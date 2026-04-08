@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Built By Beans — Custom Web Applications for Your Business</title>
+    <meta name="description" content="Built By Beans builds custom web applications tailored to your business. From storefronts to dashboards, we bring your ideas to life.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav" id="nav">
+        <div class="container nav-container">
+            <a href="#" class="logo">
+                <span class="logo-icon">&#9672;</span>
+                Built By Beans
+            </a>
+            <ul class="nav-links" id="nav-links">
+                <li><a href="#services">Services</a></li>
+                <li><a href="#process">Process</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact" class="btn btn-sm">Get in Touch</a></li>
+            </ul>
+            <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <header class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-badge">Custom Web Applications</div>
+                <h1>Your business deserves<br>software that <span class="text-gradient">works for you</span></h1>
+                <p class="hero-subtitle">Built By Beans crafts custom web applications tailored to your exact needs. No templates. No compromises. Just clean, powerful software built from the ground up.</p>
+                <div class="hero-actions">
+                    <a href="#contact" class="btn btn-primary btn-lg">Start Your Project</a>
+                    <a href="#services" class="btn btn-outline btn-lg">See What We Build</a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="code-window">
+                    <div class="code-header">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                        <span class="code-title">your-app.py</span>
+                    </div>
+                    <pre class="code-body"><code><span class="code-keyword">class</span> <span class="code-class">YourBusiness</span>:
+    <span class="code-keyword">def</span> <span class="code-func">__init__</span>(self):
+        self.growth = <span class="code-string">"unlimited"</span>
+        self.tech_debt = <span class="code-num">0</span>
+        self.builder = <span class="code-string">"Built By Beans"</span>
+
+    <span class="code-keyword">def</span> <span class="code-func">launch</span>(self):
+        <span class="code-keyword">return</span> <span class="code-string">"Success"</span> <span class="code-comment"># Always</span></code></pre>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Services -->
+    <section class="section" id="services">
+        <div class="container">
+            <div class="section-header">
+                <h2>What We Build</h2>
+                <p>Every business is different. Your software should be too.</p>
+            </div>
+            <div class="services-grid">
+                <div class="service-card">
+                    <div class="service-icon">&#128736;</div>
+                    <h3>Custom Web Apps</h3>
+                    <p>Full-stack web applications built from scratch to match your exact workflow. Inventory systems, booking platforms, client portals — you name it.</p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon">&#128722;</div>
+                    <h3>E-Commerce Solutions</h3>
+                    <p>Online stores that actually convert. Custom product pages, checkout flows, and admin dashboards that make selling online effortless.</p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon">&#128202;</div>
+                    <h3>Business Dashboards</h3>
+                    <p>See your data clearly. Custom dashboards that pull from your existing tools and give you the insights you need to make decisions.</p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon">&#9889;</div>
+                    <h3>API Integrations</h3>
+                    <p>Connect your tools. We build integrations between your existing software so everything talks to each other seamlessly.</p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon">&#128241;</div>
+                    <h3>Responsive Design</h3>
+                    <p>Apps that look and work great on every device. Desktop, tablet, phone — your customers get a flawless experience everywhere.</p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon">&#128274;</div>
+                    <h3>Maintenance & Support</h3>
+                    <p>We don't disappear after launch. Ongoing support, updates, and improvements to keep your app running at peak performance.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process -->
+    <section class="section section-alt" id="process">
+        <div class="container">
+            <div class="section-header">
+                <h2>How It Works</h2>
+                <p>A straightforward process from idea to launch.</p>
+            </div>
+            <div class="process-grid">
+                <div class="process-step">
+                    <div class="step-number">01</div>
+                    <h3>Discovery</h3>
+                    <p>We sit down and talk about your business, your goals, and what you need your software to do. No jargon, just conversation.</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">02</div>
+                    <h3>Design & Plan</h3>
+                    <p>I map out your application's architecture and design. You'll see mockups and a clear plan before any code is written.</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">03</div>
+                    <h3>Build</h3>
+                    <p>Development happens in sprints with regular check-ins. You'll see progress throughout — no waiting months for a big reveal.</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">04</div>
+                    <h3>Launch & Grow</h3>
+                    <p>Your app goes live with full support. As your business evolves, your software evolves with it.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About -->
+    <section class="section" id="about">
+        <div class="container">
+            <div class="about-grid">
+                <div class="about-content">
+                    <h2>Built different.<br>Built by Beans.</h2>
+                    <p>I started Built By Beans because too many businesses are stuck using software that wasn't made for them — fighting with clunky tools, duct-taping spreadsheets together, or paying for features they'll never use.</p>
+                    <p>Every line of code I write is purposeful. I build lean, fast, and exactly what you need. No bloat, no unnecessary complexity — just software that makes your life easier and your business stronger.</p>
+                    <div class="about-stats">
+                        <div class="stat">
+                            <span class="stat-value">100%</span>
+                            <span class="stat-label">Custom Code</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value">0</span>
+                            <span class="stat-label">Cookie-Cutter Templates</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value">&infin;</span>
+                            <span class="stat-label">Cups of Coffee</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact -->
+    <section class="section section-alt" id="contact">
+        <div class="container">
+            <div class="section-header">
+                <h2>Let's Build Something</h2>
+                <p>Tell me about your project and I'll get back to you within 24 hours.</p>
+            </div>
+            <div class="contact-grid">
+                <form class="contact-form" id="contact-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="name">Name <span class="required">*</span></label>
+                            <input type="text" id="name" name="name" required placeholder="Your name">
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email <span class="required">*</span></label>
+                            <input type="email" id="email" name="email" required placeholder="you@company.com">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="project_type">Project Type</label>
+                        <select id="project_type" name="project_type">
+                            <option value="">Select a project type</option>
+                            <option value="Custom Web App">Custom Web Application</option>
+                            <option value="E-Commerce">E-Commerce / Online Store</option>
+                            <option value="Dashboard">Business Dashboard</option>
+                            <option value="API Integration">API Integration</option>
+                            <option value="Redesign">Website Redesign</option>
+                            <option value="Other">Something Else</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="message">Tell me about your project <span class="required">*</span></label>
+                        <textarea id="message" name="message" rows="5" required placeholder="What does your business do? What problem are you trying to solve?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg btn-full" id="submit-btn">
+                        Send Message
+                    </button>
+                    <div class="form-status" id="form-status"></div>
+                </form>
+                <div class="contact-info">
+                    <div class="contact-card">
+                        <h3>Prefer email?</h3>
+                        <p>Reach me directly at</p>
+                        <a href="mailto:mbean@builtbybeans.com" class="contact-email">mbean@builtbybeans.com</a>
+                    </div>
+                    <div class="contact-card">
+                        <h3>Quick response</h3>
+                        <p>I typically respond within 24 hours. For urgent projects, mention it in your message and I'll prioritize your inquiry.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-icon">&#9672;</span> Built By Beans
+                </div>
+                <p class="footer-text">Custom web applications for businesses that refuse to settle.</p>
+                <p class="footer-copy">&copy; 2025 Built By Beans. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
