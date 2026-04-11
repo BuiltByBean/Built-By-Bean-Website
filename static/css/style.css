@@ -35,6 +35,12 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+html, body {
+    width: 100%;
+    max-width: 100vw;
 }
 
 .container {
@@ -409,6 +415,11 @@ html.is-scrolling .scroll-arrow {
     flex-wrap: wrap;
 }
 
+.hero-content,
+.hero-visual {
+    min-width: 0;
+}
+
 /* Code Window */
 .code-window {
     background: var(--surface);
@@ -416,6 +427,7 @@ html.is-scrolling .scroll-arrow {
     border-radius: var(--radius);
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    max-width: 100%;
 }
 
 .code-header {
@@ -1249,68 +1261,188 @@ html {
 }
 
 @media (max-width: 768px) {
+    /* ── Layout basics ─────────────────────────── */
+    .container {
+        padding: 0 20px;
+    }
+
+    .section {
+        min-height: auto;
+        padding: 80px 0;
+    }
+
+    .section-header {
+        margin-bottom: 40px;
+    }
+
+    .section-header h2 {
+        font-size: 2rem;
+    }
+
+    .section-header p {
+        font-size: 1rem;
+    }
+
+    /* ── Nav ───────────────────────────────────── */
+    .nav-container {
+        min-height: 72px;
+    }
+
+    .logo {
+        font-size: 1.1rem;
+        gap: 10px;
+    }
+
+    .logo-img {
+        width: 36px;
+        height: 36px;
+    }
+
     .nav-links {
         display: none;
-        position: absolute;
-        top: 120px;
+        position: fixed;
+        top: 72px;
         left: 0;
         right: 0;
-        background: var(--bg);
+        background: rgba(10, 10, 11, 0.97);
+        backdrop-filter: blur(16px);
         border-bottom: 1px solid var(--border);
         flex-direction: column;
-        padding: 24px;
-        gap: 20px;
+        align-items: stretch;
+        padding: 20px 24px 28px;
+        gap: 4px;
     }
 
     .nav-links.open {
         display: flex;
     }
 
+    .nav-links li {
+        width: 100%;
+    }
+
+    .nav-links a.nav-link,
+    .nav-admin {
+        display: block;
+        padding: 14px 0;
+        font-size: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-link::after {
+        display: none;
+    }
+
+    .nav-admin-item {
+        gap: 0;
+    }
+
+    .nav-admin-item::before {
+        display: none;
+    }
+
     .nav-toggle {
         display: flex;
     }
 
-    .hero .container {
-        grid-template-columns: 1fr;
-        gap: 48px;
+    /* ── Hero ─────────────────────────────────── */
+    .hero {
+        min-height: calc(100vh - 72px);
+        padding: 96px 0 96px;
     }
 
-    .hero {
-        padding: 120px 0 60px;
+    .hero .container {
+        grid-template-columns: 1fr;
+        gap: 40px;
+    }
+
+    .hero-content {
+        text-align: left;
     }
 
     .hero h1 {
-        font-size: 2.25rem;
+        font-size: 2.15rem;
+        line-height: 1.15;
+    }
+
+    .hero h1 br {
+        display: none;
     }
 
     .hero-subtitle {
         font-size: 1rem;
     }
 
+    .hero-actions {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .hero-actions .btn {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .btn-lg {
+        padding: 13px 22px;
+        font-size: 0.95rem;
+    }
+
+    /* Shrink the code window to fit and let the long lines scroll */
+    .code-window {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .code-body {
+        padding: 18px;
+        font-size: 0.72rem;
+        line-height: 1.7;
+        overflow-x: auto;
+    }
+
+    .code-body code {
+        white-space: pre;
+    }
+
+    /* ── Section grids ─────────────────────────── */
     .services-grid {
         grid-template-columns: 1fr;
     }
 
     .promise-grid {
         grid-template-columns: 1fr;
+        gap: 16px;
     }
 
     .promise-card {
         padding: 32px 24px;
     }
 
+    .promise-card h3 {
+        font-size: 1.2rem;
+    }
+
     .why-options {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .option-col {
+        padding: 24px 22px;
+    }
+
+    .why-grid {
         grid-template-columns: 1fr;
         gap: 16px;
     }
 
     .why-card {
-        padding: 32px 24px;
+        padding: 30px 24px;
     }
 
-    .why-bridge {
-        font-size: 0.95rem;
-        margin-bottom: 32px;
+    .why-card h3 {
+        font-size: 1.2rem;
     }
 
     .process-grid {
@@ -1318,25 +1450,52 @@ html {
         gap: 32px;
     }
 
+    /* ── Contact ───────────────────────────────── */
     .contact-grid {
         grid-template-columns: 1fr;
+        gap: 32px;
     }
 
     .form-row {
         grid-template-columns: 1fr;
     }
 
-    .about-stats {
-        flex-direction: column;
-        gap: 24px;
+    .contact-form {
+        padding: 28px 22px;
     }
 
-    .section {
-        padding: 64px 0;
+    /* ── Footer ────────────────────────────────── */
+    .footer {
+        padding: 40px 0;
+    }
+
+    /* ── Scroll arrows: sit just under the 72px nav and avoid
+       bumping into the section padding at the bottom ──────── */
+    .scroll-arrow svg {
+        width: 28px;
+        height: 28px;
+    }
+
+    .scroll-arrow-up {
+        top: 90px;
+    }
+
+    .scroll-arrow-down {
+        bottom: 20px;
+    }
+}
+
+@media (max-width: 380px) {
+    .hero h1 {
+        font-size: 1.9rem;
     }
 
     .section-header h2 {
-        font-size: 2rem;
+        font-size: 1.75rem;
+    }
+
+    .code-body {
+        font-size: 0.65rem;
     }
 }
 
