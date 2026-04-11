@@ -177,9 +177,59 @@ body {
 
 /* ===== Hero ===== */
 .hero {
-    padding: 140px 0 100px;
+    min-height: 100vh;
+    padding: 140px 0 140px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
     position: relative;
     overflow: hidden;
+}
+
+.hero::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 140px;
+    background: linear-gradient(to bottom, transparent, var(--bg));
+    pointer-events: none;
+    z-index: 1;
+}
+
+.scroll-indicator {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-decoration: none;
+    z-index: 2;
+    transition: color 0.2s;
+}
+
+.scroll-indicator:hover {
+    color: var(--primary);
+}
+
+.scroll-indicator svg {
+    width: 20px;
+    height: 20px;
+    animation: scrollBounce 2.2s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+    0%, 100% { transform: translateY(0); opacity: 0.55; }
+    50%      { transform: translateY(8px); opacity: 1; }
 }
 
 .hero::before {
@@ -305,7 +355,14 @@ body {
 }
 
 .section-alt {
-    background: var(--bg-alt);
+    background:
+        linear-gradient(
+            to bottom,
+            var(--bg) 0%,
+            var(--bg-alt) 140px,
+            var(--bg-alt) calc(100% - 140px),
+            var(--bg) 100%
+        );
 }
 
 .section-header {
@@ -586,7 +643,6 @@ body {
 /* ===== Footer ===== */
 .footer {
     padding: 48px 0;
-    border-top: 1px solid var(--border);
     text-align: center;
 }
 
