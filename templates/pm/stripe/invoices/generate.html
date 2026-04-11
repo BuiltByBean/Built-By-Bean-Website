@@ -1,0 +1,281 @@
+{% extends "pm/base.html" %}
+
+{% block title %}Create Invoice - Built By Bean{% endblock %}
+{% block page_title %}Create Invoice{% endblock %}
+{% block page_subtitle %}Generate an invoice from time entries and expenses{% endblock %}
+
+{% block content %}
+<div x-data="invoiceGenerator()" class="max-w-5xl mx-auto space-y-6 stagger-in">
+
+    <form method="POST" action="{{ url_for('stripe.invoice_create') }}" @submit="submitting = true">
+
+
+        <!-- Step 1: Client & Project -->
+        <div class="glass-card p-6 mb-6">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-4">1. Select Client & Project</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Client <span class="text-red-500">*</span></label>
+                    <select name="client_id" x-model="clientId" @change="loadEntries()"
+                            class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" required>
+                        <option value="">Select a client...</option>
+                        {% for c in clients %}
+                        <option value="{{ c.id }}" {% if preselect_client == c.id %}selected{% endif %}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Project (optional)</label>
+                    <select name="project_id" x-model="projectId"
+                            class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                        <option value="">All projects</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}" {% if preselect_project == p.id %}selected{% endif %}>{{ p.name }} ({{ p.client.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Time Entries -->
+        <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">2. Select Time Entries</h3>
+                <template x-if="timeEntries.length > 0">
+                    <button type="button" @click="toggleAllTime()" class="text-xs text-brand-500 hover:text-brand-600">
+                        <span x-text="allTimeSelected ? 'Deselect All' : 'Select All'"></span>
+                    </button>
+                </template>
+            </div>
+
+            <template x-if="loading">
+                <div class="py-8 text-center">
+                    <div class="inline-block w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm text-surface-500 dark:text-surface-400 mt-2">Loading entries...</p>
+                </div>
+            </template>
+
+            <template x-if="!loading && timeEntries.length === 0">
+                <p class="py-8 text-center text-sm text-surface-500 dark:text-surface-400">No uninvoiced time entries for this client</p>
+            </template>
+
+            <template x-if="!loading && timeEntries.length > 0">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 border-b border-surface-200 dark:border-surface-700">
+                                <th class="py-2 px-3 w-8"></th>
+                                <th class="text-left py-2 px-3">Date</th>
+                                <th class="text-left py-2 px-3">Project</th>
+                                <th class="text-left py-2 px-3">Description</th>
+                                <th class="text-right py-2 px-3">Hours</th>
+                                <th class="text-right py-2 px-3">Rate</th>
+                                <th class="text-right py-2 px-3">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-surface-100 dark:divide-surface-800">
+                            <template x-for="entry in timeEntries" :key="entry.id">
+                                <tr class="hover:bg-surface-50 dark:hover:bg-surface-800/30" :class="entry.is_free ? 'opacity-50' : ''">
+                                    <td class="py-2 px-3">
+                                        <input type="checkbox" name="time_entries" :value="entry.id"
+                                               x-model="selectedTimeIds"
+                                               :disabled="entry.is_free"
+                                               class="w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-brand-500 focus:ring-brand-500">
+                                    </td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300" x-text="entry.date"></td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300" x-text="entry.project_name"></td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300">
+                                        <span x-text="entry.description || 'Development work'"></span>
+                                        <template x-if="entry.is_free">
+                                            <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Free</span>
+                                        </template>
+                                    </td>
+                                    <td class="py-2 px-3 text-sm text-right text-surface-700 dark:text-surface-300" x-text="entry.hours.toFixed(1) + 'h'"></td>
+                                    <td class="py-2 px-3 text-sm text-right text-surface-700 dark:text-surface-300" x-text="'$' + entry.rate.toFixed(0) + '/hr'"></td>
+                                    <td class="py-2 px-3 text-sm text-right font-semibold text-surface-900 dark:text-white" x-text="'$' + entry.cost.toFixed(2)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+        </div>
+
+        <!-- Step 3: Expenses -->
+        <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">3. Select Expenses</h3>
+                <template x-if="expenses.length > 0">
+                    <button type="button" @click="toggleAllExpenses()" class="text-xs text-brand-500 hover:text-brand-600">
+                        <span x-text="allExpensesSelected ? 'Deselect All' : 'Select All'"></span>
+                    </button>
+                </template>
+            </div>
+
+            <template x-if="!loading && expenses.length === 0">
+                <p class="py-8 text-center text-sm text-surface-500 dark:text-surface-400">No uninvoiced expenses for this client</p>
+            </template>
+
+            <template x-if="!loading && expenses.length > 0">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 border-b border-surface-200 dark:border-surface-700">
+                                <th class="py-2 px-3 w-8"></th>
+                                <th class="text-left py-2 px-3">Date</th>
+                                <th class="text-left py-2 px-3">Category</th>
+                                <th class="text-left py-2 px-3">Description</th>
+                                <th class="text-left py-2 px-3">Project</th>
+                                <th class="text-right py-2 px-3">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-surface-100 dark:divide-surface-800">
+                            <template x-for="expense in expenses" :key="expense.id">
+                                <tr class="hover:bg-surface-50 dark:hover:bg-surface-800/30">
+                                    <td class="py-2 px-3">
+                                        <input type="checkbox" name="expenses" :value="expense.id"
+                                               x-model="selectedExpenseIds"
+                                               class="w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-brand-500 focus:ring-brand-500">
+                                    </td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300" x-text="expense.date"></td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300" x-text="expense.category"></td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300" x-text="expense.description || '-'"></td>
+                                    <td class="py-2 px-3 text-sm text-surface-700 dark:text-surface-300" x-text="expense.project_name || '-'"></td>
+                                    <td class="py-2 px-3 text-sm text-right font-semibold text-surface-900 dark:text-white" x-text="'$' + expense.amount.toFixed(2)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+        </div>
+
+        <!-- Step 4: Invoice Settings & Preview -->
+        <div class="glass-card p-6 mb-6" x-show="clientId && (selectedTimeIds.length > 0 || selectedExpenseIds.length > 0)" x-transition>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-4">4. Invoice Settings</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Due (days)</label>
+                    <input type="number" name="due_days" value="30" min="1" max="90"
+                           class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Notes (optional)</label>
+                    <input type="text" name="notes" placeholder="Thank you for your business!"
+                           class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                </div>
+            </div>
+
+            <!-- Preview Total -->
+            <div class="bg-surface-50 dark:bg-surface-800/50 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-surface-500 dark:text-surface-400">Time entries</span>
+                    <span class="text-sm font-medium text-surface-900 dark:text-white" x-text="selectedTimeIds.length + ' selected'"></span>
+                </div>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-surface-500 dark:text-surface-400">Expenses</span>
+                    <span class="text-sm font-medium text-surface-900 dark:text-white" x-text="selectedExpenseIds.length + ' selected'"></span>
+                </div>
+                <div class="flex items-center justify-between pt-3 border-t border-surface-200 dark:border-surface-700">
+                    <span class="text-base font-bold text-surface-900 dark:text-white">Estimated Total</span>
+                    <span class="text-xl font-bold gradient-text" x-text="'$' + estimatedTotal.toFixed(2)"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div x-show="clientId && (selectedTimeIds.length > 0 || selectedExpenseIds.length > 0)" x-transition>
+            <button type="submit" :disabled="submitting"
+                    class="w-full px-6 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="!submitting">Create Draft Invoice</span>
+                <span x-show="submitting" class="flex items-center justify-center gap-2">
+                    <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Creating...
+                </span>
+            </button>
+        </div>
+
+    </form>
+</div>
+
+<script>
+function invoiceGenerator() {
+    return {
+        clientId: '{{ preselect_client or "" }}',
+        projectId: '{{ preselect_project or "" }}',
+        timeEntries: [],
+        expenses: [],
+        selectedTimeIds: [],
+        selectedExpenseIds: [],
+        loading: false,
+        submitting: false,
+
+        init() {
+            if (this.clientId) this.loadEntries();
+        },
+
+        async loadEntries() {
+            if (!this.clientId) {
+                this.timeEntries = [];
+                this.expenses = [];
+                return;
+            }
+            this.loading = true;
+            this.selectedTimeIds = [];
+            this.selectedExpenseIds = [];
+
+            try {
+                const [timeRes, expenseRes] = await Promise.all([
+                    fetch(`/stripe/api/uninvoiced-entries/${this.clientId}`),
+                    fetch(`/stripe/api/uninvoiced-expenses/${this.clientId}`),
+                ]);
+                this.timeEntries = await timeRes.json();
+                this.expenses = await expenseRes.json();
+            } catch (e) {
+                console.error('Failed to load entries:', e);
+            }
+            this.loading = false;
+        },
+
+        get allTimeSelected() {
+            const billable = this.timeEntries.filter(e => !e.is_free);
+            return billable.length > 0 && this.selectedTimeIds.length === billable.length;
+        },
+
+        get allExpensesSelected() {
+            return this.expenses.length > 0 && this.selectedExpenseIds.length === this.expenses.length;
+        },
+
+        toggleAllTime() {
+            if (this.allTimeSelected) {
+                this.selectedTimeIds = [];
+            } else {
+                this.selectedTimeIds = this.timeEntries.filter(e => !e.is_free).map(e => String(e.id));
+            }
+        },
+
+        toggleAllExpenses() {
+            if (this.allExpensesSelected) {
+                this.selectedExpenseIds = [];
+            } else {
+                this.selectedExpenseIds = this.expenses.map(e => String(e.id));
+            }
+        },
+
+        get estimatedTotal() {
+            let total = 0;
+            for (const id of this.selectedTimeIds) {
+                const entry = this.timeEntries.find(e => String(e.id) === String(id));
+                if (entry) total += entry.cost;
+            }
+            for (const id of this.selectedExpenseIds) {
+                const expense = this.expenses.find(e => String(e.id) === String(id));
+                if (expense) total += expense.amount;
+            }
+            return total;
+        },
+    };
+}
+</script>
+{% endblock %}

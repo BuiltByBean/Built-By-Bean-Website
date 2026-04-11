@@ -1,0 +1,60 @@
+{% extends "pm/base.html" %}
+
+{% block page_title %}{{ 'Edit Client' if editing else 'New Client' }}{% endblock %}
+{% block page_subtitle %}{{ client.name if editing else 'Add a new client' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="glass-card p-6">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Client Name *</label>
+                    {{ form.name(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="Enter client name") }}
+                    {% for error in form.name.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Email</label>
+                        {{ form.email(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="client@email.com") }}
+                        {% for error in form.email.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Phone</label>
+                        {{ form.phone(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="(555) 123-4567") }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Company</label>
+                    {{ form.company(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="Company name") }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Address</label>
+                    {{ form.address(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="2", placeholder="Street address, city, state, zip") }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Notes</label>
+                    {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="Any additional notes...") }}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+                <button type="submit"
+                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                    {{ 'Update Client' if editing else 'Create Client' }}
+                </button>
+                <a href="{{ url_for('pm.client_detail', id=client.id) if editing else url_for('pm.clients_list') }}"
+                   class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

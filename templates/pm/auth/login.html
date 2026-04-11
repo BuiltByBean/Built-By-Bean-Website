@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ darkMode: localStorage.getItem('darkMode') !== 'false' }" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Built By Bean Project Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a8a', 950: '#172554' },
+                        surface: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 700: '#334155', 800: '#1e293b', 900: '#0f172a', 950: '#020617' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .mesh-bg {
+            background-color: #f8fafc;
+            background-image:
+                radial-gradient(at 40% 20%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(96, 165, 250, 0.06) 0px, transparent 50%);
+        }
+        .dark .mesh-bg {
+            background-color: #020617;
+            background-image:
+                radial-gradient(at 40% 20%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(96, 165, 250, 0.1) 0px, transparent 50%);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #3b82f6, #60a5fa, #93c5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .input-ring {
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        .input-ring:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+        .dark .input-ring { border-color: rgba(255,255,255,0.1); background: rgba(15,23,42,0.5); color: #f1f5f9; }
+        .dark .input-ring:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
+    </style>
+</head>
+<body class="mesh-bg min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 shadow-lg shadow-brand-500/25 mb-4">
+                <span class="text-white font-bold text-xl">BBB</span>
+            </div>
+            <h1 class="text-2xl font-bold gradient-text">Built By Bean</h1>
+            <p class="text-surface-500 dark:text-surface-400 text-sm mt-1">Project Manager</p>
+        </div>
+
+        <!-- Login card -->
+        <div class="bg-white/80 dark:bg-surface-900/60 backdrop-blur-xl rounded-2xl border border-surface-200/80 dark:border-white/8 shadow-xl p-8">
+            <h2 class="text-lg font-semibold text-surface-900 dark:text-white mb-6">Sign In</h2>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="mb-4 px-4 py-3 rounded-xl text-sm
+                        {% if category == 'error' %}bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400
+                        {% else %}bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Username</label>
+                        {{ form.username(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white placeholder-surface-400", placeholder="Enter username") }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Password</label>
+                        {{ form.password(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white placeholder-surface-400", placeholder="Enter password") }}
+                    </div>
+                    <button type="submit"
+                            class="w-full py-2.5 px-4 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all duration-200">
+                        Sign In
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <p class="text-center text-surface-400 dark:text-surface-500 text-xs mt-6">&copy; 2026 Built By Bean, LLC</p>
+    </div>
+</body>
+</html>

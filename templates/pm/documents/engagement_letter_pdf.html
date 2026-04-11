@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    @page {
+        size: letter;
+        margin: 1in 1.2in;
+        @frame footer {
+            -pdf-frame-content: page-footer;
+            bottom: 0.3in;
+            margin-left: 0;
+            margin-right: 0;
+            height: 0.5in;
+        }
+    }
+    body {
+        font-family: Georgia, serif;
+        font-size: 11pt;
+        color: #1a1a2e;
+        line-height: 1.5;
+    }
+    .header {
+        font-size: 8pt;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        color: #2c3e6b;
+        font-weight: bold;
+        margin-bottom: 2px;
+    }
+    .header-sub {
+        font-size: 9pt;
+        font-style: italic;
+        color: #b8860b;
+    }
+    .header-line {
+        border: none;
+        border-top: 2px solid #b8860b;
+        margin: 8px 0 30px 0;
+    }
+    .title {
+        font-size: 22pt;
+        letter-spacing: 6px;
+        text-transform: uppercase;
+        color: #1a1a2e;
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+    .subtitle {
+        font-size: 12pt;
+        font-style: italic;
+        color: #666;
+        margin-bottom: 30px;
+    }
+    .prepared-for {
+        font-size: 11pt;
+        margin-bottom: 20px;
+    }
+    .prepared-for strong {
+        color: #1a1a2e;
+    }
+    .section-heading {
+        font-size: 10pt;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #2c3e6b;
+        font-weight: bold;
+        margin-top: 30px;
+        margin-bottom: 4px;
+    }
+    .section-line {
+        border: none;
+        border-top: 2px solid #b8860b;
+        margin: 4px 0 15px 0;
+    }
+    table.terms {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+    }
+    table.terms td {
+        padding: 10px 12px;
+        font-size: 10pt;
+        border-bottom: 1px solid #e0e0e0;
+        vertical-align: top;
+    }
+    table.terms td:first-child {
+        font-weight: bold;
+        width: 35%;
+        color: #1a1a2e;
+    }
+    table.terms td:last-child {
+        color: #444;
+    }
+    .terms-list {
+        margin: 10px 0;
+        padding-left: 20px;
+    }
+    .terms-list li {
+        margin-bottom: 8px;
+        font-size: 10.5pt;
+        color: #333;
+    }
+    .contact-info {
+        margin: 20px 0;
+        font-size: 11pt;
+    }
+    .ack-heading {
+        font-size: 10pt;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #2c3e6b;
+        font-weight: bold;
+        margin-top: 30px;
+        margin-bottom: 4px;
+    }
+    .sig-line {
+        margin: 18px 0 8px 0;
+        font-size: 10.5pt;
+    }
+    .sig-underline {
+        display: inline-block;
+        width: 300px;
+        border-bottom: 1px solid #333;
+    }
+    .footer-text {
+        font-size: 7.5pt;
+        color: #999;
+    }
+</style>
+</head>
+<body>
+    <!-- Header (repeated per page via @page frame) -->
+    <div class="header">
+        B U I L T &nbsp; B Y &nbsp; B E A N &nbsp; L L C
+        <span class="header-sub">Web Development &amp; Digital Solutions</span>
+    </div>
+    <hr class="header-line">
+
+    <!-- Title -->
+    <div class="title">Client Engagement Letter</div>
+    <div class="subtitle">Service Agreement &amp; Pricing Terms</div>
+
+    <!-- Prepared For -->
+    <div class="prepared-for">
+        <strong>Prepared for:</strong> {{ client_name }}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Date:</strong> {{ date }}
+    </div>
+
+    <p>Thank you for the opportunity to work with {{ client_name }}. This letter outlines the scope, pricing structure, and terms of our engagement. Please review, sign, and return prior to the start of any work.</p>
+
+    <!-- Section 1 -->
+    <div class="section-heading">1. Project Overview</div>
+    <hr class="section-line">
+    <p>Built by Bean LLC will {{ project_description }}. The engagement begins with an MVP — the agreed-upon, fully functional launch version of the site or application. All subsequent work is contracted separately and governed by the terms in Sections 3 and 4 of this letter.</p>
+
+    <!-- Section 2 -->
+    <div class="section-heading">2. MVP Development — Flat Project Fee</div>
+    <hr class="section-line">
+    <p>The MVP (Minimum Viable Product) is scoped and priced as a flat project fee determined during a discovery session before any work begins. The final fee reflects the agreed scope only — work or features outside that scope are billed separately under Sections 3 and 4.</p>
+
+    <table class="terms">
+        <tr><td>Minimum Starting Price</td><td>${{ mvp_price }} — final fee determined by project scope</td></tr>
+        <tr><td>Payment Structure</td><td>50% due at project kickoff; 50% due upon delivery and acceptance</td></tr>
+        <tr><td>Price Lock</td><td>Flat fee is agreed upon and locked in writing before work begins</td></tr>
+        <tr><td>Scope Changes</td><td>Any changes to agreed scope require a written amendment before work proceeds</td></tr>
+    </table>
+
+    <p>The MVP fee covers only the agreed initial scope. Features, additions, or changes beyond that scope are subject to separate fees as outlined below.</p>
+
+    <!-- Section 3 -->
+    <div class="section-heading">3. Maintenance &amp; Support</div>
+    <hr class="section-line">
+    <p>Once the MVP is delivered and accepted, Built by Bean LLC has no obligation to perform further work unless separately contracted. Ongoing maintenance — including bug fixes, performance updates, security patches, and general upkeep of existing functionality — is available at the following rate:</p>
+
+    <table class="terms">
+        <tr><td>Maintenance Hourly Rate</td><td>$100/hour</td></tr>
+        <tr><td>Scope</td><td>Bug fixes, updates, and support for existing, delivered functionality only</td></tr>
+        <tr><td>Billing Increment</td><td>Work is billed in one-hour minimum increments</td></tr>
+        <tr><td>Invoicing</td><td>Net 30 days from invoice date</td></tr>
+    </table>
+
+    <p>Maintenance covers what has already been built. Requests for new functionality are treated as new feature development and billed at the rate in Section 4.</p>
+
+    <!-- Section 4 -->
+    <div class="section-heading">4. New Feature Development</div>
+    <hr class="section-line">
+    <p>Any feature, functionality, or integration not included in the original agreed MVP scope is considered new feature development. This work requires additional scoping, design, development, testing, and deployment and is billed at a higher rate to reflect that investment.</p>
+
+    <table class="terms">
+        <tr><td>New Feature Hourly Rate</td><td>$200/hour</td></tr>
+        <tr><td>Billing Increment</td><td>Work is billed in one-hour minimum increments</td></tr>
+        <tr><td>Authorization</td><td>All feature work requires written approval and scope confirmation before work begins</td></tr>
+        <tr><td>Invoicing</td><td>Net 30 days from invoice date</td></tr>
+    </table>
+
+    <!-- Section 5 -->
+    <div class="section-heading">5. General Terms</div>
+    <hr class="section-line">
+    <ul class="terms-list">
+        <li>All project scopes, timelines, and fees are confirmed in a signed Statement of Work (SOW) before work begins.</li>
+        <li>Client is responsible for timely feedback, content, and approvals. Client-caused delays may affect project timelines.</li>
+        <li>Built by Bean LLC has no obligation to perform any work beyond a delivered and accepted MVP unless separately contracted in writing.</li>
+        <li>Built by Bean LLC reserves the right to display completed work in its portfolio unless the client requests otherwise in writing.</li>
+        <li>This engagement letter does not constitute a binding contract for services. A formal SOW governs each individual project or work request.</li>
+        <li>All fees are in USD. Late payments are subject to a 1.5% monthly late fee after the invoice due date.</li>
+    </ul>
+
+    <p>Please sign and return this letter to confirm your agreement to these terms.</p>
+
+    <div class="contact-info">
+        <p>Phone: 903-491-2095<br>
+        Email: MichaelBean21@gmail.com</p>
+    </div>
+
+    <hr class="section-line">
+
+    <!-- Client Acknowledgment -->
+    <div class="ack-heading">Client Acknowledgment</div>
+    <p>By signing below, {{ client_name }} acknowledges receipt of this engagement letter and agrees to the terms outlined herein.</p>
+
+    <div class="sig-line">Signature: <span class="sig-underline">&nbsp;</span></div>
+    <div class="sig-line">Printed Name: <span class="sig-underline">&nbsp;</span></div>
+    <div class="sig-line">Title: <span class="sig-underline">&nbsp;</span></div>
+    <div class="sig-line">Date: <span class="sig-underline">&nbsp;</span></div>
+
+    <!-- Footer -->
+    <div id="page-footer">
+        <div class="footer-text">Confidential — Built by Bean LLC</div>
+    </div>
+</body>
+</html>

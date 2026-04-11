@@ -1,0 +1,65 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{% block page_title %}{{ 'Edit Task' if editing else 'New Task' }}{% endblock %}
+{% block page_subtitle %}{{ task.title if editing else 'Create a new task' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="glass-card p-6">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Task Title *</label>
+                    {{ form.title(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="What needs to be done?") }}
+                    {% for error in form.title.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Project *</label>
+                    {{ select_dropdown(form.project_id.name, form.project_id.choices, form.project_id.data, "Select Project...", full_width=true) }}
+                    {% for error in form.project_id.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Status</label>
+                        {{ select_dropdown(form.status.name, form.status.choices, form.status.data or 'todo', "Status...", full_width=true) }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Priority</label>
+                        {{ select_dropdown(form.priority.name, form.priority.choices, form.priority.data or 'medium', "Priority...", full_width=true) }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Due Date</label>
+                        {{ form.due_date(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm") }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Description</label>
+                    {{ form.description(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="Brief description of the task...") }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Detailed Notes</label>
+                    {{ form.detailed_notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="5", placeholder="Detailed requirements, specs, acceptance criteria...") }}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+                <button type="submit"
+                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                    {{ 'Update Task' if editing else 'Create Task' }}
+                </button>
+                <a href="{{ url_for('pm.task_detail', id=task.id) if editing else url_for('pm.tasks_list') }}"
+                   class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

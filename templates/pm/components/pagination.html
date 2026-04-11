@@ -1,0 +1,39 @@
+{% macro render_pagination(pagination, endpoint, extra_args={}) %}
+{% if pagination.pages > 1 %}
+<nav class="flex items-center justify-between mt-6">
+    <p class="text-sm text-surface-500 dark:text-surface-400">
+        Showing <span class="font-medium text-surface-700 dark:text-surface-200">{{ ((pagination.page - 1) * pagination.per_page) + 1 }}</span>
+        to <span class="font-medium text-surface-700 dark:text-surface-200">{{ [pagination.page * pagination.per_page, pagination.total] | min }}</span>
+        of <span class="font-medium text-surface-700 dark:text-surface-200">{{ pagination.total }}</span>
+    </p>
+    <div class="flex items-center gap-1">
+        {% if pagination.has_prev %}
+        <a href="{{ url_for(endpoint, page=pagination.prev_num, **extra_args) }}"
+           class="px-3 py-1.5 text-sm rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 transition-colors">
+            Prev
+        </a>
+        {% endif %}
+
+        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+            {% if page_num %}
+                <a href="{{ url_for(endpoint, page=page_num, **extra_args) }}"
+                   class="px-3 py-1.5 text-sm rounded-lg transition-colors
+                          {% if page_num == pagination.page %}bg-brand-500 text-white shadow-sm
+                          {% else %}bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300{% endif %}">
+                    {{ page_num }}
+                </a>
+            {% else %}
+                <span class="px-2 text-surface-400">...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <a href="{{ url_for(endpoint, page=pagination.next_num, **extra_args) }}"
+           class="px-3 py-1.5 text-sm rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 transition-colors">
+            Next
+        </a>
+        {% endif %}
+    </div>
+</nav>
+{% endif %}
+{% endmacro %}

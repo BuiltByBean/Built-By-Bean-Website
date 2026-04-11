@@ -1,0 +1,102 @@
+{% extends "pm/base.html" %}
+
+{% block title %}Service Providers - Built By Bean{% endblock %}
+{% block page_title %}Service Providers{% endblock %}
+{% block page_subtitle %}Manage API connections to your infrastructure services{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('service_costs.provider_create') }}"
+   class="px-4 py-2 text-sm font-medium rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+    + Add Provider
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+
+    {% if providers %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for provider in providers %}
+        <div class="glass-card card-hover p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center
+                        {% if provider.name == 'aws' %}bg-amber-100 dark:bg-amber-900/30
+                        {% elif provider.name == 'railway' %}bg-purple-100 dark:bg-purple-900/30
+                        {% elif provider.name == 'twilio' %}bg-red-100 dark:bg-red-900/30
+                        {% elif provider.name == 'cloudflare' %}bg-orange-100 dark:bg-orange-900/30
+                        {% else %}bg-surface-100 dark:bg-surface-700{% endif %}">
+                        <span class="text-sm font-bold
+                            {% if provider.name == 'aws' %}text-amber-600 dark:text-amber-400
+                            {% elif provider.name == 'railway' %}text-purple-600 dark:text-purple-400
+                            {% elif provider.name == 'twilio' %}text-red-600 dark:text-red-400
+                            {% elif provider.name == 'cloudflare' %}text-orange-600 dark:text-orange-400
+                            {% else %}text-surface-600 dark:text-surface-400{% endif %}">
+                            {% if provider.name == 'aws' %}AWS{% elif provider.name == 'railway' %}RW{% elif provider.name == 'twilio' %}TW{% elif provider.name == 'cloudflare' %}CF{% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-surface-900 dark:text-white">{{ provider.display_name }}</h3>
+                        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
+                            {% if provider.is_active %}bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400
+                            {% else %}bg-surface-100 text-surface-500 dark:bg-surface-700 dark:text-surface-400{% endif %}">
+                            {{ 'Active' if provider.is_active else 'Inactive' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-2 mb-4">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-surface-500 dark:text-surface-400">Last Sync</span>
+                    <span class="text-surface-900 dark:text-white">{{ provider.last_sync_at|format_date if provider.last_sync_at else 'Never' }}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-surface-500 dark:text-surface-400">Cost Entries</span>
+                    <span class="text-surface-900 dark:text-white">{{ provider.cost_entries.count() }}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-surface-500 dark:text-surface-400">Mappings</span>
+                    <span class="text-surface-900 dark:text-white">{{ provider.mappings.count() }}</span>
+                </div>
+                {% if provider.sync_error %}
+                <div class="mt-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20">
+                    <p class="text-xs text-red-600 dark:text-red-400">{{ provider.sync_error }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="flex items-center gap-2 pt-3 border-t border-surface-200 dark:border-surface-700">
+                <form method="POST" action="{{ url_for('service_costs.provider_sync', id=provider.id) }}">
+                    <button type="submit" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 hover:bg-brand-200 dark:hover:bg-brand-900/50 transition-colors">
+                        Sync Now
+                    </button>
+                </form>
+                <a href="{{ url_for('service_costs.provider_edit', id=provider.id) }}" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors">
+                    Edit
+                </a>
+                <form method="POST" action="{{ url_for('service_costs.provider_delete', id=provider.id) }}"
+                      x-data @submit.prevent="if(confirm('Delete this provider and all its data?')) $el.submit()">
+                    <button type="submit" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors">
+                        Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="glass-card p-12 text-center">
+        <svg class="w-12 h-12 mx-auto text-surface-300 dark:text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+        </svg>
+        <p class="text-surface-500 dark:text-surface-400 mb-3">No service providers configured yet</p>
+        <a href="{{ url_for('service_costs.provider_create') }}" class="inline-flex items-center gap-2 text-sm font-medium text-brand-500 hover:text-brand-600">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Add your first provider
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

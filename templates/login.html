@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In — Built By Beans</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="auth-wrapper">
+        <a href="{{ url_for('index') }}" class="auth-logo">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Built By Beans">
+            <span>Built By Beans</span>
+        </a>
+        <div class="auth-card">
+            <h1>Welcome back</h1>
+            <p class="auth-subtitle">Sign in to your admin portal.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="auth-flash auth-flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('login') }}" class="auth-form">
+                {{ form.hidden_tag() }}
+                <div class="auth-field">
+                    <label for="username">Username</label>
+                    {{ form.username(id="username", class="auth-input", placeholder="Enter username", autofocus=true) }}
+                </div>
+                <div class="auth-field">
+                    <label for="password">Password</label>
+                    {{ form.password(id="password", class="auth-input", placeholder="Enter password") }}
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg auth-submit">Sign In</button>
+            </form>
+
+            <a href="{{ url_for('index') }}" class="auth-back">← Back to builtbybean.com</a>
+        </div>
+    </div>
+</body>
+</html>

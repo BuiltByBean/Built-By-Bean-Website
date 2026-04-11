@@ -1,0 +1,201 @@
+{% extends "pm/base.html" %}
+
+{% block title %}Stripe Dashboard - Built By Bean{% endblock %}
+{% block page_title %}Stripe Dashboard{% endblock %}
+{% block page_subtitle %}Payments, invoices & account overview{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center gap-2">
+    <form method="POST" action="{{ url_for('stripe.sync_all_clients') }}">
+
+        <button type="submit" class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-200 hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors">
+            Sync All Clients
+        </button>
+    </form>
+    <form method="POST" action="{{ url_for('stripe.setup_products') }}">
+
+        <button type="submit" class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-200 hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors">
+            Setup Products
+        </button>
+    </form>
+    <a href="{{ url_for('stripe.invoice_create') }}"
+       class="px-4 py-2 text-sm font-medium rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+        + New Invoice
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+
+    <!-- Balance Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card card-hover p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Available Balance</span>
+                <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl font-bold text-surface-900 dark:text-white">{{ available_balance|format_currency }}</p>
+        </div>
+
+        <div class="glass-card card-hover p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Pending Balance</span>
+                <div class="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl font-bold text-surface-900 dark:text-white">{{ pending_balance|format_currency }}</p>
+        </div>
+
+        <div class="glass-card card-hover p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Outstanding</span>
+                <div class="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl font-bold text-surface-900 dark:text-white">{{ total_outstanding|format_currency }}</p>
+        </div>
+
+        <div class="glass-card card-hover p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Open Invoices</span>
+                <div class="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl font-bold text-surface-900 dark:text-white">{{ open_invoices|length }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Open / Unpaid Invoices -->
+        <div class="glass-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-surface-900 dark:text-white">Open Invoices</h3>
+                <a href="{{ url_for('stripe.invoices_list') }}" class="text-sm text-brand-500 hover:text-brand-600">View all</a>
+            </div>
+            {% if open_invoices %}
+            <div class="space-y-3">
+                {% for inv in open_invoices %}
+                <a href="{{ url_for('stripe.invoice_detail', id=inv.id) }}" class="flex items-center justify-between p-3 rounded-xl hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors">
+                    <div>
+                        <p class="text-sm font-semibold text-surface-900 dark:text-white">{{ inv.client.name }}</p>
+                        <p class="text-xs text-surface-500 dark:text-surface-400">{{ inv.invoice_number or 'Draft' }} &middot; {{ inv.created_at|format_date }}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-bold text-surface-900 dark:text-white">{{ inv.amount_due|format_currency }}</p>
+                        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
+                            {% if inv.status == 'draft' %}bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300
+                            {% elif inv.status == 'open' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
+                            {% endif %}">{{ inv.status|title }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-surface-500 dark:text-surface-400 py-8 text-center">No open invoices</p>
+            {% endif %}
+        </div>
+
+        <!-- Recent Payments -->
+        <div class="glass-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-surface-900 dark:text-white">Recent Payments</h3>
+            </div>
+            {% if payments %}
+            <div class="space-y-3">
+                {% for payment in payments %}
+                <div class="flex items-center justify-between p-3 rounded-xl bg-surface-50 dark:bg-surface-800/30">
+                    <div>
+                        <p class="text-sm font-semibold text-surface-900 dark:text-white">{{ payment.name }}</p>
+                        <p class="text-xs text-surface-500 dark:text-surface-400">{{ payment.description }}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-bold text-emerald-600 dark:text-emerald-400">+{{ payment.amount|format_currency }}</p>
+                        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
+                            {% if payment.status == 'succeeded' %}bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400
+                            {% else %}bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300
+                            {% endif %}">{{ payment.status }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-surface-500 dark:text-surface-400 py-8 text-center">No payments yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Payouts -->
+    <div class="glass-card p-6">
+        <h3 class="text-lg font-bold text-surface-900 dark:text-white mb-4">Recent Payouts</h3>
+        {% if payouts %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 border-b border-surface-200 dark:border-surface-700">
+                        <th class="text-left py-3 px-4">Amount</th>
+                        <th class="text-left py-3 px-4">Status</th>
+                        <th class="text-left py-3 px-4">Arrival Date</th>
+                        <th class="text-left py-3 px-4">Method</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-surface-100 dark:divide-surface-800">
+                    {% for payout in payouts %}
+                    <tr>
+                        <td class="py-3 px-4 text-sm font-bold text-surface-900 dark:text-white">{{ payout.amount|format_currency }}</td>
+                        <td class="py-3 px-4">
+                            <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
+                                {% if payout.status == 'paid' %}bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400
+                                {% elif payout.status == 'pending' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
+                                {% else %}bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300
+                                {% endif %}">{{ payout.status }}</span>
+                        </td>
+                        <td class="py-3 px-4 text-sm text-surface-600 dark:text-surface-300">{{ payout.arrival_date|format_date if payout.arrival_date else '-' }}</td>
+                        <td class="py-3 px-4 text-sm text-surface-600 dark:text-surface-300">{{ payout.type }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-500 dark:text-surface-400 py-8 text-center">No payouts yet</p>
+        {% endif %}
+    </div>
+
+    <!-- Recently Paid -->
+    {% if paid_invoices %}
+    <div class="glass-card p-6">
+        <h3 class="text-lg font-bold text-surface-900 dark:text-white mb-4">Recently Paid</h3>
+        <div class="space-y-3">
+            {% for inv in paid_invoices %}
+            <a href="{{ url_for('stripe.invoice_detail', id=inv.id) }}" class="flex items-center justify-between p-3 rounded-xl hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors">
+                <div>
+                    <p class="text-sm font-semibold text-surface-900 dark:text-white">{{ inv.client.name }}</p>
+                    <p class="text-xs text-surface-500 dark:text-surface-400">{{ inv.invoice_number or 'N/A' }} &middot; Paid {{ inv.paid_at|format_date }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm font-bold text-emerald-600 dark:text-emerald-400">{{ inv.amount_paid|format_currency }}</p>
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Paid</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

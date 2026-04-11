@@ -1,0 +1,16 @@
+{% extends "pm/base.html" %}
+
+{% block page_title %}Not Found{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-[60vh]">
+    <div class="text-center">
+        <h1 class="text-6xl font-bold gradient-text mb-4">404</h1>
+        <p class="text-lg text-surface-500 dark:text-surface-400 mb-6">The page you're looking for doesn't exist.</p>
+        <a href="{{ url_for('pm.dashboard') }}"
+           class="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+            Go to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}

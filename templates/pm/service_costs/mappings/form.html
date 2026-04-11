@@ -1,0 +1,150 @@
+{% extends "pm/base.html" %}
+
+{% block title %}{{ 'Edit' if editing else 'New' }} Mapping - Built By Bean{% endblock %}
+{% block page_title %}{{ 'Edit' if editing else 'New' }} Resource Mapping{% endblock %}
+{% block page_subtitle %}Map a service resource to a client{% endblock %}
+
+{% block content %}
+<div x-data="mappingForm()" class="max-w-2xl mx-auto">
+    <form method="POST" class="space-y-6">
+
+        <!-- Provider & Resource -->
+        <div class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Resource</h3>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Provider</label>
+                <select name="provider_id" x-model="providerId" @change="loadResources()" {% if editing %}disabled{% endif %}
+                        class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" required>
+                    <option value="">Select provider...</option>
+                    {% for p in providers %}
+                    <option value="{{ p.id }}" {% if editing and mapping.provider_id == p.id %}selected{% endif %}>{{ p.display_name }}</option>
+                    {% endfor %}
+                </select>
+                {% if editing %}
+                <input type="hidden" name="provider_id" value="{{ mapping.provider_id }}">
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Resource</label>
+                <div class="relative">
+                    <input type="text" name="resource_identifier" x-model="resourceId"
+                           value="{{ mapping.resource_identifier if editing else '' }}"
+                           class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white"
+                           placeholder="e.g. aws:Amazon Simple Storage Service, railway:project-id" required
+                           list="resource-suggestions">
+                    <datalist id="resource-suggestions">
+                        <template x-for="r in resources" :key="r.id">
+                            <option :value="r.id" x-text="r.label"></option>
+                        </template>
+                    </datalist>
+                </div>
+                <template x-if="loadingResources">
+                    <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Loading resources...</p>
+                </template>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Label (optional)</label>
+                <input type="text" name="resource_label" value="{{ mapping.resource_label if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white"
+                       placeholder="Human-friendly name">
+            </div>
+        </div>
+
+        <!-- Client & Project -->
+        <div class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Allocation</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Client</label>
+                    <select name="client_id" class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                        <option value="">No client</option>
+                        {% for c in clients %}
+                        <option value="{{ c.id }}" {% if editing and mapping.client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Project (optional)</label>
+                    <select name="project_id" class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                        <option value="">No project</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}" {% if editing and mapping.project_id == p.id %}selected{% endif %}>{{ p.name }} ({{ p.client.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Split Percentage</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" name="split_percentage" min="0" max="100" step="0.1"
+                               value="{{ mapping.split_percentage if editing else 100 }}"
+                               class="w-32 input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                        <span class="text-sm text-surface-500 dark:text-surface-400">%</span>
+                    </div>
+                    <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">100% for dedicated, split for shared resources.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Monthly Cost (optional)</label>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-surface-500 dark:text-surface-400">$</span>
+                        <input type="number" name="monthly_cost" min="0" step="0.01"
+                               value="{{ mapping.monthly_cost if editing and mapping.monthly_cost else '' }}"
+                               class="w-32 input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white"
+                               placeholder="0.00">
+                    </div>
+                    <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">For services without cost APIs (e.g. Railway). Enter the monthly amount from your bill.</p>
+                </div>
+            </div>
+        </div>
+
+        {% if editing %}
+        <div class="glass-card p-6">
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" name="is_active" {{ 'checked' if mapping.is_active else '' }}
+                       class="w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-brand-500 focus:ring-brand-500">
+                <span class="text-sm font-medium text-surface-700 dark:text-surface-300">Active</span>
+            </label>
+        </div>
+        {% endif %}
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="px-6 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                {{ 'Update Mapping' if editing else 'Create Mapping' }}
+            </button>
+            <a href="{{ url_for('service_costs.mappings_list') }}" class="px-6 py-2.5 text-sm font-medium text-surface-500 hover:text-surface-700 dark:hover:text-surface-300">Cancel</a>
+        </div>
+
+    </form>
+</div>
+
+<script>
+function mappingForm() {
+    return {
+        providerId: '{{ mapping.provider_id if editing else '' }}',
+        resourceId: '{{ mapping.resource_identifier if editing else '' }}',
+        resources: [],
+        loadingResources: false,
+
+        async loadResources() {
+            if (!this.providerId) { this.resources = []; return; }
+            this.loadingResources = true;
+            try {
+                const resp = await fetch(`/service-costs/api/resources/${this.providerId}`);
+                this.resources = await resp.json();
+            } catch (e) { console.error(e); }
+            this.loadingResources = false;
+        },
+
+        init() {
+            if (this.providerId) this.loadResources();
+        }
+    };
+}
+</script>
+{% endblock %}
