@@ -1,3 +1,7 @@
+// Enable JS-only styling (fade-on-scroll, etc). If this script fails
+// to load or errors out, the page stays fully visible without dimming.
+document.documentElement.classList.add('js-ready');
+
 // Navigation scroll effect
 const nav = document.getElementById('nav');
 window.addEventListener('scroll', () => {

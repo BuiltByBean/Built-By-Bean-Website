@@ -371,36 +371,38 @@ html {
     scroll-snap-stop: normal;
 }
 
-.hero > .container,
-.section > .container {
+/* Fade-on-scroll only kicks in once JS has added .js-ready — that way
+   if the script fails to load, the page stays fully visible. */
+.js-ready .hero > .container,
+.js-ready .section > .container {
     opacity: 0.1;
     transform: translateY(32px);
     transition: opacity 0.85s ease, transform 0.85s ease;
     will-change: opacity, transform;
 }
 
-.hero.is-visible > .container,
-.section.is-visible > .container {
+.js-ready .hero.is-visible > .container,
+.js-ready .section.is-visible > .container {
     opacity: 1;
     transform: translateY(0);
 }
 
-.hero > .scroll-indicator,
-.section > .scroll-indicator {
+.js-ready .hero > .scroll-indicator,
+.js-ready .section > .scroll-indicator {
     opacity: 0;
     transition: opacity 0.6s ease 0.25s;
 }
 
-.hero.is-visible > .scroll-indicator,
-.section.is-visible > .scroll-indicator {
+.js-ready .hero.is-visible > .scroll-indicator,
+.js-ready .section.is-visible > .scroll-indicator {
     opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .hero > .container,
-    .section > .container,
-    .hero > .scroll-indicator,
-    .section > .scroll-indicator {
+    .js-ready .hero > .container,
+    .js-ready .section > .container,
+    .js-ready .hero > .scroll-indicator,
+    .js-ready .section > .scroll-indicator {
         opacity: 1 !important;
         transform: none !important;
     }
