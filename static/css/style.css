@@ -521,32 +521,25 @@ html {
     opacity: 1;
 }
 
-/* Connecting arrow between steps */
-.process-step + .process-step::after {
-    content: '→';
-    position: absolute;
-    top: 50%;
-    left: -18px;
-    transform: translateY(-50%);
+.step-icon {
+    width: 52px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 13px;
+    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
+    border: 1px solid rgba(168, 85, 247, 0.3);
     color: var(--primary);
-    font-size: 1.4rem;
-    font-weight: 600;
-    opacity: 0.55;
-    pointer-events: none;
+    font-size: 1.65rem;
+    margin-bottom: 22px;
+    transition: all 0.3s;
 }
 
-.step-number {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 2.75rem;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -0.03em;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    margin-bottom: 20px;
-    display: block;
+.process-step:hover .step-icon {
+    color: var(--accent);
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 24px var(--primary-glow);
 }
 
 .process-step h3 {
@@ -1144,10 +1137,6 @@ html {
     .process-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 40px;
-    }
-
-    .process-step + .process-step::after {
-        display: none;
     }
 }
 
