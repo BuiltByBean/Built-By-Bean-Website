@@ -442,7 +442,12 @@ html {
 }
 
 .service-card:hover {
-    border-color: var(--primary-dark);
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     box-shadow: 0 0 30px var(--primary-glow);
     transform: translateY(-4px);
 }
@@ -800,7 +805,12 @@ html {
 }
 
 .promise-card:hover {
-    border-color: var(--primary-dark);
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     box-shadow: 0 0 40px var(--primary-glow);
     transform: translateY(-6px);
 }
@@ -875,10 +885,12 @@ html {
 }
 
 .option-custom {
-    border-color: var(--primary-dark);
-    background:
-        linear-gradient(135deg, rgba(168, 85, 247, 0.05), rgba(56, 189, 248, 0.03)),
-        var(--surface);
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     box-shadow: 0 0 40px var(--primary-glow);
     position: relative;
 }
@@ -1051,7 +1063,12 @@ html {
 }
 
 .why-card:hover {
-    border-color: var(--primary-dark);
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     box-shadow: 0 0 40px var(--primary-glow);
     transform: translateY(-4px);
 }
@@ -1426,9 +1443,13 @@ html {
 
 .tile:hover {
     transform: translateY(-4px);
-    border-color: var(--primary);
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface-hover), var(--surface-hover)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     box-shadow: 0 20px 40px rgba(168, 85, 247, 0.15);
-    background: var(--surface-hover);
 }
 
 .tile-icon {
