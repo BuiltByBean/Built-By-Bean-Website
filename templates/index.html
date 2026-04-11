@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version }}">
 </head>
 <body>
     <!-- Navigation -->
@@ -152,22 +152,22 @@
 
             <div class="why-compare">
                 <div class="compare-col compare-shelf">
-                    <div class="compare-label">Off-the-shelf SaaS</div>
+                    <div class="compare-label">Renting off-the-shelf tools</div>
                     <ul class="compare-list">
-                        <li>Monthly fees forever, per user, every year</li>
+                        <li>Monthly subscription fees, per user, forever</li>
                         <li>You bend your workflow to fit their product</li>
                         <li>Pay for features you'll never use</li>
-                        <li>Price hikes, removed features, deprecated tiers</li>
+                        <li>Price hikes and features yanked away whenever they feel like it</li>
                         <li>Your data lives on someone else's server</li>
                     </ul>
                 </div>
                 <div class="compare-divider"><span>vs.</span></div>
                 <div class="compare-col compare-custom">
-                    <div class="compare-label">Custom built by us</div>
+                    <div class="compare-label">Owning custom built by us</div>
                     <ul class="compare-list compare-list-good">
                         <li>One investment, then it's yours — no rent</li>
                         <li>The app fits your workflow, not the reverse</li>
-                        <li>Every feature is built because you asked for it</li>
+                        <li>Every feature exists because you asked for it</li>
                         <li>No surprise price changes — you own the code</li>
                         <li>Your data lives where you decide</li>
                     </ul>
@@ -178,19 +178,19 @@
                 <div class="why-card">
                     <div class="why-icon">&#128200;</div>
                     <h3>Pay once, save forever</h3>
-                    <p>Yes — custom costs more up front than clicking "Start Free Trial." But do the math on your SaaS stack. Most tools charge per seat, per month, every month you stay in business. A custom app you actually own usually pays itself off inside a year, sometimes faster. Every month after that is pure savings going straight back into your bottom line.</p>
-                    <p>Think of it as the difference between renting and owning. SaaS is a lease you can never buy out. Custom is an asset your business keeps.</p>
+                    <p>Yes — custom costs more up front than signing up for yet another monthly subscription. But do the math on everything you're already paying every month: the scheduling tool, the CRM, the invoicing app, the reporting dashboard. Those bills never stop, and they go up every year.</p>
+                    <p>A custom app you actually own usually pays itself off inside a year, sometimes faster. Every month after that is pure savings going straight back into your bottom line. Think of it like the difference between renting and owning a house — subscriptions are a lease you can never buy out. Custom is an asset your business keeps.</p>
                 </div>
                 <div class="why-card">
                     <div class="why-icon">&#9881;&#65039;</div>
                     <h3>Built around how you already work</h3>
-                    <p>Off-the-shelf tools force your team to learn someone else's system, then duct-tape workarounds when it doesn't quite fit. That friction adds up — hours every week lost to retraining, double-entry, and "we just do it that way because the software won't let us do it right."</p>
+                    <p>Off-the-shelf tools force your team to learn someone else's system, then duct-tape workarounds when it doesn't quite fit. That friction adds up fast — hours every week lost to retraining, double-entry, and "we just do it that way because the software won't let us do it right."</p>
                     <p>Custom flips that around. We study how you actually run your business and build the app to match. No retraining. No fighting the tool. Just a system that slots into your day so cleanly you stop noticing it — and all those reclaimed hours go straight into growing the business instead of babysitting software.</p>
                 </div>
             </div>
 
             <div class="why-cta">
-                <p>Curious what the ROI looks like for your situation?</p>
+                <p>Curious what the math looks like for your business?</p>
                 <a href="#contact" class="btn btn-primary">Let's run the numbers</a>
             </div>
         </div>

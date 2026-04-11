@@ -371,10 +371,14 @@ def create_app():
 
     # ── Context Processor ────────────────────────────────────
 
+    # Asset cache-busting version (updates on each process boot → each deploy)
+    _asset_version = str(int(datetime.now(timezone.utc).timestamp()))
+
     @app.context_processor
     def inject_globals():
         return {
             "now": datetime.now(timezone.utc),
+            "asset_version": _asset_version,
             "phase_choices": PHASE_CHOICES,
             "status_choices": PROJECT_STATUS_CHOICES,
             "task_status_choices": TASK_STATUS_CHOICES,
