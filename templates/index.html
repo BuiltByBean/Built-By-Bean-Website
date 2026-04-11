@@ -44,12 +44,16 @@
     <header class="hero">
         <div class="container">
             <div class="hero-content">
-                <div class="hero-badge">Handbuilt web apps</div>
                 <h1>I build the software<br>your business <span class="text-gradient">actually needs</span></h1>
                 <p class="hero-subtitle">Hi, I'm Michael. I build custom web apps for small businesses that are tired of the subscription treadmill — tools that fit your workflow, that you own outright, and don't hit you with subscription fees or per-user pricing ever again.</p>
                 <div class="hero-actions">
-                    <a href="#contact" class="btn btn-primary btn-lg">Let's talk</a>
-                    <a href="#why-custom" class="btn btn-outline btn-lg">Why custom?</a>
+                    <a href="#contact" class="btn btn-primary btn-lg">
+                        <span>Let's talk</span>
+                        {{ icons.arrowRight() }}
+                    </a>
+                    <a href="#why-custom" class="btn btn-outline btn-lg">
+                        <span>Why custom?</span>
+                    </a>
                 </div>
             </div>
             <div class="hero-visual">
