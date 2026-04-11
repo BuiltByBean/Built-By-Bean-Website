@@ -64,7 +64,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 72px;
+    min-height: 120px;
 }
 
 .logo {
@@ -78,10 +78,10 @@ body {
 }
 
 .logo-img {
-    width: 48px;
-    height: 48px;
+    width: 96px;
+    height: 96px;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: 10px;
 }
 
 .nav-links {
@@ -178,7 +178,7 @@ body {
 /* ===== Hero ===== */
 .hero {
     min-height: 100vh;
-    padding: 140px 0 140px;
+    padding: 180px 0 140px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1149,7 +1149,7 @@ html {
     .nav-links {
         display: none;
         position: absolute;
-        top: 72px;
+        top: 120px;
         left: 0;
         right: 0;
         background: var(--bg);
