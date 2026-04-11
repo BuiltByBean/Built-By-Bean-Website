@@ -683,19 +683,15 @@ body {
 /* ===== Promise / Value Props ===== */
 .promise-section {
     position: relative;
-    overflow: hidden;
-}
-
-.promise-section::before {
-    content: '';
-    position: absolute;
-    top: -40%;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 900px;
-    height: 600px;
-    background: radial-gradient(ellipse, var(--primary-glow), transparent 70%);
-    pointer-events: none;
+    background:
+        radial-gradient(ellipse 900px 500px at 50% 55%, var(--primary-glow), transparent 70%),
+        linear-gradient(
+            to bottom,
+            var(--bg) 0%,
+            var(--bg-alt) 180px,
+            var(--bg-alt) calc(100% - 180px),
+            var(--bg) 100%
+        );
 }
 
 .promise-section .container {
@@ -775,10 +771,9 @@ body {
 .why-section {
     position: relative;
     background:
-        radial-gradient(ellipse at top left, rgba(56, 189, 248, 0.08), transparent 50%),
-        radial-gradient(ellipse at bottom right, var(--primary-glow), transparent 55%),
+        radial-gradient(ellipse 700px 500px at 20% 60%, rgba(56, 189, 248, 0.09), transparent 65%),
+        radial-gradient(ellipse 800px 500px at 80% 40%, var(--primary-glow), transparent 65%),
         var(--bg);
-    overflow: hidden;
 }
 
 .why-compare {
