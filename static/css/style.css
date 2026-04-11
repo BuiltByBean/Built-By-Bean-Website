@@ -128,9 +128,22 @@ body {
     transform: scaleX(1);
 }
 
-/* Push the CTA + admin link to sit apart from the section links */
-.nav-cta {
-    margin-left: 10px;
+/* Subtle vertical divider before the admin / log-in link, separating
+   the section anchor links on the left from the secondary admin
+   escape hatch on the right. */
+.nav-admin-item {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.nav-admin-item::before {
+    content: '';
+    display: block;
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    opacity: 0.6;
 }
 
 /* Subtle admin / log-in link — no chrome, small, muted */

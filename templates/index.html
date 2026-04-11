@@ -25,11 +25,11 @@
                 <li><a href="#why-custom" class="nav-link">Why Custom</a></li>
                 <li><a href="#costs" class="nav-link">The Cost</a></li>
                 <li><a href="#process" class="nav-link">Process</a></li>
-                <li class="nav-cta"><a href="#contact" class="btn btn-sm">Get in Touch</a></li>
+                <li><a href="#contact" class="nav-link">Get in Touch</a></li>
                 {% if current_user.is_authenticated %}
-                <li><a href="{{ url_for('admin_hub') }}" class="nav-admin">Admin</a></li>
+                <li class="nav-admin-item"><a href="{{ url_for('admin_hub') }}" class="nav-admin">Admin</a></li>
                 {% else %}
-                <li><a href="{{ url_for('login') }}" class="nav-admin">Log In</a></li>
+                <li class="nav-admin-item"><a href="{{ url_for('login') }}" class="nav-admin">Log In</a></li>
                 {% endif %}
             </ul>
             <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">
