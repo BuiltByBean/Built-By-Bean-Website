@@ -87,7 +87,7 @@ body {
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 32px;
+    gap: 30px;
     list-style: none;
 }
 
@@ -100,6 +100,51 @@ body {
 }
 
 .nav-links a:hover {
+    color: var(--text);
+}
+
+/* Section anchor links: animated gradient underline on hover */
+.nav-link {
+    position: relative;
+    padding: 4px 0;
+    letter-spacing: 0.01em;
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 1.5px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+    border-radius: 2px;
+}
+
+.nav-link:hover::after {
+    transform: scaleX(1);
+}
+
+/* Push the CTA + admin link to sit apart from the section links */
+.nav-cta {
+    margin-left: 10px;
+}
+
+/* Subtle admin / log-in link — no chrome, small, muted */
+.nav-admin {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    opacity: 0.7;
+    letter-spacing: 0.02em;
+    transition: opacity 0.2s, color 0.2s;
+}
+
+.nav-admin:hover {
+    opacity: 1;
     color: var(--text);
 }
 
