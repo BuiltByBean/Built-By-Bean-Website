@@ -926,11 +926,13 @@ html {
 
 .why-bridge {
     text-align: center;
-    font-size: 1.05rem;
+    font-size: 1.15rem;
+    font-weight: 600;
     color: var(--text);
-    max-width: 640px;
+    max-width: 820px;
     margin: 0 auto 40px;
-    line-height: 1.6;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
 }
 
 .compare-col {
