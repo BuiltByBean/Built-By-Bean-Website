@@ -60,6 +60,53 @@ document.querySelectorAll('.hero, .section').forEach(el => {
 const hero = document.querySelector('.hero');
 if (hero) hero.classList.add('is-visible');
 
+// Fixed viewport scroll-nav: up + down chevrons pinned to the bottom of
+// the window. Targets update dynamically based on which section is
+// currently in view. Hidden on unsupported states (e.g. first/last).
+const scrollNav = document.querySelector('.scroll-nav');
+if (scrollNav) {
+    const scrollSections = [...document.querySelectorAll('.hero, .section')];
+    const upBtn = scrollNav.querySelector('.scroll-nav-up');
+    const downBtn = scrollNav.querySelector('.scroll-nav-down');
+
+    const smoothScrollTo = (el) => {
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const currentSectionIndex = () => {
+        const centerY = window.scrollY + window.innerHeight / 2;
+        let idx = 0;
+        for (let i = 0; i < scrollSections.length; i++) {
+            if (scrollSections[i].offsetTop <= centerY) idx = i;
+        }
+        return idx;
+    };
+
+    const updateScrollNav = () => {
+        const i = currentSectionIndex();
+        const prev = scrollSections[i - 1];
+        const next = scrollSections[i + 1];
+        upBtn.hidden = !prev;
+        downBtn.hidden = !next;
+        upBtn.dataset.targetIndex = prev ? String(i - 1) : '';
+        downBtn.dataset.targetIndex = next ? String(i + 1) : '';
+    };
+
+    upBtn.addEventListener('click', () => {
+        const i = currentSectionIndex();
+        smoothScrollTo(scrollSections[i - 1]);
+    });
+    downBtn.addEventListener('click', () => {
+        const i = currentSectionIndex();
+        smoothScrollTo(scrollSections[i + 1]);
+    });
+
+    window.addEventListener('scroll', updateScrollNav, { passive: true });
+    window.addEventListener('resize', updateScrollNav);
+    updateScrollNav();
+}
+
 // Contact form
 const form = document.getElementById('contact-form');
 const submitBtn = document.getElementById('submit-btn');

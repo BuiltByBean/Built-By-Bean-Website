@@ -70,9 +70,6 @@
                 </div>
             </div>
         </div>
-        <a href="#promise" class="scroll-indicator" aria-label="Scroll to next section">
-            {{ icons.chevronDown() }}
-        </a>
     </header>
 
     <!-- Promise / Value Props -->
@@ -100,9 +97,6 @@
                 </div>
             </div>
         </div>
-        <a href="#why-custom" class="scroll-indicator" aria-label="Scroll to Why Custom">
-            {{ icons.chevronDown() }}
-        </a>
     </section>
 
     {# Services section hidden — uncomment to bring back.
@@ -212,9 +206,6 @@
                 </div>
             </div>
         </div>
-        <a href="#process" class="scroll-indicator" aria-label="Scroll to Process">
-            {{ icons.chevronDown() }}
-        </a>
     </section>
 
     <!-- Process -->
@@ -247,9 +238,6 @@
                 </div>
             </div>
         </div>
-        <a href="#contact" class="scroll-indicator" aria-label="Scroll to Contact">
-            {{ icons.chevronDown() }}
-        </a>
     </section>
 
     <!-- Contact -->
@@ -319,6 +307,15 @@
             </div>
         </div>
     </footer>
+
+    <nav class="scroll-nav" aria-label="Section navigation">
+        <button type="button" class="scroll-nav-btn scroll-nav-up" aria-label="Previous section" hidden>
+            {{ icons.chevronUp() }}
+        </button>
+        <button type="button" class="scroll-nav-btn scroll-nav-down" aria-label="Next section">
+            {{ icons.chevronDown() }}
+        </button>
+    </nav>
 
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ asset_version }}"></script>
 </body>
