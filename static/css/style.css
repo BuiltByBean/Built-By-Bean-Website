@@ -347,8 +347,24 @@ body {
 }
 
 .service-icon {
-    font-size: 2rem;
-    margin-bottom: 16px;
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--primary-glow);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    color: var(--primary);
+    font-size: 1.75rem;
+    margin-bottom: 20px;
+    transition: all 0.3s;
+}
+
+.service-card:hover .service-icon {
+    color: var(--accent);
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 20px var(--primary-glow);
 }
 
 .service-card h3 {
@@ -665,8 +681,24 @@ body {
 }
 
 .promise-icon {
-    font-size: 2.4rem;
-    margin-bottom: 20px;
+    width: 56px;
+    height: 56px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: var(--primary);
+    font-size: 2rem;
+    margin-bottom: 22px;
+    transition: all 0.3s;
+}
+
+.promise-card:hover .promise-icon {
+    color: var(--accent);
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 24px var(--primary-glow);
 }
 
 .promise-card h3 {
@@ -804,8 +836,24 @@ body {
 }
 
 .why-icon {
-    font-size: 2.2rem;
-    margin-bottom: 18px;
+    width: 52px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 13px;
+    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: var(--primary);
+    font-size: 1.85rem;
+    margin-bottom: 20px;
+    transition: all 0.3s;
+}
+
+.why-card:hover .why-icon {
+    color: var(--accent);
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 24px var(--primary-glow);
 }
 
 .why-card h3 {
@@ -1154,8 +1202,24 @@ body {
 }
 
 .tile-icon {
-    font-size: 2.25rem;
-    margin-bottom: 16px;
+    width: 52px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 13px;
+    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: var(--primary);
+    font-size: 1.85rem;
+    margin-bottom: 18px;
+    transition: all 0.3s;
+}
+
+.tile:hover .tile-icon {
+    color: var(--accent);
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 24px var(--primary-glow);
 }
 
 .tile h3 {

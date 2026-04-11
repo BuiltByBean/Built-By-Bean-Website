@@ -1,3 +1,4 @@
+{% import '_icons.html' as icons %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_version }}">
 </head>
 <body class="hub-body">
     <nav class="nav hub-nav">
@@ -33,12 +34,12 @@
 
             <div class="tile-grid">
                 <a href="{{ url_for('pm.dashboard') }}" class="tile">
-                    <div class="tile-icon">&#128202;</div>
+                    <div class="tile-icon">{{ icons.barChart() }}</div>
                     <h3>Project Manager</h3>
                     <p>Clients, projects, tasks, time tracking, invoicing, and reports.</p>
                 </a>
                 <div class="tile tile-placeholder">
-                    <div class="tile-icon">&#10133;</div>
+                    <div class="tile-icon">{{ icons.plus() }}</div>
                     <h3>More tools coming</h3>
                     <p>Future admin tools will appear here as you build them.</p>
                 </div>
