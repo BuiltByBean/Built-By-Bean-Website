@@ -19,7 +19,7 @@ navLinks.querySelectorAll('a').forEach(link => {
     });
 });
 
-// Scroll animations
+// Scroll animations for cards (fade-in once)
 const observerOptions = {
     threshold: 0.1,
     rootMargin: '0px 0px -40px 0px'
@@ -37,6 +37,24 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.service-card, .process-step, .contact-card, .about-content').forEach(el => {
     observer.observe(el);
 });
+
+// Section visibility — fade the active section in, dim the others.
+// Reversible (no unobserve) so sections fade out when scrolled past.
+const sectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        entry.target.classList.toggle('is-visible', entry.intersectionRatio >= 0.35);
+    });
+}, {
+    threshold: [0, 0.15, 0.35, 0.55, 0.75, 1]
+});
+
+document.querySelectorAll('.hero, .section').forEach(el => {
+    sectionObserver.observe(el);
+});
+
+// Mark the hero visible immediately on load so the first view isn't dim
+const hero = document.querySelector('.hero');
+if (hero) hero.classList.add('is-visible');
 
 // Contact form
 const form = document.getElementById('contact-form');

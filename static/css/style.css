@@ -339,7 +339,13 @@ body {
 
 /* ===== Sections ===== */
 .section {
-    padding: 100px 0;
+    min-height: 100vh;
+    padding: 120px 0 140px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
 }
 
 .section-alt {
@@ -347,9 +353,58 @@ body {
         linear-gradient(
             to bottom,
             var(--bg) 0%,
-            var(--bg-alt) 50%,
+            var(--bg-alt) 18%,
+            var(--bg-alt) 82%,
             var(--bg) 100%
         );
+}
+
+/* Scroll snap + fade-on-scroll */
+html {
+    scroll-behavior: smooth;
+    scroll-snap-type: y proximity;
+}
+
+.hero,
+.section {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+}
+
+.hero > .container,
+.section > .container {
+    opacity: 0.1;
+    transform: translateY(32px);
+    transition: opacity 0.85s ease, transform 0.85s ease;
+    will-change: opacity, transform;
+}
+
+.hero.is-visible > .container,
+.section.is-visible > .container {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.hero > .scroll-indicator,
+.section > .scroll-indicator {
+    opacity: 0;
+    transition: opacity 0.6s ease 0.25s;
+}
+
+.hero.is-visible > .scroll-indicator,
+.section.is-visible > .scroll-indicator {
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero > .container,
+    .section > .container,
+    .hero > .scroll-indicator,
+    .section > .scroll-indicator {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+    html { scroll-snap-type: none; scroll-behavior: auto; }
 }
 
 .section-header {
