@@ -850,19 +850,7 @@ html {
         linear-gradient(135deg, rgba(168, 85, 247, 0.05), rgba(56, 189, 248, 0.03)),
         var(--surface);
     box-shadow: 0 0 40px var(--primary-glow);
-    transform: translateY(-8px);
     position: relative;
-}
-
-.option-custom::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .option-label {
@@ -1112,10 +1100,6 @@ html {
         padding: 24px 20px;
     }
 
-    .option-custom {
-        transform: none;
-    }
-
     .process-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 40px;
@@ -1176,10 +1160,6 @@ html {
     .why-options {
         grid-template-columns: 1fr;
         gap: 16px;
-    }
-
-    .option-custom {
-        transform: none;
     }
 
     .why-card {
