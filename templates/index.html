@@ -23,6 +23,7 @@
             <ul class="nav-links" id="nav-links">
                 <li><a href="#promise">Our Promise</a></li>
                 <li><a href="#why-custom">Why Custom</a></li>
+                <li><a href="#costs">The Cost</a></li>
                 <li><a href="#process">Process</a></li>
                 <li><a href="#contact" class="btn btn-sm">Get in Touch</a></li>
                 {% if current_user.is_authenticated %}
@@ -191,8 +192,16 @@
                 </div>
             </div>
 
-            <p class="why-bridge">Custom costs more up front — <span class="text-gradient">here's what that actually buys you</span>.</p>
+        </div>
+    </section>
 
+    <!-- The real cost -->
+    <section class="section section-alt" id="costs">
+        <div class="container">
+            <div class="section-header">
+                <h2>The real <span class="text-gradient">cost</span></h2>
+                <p>Custom costs more up front — here's what that actually buys you.</p>
+            </div>
             <div class="why-grid">
                 <div class="why-card">
                     <div class="why-icon">{{ icons.trendingUp() }}</div>

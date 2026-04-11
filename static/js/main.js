@@ -60,6 +60,21 @@ document.querySelectorAll('.hero, .section').forEach(el => {
 const hero = document.querySelector('.hero');
 if (hero) hero.classList.add('is-visible');
 
+// Hide the scroll arrows while the viewport is actively moving so they
+// don't flash across the page during a snap / smooth-scroll transition.
+// The class is removed ~200ms after the last scroll event fires, which
+// matches when a typical smooth-scroll has settled onto its target.
+{
+    let scrollSettleTimer;
+    window.addEventListener('scroll', () => {
+        document.documentElement.classList.add('is-scrolling');
+        clearTimeout(scrollSettleTimer);
+        scrollSettleTimer = setTimeout(() => {
+            document.documentElement.classList.remove('is-scrolling');
+        }, 180);
+    }, { passive: true });
+}
+
 // Fixed viewport scroll arrows — up chevron pinned near the top of the
 // window, down chevron pinned near the bottom. Visibility and targets
 // update dynamically based on which section is currently in view.
