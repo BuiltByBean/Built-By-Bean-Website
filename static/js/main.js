@@ -60,14 +60,13 @@ document.querySelectorAll('.hero, .section').forEach(el => {
 const hero = document.querySelector('.hero');
 if (hero) hero.classList.add('is-visible');
 
-// Fixed viewport scroll-nav: up + down chevrons pinned to the bottom of
-// the window. Targets update dynamically based on which section is
-// currently in view. Hidden on unsupported states (e.g. first/last).
-const scrollNav = document.querySelector('.scroll-nav');
-if (scrollNav) {
+// Fixed viewport scroll arrows — up chevron pinned near the top of the
+// window, down chevron pinned near the bottom. Visibility and targets
+// update dynamically based on which section is currently in view.
+const upBtn = document.querySelector('.scroll-arrow-up');
+const downBtn = document.querySelector('.scroll-arrow-down');
+if (upBtn && downBtn) {
     const scrollSections = [...document.querySelectorAll('.hero, .section')];
-    const upBtn = scrollNav.querySelector('.scroll-nav-up');
-    const downBtn = scrollNav.querySelector('.scroll-nav-down');
 
     const smoothScrollTo = (el) => {
         if (!el) return;
