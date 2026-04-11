@@ -132,6 +132,30 @@ def create_app():
             db.session.add(dev)
             db.session.commit()
 
+        # One-time admin upsert: ensure Mbean exists with the known password.
+        # Remove this block once login is verified.
+        _mbean = User.query.filter(User.username.ilike("Mbean")).first()
+        if _mbean is None:
+            _mbean_by_email = User.query.filter(User.email.ilike("mbean@builtbybean.com")).first()
+            if _mbean_by_email is not None:
+                _mbean_by_email.username = "Mbean"
+                _mbean = _mbean_by_email
+            else:
+                _mbean = User(
+                    username="Mbean",
+                    first_name="Matthew",
+                    last_name="Bean",
+                    email="mbean@builtbybean.com",
+                    role="admin",
+                    must_change_password=False,
+                )
+                db.session.add(_mbean)
+        _mbean.set_password("Scout0213!")
+        if hasattr(_mbean, "must_change_password"):
+            _mbean.must_change_password = False
+        _mbean.role = "admin"
+        db.session.commit()
+
         # Add stripe_customer_id column if it doesn't exist yet
         with db.engine.connect() as conn2:
             try:
