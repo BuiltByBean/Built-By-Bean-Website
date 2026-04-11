@@ -1,0 +1,385 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/status_badge.html" import badge %}
+
+{% block page_title %}{{ project.name }}{% endblock %}
+{% block page_subtitle %}{{ project.client.name }}{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center gap-2" x-data="{ confirmDelete: false }">
+    <button @click="$dispatch('open-task-modal')"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        New Task
+    </button>
+    <a href="{{ url_for('pm.time_create', project_id=project.id) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+        Log Time
+    </a>
+    <a href="{{ url_for('pm.project_edit', id=project.id) }}"
+       class="px-3 py-2 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">
+        Edit
+    </a>
+    <div x-show="!confirmDelete">
+        <button @click="confirmDelete = true"
+                class="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-600 text-sm font-medium rounded-xl transition-colors">
+            Delete
+        </button>
+    </div>
+    <form x-show="confirmDelete" x-cloak method="POST" action="{{ url_for('pm.project_delete', id=project.id) }}" class="inline-flex items-center gap-2">
+        <span class="text-xs text-red-500">Delete project?</span>
+        <button type="submit" class="px-3 py-2 text-xs bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium">Yes</button>
+        <button type="button" @click="confirmDelete = false" class="px-3 py-2 text-xs text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 font-medium">No</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Phase Progress Bar -->
+{% set phases = [('discovery', 'Discovery'), ('proposal', 'Proposal'), ('contracted', 'Contracted'), ('mvp', 'MVP'), ('live', 'Live')] %}
+{% set phase_keys = phases | map(attribute='0') | list %}
+{% set current_idx = phase_keys.index(project.phase) if project.phase in phase_keys else 0 %}
+<div class="glass-card p-6 mb-6">
+    <div class="relative mb-6">
+        <!-- Connector lines (behind circles) -->
+        <div class="absolute top-[18px] left-0 right-0 px-[10%]">
+            <div class="grid grid-cols-4 gap-0">
+                {% for val, label in phases %}
+                {% if not loop.last %}
+                {% set idx = loop.index0 %}
+                <div class="h-0.5 rounded-full {% if idx < current_idx %}bg-brand-500{% else %}bg-surface-200 dark:bg-surface-700{% endif %}"></div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        <!-- Step circles -->
+        <div class="relative grid grid-cols-5 gap-0">
+            {% for val, label in phases %}
+            {% set idx = loop.index0 %}
+            <form method="POST" action="{{ url_for('pm.project_phase_update', id=project.id) }}" class="flex flex-col items-center">
+                <input type="hidden" name="phase" value="{{ val }}">
+                <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
+                    {% if idx < current_idx %}bg-brand-500 text-white shadow-md shadow-brand-500/30 hover:bg-brand-600
+                    {% elif idx == current_idx %}bg-brand-500 text-white shadow-lg shadow-brand-500/40 ring-4 ring-brand-500/20
+                    {% else %}bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 hover:bg-surface-300 dark:hover:bg-surface-600{% endif %}">
+                    {% if idx < current_idx %}
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    {% else %}{{ idx + 1 }}{% endif %}
+                </button>
+                <span class="mt-2 text-[11px] font-medium whitespace-nowrap
+                    {% if idx <= current_idx %}text-brand-600 dark:text-brand-400{% else %}text-surface-400 dark:text-surface-500{% endif %}">{{ label }}</span>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Project Info -->
+    <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase">Status:</span>
+            {{ badge(project.status) }}
+        </div>
+        {% if project.mvp_date %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase">MVP Date:</span>
+            <span class="text-sm font-medium text-surface-900 dark:text-white">{{ project.mvp_date | format_date }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-500 dark:text-surface-400 uppercase">Free Maint. Ends:</span>
+            {% set today = now.date() if now else none %}
+            {% if project.free_maintenance_end and today and today <= project.free_maintenance_end %}
+            <span class="text-sm font-medium text-emerald-600 dark:text-emerald-400">{{ project.free_maintenance_end | format_date }}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Active</span>
+            {% elif project.free_maintenance_end %}
+            <span class="text-sm font-medium text-surface-500 dark:text-surface-400">{{ project.free_maintenance_end | format_date }}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-600 dark:bg-surface-800 dark:text-surface-400">Expired</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if project.description %}
+    <p class="mt-4 text-sm text-surface-600 dark:text-surface-300">{{ project.description }}</p>
+    {% endif %}
+</div>
+
+<!-- Financial Summary -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+    <div class="glass-card p-4">
+        <p class="text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Total Hours</p>
+        <p class="text-lg font-bold text-surface-900 dark:text-white">{{ project.total_hours | format_hours }}</p>
+    </div>
+    <div class="glass-card p-4">
+        <p class="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">Revenue</p>
+        <p class="text-lg font-bold text-emerald-700 dark:text-emerald-300">{{ project.total_revenue | format_currency }}</p>
+    </div>
+    <div class="glass-card p-4">
+        <p class="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Expenses</p>
+        <p class="text-lg font-bold text-red-700 dark:text-red-300">{{ project.total_expenses | format_currency }}</p>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div x-data="{ tab: 'tasks' }">
+    <div class="flex gap-1 mb-4 p-1 glass-card w-fit">
+        <button @click="tab = 'tasks'" :class="tab === 'tasks' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800'"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            Tasks ({{ tasks | length }})
+        </button>
+        <button @click="tab = 'time'" :class="tab === 'time' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800'"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            Time ({{ time_entries | length }})
+        </button>
+        <button @click="tab = 'expenses'" :class="tab === 'expenses' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800'"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            Expenses ({{ expenses | length }})
+        </button>
+        <button @click="tab = 'docs'" :class="tab === 'docs' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800'"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            Documents ({{ documents | length }})
+        </button>
+        <button @click="tab = 'invoices'" :class="tab === 'invoices' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800'"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            Invoices ({{ project.invoices | length }})
+        </button>
+    </div>
+
+    <!-- Tasks Tab -->
+    <div x-show="tab === 'tasks'" class="glass-card p-6">
+        {% if tasks %}
+        <div class="space-y-3">
+            {% for task in tasks %}
+            <a href="{{ url_for('pm.task_detail', id=task.id) }}"
+               class="flex items-center justify-between p-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-700/50 transition-colors">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h4 class="text-sm font-medium text-surface-900 dark:text-white truncate">{{ task.title }}</h4>
+                        {{ badge(task.status) }}
+                        {{ badge(task.priority) }}
+                    </div>
+                    <p class="text-xs text-surface-500 dark:text-surface-400">
+                        {{ task.documents.count() }} docs &middot; {{ task.expenses.count() }} expenses &middot; {{ task.total_hours | format_hours }}
+                        {% if task.subtask_count > 0 %} &middot; {{ task.completed_subtask_count }}/{{ task.subtask_count }} subtasks{% endif %}
+                        {% if task.due_date %} &middot; Due {{ task.due_date | format_date }}{% endif %}
+                    </p>
+                </div>
+                <svg class="w-4 h-4 text-surface-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-sm text-surface-400 dark:text-surface-500 mb-3">No tasks yet</p>
+            <button @click="$dispatch('open-task-modal')" class="inline-flex items-center gap-1.5 text-sm font-medium text-brand-500 hover:text-brand-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Add Task
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Time Tab -->
+    <div x-show="tab === 'time'" x-cloak class="glass-card p-6">
+        {% if time_entries %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-surface-200 dark:border-surface-700">
+                        <th class="text-left py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Date</th>
+                        <th class="text-left py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Description</th>
+                        <th class="text-center py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Type</th>
+                        <th class="text-right py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Hours</th>
+                        <th class="text-right py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Cost</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-surface-100 dark:divide-surface-800">
+                    {% for entry in time_entries %}
+                    <tr class="hover:bg-surface-50 dark:hover:bg-surface-800/30">
+                        <td class="py-2 px-3 text-sm text-surface-600 dark:text-surface-300">{{ entry.date | format_date }}</td>
+                        <td class="py-2 px-3 text-sm text-surface-900 dark:text-white">{{ entry.description or '—' }}</td>
+                        <td class="py-2 px-3 text-center">{{ badge(entry.rate_type) }}</td>
+                        <td class="py-2 px-3 text-sm text-right font-medium text-surface-900 dark:text-white">{{ entry.hours }}h</td>
+                        <td class="py-2 px-3 text-sm text-right font-medium text-emerald-600 dark:text-emerald-400">{{ entry.cost | format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-sm text-surface-400 dark:text-surface-500 mb-3">No time logged yet</p>
+            <a href="{{ url_for('pm.time_create', project_id=project.id) }}" class="inline-flex items-center gap-1.5 text-sm font-medium text-brand-500 hover:text-brand-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Log Time
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Expenses Tab -->
+    <div x-show="tab === 'expenses'" x-cloak class="glass-card p-6">
+        {% if expenses %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-surface-200 dark:border-surface-700">
+                        <th class="text-left py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Date</th>
+                        <th class="text-left py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Description</th>
+                        <th class="text-center py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Category</th>
+                        <th class="text-right py-2 px-3 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-surface-100 dark:divide-surface-800">
+                    {% for expense in expenses %}
+                    <tr class="hover:bg-surface-50 dark:hover:bg-surface-800/30">
+                        <td class="py-2 px-3 text-sm text-surface-600 dark:text-surface-300">{{ expense.date | format_date }}</td>
+                        <td class="py-2 px-3 text-sm text-surface-900 dark:text-white">{{ expense.description or '—' }}</td>
+                        <td class="py-2 px-3 text-center">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-300">{{ expense.category }}</span>
+                            {% if expense.is_auto_generated %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 ml-1">Auto</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-2 px-3 text-sm text-right font-medium text-red-600 dark:text-red-400">{{ expense.amount | format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-sm text-surface-400 dark:text-surface-500">No expenses recorded</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Documents Tab -->
+    <div x-show="tab === 'docs'" x-cloak class="glass-card p-6">
+        <!-- Upload Form -->
+        <form method="POST" action="{{ url_for('pm.project_upload_document', id=project.id) }}" enctype="multipart/form-data" class="mb-6">
+            <label class="flex items-center justify-center gap-2 px-4 py-4 rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600 hover:border-brand-400 dark:hover:border-brand-500 cursor-pointer transition-colors">
+                <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <span class="text-sm text-surface-500 dark:text-surface-400">Upload contracts, engagement letters, or other documents</span>
+                <input type="file" name="documents" multiple class="hidden" onchange="this.form.submit()">
+            </label>
+        </form>
+
+        {% if documents %}
+        <div class="space-y-2">
+            {% for doc in documents %}
+            <div class="flex items-center justify-between p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-surface-900 dark:text-white truncate">{{ doc.original_name }}</p>
+                        <p class="text-xs text-surface-500 dark:text-surface-400">{{ doc.size_display }} &middot; {{ doc.uploaded_at | format_date }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0" x-data="{ confirm: false }">
+                    <a href="{{ url_for('pm.document_download', id=doc.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Download</a>
+                    <button type="button" @click="confirm = true" x-show="!confirm" class="text-xs text-red-500 hover:text-red-600 font-medium">Del</button>
+                    <form x-show="confirm" method="POST" action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline-flex items-center gap-1">
+                        <button type="submit" class="px-2 py-0.5 text-xs bg-red-500 text-white rounded">Yes</button>
+                        <button type="button" @click="confirm = false" class="text-xs text-surface-500">No</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-sm text-surface-400 dark:text-surface-500">No documents uploaded yet</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Invoices Tab -->
+    <div x-show="tab === 'invoices'" x-cloak class="glass-card p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Project Invoices</h3>
+            <a href="{{ url_for('stripe.invoice_create', client_id=project.client_id, project_id=project.id) }}" class="text-xs font-medium text-brand-500 hover:text-brand-600">+ Create Invoice</a>
+        </div>
+        {% if project.invoices %}
+        <div class="space-y-3">
+            {% for inv in project.invoices|sort(attribute='created_at', reverse=true) %}
+            <a href="{{ url_for('stripe.invoice_detail', id=inv.id) }}" class="flex items-center justify-between p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-700/50 transition-colors">
+                <div>
+                    <p class="text-sm font-medium text-surface-900 dark:text-white">{{ inv.invoice_number or ('Draft #' ~ inv.id) }}</p>
+                    <p class="text-xs text-surface-500 dark:text-surface-400">{{ inv.created_at|format_date }}{% if inv.due_date %} &middot; Due {{ inv.due_date|format_date }}{% endif %}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm font-bold text-surface-900 dark:text-white">{{ inv.total|format_currency }}</p>
+                    <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
+                        {% if inv.status == 'paid' %}bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400
+                        {% elif inv.status == 'open' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
+                        {% elif inv.status == 'draft' %}bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300
+                        {% else %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                        {% endif %}">{{ inv.status|title }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-sm text-surface-400 dark:text-surface-500">No invoices for this project</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- New Task Modal -->
+<div x-data="{ open: false, submitting: false }" @open-task-modal.window="open = true; $nextTick(() => $refs.taskTitle && $refs.taskTitle.focus())" @keydown.escape.window="open = false">
+    <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 lg:pl-[260px]"
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="open = false"></div>
+        <div class="relative w-full max-w-lg glass-card p-6 shadow-2xl"
+             x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-lg font-semibold text-surface-900 dark:text-white">New Task</h3>
+                <button @click="open = false" class="text-surface-400 hover:text-surface-600 dark:hover:text-surface-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <form method="POST" action="{{ url_for('pm.task_create_quick') }}" @submit="submitting = true">
+                <input type="hidden" name="project_id" value="{{ project.id }}">
+                <input type="hidden" name="redirect" value="{{ url_for('pm.project_detail', id=project.id) }}">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Title</label>
+                        <input type="text" name="title" required x-ref="taskTitle"
+                               class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400"
+                               placeholder="Task title...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Due Date</label>
+                        <input type="date" name="due_date"
+                               class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Description</label>
+                        <textarea name="description" rows="3"
+                                  class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400"
+                                  placeholder="Optional..."></textarea>
+                    </div>
+                </div>
+                <div class="flex items-center justify-end gap-3 mt-6">
+                    <button type="button" @click="open = false" class="px-4 py-2 text-sm font-medium text-surface-600 dark:text-surface-300 hover:text-surface-800 dark:hover:text-white transition-colors">Cancel</button>
+                    <button type="submit" :disabled="submitting"
+                            class="px-5 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all disabled:opacity-50">
+                        Create Task
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

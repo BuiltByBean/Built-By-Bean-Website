@@ -1,0 +1,192 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/status_badge.html" import badge %}
+
+{% block page_title %}{{ client.name }} {{ badge(client.stage or 'lead') }}{% endblock %}
+{% block page_subtitle %}{{ client.company or 'Client Details' }}{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center gap-2">
+    <a href="{{ url_for('pm.project_create', client_id=client.id) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        New Project
+    </a>
+    <a href="{{ url_for('pm.client_edit', id=client.id) }}"
+       class="px-4 py-2 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">
+        Edit
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Client Info -->
+    <div class="glass-card p-6">
+        <h3 class="text-sm font-semibold text-surface-900 dark:text-white mb-4 uppercase tracking-wider">Contact Info</h3>
+        <div class="space-y-3">
+            {% if client.email %}
+            <div>
+                <p class="text-xs text-surface-500 dark:text-surface-400">Email</p>
+                <p class="text-sm text-surface-900 dark:text-white">{{ client.email }}</p>
+            </div>
+            {% endif %}
+            {% if client.phone %}
+            <div>
+                <p class="text-xs text-surface-500 dark:text-surface-400">Phone</p>
+                <p class="text-sm text-surface-900 dark:text-white">{{ client.phone }}</p>
+            </div>
+            {% endif %}
+            {% if client.address %}
+            <div>
+                <p class="text-xs text-surface-500 dark:text-surface-400">Address</p>
+                <p class="text-sm text-surface-900 dark:text-white whitespace-pre-line">{{ client.address }}</p>
+            </div>
+            {% endif %}
+            {% if client.notes %}
+            <div>
+                <p class="text-xs text-surface-500 dark:text-surface-400">Notes</p>
+                <p class="text-sm text-surface-900 dark:text-white whitespace-pre-line">{{ client.notes }}</p>
+            </div>
+            {% endif %}
+            <div>
+                <p class="text-xs text-surface-500 dark:text-surface-400">Client Since</p>
+                <p class="text-sm text-surface-900 dark:text-white">{{ client.created_at | format_date }}</p>
+            </div>
+        </div>
+
+        <!-- Stripe Status -->
+        <div class="mt-6 pt-4 border-t border-surface-200 dark:border-surface-700">
+            <p class="text-xs text-surface-500 dark:text-surface-400 mb-1">Stripe</p>
+            {% if client.stripe_customer_id %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Synced
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full bg-surface-100 text-surface-500 dark:bg-surface-700 dark:text-surface-400">
+                Not synced
+            </span>
+            {% endif %}
+        </div>
+
+        <!-- Delete -->
+        <div class="mt-6 pt-4 border-t border-surface-200 dark:border-surface-700" x-data="{ confirmDelete: false }">
+            <button @click="confirmDelete = true" x-show="!confirmDelete"
+                    class="text-xs text-red-500 hover:text-red-600 font-medium">Delete Client</button>
+            <form x-show="confirmDelete" method="POST" action="{{ url_for('pm.client_delete', id=client.id) }}" class="flex items-center gap-2">
+                <span class="text-xs text-red-500">Are you sure?</span>
+                <button type="submit" class="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
+                <button type="button" @click="confirmDelete = false" class="px-3 py-1 text-xs text-surface-500 hover:text-surface-700 dark:hover:text-surface-300">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Financial Summary + Projects -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Financials -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div class="glass-card p-4">
+                <p class="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Contract Value</p>
+                <p class="text-xl font-bold text-blue-700 dark:text-blue-300">{{ (client.contract_revenue or 0) | format_currency }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Total Hours</p>
+                <p class="text-xl font-bold text-surface-900 dark:text-white">{{ total_hours | format_hours }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">Total Revenue</p>
+                <p class="text-xl font-bold text-emerald-700 dark:text-emerald-300">{{ total_revenue | format_currency }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Total Expenses</p>
+                <p class="text-xl font-bold text-red-700 dark:text-red-300">{{ total_expenses | format_currency }}</p>
+            </div>
+        </div>
+
+        <!-- Projects -->
+        <div class="glass-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-surface-900 dark:text-white uppercase tracking-wider">Projects</h3>
+            </div>
+            {% if projects %}
+            <div class="space-y-3">
+                {% for project in projects %}
+                <a href="{{ url_for('pm.project_detail', id=project.id) }}"
+                   class="block p-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-700/50 transition-colors">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-sm font-medium text-surface-900 dark:text-white">{{ project.name }}</h4>
+                        <div class="flex items-center gap-2">
+                            {{ badge(project.phase) }}
+                            {{ badge(project.status) }}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-surface-500 dark:text-surface-400">
+                        <span>{{ project.tasks.count() }} tasks</span>
+                        <span>{{ project.total_hours | format_hours }}</span>
+                        <span>{{ project.total_revenue | format_currency }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <p class="text-sm text-surface-400 dark:text-surface-500 mb-3">No projects for this client yet</p>
+                <a href="{{ url_for('pm.project_create', client_id=client.id) }}" class="inline-flex items-center gap-1.5 text-sm font-medium text-brand-500 hover:text-brand-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    Create Project
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Documents -->
+        <div class="glass-card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-surface-900 dark:text-white uppercase tracking-wider">Documents ({{ documents | length }})</h3>
+            </div>
+
+            <!-- Upload Form -->
+            <form method="POST" action="{{ url_for('pm.client_upload_document', id=client.id) }}" enctype="multipart/form-data" class="mb-4">
+                <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600 hover:border-brand-400 dark:hover:border-brand-500 cursor-pointer transition-colors">
+                    <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <span class="text-sm text-surface-500 dark:text-surface-400">Upload contracts or engagement letters</span>
+                    <input type="file" name="documents" multiple class="hidden" onchange="this.form.submit()">
+                </label>
+            </form>
+
+            {% if documents %}
+            <div class="space-y-2">
+                {% for doc in documents %}
+                <div class="flex items-center justify-between p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-surface-900 dark:text-white truncate">{{ doc.original_name }}</p>
+                            <p class="text-xs text-surface-500 dark:text-surface-400">{{ doc.size_display }} &middot; {{ doc.uploaded_at | format_date }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0" x-data="{ confirm: false }">
+                        <a href="{{ url_for('pm.document_download', id=doc.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Download</a>
+                        <button type="button" @click="confirm = true" x-show="!confirm" class="text-xs text-red-500 hover:text-red-600 font-medium">Del</button>
+                        <form x-show="confirm" method="POST" action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline-flex items-center gap-1">
+                            <button type="submit" class="px-2 py-0.5 text-xs bg-red-500 text-white rounded">Yes</button>
+                            <button type="button" @click="confirm = false" class="text-xs text-surface-500">No</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-sm text-surface-400 dark:text-surface-500 py-4">No documents uploaded yet</p>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}

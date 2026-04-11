@@ -1,0 +1,120 @@
+{% extends "pm/base.html" %}
+
+{% block title %}{{ 'Edit' if editing else 'Add' }} Provider - Built By Bean{% endblock %}
+{% block page_title %}{{ 'Edit' if editing else 'Add' }} Service Provider{% endblock %}
+{% block page_subtitle %}Configure API credentials for cost tracking{% endblock %}
+
+{% block content %}
+<div x-data="{ providerType: '{{ provider.name if editing else '' }}' }" class="max-w-2xl mx-auto">
+    <form method="POST" class="space-y-6">
+
+        <!-- Provider Type -->
+        {% if not editing %}
+        <div class="glass-card p-6">
+            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">Provider Type</label>
+            <div class="grid grid-cols-2 gap-3">
+                {% for val, label in provider_types %}
+                <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-all border-2"
+                       :class="providerType === '{{ val }}' ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'">
+                    <input type="radio" name="name" value="{{ val }}" x-model="providerType" class="hidden">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center
+                        {% if val == 'aws' %}bg-amber-100 dark:bg-amber-900/30
+                        {% elif val == 'railway' %}bg-purple-100 dark:bg-purple-900/30
+                        {% elif val == 'twilio' %}bg-red-100 dark:bg-red-900/30
+                        {% elif val == 'cloudflare' %}bg-orange-100 dark:bg-orange-900/30{% endif %}">
+                        <span class="text-xs font-bold
+                            {% if val == 'aws' %}text-amber-600{% elif val == 'railway' %}text-purple-600{% elif val == 'twilio' %}text-red-600{% elif val == 'cloudflare' %}text-orange-600{% endif %}">
+                            {% if val == 'aws' %}AWS{% elif val == 'railway' %}RW{% elif val == 'twilio' %}TW{% elif val == 'cloudflare' %}CF{% endif %}
+                        </span>
+                    </div>
+                    <span class="text-sm font-medium text-surface-900 dark:text-white">{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- AWS Credentials -->
+        <div x-show="providerType === 'aws'" x-transition class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">AWS Credentials</h3>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Access Key ID</label>
+                <input type="text" name="aws_access_key_id" value="{{ creds.aws_access_key_id if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" placeholder="AKIAIOSFODNN7EXAMPLE">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Secret Access Key</label>
+                <input type="password" name="aws_secret_access_key" value="{{ creds.aws_secret_access_key if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Region</label>
+                <input type="text" name="region" value="{{ creds.region if editing else 'us-east-2' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+            </div>
+        </div>
+
+        <!-- Railway Credentials -->
+        <div x-show="providerType === 'railway'" x-transition class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Railway Credentials</h3>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">API Token</label>
+                <input type="password" name="railway_api_token" value="{{ creds.api_token if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" placeholder="railway_token_...">
+                <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Generate at railway.com > Account Settings > Tokens</p>
+            </div>
+        </div>
+
+        <!-- Twilio Credentials -->
+        <div x-show="providerType === 'twilio'" x-transition class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Twilio Credentials</h3>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Account SID</label>
+                <input type="text" name="twilio_account_sid" value="{{ creds.account_sid if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" placeholder="AC...">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Auth Token</label>
+                <input type="password" name="twilio_auth_token" value="{{ creds.auth_token if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+            </div>
+        </div>
+
+        <!-- Cloudflare Credentials -->
+        <div x-show="providerType === 'cloudflare'" x-transition class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Cloudflare Credentials</h3>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">API Token</label>
+                <input type="password" name="cf_api_token" value="{{ creds.api_token if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Needs Account:Billing:Read permission</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Account ID</label>
+                <input type="text" name="cf_account_id" value="{{ creds.account_id if editing else '' }}"
+                       class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Found in Cloudflare dashboard URL or account overview</p>
+            </div>
+        </div>
+
+        {% if editing %}
+        <div class="glass-card p-6">
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" name="is_active" {{ 'checked' if provider.is_active else '' }}
+                       class="w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-brand-500 focus:ring-brand-500">
+                <span class="text-sm font-medium text-surface-700 dark:text-surface-300">Active</span>
+            </label>
+        </div>
+        {% endif %}
+
+        <div class="flex items-center gap-3">
+            <button type="submit" x-show="providerType || {{ 'true' if editing else 'false' }}"
+                    class="px-6 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                {{ 'Update Provider' if editing else 'Add Provider' }}
+            </button>
+            <a href="{{ url_for('service_costs.providers_list') }}" class="px-6 py-2.5 text-sm font-medium text-surface-500 hover:text-surface-700 dark:hover:text-surface-300">Cancel</a>
+        </div>
+
+    </form>
+</div>
+{% endblock %}

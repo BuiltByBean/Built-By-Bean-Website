@@ -1,0 +1,90 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{% block page_title %}{{ 'Edit Time Entry' if editing else 'Log Time' }}{% endblock %}
+{% block page_subtitle %}{{ 'Update your time entry' if editing else 'Record work hours' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <!-- Rate Card -->
+    <div class="glass-card p-4 mb-6">
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Maintenance</span>
+                <span class="text-sm font-semibold text-surface-900 dark:text-white">$100/hr</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">New Feature</span>
+                <span class="text-sm font-semibold text-surface-900 dark:text-white">$200/hr</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card p-6">
+        <form method="POST"
+              x-data="{
+                rateType: '{{ form.rate_type.data or 'maintenance' }}',
+                hours: {{ form.hours.data or 0 }},
+                get cost() { return this.hours * (this.rateType === 'maintenance' ? 100 : 200); }
+              }"
+              @dropdown-change="if ($event.detail.name === 'rate_type') rateType = $event.detail.value">
+
+            {{ form.hidden_tag() }}
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Project *</label>
+                    {{ select_dropdown(form.project_id.name, form.project_id.choices, form.project_id.data, "Select Project...", full_width=true) }}
+                    {% for error in form.project_id.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Task (Optional)</label>
+                    {{ select_dropdown(form.task_id.name, form.task_id.choices, form.task_id.data or 0, "— No specific task —", full_width=true) }}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Date *</label>
+                        {{ form.date(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm") }}
+                        {% for error in form.date.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Hours *</label>
+                        {{ form.hours(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm", step="0.25", min="0.25", **{"x-model.number": "hours"}) }}
+                        {% for error in form.hours.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Rate Type *</label>
+                        {{ select_dropdown(form.rate_type.name, form.rate_type.choices, form.rate_type.data or 'maintenance', "Rate Type...", full_width=true) }}
+                    </div>
+                </div>
+
+                <!-- Live Cost Preview -->
+                <div class="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/30">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Estimated Cost</span>
+                        <span class="text-xl font-bold text-emerald-700 dark:text-emerald-300" x-text="'$' + cost.toFixed(2)"></span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Description</label>
+                    {{ form.description(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="What did you work on?") }}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+                <button type="submit"
+                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                    {{ 'Update Entry' if editing else 'Log Time' }}
+                </button>
+                <a href="{{ url_for('pm.time_list') }}"
+                   class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

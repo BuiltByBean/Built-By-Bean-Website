@@ -1,0 +1,83 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{% block page_title %}{{ 'Edit Project' if editing else 'New Project' }}{% endblock %}
+{% block page_subtitle %}{{ project.name if editing else 'Create a new project' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="glass-card p-6">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Project Name *</label>
+                    {{ form.name(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="Enter project name") }}
+                    {% for error in form.name.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Client *</label>
+                    {{ select_dropdown(form.client_id.name, form.client_id.choices, form.client_id.data, "Select Client...", full_width=true) }}
+                    {% for error in form.client_id.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Description</label>
+                    {{ form.description(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="What is this project about?") }}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Phase</label>
+                        {{ select_dropdown(form.phase.name, form.phase.choices, form.phase.data or 'discovery', "Select Phase...", full_width=true) }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Status</label>
+                        {{ select_dropdown(form.status.name, form.status.choices, form.status.data or 'active', "Select Status...", full_width=true) }}
+                    </div>
+                </div>
+
+                <div x-data="{ mvpDate: '{{ form.mvp_date.data or '' }}' }">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">MVP Delivery Date</label>
+                            {{ form.mvp_date(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm", **{"x-model": "mvpDate"}) }}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Free Maintenance Ends</label>
+                            <div class="px-4 py-2.5 rounded-full border border-surface-200 dark:border-white/10 bg-surface-50 dark:bg-surface-800/30 text-sm"
+                                 :class="mvpDate ? 'text-surface-900 dark:text-white' : 'text-surface-400 dark:text-surface-500'">
+                                <template x-if="mvpDate">
+                                    <span x-text="(() => { const d = new Date(mvpDate); d.setDate(d.getDate() + 30); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); })()"></span>
+                                </template>
+                                <template x-if="!mvpDate">
+                                    <span>Set MVP date to calculate</span>
+                                </template>
+                                <span class="text-xs text-surface-400 dark:text-surface-500 ml-1">(30 days after MVP)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Notes</label>
+                    {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="Additional notes...") }}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+                <button type="submit"
+                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                    {{ 'Update Project' if editing else 'Create Project' }}
+                </button>
+                <a href="{{ url_for('pm.project_detail', id=project.id) if editing else url_for('pm.projects_list') }}"
+                   class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

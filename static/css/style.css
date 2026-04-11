@@ -693,3 +693,244 @@ body {
         font-size: 2rem;
     }
 }
+
+/* ============================================
+   Admin portal: login, hub, tiles
+   ============================================ */
+
+.nav-login {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
+}
+
+.nav-login:hover {
+    color: var(--text);
+    border-color: var(--primary);
+    background: var(--primary-glow);
+}
+
+/* --- Login page --- */
+.auth-body {
+    min-height: 100vh;
+    background: radial-gradient(ellipse at top, var(--primary-glow), transparent 60%), var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+}
+
+.auth-wrapper {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+}
+
+.auth-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.auth-logo img {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+}
+
+.auth-card {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 40px 32px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.auth-card h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.auth-subtitle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 28px;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.auth-field label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.auth-input {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.auth-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.auth-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg);
+    box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.auth-submit {
+    width: 100%;
+    margin-top: 8px;
+}
+
+.auth-flash {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+.auth-flash-error {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: var(--error);
+}
+
+.auth-flash-success {
+    background: rgba(74, 222, 128, 0.1);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    color: var(--success);
+}
+
+.auth-back {
+    display: block;
+    text-align: center;
+    margin-top: 24px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.auth-back:hover {
+    color: var(--text);
+}
+
+/* --- Admin hub --- */
+.hub-body {
+    min-height: 100vh;
+    background: var(--bg);
+}
+
+.hub-user {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.hub-main {
+    padding-top: 140px;
+    padding-bottom: 80px;
+    min-height: 100vh;
+}
+
+.hub-header {
+    text-align: center;
+    margin-bottom: 56px;
+}
+
+.hub-header h1 {
+    font-size: 2.75rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    color: var(--text);
+}
+
+.hub-header p {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+}
+
+.tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.tile {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px 28px;
+    transition: all 0.3s ease;
+    color: var(--text);
+}
+
+.tile:hover {
+    transform: translateY(-4px);
+    border-color: var(--primary);
+    box-shadow: 0 20px 40px rgba(168, 85, 247, 0.15);
+    background: var(--surface-hover);
+}
+
+.tile-icon {
+    font-size: 2.25rem;
+    margin-bottom: 16px;
+}
+
+.tile h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.tile p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.tile-placeholder {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.tile-placeholder:hover {
+    transform: none;
+    border-color: var(--border);
+    box-shadow: none;
+    background: var(--surface);
+}
