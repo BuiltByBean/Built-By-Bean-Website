@@ -186,18 +186,6 @@ body {
     overflow: hidden;
 }
 
-.hero::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 140px;
-    background: linear-gradient(to bottom, transparent, var(--bg));
-    pointer-events: none;
-    z-index: 1;
-}
-
 .scroll-indicator {
     position: absolute;
     bottom: 28px;
@@ -359,8 +347,7 @@ body {
         linear-gradient(
             to bottom,
             var(--bg) 0%,
-            var(--bg-alt) 140px,
-            var(--bg-alt) calc(100% - 140px),
+            var(--bg-alt) 50%,
             var(--bg) 100%
         );
 }
@@ -684,12 +671,11 @@ body {
 .promise-section {
     position: relative;
     background:
-        radial-gradient(ellipse 900px 500px at 50% 55%, var(--primary-glow), transparent 70%),
+        radial-gradient(ellipse 900px 500px at 50% 50%, var(--primary-glow), transparent 70%),
         linear-gradient(
             to bottom,
             var(--bg) 0%,
-            var(--bg-alt) 180px,
-            var(--bg-alt) calc(100% - 180px),
+            var(--bg-alt) 50%,
             var(--bg) 100%
         );
 }
