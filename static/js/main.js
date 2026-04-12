@@ -60,21 +60,6 @@ document.querySelectorAll('.hero, .section').forEach(el => {
 const hero = document.querySelector('.hero');
 if (hero) hero.classList.add('is-visible');
 
-// Hide the scroll arrows while the viewport is actively moving so they
-// don't flash across the page during a snap / smooth-scroll transition.
-// The class is removed ~200ms after the last scroll event fires, which
-// matches when a typical smooth-scroll has settled onto its target.
-{
-    let scrollSettleTimer;
-    window.addEventListener('scroll', () => {
-        document.documentElement.classList.add('is-scrolling');
-        clearTimeout(scrollSettleTimer);
-        scrollSettleTimer = setTimeout(() => {
-            document.documentElement.classList.remove('is-scrolling');
-        }, 180);
-    }, { passive: true });
-}
-
 // Fixed viewport scroll arrows — up chevron pinned near the top of the
 // window, down chevron pinned near the bottom. Visibility and targets
 // update dynamically based on which section is currently in view.
@@ -82,6 +67,17 @@ const upBtn = document.querySelector('.scroll-arrow-up');
 const downBtn = document.querySelector('.scroll-arrow-down');
 if (upBtn && downBtn) {
     const scrollSections = [...document.querySelectorAll('.hero, .section')];
+
+    // Hide the arrows only during an arrow-triggered smooth scroll (not
+    // on every user scroll event, which killed taps on mobile). The
+    // class is added on click and removed when the target section is
+    // in view — or after a 900ms safety timeout.
+    const beginArrowScroll = () => {
+        document.documentElement.classList.add('is-scrolling');
+        setTimeout(() => {
+            document.documentElement.classList.remove('is-scrolling');
+        }, 900);
+    };
 
     const smoothScrollTo = (el) => {
         if (!el) return;
@@ -108,10 +104,12 @@ if (upBtn && downBtn) {
     };
 
     upBtn.addEventListener('click', () => {
+        beginArrowScroll();
         const i = currentSectionIndex();
         smoothScrollTo(scrollSections[i - 1]);
     });
     downBtn.addEventListener('click', () => {
+        beginArrowScroll();
         const i = currentSectionIndex();
         smoothScrollTo(scrollSections[i + 1]);
     });

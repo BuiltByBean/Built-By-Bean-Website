@@ -35,12 +35,13 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
 }
 
-html, body {
-    width: 100%;
-    max-width: 100vw;
+/* Contain any overflow without creating a new scroll context
+   (overflow-x: hidden would kill scroll-snap and fixed children
+   on iOS Safari). overflow-x: clip is the safe choice. */
+html {
+    overflow-x: clip;
 }
 
 .container {
@@ -1482,6 +1483,20 @@ html {
 
     .scroll-arrow-down {
         bottom: 20px;
+    }
+
+    /* Disable scroll-snap on mobile: it interferes with smooth
+       anchor scrolls and the touch-scroll feel on iOS / Android. */
+    html {
+        scroll-snap-type: none;
+    }
+
+    /* Keep scroll arrows tappable even while the page is mid-scroll
+       on mobile — pointer-events: none during .is-scrolling kills
+       every tap during touch scrolling. */
+    html.is-scrolling .scroll-arrow {
+        opacity: 1;
+        pointer-events: auto;
     }
 }
 
