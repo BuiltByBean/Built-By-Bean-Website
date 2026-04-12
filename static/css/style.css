@@ -398,6 +398,7 @@ html.is-scrolling .scroll-arrow {
     line-height: 1.1;
     letter-spacing: -0.02em;
     margin-bottom: 20px;
+    max-width: 18ch;
 }
 
 .text-gradient {
@@ -1369,10 +1370,7 @@ html {
     .hero h1 {
         font-size: 2.15rem;
         line-height: 1.15;
-    }
-
-    .hero h1 br {
-        display: none;
+        max-width: 100%;
     }
 
     .hero-subtitle {
