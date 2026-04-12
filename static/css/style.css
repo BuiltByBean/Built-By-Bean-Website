@@ -74,6 +74,7 @@ body {
 .logo {
     font-size: 1.35rem;
     font-weight: 700;
+    color: var(--text);
     text-decoration: none;
     display: flex;
     align-items: center;
