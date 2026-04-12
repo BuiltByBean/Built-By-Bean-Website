@@ -94,8 +94,8 @@ body {
 
 .logo::before {
     content: '';
-    width: 42px;
-    height: 42px;
+    width: 96px;
+    height: 96px;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     -webkit-mask-image: url('/static/images/logo.png');
     mask-image: url('/static/images/logo.png');
@@ -1323,8 +1323,8 @@ html {
     }
 
     .logo::before {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
     }
 
     .nav-links {
