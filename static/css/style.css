@@ -698,6 +698,7 @@ html {
     gap: 48px;
     max-width: 960px;
     margin: 0 auto;
+    align-items: stretch;
 }
 
 .contact-form {
@@ -756,14 +757,26 @@ html {
 }
 
 .form-group select option {
-    background: var(--surface);
+    background: var(--bg);
     color: var(--text);
+    padding: 10px 16px;
+}
+
+.form-group select option:checked {
+    background: var(--primary-dark);
+    color: #fff;
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-    border-color: var(--primary-dark);
+    outline: none;
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
@@ -786,7 +799,7 @@ html {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    padding-top: 8px;
+    justify-content: space-between;
 }
 
 .contact-card {
@@ -794,6 +807,10 @@ html {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 28px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .contact-card h3 {
