@@ -28,6 +28,15 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// Logo click: smooth-scroll to top instead of hard-navigating to /
+const logoLink = document.getElementById('logo-link');
+if (logoLink) {
+    logoLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+}
+
 // Navigation scroll effect
 const nav = document.getElementById('nav');
 window.addEventListener('scroll', () => {
