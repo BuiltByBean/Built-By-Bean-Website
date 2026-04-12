@@ -381,10 +381,15 @@ html.is-scrolling .scroll-arrow {
 
 .hero .container {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 60px;
     align-items: center;
     position: relative;
+    max-width: 900px;
+}
+
+.hero-visual {
+    display: none;
 }
 
 .hero h1 {
