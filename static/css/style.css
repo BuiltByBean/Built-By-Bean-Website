@@ -115,6 +115,11 @@ html {
     position: relative;
     padding: 4px 0;
     letter-spacing: 0.01em;
+    transition: color 0.2s, transform 0.25s ease;
+}
+
+.nav-link:hover {
+    transform: translateY(-2px);
 }
 
 .nav-link::after {
