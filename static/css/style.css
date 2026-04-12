@@ -35,14 +35,9 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-}
-
-/* Contain any overflow without creating a new scroll context
-   (overflow-x: hidden would kill scroll-snap and fixed children
-   on iOS Safari). overflow-x: clip is the safe choice. */
-html {
     overflow-x: clip;
 }
+
 
 .container {
     max-width: 1200px;

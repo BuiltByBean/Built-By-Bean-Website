@@ -2,6 +2,32 @@
 // to load or errors out, the page stays fully visible without dimming.
 document.documentElement.classList.add('js-ready');
 
+// Strip any stale #section from the URL on initial load so a
+// cached builtbybeans.com/#promise address doesn't persist.
+if (window.location.hash) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+// Intercept in-page anchor clicks so they scroll to the target
+// section without writing a #hash into the URL bar. Applies to
+// every <a href="#..."> on the page (nav links, hero CTAs, etc).
+// The global CSS `scroll-behavior: smooth` on <html> handles the
+// smoothness, so we use a plain scrollIntoView() with no options.
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    const href = link.getAttribute('href');
+    if (!href || href === '#') {
+        e.preventDefault();
+        return;
+    }
+    const target = document.querySelector(href);
+    if (target) {
+        e.preventDefault();
+        target.scrollIntoView();
+    }
+});
+
 // Navigation scroll effect
 const nav = document.getElementById('nav');
 window.addEventListener('scroll', () => {
