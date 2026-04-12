@@ -74,7 +74,10 @@ body {
 .logo {
     font-size: 1.35rem;
     font-weight: 700;
-    color: var(--text);
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     text-decoration: none;
     display: flex;
     align-items: center;
@@ -86,6 +89,23 @@ body {
     height: 96px;
     object-fit: contain;
     border-radius: 10px;
+    display: none;
+}
+
+.logo::before {
+    content: '';
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-mask-image: url('/static/images/logo.png');
+    mask-image: url('/static/images/logo.png');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    flex-shrink: 0;
 }
 
 .nav-links {
@@ -1302,9 +1322,9 @@ html {
         gap: 10px;
     }
 
-    .logo-img {
-        width: 36px;
-        height: 36px;
+    .logo::before {
+        width: 32px;
+        height: 32px;
     }
 
     .nav-links {
