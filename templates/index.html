@@ -313,55 +313,5 @@
 
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ asset_version }}"></script>
 
-    <!-- TEMPORARY: live color picker for gradient experimentation -->
-    <div id="color-picker" style="position:fixed;bottom:80px;right:20px;z-index:9999;background:#1a1a1f;border:1px solid #333;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px;font-family:inherit;color:#e4e4e7;font-size:0.85rem;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-        <div style="font-weight:700;font-size:0.95rem;">Gradient Preview</div>
-        <label style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
-            Primary
-            <input type="color" id="pick-primary" value="#c084fc" style="width:52px;height:34px;border:none;border-radius:6px;cursor:pointer;background:none;">
-        </label>
-        <label style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
-            Accent
-            <input type="color" id="pick-accent" value="#38bdf8" style="width:52px;height:34px;border:none;border-radius:6px;cursor:pointer;background:none;">
-        </label>
-        <div style="height:24px;border-radius:6px;" id="gradient-preview"></div>
-        <div id="color-values" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:#a1a1aa;white-space:pre;line-height:1.6;"></div>
-        <button onclick="navigator.clipboard.writeText(document.getElementById('color-values').innerText)" style="background:#333;color:#e4e4e7;border:1px solid #555;border-radius:6px;padding:8px;cursor:pointer;font-size:0.8rem;transition:background 0.2s;">Copy Values</button>
-    </div>
-    <script>
-    (function() {
-        var primary = document.getElementById('pick-primary');
-        var accent = document.getElementById('pick-accent');
-        var values = document.getElementById('color-values');
-        var preview = document.getElementById('gradient-preview');
-        function hexToRgb(hex) {
-            var r = parseInt(hex.slice(1,3), 16);
-            var g = parseInt(hex.slice(3,5), 16);
-            var b = parseInt(hex.slice(5,7), 16);
-            return {r:r, g:g, b:b};
-        }
-        function darken(hex, amt) {
-            var c = hexToRgb(hex), f = 1 - amt;
-            return 'rgb(' + Math.round(c.r*f) + ',' + Math.round(c.g*f) + ',' + Math.round(c.b*f) + ')';
-        }
-        function update() {
-            var p = primary.value, a = accent.value;
-            var pc = hexToRgb(p), ac = hexToRgb(a);
-            var pRgb = pc.r + ', ' + pc.g + ', ' + pc.b;
-            var aRgb = ac.r + ', ' + ac.g + ', ' + ac.b;
-            document.documentElement.style.setProperty('--primary', p);
-            document.documentElement.style.setProperty('--primary-dark', darken(p, 0.2));
-            document.documentElement.style.setProperty('--primary-rgb', pRgb);
-            document.documentElement.style.setProperty('--primary-glow', 'rgba(' + pRgb + ', 0.15)');
-            document.documentElement.style.setProperty('--accent', a);
-            document.documentElement.style.setProperty('--accent-rgb', aRgb);
-            preview.style.background = 'linear-gradient(135deg,' + p + ',' + a + ')';
-            values.innerText = 'primary: ' + p + '\naccent:  ' + a;
-        }
-        primary.addEventListener('input', update);
-        accent.addEventListener('input', update);
-        update();
-    })();
-    </script>
 </body>
 </html>
