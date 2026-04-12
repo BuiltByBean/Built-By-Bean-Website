@@ -13,9 +13,9 @@
     --border: #2a2a32;
     --text: #e4e4e7;
     --text-muted: #a1a1aa;
-    --primary: #cb7025;
-    --primary-dark: #a25a1e;
-    --primary-rgb: 203, 112, 37;
+    --primary: #c084fc;
+    --primary-dark: #a855f7;
+    --primary-rgb: 168, 85, 247;
     --primary-glow: rgba(var(--primary-rgb), 0.15);
     --accent: #38bdf8;
     --accent-rgb: 56, 189, 248;
