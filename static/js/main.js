@@ -156,7 +156,7 @@ form.addEventListener('submit', async (e) => {
     const data = {
         name: form.name.value,
         email: form.email.value,
-        project_type: form.project_type.value,
+
         message: form.message.value,
     };
 
