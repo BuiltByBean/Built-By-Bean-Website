@@ -255,49 +255,54 @@
                 <h2>Let's Build Something</h2>
                 <p>Tell me about your project and I'll get back to you within 24 hours.</p>
             </div>
-            <div class="contact-grid">
-                <form class="contact-form" id="contact-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="name">Name <span class="required">*</span></label>
-                            <input type="text" id="name" name="name" required placeholder="Your name">
-                        </div>
-                        <div class="form-group">
-                            <label for="email">Email <span class="required">*</span></label>
-                            <input type="email" id="email" name="email" required placeholder="you@company.com">
-                        </div>
+            <div class="contact-layout">
+                <div class="form-row contact-row-1">
+                    <div class="form-group">
+                        <label for="name">Name <span class="required">*</span></label>
+                        <input type="text" id="name" name="name" required placeholder="Your name" form="contact-form">
                     </div>
                     <div class="form-group">
-                        <label for="project_type">Project Type</label>
-                        <select id="project_type" name="project_type">
-                            <option value="">Select a project type</option>
-                            <option value="Custom Web App">Custom Web Application</option>
-                            <option value="E-Commerce">E-Commerce / Online Store</option>
-                            <option value="Dashboard">Business Dashboard</option>
-                            <option value="API Integration">API Integration</option>
-                            <option value="Redesign">Website Redesign</option>
-                            <option value="Other">Something Else</option>
-                        </select>
+                        <label for="email">Email <span class="required">*</span></label>
+                        <input type="email" id="email" name="email" required placeholder="you@company.com" form="contact-form">
                     </div>
-                    <div class="form-group">
-                        <label for="message">Tell me about your project <span class="required">*</span></label>
-                        <textarea id="message" name="message" rows="5" required placeholder="What does your business do? What problem are you trying to solve?"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-lg btn-full" id="submit-btn">
-                        Send Message
-                    </button>
-                    <div class="form-status" id="form-status"></div>
-                </form>
-                <div class="contact-info">
-                    <div class="contact-card">
-                        <h3>Prefer email?</h3>
-                        <p>Reach me directly at</p>
-                        <a href="mailto:mbean@builtbybeans.com" class="contact-email">mbean@builtbybeans.com</a>
-                    </div>
-                    <div class="contact-card">
-                        <h3>Quick response</h3>
-                        <p>I typically respond within 24 hours. For urgent projects, mention it in your message and I'll prioritize your inquiry.</p>
-                    </div>
+                </div>
+
+                <div class="form-group contact-row-2">
+                    <label for="project_type">Project Type</label>
+                    <select id="project_type" name="project_type" form="contact-form">
+                        <option value="">Select a project type</option>
+                        <option value="Custom Web App">Custom Web Application</option>
+                        <option value="E-Commerce">E-Commerce / Online Store</option>
+                        <option value="Dashboard">Business Dashboard</option>
+                        <option value="API Integration">API Integration</option>
+                        <option value="Redesign">Website Redesign</option>
+                        <option value="Other">Something Else</option>
+                    </select>
+                </div>
+
+                <div class="contact-card contact-card-1">
+                    <h3>Prefer email?</h3>
+                    <p>Reach me directly at</p>
+                    <a href="mailto:mbean@builtbybeans.com" class="contact-email">mbean@builtbybeans.com</a>
+                </div>
+
+                <div class="form-group contact-row-3">
+                    <label for="message">Tell me about your project <span class="required">*</span></label>
+                    <textarea id="message" name="message" rows="5" required placeholder="What does your business do? What problem are you trying to solve?" form="contact-form"></textarea>
+                </div>
+
+                <div class="contact-row-4">
+                    <form id="contact-form">
+                        <button type="submit" class="btn btn-primary btn-lg btn-full" id="submit-btn">
+                            Send Message
+                        </button>
+                        <div class="form-status" id="form-status"></div>
+                    </form>
+                </div>
+
+                <div class="contact-card contact-card-2">
+                    <h3>Quick response</h3>
+                    <p>I typically respond within 24 hours. For urgent projects, mention it in your message and I'll prioritize your inquiry.</p>
                 </div>
             </div>
         </div>
