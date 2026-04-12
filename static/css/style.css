@@ -15,8 +15,10 @@
     --text-muted: #a1a1aa;
     --primary: #c084fc;
     --primary-dark: #a855f7;
-    --primary-glow: rgba(168, 85, 247, 0.15);
+    --primary-rgb: 168, 85, 247;
+    --primary-glow: rgba(var(--primary-rgb), 0.15);
     --accent: #38bdf8;
+    --accent-rgb: 56, 189, 248;
     --success: #4ade80;
     --error: #f87171;
     --radius: 12px;
@@ -187,8 +189,8 @@ body {
     background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, var(--accent) 140%);
     color: #fff;
     box-shadow:
-        0 10px 30px -8px rgba(168, 85, 247, 0.5),
-        0 0 0 1px rgba(168, 85, 247, 0.35),
+        0 10px 30px -8px rgba(var(--primary-rgb), 0.5),
+        0 0 0 1px rgba(var(--primary-rgb), 0.35),
         inset 0 1px 0 rgba(255, 255, 255, 0.12);
     position: relative;
     isolation: isolate;
@@ -209,9 +211,9 @@ body {
 .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow:
-        0 18px 44px -8px rgba(168, 85, 247, 0.65),
-        0 0 60px -6px rgba(56, 189, 248, 0.3),
-        0 0 0 1px rgba(192, 132, 252, 0.5),
+        0 18px 44px -8px rgba(var(--primary-rgb), 0.65),
+        0 0 60px -6px rgba(var(--accent-rgb), 0.3),
+        0 0 0 1px rgba(var(--primary-rgb), 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
@@ -243,7 +245,7 @@ body {
         linear-gradient(135deg, var(--primary), var(--accent));
     background-origin: border-box;
     background-clip: padding-box, border-box;
-    box-shadow: 0 8px 24px -8px rgba(168, 85, 247, 0.35);
+    box-shadow: 0 8px 24px -8px rgba(var(--primary-rgb), 0.35);
     transform: translateY(-2px);
 }
 
@@ -562,7 +564,7 @@ html {
     justify-content: center;
     border-radius: 12px;
     background: var(--primary-glow);
-    border: 1px solid rgba(168, 85, 247, 0.25);
+    border: 1px solid rgba(var(--primary-rgb), 0.25);
     color: var(--primary);
     font-size: 1.75rem;
     margin-bottom: 20px;
@@ -623,8 +625,8 @@ html {
     align-items: center;
     justify-content: center;
     border-radius: 13px;
-    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
-    border: 1px solid rgba(168, 85, 247, 0.3);
+    background: linear-gradient(135deg, var(--primary-glow), rgba(var(--accent-rgb), 0.12));
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
     color: var(--primary);
     font-size: 1.65rem;
     margin-bottom: 22px;
@@ -948,8 +950,8 @@ html {
     align-items: center;
     justify-content: center;
     border-radius: 14px;
-    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
-    border: 1px solid rgba(168, 85, 247, 0.3);
+    background: linear-gradient(135deg, var(--primary-glow), rgba(var(--accent-rgb), 0.12));
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
     color: var(--primary);
     font-size: 2rem;
     margin-bottom: 22px;
@@ -980,7 +982,7 @@ html {
 .why-section {
     position: relative;
     background:
-        radial-gradient(ellipse 700px 500px at 20% 60%, rgba(56, 189, 248, 0.09), transparent 65%),
+        radial-gradient(ellipse 700px 500px at 20% 60%, rgba(var(--accent-rgb), 0.09), transparent 65%),
         radial-gradient(ellipse 800px 500px at 80% 40%, var(--primary-glow), transparent 65%),
         var(--bg);
 }
@@ -1202,8 +1204,8 @@ html {
     align-items: center;
     justify-content: center;
     border-radius: 13px;
-    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
-    border: 1px solid rgba(168, 85, 247, 0.3);
+    background: linear-gradient(135deg, var(--primary-glow), rgba(var(--accent-rgb), 0.12));
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
     color: var(--primary);
     font-size: 1.85rem;
     margin-bottom: 20px;
@@ -1725,7 +1727,7 @@ html {
         linear-gradient(135deg, var(--primary), var(--accent));
     background-origin: border-box;
     background-clip: padding-box, border-box;
-    box-shadow: 0 20px 40px rgba(168, 85, 247, 0.15);
+    box-shadow: 0 20px 40px rgba(var(--primary-rgb), 0.15);
 }
 
 .tile-icon {
@@ -1735,8 +1737,8 @@ html {
     align-items: center;
     justify-content: center;
     border-radius: 13px;
-    background: linear-gradient(135deg, var(--primary-glow), rgba(56, 189, 248, 0.12));
-    border: 1px solid rgba(168, 85, 247, 0.3);
+    background: linear-gradient(135deg, var(--primary-glow), rgba(var(--accent-rgb), 0.12));
+    border: 1px solid rgba(var(--primary-rgb), 0.3);
     color: var(--primary);
     font-size: 1.85rem;
     margin-bottom: 18px;

@@ -346,11 +346,15 @@
         }
         function update() {
             var p = primary.value, a = accent.value;
-            var c = hexToRgb(p);
+            var pc = hexToRgb(p), ac = hexToRgb(a);
+            var pRgb = pc.r + ', ' + pc.g + ', ' + pc.b;
+            var aRgb = ac.r + ', ' + ac.g + ', ' + ac.b;
             document.documentElement.style.setProperty('--primary', p);
             document.documentElement.style.setProperty('--primary-dark', darken(p, 0.2));
-            document.documentElement.style.setProperty('--primary-glow', 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0.15)');
+            document.documentElement.style.setProperty('--primary-rgb', pRgb);
+            document.documentElement.style.setProperty('--primary-glow', 'rgba(' + pRgb + ', 0.15)');
             document.documentElement.style.setProperty('--accent', a);
+            document.documentElement.style.setProperty('--accent-rgb', aRgb);
             preview.style.background = 'linear-gradient(135deg,' + p + ',' + a + ')';
             values.innerText = 'primary: ' + p + '\naccent:  ' + a;
         }
