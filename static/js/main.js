@@ -49,12 +49,14 @@ const navLinks = document.getElementById('nav-links');
 
 navToggle.addEventListener('click', () => {
     navLinks.classList.toggle('open');
+    navToggle.classList.toggle('active');
 });
 
 // Close mobile nav on link click
 navLinks.querySelectorAll('a').forEach(link => {
     link.addEventListener('click', () => {
         navLinks.classList.remove('open');
+        navToggle.classList.remove('active');
     });
 });
 
