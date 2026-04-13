@@ -1401,6 +1401,10 @@ html {
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
+    .nav-links li:last-child a.nav-link {
+        border-bottom: none;
+    }
+
     .nav-link::after {
         display: none;
     }
