@@ -905,6 +905,24 @@ html {
 }
 
 /* ===== Promise / Value Props ===== */
+/* ===== About Me ===== */
+.about-block {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.about-block p {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1.75;
+}
+
+.about-block p + p {
+    margin-top: 18px;
+}
+
+/* ===== How I Work / Promise ===== */
 .promise-section {
     position: relative;
     background:
