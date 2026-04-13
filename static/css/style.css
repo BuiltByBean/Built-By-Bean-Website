@@ -697,27 +697,6 @@ html {
     transform: translateY(-4px);
 }
 
-.about-card-icon {
-    width: 48px;
-    height: 48px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-    background: var(--primary-glow);
-    border: 1px solid rgba(var(--primary-rgb), 0.25);
-    color: var(--primary);
-    font-size: 1.75rem;
-    margin-bottom: 20px;
-    transition: all 0.3s;
-}
-
-.about-card:hover .about-card-icon {
-    color: var(--accent);
-    border-color: var(--primary-dark);
-    box-shadow: 0 0 20px var(--primary-glow);
-}
-
 .about-card h3 {
     font-size: 1.15rem;
     font-weight: 700;
