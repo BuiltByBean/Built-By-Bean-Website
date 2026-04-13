@@ -1346,8 +1346,8 @@ html {
     }
 
     .logo::before {
-        width: 36px;
-        height: 36px;
+        width: 64px;
+        height: 64px;
     }
 
     .nav-links {
