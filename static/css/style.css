@@ -669,45 +669,66 @@ html {
     line-height: 1.65;
 }
 
-/* ===== About ===== */
+/* ===== About Me ===== */
 .about-grid {
-    max-width: 720px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    max-width: 1000px;
+    margin: 0 auto;
 }
 
-.about-content h2 {
-    font-size: 2.5rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    margin-bottom: 24px;
+.about-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+    transition: all 0.3s;
 }
 
-.about-content p {
-    color: var(--text-muted);
-    font-size: 1.05rem;
-    line-height: 1.7;
-    margin-bottom: 16px;
+.about-card:hover {
+    border-color: transparent;
+    background-image:
+        linear-gradient(var(--surface), var(--surface)),
+        linear-gradient(135deg, var(--primary), var(--accent));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 0 32px var(--primary-glow);
+    transform: translateY(-4px);
 }
 
-.about-stats {
-    display: flex;
-    gap: 48px;
-    margin-top: 40px;
-    padding-top: 32px;
-    border-top: 1px solid var(--border);
-}
-
-.stat-value {
-    display: block;
-    font-size: 2rem;
-    font-weight: 800;
+.about-card-icon {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--primary-glow);
+    border: 1px solid rgba(var(--primary-rgb), 0.25);
     color: var(--primary);
-    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.75rem;
+    margin-bottom: 20px;
+    transition: all 0.3s;
 }
 
-.stat-label {
+.about-card:hover .about-card-icon {
+    color: var(--accent);
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 20px var(--primary-glow);
+}
+
+.about-card h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    line-height: 1.3;
+}
+
+.about-card p {
     color: var(--text-muted);
-    font-size: 0.85rem;
-    font-weight: 500;
+    font-size: 0.95rem;
+    line-height: 1.7;
 }
 
 /* ===== Contact ===== */
