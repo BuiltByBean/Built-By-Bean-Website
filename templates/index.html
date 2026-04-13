@@ -22,9 +22,7 @@
             </a>
             <ul class="nav-links" id="nav-links">
                 <li><a href="#about" class="nav-link">About Me</a></li>
-                <li><a href="#how-i-work" class="nav-link">How I Work</a></li>
                 <li><a href="#why-custom" class="nav-link">Why Custom</a></li>
-                <li><a href="#costs" class="nav-link">The Cost</a></li>
                 <li><a href="#process" class="nav-link">Process</a></li>
                 <li><a href="#contact" class="nav-link">Get in Touch</a></li>
             </ul>
@@ -103,77 +101,7 @@
         </div>
     </section>
 
-    <!-- How I Work -->
-    <section class="section promise-section" id="how-i-work">
-        <div class="container">
-            <div class="section-header">
-                <h2>Here's how <span class="text-gradient">I work</span></h2>
-                <p>Three things you should know before we start.</p>
-            </div>
-            <div class="promise-grid">
-                <div class="promise-card">
-                    <div class="promise-icon">{{ icons.wallet() }}</div>
-                    <h3>I work with your budget</h3>
-                    <p>Custom doesn't have to mean expensive. I'll be straight with you about what we can build within your budget, and I'll make every dollar count. No hidden fees, no scope creep surprises. You'll know exactly what you're paying for before we start.</p>
-                </div>
-                <div class="promise-card">
-                    <div class="promise-icon">{{ icons.key() }}</div>
-                    <h3>You own what I build</h3>
-                    <p>When we're done, the code, the database, the whole thing is yours. No ongoing cost for the product, no per-user pricing. Ever. The only recurring fee is a small monthly charge to keep everything hosted and running. We'll walk through the exact number together before you commit.</p>
-                </div>
-                <div class="promise-card">
-                    <div class="promise-icon">{{ icons.lightbulb() }}</div>
-                    <h3>Everything is built from scratch for you</h3>
-                    <p>No templates, no cookie-cutter kits. I design every app around your exact workflow. If you can describe what you need, I can build it.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    {# Services section hidden. Uncomment to bring back.
-    <section class="section" id="services">
-        <div class="container">
-            <div class="section-header">
-                <h2>What We Build</h2>
-                <p>Every business is different. Your software should be too.</p>
-            </div>
-            <div class="services-grid">
-                <div class="service-card">
-                    <div class="service-icon">{{ icons.code() }}</div>
-                    <h3>Custom Web Apps</h3>
-                    <p>Full-stack web applications built from scratch to match your exact workflow. Inventory systems, booking platforms, client portals, you name it.</p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon">{{ icons.shoppingCart() }}</div>
-                    <h3>E-Commerce Solutions</h3>
-                    <p>Online stores that actually convert. Custom product pages, checkout flows, and admin dashboards that make selling online effortless.</p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon">{{ icons.barChart() }}</div>
-                    <h3>Business Dashboards</h3>
-                    <p>See your data clearly. Custom dashboards that pull from your existing tools and give you the insights you need to make decisions.</p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon">{{ icons.zap() }}</div>
-                    <h3>API Integrations</h3>
-                    <p>Connect your tools. We build integrations between your existing software so everything talks to each other seamlessly.</p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon">{{ icons.smartphone() }}</div>
-                    <h3>Responsive Design</h3>
-                    <p>Apps that look and work great on every device. Desktop, tablet, phone. Your customers get a flawless experience everywhere.</p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon">{{ icons.shieldCheck() }}</div>
-                    <h3>Maintenance & Support</h3>
-                    <p>We don't disappear after launch. Ongoing support, updates, and improvements to keep your app running at peak performance.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-    #}
-
-    <!-- Why Custom vs. Off-the-Shelf -->
+    <!-- Why Custom -->
     <section class="section why-section" id="why-custom">
         <div class="container">
             <div class="section-header">
@@ -223,26 +151,30 @@
                 </div>
             </div>
 
-        </div>
-    </section>
+            <div class="why-details">
+                <h3 class="why-details-heading">Custom costs more up front. Here's what that <span class="text-gradient">actually buys you</span>.</h3>
 
-    <!-- The real cost -->
-    <section class="section section-alt" id="costs">
-        <div class="container">
-            <div class="section-header">
-                <h2>The real <span class="text-gradient">cost</span></h2>
-                <p>Custom costs more up front. Here's what that actually buys you.</p>
-            </div>
-            <div class="why-grid">
-                <div class="why-card">
-                    <div class="why-icon">{{ icons.trendingUp() }}</div>
-                    <h3>Pay once, save forever</h3>
-                    <p>Add up everything you already pay every month: the scheduling tool, the CRM, the invoicing app, the reporting dashboard, plus the hours you burn on spreadsheets. Those bills never stop and they go up every year. A custom app you actually own usually pays itself off inside a year, sometimes sooner. Every month after that is pure savings back into your bottom line.</p>
-                </div>
-                <div class="why-card">
-                    <div class="why-icon">{{ icons.settings() }}</div>
-                    <h3>Built around how you actually work</h3>
-                    <p>Whatever you're using now was built for a generic business, not yours. You lose hours to the gap between how you actually run things and what the tool allows. I sit down with you, figure out your real workflow, then build the app to match. The tool disappears into your day, and the reclaimed hours go straight into growing the business.</p>
+                <div class="why-grid">
+                    <div class="why-card">
+                        <div class="why-icon">{{ icons.wallet() }}</div>
+                        <h3>I work with your budget</h3>
+                        <p>Custom doesn't have to mean expensive. I'll be straight with you about what we can build within your budget, and I'll make every dollar count. No hidden fees, no scope creep surprises. You'll know exactly what you're paying for before we start.</p>
+                    </div>
+                    <div class="why-card">
+                        <div class="why-icon">{{ icons.key() }}</div>
+                        <h3>You own what I build</h3>
+                        <p>When we're done, the code, the database, the whole thing is yours. No ongoing cost for the product, no per-user pricing. Ever. The only recurring fee is a small monthly charge to keep everything hosted and running. We'll walk through the exact number together before you commit.</p>
+                    </div>
+                    <div class="why-card">
+                        <div class="why-icon">{{ icons.trendingUp() }}</div>
+                        <h3>Pay once, save forever</h3>
+                        <p>Add up everything you already pay every month: the scheduling tool, the CRM, the invoicing app, the reporting dashboard, plus the hours you burn on spreadsheets. Those bills never stop and they go up every year. A custom app you actually own usually pays itself off inside a year, sometimes sooner.</p>
+                    </div>
+                    <div class="why-card">
+                        <div class="why-icon">{{ icons.settings() }}</div>
+                        <h3>Built around how you actually work</h3>
+                        <p>Whatever you're using now was built for a generic business, not yours. I sit down with you, figure out your real workflow, then build the app to match. The tool disappears into your day, and the reclaimed hours go straight into growing the business.</p>
+                    </div>
                 </div>
             </div>
         </div>

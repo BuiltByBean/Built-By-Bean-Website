@@ -1210,6 +1210,18 @@ html {
     padding: 8px 14px;
 }
 
+.why-details {
+    margin-top: 64px;
+}
+
+.why-details-heading {
+    text-align: center;
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 36px;
+    color: var(--text);
+}
+
 .why-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
