@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Pluralism Within</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('pluralism.static', filename='css/main.css') }}">
+</head>
+<body>
+<div id="app">
+    <header id="header">
+        <h1>The Pluralism Within</h1>
+        <p class="subtitle">Tracing the Fractures of Christendom</p>
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Search denominations..." autocomplete="off">
+            <div id="search-results"></div>
+        </div>
+    </header>
+
+    <div id="legend"></div>
+    <button id="legend-toggle" title="Toggle legend">&#9673;</button>
+
+    <nav id="era-nav">
+        <div class="era-nav-title">Eras</div>
+        <button class="era-btn" data-era="early">Early Church</button>
+        <button class="era-btn" data-era="schism">Great Schism</button>
+        <button class="era-btn" data-era="reformation">Reformation</button>
+        <button class="era-btn" data-era="modern">Modern</button>
+    </nav>
+
+    <svg id="tree-svg"></svg>
+
+    <div id="minimap">
+        <svg id="minimap-svg"></svg>
+    </div>
+
+    <div id="year-indicator"></div>
+
+    <div id="zoom-controls">
+        <button id="zoom-in" title="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out">&minus;</button>
+        <button id="zoom-reset" title="Reset view">&#8634;</button>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <div id="detail-panel" class="hidden">
+        <button id="close-panel">&times;</button>
+        <div id="panel-content"></div>
+    </div>
+</div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('pluralism.static', filename='js/tree.js') }}"></script>
+</body>
+</html>

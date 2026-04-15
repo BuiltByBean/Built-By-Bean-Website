@@ -189,6 +189,10 @@ def create_app():
     from pm.service_costs_routes import service_costs_bp
     app.register_blueprint(service_costs_bp)
 
+    # ── Pluralism Project ──────────────────────────────────
+    from pluralism import pluralism_bp
+    app.register_blueprint(pluralism_bp)
+
     # ── Helpers ──────────────────────────────────────────────
 
     def allowed_file(filename):
