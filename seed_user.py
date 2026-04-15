@@ -10,7 +10,7 @@ with app.app_context():
     if not User.query.filter_by(username="mbean").first():
         user = User(
             username="mbean",
-            first_name="Matthew",
+            first_name="Michael",
             last_name="Bean",
             email="mbean@builtbybean.com",
             role="admin",
