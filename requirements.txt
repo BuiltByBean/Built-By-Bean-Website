@@ -13,3 +13,4 @@ python-dateutil>=2.8
 fpdf2>=2.8
 stripe>=8.0
 requests>=2.31
+flask-mail>=0.10

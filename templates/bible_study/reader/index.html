@@ -1,0 +1,404 @@
+{% extends "bible_study/base.html" %}
+{% block page_title %}{{ book }} {{ chapter }}{% endblock %}
+
+{% block content %}
+<div class="flex h-full" x-data="bibleReader()" x-init="init()">
+
+    <!-- LEFT: Book/Chapter Nav (desktop only, collapsible) -->
+    <div x-show="navOpen" x-cloak x-transition class="w-56 flex-shrink-0 border-r border-surface-200 dark:border-white/5 bg-surface-50 dark:bg-surface-900 flex-col overflow-hidden hidden md:flex">
+        <div class="flex p-2 gap-1 border-b border-surface-200 dark:border-white/5">
+            <button @click="testament = 'OT'" :class="testament === 'OT' ? 'bg-brand-600 text-white shadow' : 'text-surface-500'" class="flex-1 text-[11px] font-semibold py-2 rounded-md transition-all">OT</button>
+            <button @click="testament = 'NT'" :class="testament === 'NT' ? 'bg-brand-600 text-white shadow' : 'text-surface-500'" class="flex-1 text-[11px] font-semibold py-2 rounded-md transition-all">NT</button>
+        </div>
+        <div class="flex-1 overflow-y-auto custom-scrollbar px-1 py-1">
+            <template x-for="b in books.filter(x => x.testament === testament)" :key="b.name">
+                <div>
+                    <button @click="expandedBook = expandedBook === b.name ? '' : b.name"
+                            :class="b.name === currentBook ? 'bg-brand-500/10 text-brand-700 dark:text-brand-300' : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-white/5'"
+                            class="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-all flex items-center justify-between min-h-[36px]">
+                        <span x-text="b.name" class="truncate"></span>
+                        <svg :class="expandedBook === b.name ? 'rotate-90' : ''" class="w-3 h-3 text-surface-400 transition-transform flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                    <div x-show="expandedBook === b.name" x-cloak x-transition class="grid grid-cols-7 gap-1 px-1 py-1">
+                        <template x-for="ch in Array.from({length: b.chapters}, (_, i) => i + 1)" :key="ch">
+                            <a :href="'/Bible-Study/read/' + encodeURIComponent(b.name) + '/' + ch"
+                               :class="ch == currentChapter && b.name == currentBook ? 'bg-brand-500 text-white' : 'bg-surface-100 dark:bg-white/5 text-surface-500 hover:bg-surface-200 dark:hover:bg-white/10'"
+                               class="flex items-center justify-center rounded text-[10px] font-medium transition-all h-7"
+                               x-text="ch"></a>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Desktop collapse toggle — small tab at top, not full height -->
+    <div class="hidden md:block relative flex-shrink-0 w-0">
+        <button @click="navOpen = !navOpen; localStorage.setItem('readerNav', navOpen)"
+                class="absolute top-3 -right-6 z-10 w-6 h-8 flex items-center justify-center rounded-r-md bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 text-surface-500 dark:text-surface-400 transition-colors shadow-sm"
+                :title="navOpen ? 'Hide books' : 'Show books'">
+            <svg :class="navOpen ? '' : 'rotate-180'" class="w-3.5 h-3.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+        </button>
+    </div>
+
+    <!-- CENTER: Chapter Text -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar px-3 md:px-6 py-3" :class="selectedVerses.length > 0 ? 'pb-48 md:pb-3' : 'pb-20 md:pb-3'" id="reading-pane">
+        <!-- Header with chapter title, mobile book picker button, passage search -->
+        <div class="flex items-center gap-2 mb-3 max-w-2xl mx-auto">
+            <!-- Prev arrow -->
+            <button @click="goChapter(-1)" x-show="prevChapterUrl" class="p-2 rounded-lg text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-white/5 transition-colors flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+            </button>
+            <!-- Mobile: book picker button -->
+            <button @click="mobilePickerOpen = true" class="md:hidden flex items-center gap-1 px-2 py-2 rounded-lg bg-surface-100 dark:bg-white/5 text-surface-700 dark:text-surface-300 min-h-[44px]">
+                <span class="text-sm font-bold" x-text="currentBook + ' ' + currentChapter"></span>
+                <svg class="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+            </button>
+            <!-- Desktop: plain title -->
+            <h2 class="text-lg font-bold gradient-text flex-shrink-0 hidden md:block" x-text="currentBook + ' ' + currentChapter"></h2>
+            <!-- Next arrow -->
+            <button @click="goChapter(1)" x-show="nextChapterUrl" class="p-2 rounded-lg text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-white/5 transition-colors flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+            </button>
+            <!-- Passage search -->
+            <div class="flex-1 max-w-xs relative" x-data="{ focused: false }" @click.outside="focused = false">
+                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-400 z-10" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+                <input x-model="passageSearch" @focus="focused = true" @input="focused = true"
+                       @keydown.down.prevent="highlightNext()" @keydown.up.prevent="highlightPrev()"
+                       @keydown.enter.prevent="pickHighlighted()" @keydown.escape="focused = false"
+                       type="text" placeholder="Go to..."
+                       class="w-full pl-8 pr-3 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring">
+                <div x-show="focused && passageSearch.trim().length > 0 && suggestions.length > 0" x-cloak
+                     class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto custom-scrollbar">
+                    <template x-for="(s, i) in suggestions" :key="s.url">
+                        <a :href="s.url" @mouseenter="highlightIdx = i"
+                           :class="i === highlightIdx ? 'bg-brand-50 dark:bg-brand-500/20' : ''"
+                           class="flex items-center gap-2 px-3 py-2.5 text-xs transition-colors cursor-pointer block min-h-[44px]">
+                            <span class="font-medium text-surface-900 dark:text-white" x-text="s.label"></span>
+                            <span class="text-surface-400 text-[10px]" x-text="s.sub"></span>
+                        </a>
+                    </template>
+                </div>
+            </div>
+            <!-- Eraser button — appears right of search when verses selected -->
+            <button x-show="selectedVerses.length > 0" x-cloak x-transition @click="clearSelection()"
+                    class="p-2 rounded-lg border border-surface-300 dark:border-surface-600 text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500 transition-colors flex-shrink-0"
+                    title="Clear all highlights">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 20H7L3 16c-.6-.6-.6-1.5 0-2.1l10-10c.6-.6 1.5-.6 2.1 0l7 7c.6.6.6 1.5 0 2.1L16 19"/>
+                    <path d="M6 11l4 4"/>
+                </svg>
+            </button>
+        </div>
+
+        <div x-show="loading" class="text-center py-12 text-surface-400 animate-pulse">Loading...</div>
+        <div x-show="error" class="text-center py-12"><p class="text-red-500 text-sm" x-text="error"></p></div>
+
+        <div x-show="!loading && !error" class="max-w-2xl mx-auto leading-7 text-[15px]">
+            <template x-for="(item, idx) in verses" :key="idx">
+                <span>
+                    <!-- Section heading -->
+                    <h3 x-show="item.type === 'heading'" class="text-sm font-bold text-brand-500 dark:text-brand-400 tracking-wide mt-6 mb-2 block" x-text="item.text"></h3>
+                    <!-- Verse -->
+                    <span x-show="item.type === 'verse'" @click="item.number && selectVerse(item.number)"
+                          :class="{ 'bg-brand-200 dark:bg-brand-500/40 ring-1 ring-brand-400/50 dark:ring-brand-400/30': item.number && isSelected(item.number), 'hover:bg-surface-100 dark:hover:bg-white/5': item.number && !isSelected(item.number) }"
+                          class="inline cursor-pointer rounded px-0.5 transition-colors">
+                        <sup :class="item.number && isSelected(item.number) ? 'text-brand-300' : 'text-brand-400 dark:text-brand-500'" class="text-[10px] font-bold mr-0.5 select-none" x-text="item.number"></sup>
+                        <span :class="item.number && isSelected(item.number) ? 'text-surface-900 dark:text-white font-medium' : 'text-surface-700 dark:text-surface-300'" x-text="item.text"></span>
+                        <template x-if="item.number && (notedVerses.includes(item.number) || taggedVerses[item.number] || questionedVerses.includes(item.number))">
+                            <span class="inline-flex items-center gap-0.5 ml-0.5 align-super">
+                                <template x-if="notedVerses.includes(item.number)"><span class="inline-block w-1.5 h-1.5 rounded-full bg-brand-400"></span></template>
+                                <template x-if="taggedVerses[item.number]"><template x-for="c in (taggedVerses[item.number] || []).slice(0, 3)"><span class="inline-block w-1.5 h-1.5 rounded-full" :style="'background:' + c"></span></template></template>
+                                <template x-if="questionedVerses.includes(item.number)"><span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"></span></template>
+                            </span>
+                        </template><span> </span>
+                    </span>
+                </span>
+            </template>
+        </div>
+        <p x-show="copyright" class="esv-copyright mt-6 max-w-2xl mx-auto border-t border-surface-200 dark:border-white/5 pt-3" x-text="copyright"></p>
+    </div>
+
+    <!-- MOBILE: Floating action bar when verses selected (shows INSTEAD of full panel) -->
+    <div x-show="selectedVerses.length > 0 && !mobilePanelOpen" x-cloak x-transition
+         class="md:hidden fixed bottom-20 left-3 right-3 z-40 bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-surface-200 dark:border-white/10 p-3" style="pointer-events:auto">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-bold text-surface-900 dark:text-white" x-text="selectionLabel"></span>
+            <button @click="clearSelection()" class="p-1.5 rounded-lg text-surface-400 hover:text-surface-600">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="flex gap-2">
+            <button @click="studyTab = 'notes'; mobilePanelOpen = true; fetchVerseData()" class="flex-1 py-2.5 bg-brand-600 text-white text-xs font-semibold rounded-lg min-h-[44px]">Notes</button>
+            <button @click="studyTab = 'tags'; mobilePanelOpen = true; fetchVerseData()" class="flex-1 py-2.5 bg-surface-600 text-white text-xs font-semibold rounded-lg min-h-[44px]">Tags</button>
+            <button @click="studyTab = 'questions'; mobilePanelOpen = true; fetchVerseData()" class="flex-1 py-2.5 bg-amber-600 text-white text-xs font-semibold rounded-lg min-h-[44px]">Questions</button>
+        </div>
+    </div>
+
+    <!-- RIGHT: Study Panel (full screen on mobile ONLY when mobilePanelOpen, always on desktop) -->
+    <div x-show="selectedVerses.length > 0 && (mobilePanelOpen || windowWidth >= 768)" x-cloak x-transition
+         class="w-full md:w-80 lg:w-96 flex-shrink-0 border-l border-surface-200 dark:border-white/5 bg-white dark:bg-surface-900 flex flex-col overflow-hidden
+                fixed inset-0 z-40 md:static md:inset-auto">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-surface-200 dark:border-white/5 flex-shrink-0 min-h-[52px]">
+            <div>
+                <h3 class="text-sm font-bold text-surface-900 dark:text-white" x-text="selectionLabel"></h3>
+                <p class="text-[10px] text-surface-500 uppercase tracking-wider mt-0.5">Study Panel</p>
+            </div>
+            <button @click="mobilePanelOpen = false; clearSelection()" class="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="flex border-b border-surface-200 dark:border-white/5 flex-shrink-0">
+            <button @click="studyTab = 'notes'" :class="studyTab === 'notes' ? 'text-brand-600 dark:text-brand-400 border-b-2 border-brand-500' : 'text-surface-500'" class="flex-1 py-3 text-xs font-semibold min-h-[44px]">Notes</button>
+            <button @click="studyTab = 'tags'" :class="studyTab === 'tags' ? 'text-brand-600 dark:text-brand-400 border-b-2 border-brand-500' : 'text-surface-500'" class="flex-1 py-3 text-xs font-semibold min-h-[44px]">Tags</button>
+            <button @click="studyTab = 'questions'" :class="studyTab === 'questions' ? 'text-brand-600 dark:text-brand-400 border-b-2 border-brand-500' : 'text-surface-500'" class="flex-1 py-3 text-xs font-semibold min-h-[44px]">Questions</button>
+        </div>
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+            <!-- NOTES -->
+            <div x-show="studyTab === 'notes'">
+                <template x-for="n in verseNotes" :key="n.id"><div class="glass-card p-3 mb-3"><div class="text-[10px] font-medium text-surface-400 uppercase tracking-wider mb-1" x-text="formatDate(n.created_at)"></div><div class="text-sm text-surface-700 dark:text-surface-300" x-html="n.body"></div></div></template>
+                <p x-show="verseNotes.length === 0" class="text-sm text-surface-400 italic">No notes yet.</p>
+                <div class="mt-3"><textarea spellcheck="true" autocomplete="off" x-model="newNoteBody" rows="3" placeholder="Add a note..." class="w-full px-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring resize-none"></textarea><button @click="saveNote()" :disabled="!newNoteBody.trim()" class="mt-2 w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 min-h-[44px]">Save Note</button></div>
+            </div>
+            <!-- TAGS -->
+            <div x-show="studyTab === 'tags'">
+                <template x-for="tv in verseTags" :key="tv.id"><div class="glass-card p-3 mb-2 flex items-center justify-between"><div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full" :style="'background:' + tv.tag_color"></span><span class="text-sm font-medium text-surface-900 dark:text-white" x-text="tv.tag_name"></span></div><button @click="removeTagVerse(tv.id)" class="p-2 text-surface-400 hover:text-red-500"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button></div></template>
+                <p x-show="verseTags.length === 0" class="text-sm text-surface-400 italic">No tags.</p>
+                <div class="mt-3 space-y-1">
+                    <template x-for="tag in allTags" :key="tag.id"><button @click="applyTag(tag.id)" class="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-left hover:bg-surface-100 dark:hover:bg-white/5 min-h-[44px]"><span class="w-2.5 h-2.5 rounded-full" :style="'background:' + tag.color"></span><span x-text="tag.name"></span></button></template>
+                    <div x-data="{ showCreate: false }" class="pt-2"><button @click="showCreate = !showCreate" class="text-xs font-medium text-brand-600 dark:text-brand-400 min-h-[44px] px-3">+ New Tag</button><div x-show="showCreate" x-cloak class="flex gap-2 mt-1"><input x-model="newTagName" placeholder="Name" class="flex-1 px-2 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-md input-ring"><input x-model="newTagColor" type="color" value="#6366f1" class="w-10 h-10 rounded border cursor-pointer"><button @click="createTagAndApply()" class="px-3 py-2 bg-brand-600 text-white text-xs rounded-md hover:bg-brand-700 min-h-[44px]">Add</button></div></div>
+                </div>
+            </div>
+            <!-- QUESTIONS -->
+            <div x-show="studyTab === 'questions'">
+                <template x-for="q in verseQuestions" :key="q.id">
+                    <div class="glass-card p-3 mb-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="text-sm flex-1" :class="q.is_answered ? 'text-surface-500' : 'text-surface-700 dark:text-surface-300'" x-text="q.body"></p>
+                            <div class="flex gap-1 flex-shrink-0">
+                                <button @click="toggleAnswered(q.id, !q.is_answered)" class="p-2"><svg class="w-4 h-4" :class="q.is_answered?'text-emerald-500':'text-surface-400'" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+                                <button @click="deleteQuestion(q.id)" class="p-2 text-surface-400 hover:text-red-500"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                            </div>
+                        </div>
+                        <!-- Answer section -->
+                        <div class="mt-2" x-data="{ editing: false, draft: q.answer || '' }">
+                            <div x-show="q.answer && !editing" class="pl-3 border-l-2 border-emerald-500/30 mt-1">
+                                <p class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Answer</p>
+                                <p class="text-sm text-surface-700 dark:text-surface-300" x-text="q.answer"></p>
+                                <button @click="editing = true; draft = q.answer || ''" class="text-[10px] text-brand-500 mt-1">Edit</button>
+                            </div>
+                            <div x-show="!q.answer && !editing">
+                                <button @click="editing = true" class="text-xs text-brand-600 dark:text-brand-400">+ Write answer</button>
+                            </div>
+                            <div x-show="editing" x-cloak class="mt-1">
+                                <textarea spellcheck="true" autocomplete="off" x-model="draft" rows="3" placeholder="Write your answer..." class="w-full px-3 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring resize-none"></textarea>
+                                <div class="flex gap-2 mt-1">
+                                    <button @click="saveAnswer(q.id, draft); editing = false" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-lg min-h-[36px]">Save</button>
+                                    <button @click="editing = false" class="px-3 py-1.5 text-xs text-surface-500 bg-surface-100 dark:bg-white/5 rounded-lg min-h-[36px]">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="verseQuestions.length === 0" class="text-sm text-surface-400 italic">No questions.</p>
+                <div class="mt-3"><textarea spellcheck="true" autocomplete="off" x-model="newQuestionBody" rows="2" placeholder="Ask a question..." class="w-full px-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring resize-none"></textarea><button @click="saveQuestion()" :disabled="!newQuestionBody.trim()" class="mt-2 w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 min-h-[44px]">Save Question</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE: Book/Chapter Picker (bottom sheet overlay) -->
+    <div x-show="mobilePickerOpen" x-cloak class="fixed inset-0 z-50 md:hidden" x-transition>
+        <div class="absolute inset-0 bg-black/60" @click="mobilePickerOpen = false"></div>
+        <div class="absolute bottom-0 left-0 right-0 bg-white dark:bg-surface-900 rounded-t-2xl max-h-[75vh] flex flex-col" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
+            <!-- Handle bar -->
+            <div class="flex justify-center pt-2 pb-1"><div class="w-10 h-1 bg-surface-300 dark:bg-surface-600 rounded-full"></div></div>
+            <!-- Testament toggle -->
+            <div class="flex px-4 pb-2 gap-2">
+                <button @click="testament = 'OT'" :class="testament === 'OT' ? 'bg-brand-600 text-white' : 'bg-surface-100 dark:bg-white/5 text-surface-500'" class="flex-1 py-2.5 text-sm font-semibold rounded-lg min-h-[44px]">Old Testament</button>
+                <button @click="testament = 'NT'" :class="testament === 'NT' ? 'bg-brand-600 text-white' : 'bg-surface-100 dark:bg-white/5 text-surface-500'" class="flex-1 py-2.5 text-sm font-semibold rounded-lg min-h-[44px]">New Testament</button>
+            </div>
+            <!-- Book list -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6">
+                <template x-for="b in books.filter(x => x.testament === testament)" :key="b.name">
+                    <div>
+                        <button @click="mobileExpandedBook = mobileExpandedBook === b.name ? '' : b.name"
+                                :class="b.name === currentBook ? 'text-brand-600 dark:text-brand-400 font-bold' : 'text-surface-800 dark:text-surface-200'"
+                                class="w-full text-left px-2 py-3 text-sm flex items-center justify-between border-b border-surface-100 dark:border-white/5 min-h-[48px]">
+                            <span x-text="b.name"></span>
+                            <svg :class="mobileExpandedBook === b.name ? 'rotate-90' : ''" class="w-4 h-4 text-surface-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                        </button>
+                        <div x-show="mobileExpandedBook === b.name" x-cloak x-transition class="grid grid-cols-7 gap-2 px-2 py-3">
+                            <template x-for="ch in Array.from({length: b.chapters}, (_, i) => i + 1)" :key="ch">
+                                <a :href="'/Bible-Study/read/' + encodeURIComponent(b.name) + '/' + ch"
+                                   :class="ch == currentChapter && b.name == currentBook ? 'bg-brand-500 text-white' : 'bg-surface-100 dark:bg-white/5 text-surface-600 dark:text-surface-400'"
+                                   class="flex items-center justify-center rounded-lg text-sm font-medium h-10 min-w-[40px]"
+                                   x-text="ch"></a>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function bibleReader() {
+    return {
+        currentBook: '{{ book }}', currentChapter: {{ chapter }},
+        books: {{ bible_books_json | safe }},
+        testament: '{{ "NT" if book in ["Matthew","Mark","Luke","John","Acts","Romans","1 Corinthians","2 Corinthians","Galatians","Ephesians","Philippians","Colossians","1 Thessalonians","2 Thessalonians","1 Timothy","2 Timothy","Titus","Philemon","Hebrews","James","1 Peter","2 Peter","1 John","2 John","3 John","Jude","Revelation"] else "OT" }}',
+        expandedBook: '{{ book }}', mobileExpandedBook: '{{ book }}',
+        navOpen: localStorage.getItem('readerNav') !== 'false',
+        mobilePickerOpen: false,
+        mobilePanelOpen: false,
+        windowWidth: window.innerWidth,
+        verses: [], copyright: '', loading: false, error: '',
+        notedVerses: [], taggedVerses: {}, questionedVerses: [],
+        selectedVerses: [],
+        verseNotes: [], verseTags: [], verseQuestions: [], allTags: [],
+        studyTab: 'notes',
+        newNoteBody: '', newTagName: '', newTagColor: '#6366f1', newQuestionBody: '',
+        passageSearch: '', highlightIdx: 0,
+
+        async init() {
+            await this.fetchPassage(); await this.fetchTags();
+            window.addEventListener('resize', () => this.windowWidth = window.innerWidth);
+        },
+
+        async fetchPassage() {
+            this.loading = true; this.error = '';
+            try {
+                const r = await fetch('/Bible-Study/api/passage?book=' + encodeURIComponent(this.currentBook) + '&chapter=' + this.currentChapter);
+                const d = await r.json();
+                if (d.error) this.error = d.error;
+                this.verses = d.verses || []; this.copyright = d.copyright || '';
+                this.notedVerses = d.noted_verses || []; this.taggedVerses = d.tagged_verses || {};
+                this.questionedVerses = d.questioned_verses || [];
+            } catch (e) { this.error = 'Failed to load'; }
+            this.loading = false;
+        },
+        async fetchTags() { this.allTags = await (await fetch('/Bible-Study/api/tags')).json(); },
+
+        selectVerse(num) {
+            if (this.selectedVerses.includes(num)) {
+                // Deselect just this one verse
+                this.selectedVerses = this.selectedVerses.filter(v => v !== num);
+            } else if (this.selectedVerses.length === 0) {
+                // Nothing selected — select this verse
+                this.selectedVerses = [num];
+            } else {
+                // Add verse and fill the full range between min and max
+                const all = [...this.selectedVerses, num];
+                const min = Math.min(...all), max = Math.max(...all);
+                this.selectedVerses = Array.from({length: max - min + 1}, (_, i) => min + i);
+            }
+            if (this.selectedVerses.length > 0) this.fetchVerseData();
+            else { this.verseNotes=[]; this.verseTags=[]; this.verseQuestions=[]; this.mobilePanelOpen=false; }
+        },
+        isSelected(num) { return this.selectedVerses.includes(num); },
+        clearSelection() { this.selectedVerses=[]; this.verseNotes=[]; this.verseTags=[]; this.verseQuestions=[]; this.mobilePanelOpen=false; },
+
+        get selectionLabel() {
+            if (!this.selectedVerses.length) return '';
+            const min=Math.min(...this.selectedVerses), max=Math.max(...this.selectedVerses);
+            return min===max ? this.currentBook+' '+this.currentChapter+':'+min : this.currentBook+' '+this.currentChapter+':'+min+'-'+max;
+        },
+
+        async fetchVerseData() {
+            const vs=Math.min(...this.selectedVerses), ve=Math.max(...this.selectedVerses);
+            const p='book='+encodeURIComponent(this.currentBook)+'&chapter='+this.currentChapter+'&verse_start='+vs+'&verse_end='+ve;
+            const [nr,tr,qr]=await Promise.all([fetch('/Bible-Study/api/notes?'+p),fetch('/Bible-Study/api/tag-verses?'+p),fetch('/Bible-Study/api/questions?'+p)]);
+            this.verseNotes=await nr.json(); this.verseTags=await tr.json(); this.verseQuestions=await qr.json();
+        },
+
+        async saveNote() { if(!this.newNoteBody.trim())return; const vs=Math.min(...this.selectedVerses),ve=Math.max(...this.selectedVerses); await fetch('/Bible-Study/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book:this.currentBook,chapter:this.currentChapter,verse_start:vs,verse_end:ve,body:this.newNoteBody})}); this.newNoteBody=''; await this.fetchVerseData(); await this.fetchPassage(); },
+        async applyTag(id) { const vs=Math.min(...this.selectedVerses),ve=Math.max(...this.selectedVerses); await fetch('/Bible-Study/api/tag-verses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tag_id:id,book:this.currentBook,chapter:this.currentChapter,verse_start:vs,verse_end:ve})}); await this.fetchVerseData(); await this.fetchPassage(); },
+        async createTagAndApply() { if(!this.newTagName.trim())return; const r=await fetch('/Bible-Study/api/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:this.newTagName,color:this.newTagColor})}); const tag=await r.json(); this.newTagName=''; await this.fetchTags(); if(tag.id) await this.applyTag(tag.id); },
+        async removeTagVerse(id) { await fetch('/Bible-Study/api/tag-verses/'+id,{method:'DELETE'}); await this.fetchVerseData(); await this.fetchPassage(); },
+        async saveQuestion() { if(!this.newQuestionBody.trim())return; const vs=Math.min(...this.selectedVerses),ve=Math.max(...this.selectedVerses); await fetch('/Bible-Study/api/questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({book:this.currentBook,chapter:this.currentChapter,verse_start:vs,verse_end:ve,body:this.newQuestionBody})}); this.newQuestionBody=''; await this.fetchVerseData(); await this.fetchPassage(); },
+        async toggleAnswered(id,val) { await fetch('/Bible-Study/api/questions/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_answered:val})}); await this.fetchVerseData(); },
+        async saveAnswer(id,answer) { await fetch('/Bible-Study/api/questions/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:answer,is_answered:!!answer.trim()})}); await this.fetchVerseData(); },
+        async deleteQuestion(id) { await fetch('/Bible-Study/api/questions/'+id,{method:'DELETE'}); await this.fetchVerseData(); await this.fetchPassage(); },
+
+        get suggestions() {
+            const input=this.passageSearch.trim().toLowerCase(); if(!input) return []; this.highlightIdx=0;
+            const match=input.match(/^(.+?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/i);
+            if(match) { const bq=match[1].trim().toLowerCase(),ch=parseInt(match[2]); const found=this.books.filter(b=>b.name.toLowerCase().startsWith(bq)||b.name.toLowerCase().includes(bq)); const r=[]; for(const b of found.slice(0,5)){if(ch>=1&&ch<=b.chapters)r.push({label:b.name+' '+ch,sub:match[3]?':'+match[3]+(match[4]?'-'+match[4]:''):'',url:'/Bible-Study/read/'+encodeURIComponent(b.name)+'/'+ch});} if(r.length) return r.slice(0,8); }
+            const matched=this.books.filter(b=>b.name.toLowerCase().startsWith(input)||b.name.toLowerCase().includes(input)); const r=[];
+            for(const b of matched.slice(0,6)){for(let ch=1;ch<=Math.min(b.chapters,4);ch++)r.push({label:b.name+' '+ch,sub:'',url:'/Bible-Study/read/'+encodeURIComponent(b.name)+'/'+ch});}
+            return r.slice(0,10);
+        },
+        highlightNext(){if(this.highlightIdx<this.suggestions.length-1)this.highlightIdx++;},
+        highlightPrev(){if(this.highlightIdx>0)this.highlightIdx--;},
+        pickHighlighted(){const s=this.suggestions[this.highlightIdx];if(s&&s.url!=='#'){this.passageSearch='';window.location.href=s.url;}},
+        formatDate(iso){if(!iso)return'';return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});},
+
+        // Navigate chapter without page reload
+        async goChapter(dir) {
+            const target = dir === -1 ? this._prevChapter() : this._nextChapter();
+            if (!target) return;
+            this.currentBook = target.book;
+            this.currentChapter = target.chapter;
+            this.clearSelection();
+            this.expandedBook = target.book;
+            this.testament = this.books.find(b => b.name === target.book)?.testament || 'OT';
+            // Update URL without reload
+            history.pushState(null, '', '/Bible-Study/read/' + encodeURIComponent(target.book) + '/' + target.chapter);
+            document.title = target.book + ' ' + target.chapter + ' — Bible Study Notes';
+            // Scroll to top
+            document.getElementById('reading-pane')?.scrollTo(0, 0);
+            // Fetch new passage
+            await this.fetchPassage();
+            // Save last position cookie
+            document.cookie = 'last_passage=' + target.book + '/' + target.chapter + ';max-age=31536000;path=/';
+        },
+        _prevChapter() {
+            if (this.currentChapter > 1) return { book: this.currentBook, chapter: this.currentChapter - 1 };
+            const idx = this.books.findIndex(b => b.name === this.currentBook);
+            if (idx > 0) return { book: this.books[idx-1].name, chapter: this.books[idx-1].chapters };
+            return null;
+        },
+        _nextChapter() {
+            const book = this.books.find(b => b.name === this.currentBook);
+            if (book && this.currentChapter < book.chapters) return { book: this.currentBook, chapter: this.currentChapter + 1 };
+            const idx = this.books.findIndex(b => b.name === this.currentBook);
+            if (idx < this.books.length - 1) return { book: this.books[idx+1].name, chapter: 1 };
+            return null;
+        },
+
+        // Prev/Next chapter navigation
+        get prevChapterUrl() {
+            if (this.currentChapter > 1) return '/Bible-Study/read/' + encodeURIComponent(this.currentBook) + '/' + (this.currentChapter - 1);
+            // Go to previous book's last chapter
+            const idx = this.books.findIndex(b => b.name === this.currentBook);
+            if (idx > 0) return '/Bible-Study/read/' + encodeURIComponent(this.books[idx-1].name) + '/' + this.books[idx-1].chapters;
+            return null;
+        },
+        get prevChapterLabel() {
+            if (this.currentChapter > 1) return this.currentBook + ' ' + (this.currentChapter - 1);
+            const idx = this.books.findIndex(b => b.name === this.currentBook);
+            if (idx > 0) return this.books[idx-1].name + ' ' + this.books[idx-1].chapters;
+            return '';
+        },
+        get nextChapterUrl() {
+            const book = this.books.find(b => b.name === this.currentBook);
+            if (book && this.currentChapter < book.chapters) return '/Bible-Study/read/' + encodeURIComponent(this.currentBook) + '/' + (this.currentChapter + 1);
+            // Go to next book's chapter 1
+            const idx = this.books.findIndex(b => b.name === this.currentBook);
+            if (idx < this.books.length - 1) return '/Bible-Study/read/' + encodeURIComponent(this.books[idx+1].name) + '/1';
+            return null;
+        },
+        get nextChapterLabel() {
+            const book = this.books.find(b => b.name === this.currentBook);
+            if (book && this.currentChapter < book.chapters) return this.currentBook + ' ' + (this.currentChapter + 1);
+            const idx = this.books.findIndex(b => b.name === this.currentBook);
+            if (idx < this.books.length - 1) return this.books[idx+1].name + ' 1';
+            return '';
+        },
+    }
+}
+</script>
+{% endblock %}

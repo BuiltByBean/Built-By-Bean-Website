@@ -79,7 +79,7 @@
     extinctItem.append("span").text("Extinct");
 
     /* ── Load data ── */
-    d3.json("/project-pluralism/api/denominations").then((data) => {
+    d3.json("/Pluralism/api/denominations").then((data) => {
         render(data);
     });
 

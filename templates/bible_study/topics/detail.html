@@ -1,0 +1,133 @@
+{% extends "bible_study/base.html" %}
+{% block page_title %}{{ topic.title }}{% endblock %}
+{% block content %}
+<div class="h-full overflow-y-auto custom-scrollbar" x-data="topicEditor()" x-init="init()">
+    <div class="p-4 md:p-6 max-w-3xl mx-auto">
+
+        <!-- Header -->
+        <div class="flex items-center gap-3 mb-4">
+            <a href="/Bible-Study/topics" class="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+            </a>
+            <div class="flex-1">
+                <input x-model="title" @change="autoSave()" class="w-full text-xl font-bold bg-transparent border-none focus:outline-none text-surface-900 dark:text-white placeholder-surface-400" placeholder="Topic title">
+            </div>
+            <button @click="confirmDelete = true" class="p-2 text-surface-400 hover:text-red-500">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+            </button>
+        </div>
+
+        <!-- Delete confirmation -->
+        <div x-show="confirmDelete" x-cloak class="glass-card p-4 mb-4 border-red-500/20">
+            <p class="text-sm text-red-600 dark:text-red-400 mb-2">Delete this topic permanently?</p>
+            <div class="flex gap-2">
+                <button @click="deleteTopic()" class="flex-1 py-2 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 min-h-[44px]">Delete</button>
+                <button @click="confirmDelete = false" class="flex-1 py-2 text-xs text-surface-500 bg-surface-100 dark:bg-white/5 rounded-lg min-h-[44px]">Cancel</button>
+            </div>
+        </div>
+
+        <p class="text-xs text-surface-400 mb-3">
+            Use <code class="px-1 py-0.5 bg-surface-100 dark:bg-white/10 rounded text-brand-600 dark:text-brand-400">[John 3:16]</code> to insert a clickable scripture reference.
+            <span x-show="saving" class="text-surface-400 animate-pulse ml-2">Saving...</span>
+            <span x-show="saved && !saving" x-cloak class="text-emerald-500 ml-2">Saved</span>
+        </p>
+
+        <!-- Toggle: Edit mode vs Read mode -->
+        <div class="flex gap-2 mb-3">
+            <button @click="editMode = true" :class="editMode ? 'bg-brand-600 text-white' : 'bg-surface-100 dark:bg-white/5 text-surface-500'" class="px-3 py-2 rounded-lg text-xs font-medium min-h-[44px]">Edit</button>
+            <button @click="editMode = false" :class="!editMode ? 'bg-brand-600 text-white' : 'bg-surface-100 dark:bg-white/5 text-surface-500'" class="px-3 py-2 rounded-lg text-xs font-medium min-h-[44px]">Read</button>
+        </div>
+
+        <!-- Edit mode: textarea -->
+        <div x-show="editMode" class="glass-card p-4 min-h-[300px]">
+            <textarea spellcheck="true" autocomplete="off" x-model="body" @input.debounce.1000ms="autoSave()" rows="15"
+                      class="w-full text-sm bg-transparent border-none focus:outline-none text-surface-700 dark:text-surface-300 resize-none leading-7 placeholder-surface-400"
+                      placeholder="Start writing about this topic...&#10;&#10;Use [Romans 8:28] to reference scripture."></textarea>
+        </div>
+
+        <!-- Read mode: rendered with clickable scripture -->
+        <div x-show="!editMode" x-cloak class="glass-card p-4 min-h-[300px] text-sm leading-7 text-surface-700 dark:text-surface-300" x-html="renderBody()"></div>
+
+        <p class="esv-copyright mt-6">{{ ESV_COPYRIGHT }}</p>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function topicEditor() {
+    return {
+        topicId: {{ topic.id }},
+        title: {{ topic.title | tojson }},
+        body: {{ topic.body | tojson }},
+        saving: false, saved: false, confirmDelete: false, saveTimer: null, editMode: true,
+
+        init() {
+            // Start in read mode if there's content
+            if (this.body.trim()) this.editMode = false;
+        },
+
+        async autoSave() {
+            this.saving = true; this.saved = false;
+            await fetch('/Bible-Study/api/topics/' + this.topicId, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ title: this.title, body: this.body })
+            });
+            this.saving = false; this.saved = true;
+            clearTimeout(this.saveTimer);
+            this.saveTimer = setTimeout(() => this.saved = false, 3000);
+        },
+
+        async deleteTopic() {
+            await fetch('/Bible-Study/api/topics/' + this.topicId, { method: 'DELETE' });
+            window.location.href = '/Bible-Study/topics';
+        },
+
+        renderBody() {
+            // Replace [Reference] with inline expandable scripture blocks
+            let counter = 0;
+            return this.body
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/\[([A-Za-z0-9 ]+\d+[:\d\-]*)\]/g, function(match, ref) {
+                    const id = 'scr-' + (counter++);
+                    return '<span class="inline">' +
+                        '<button onclick="toggleScripture(this, \'' + ref.replace(/'/g, "\\'") + '\', \'' + id + '\')" class="scripture-ref inline-flex items-center gap-1">' +
+                            '<svg class="w-3 h-3 inline transition-transform scripture-chevron" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>' +
+                            ref +
+                        '</button>' +
+                        '<div id="' + id + '" class="hidden my-2 ml-2 pl-3 py-2 border-l-2 border-brand-500/30 bg-brand-50/50 dark:bg-brand-500/10 rounded-r-lg">' +
+                            '<p class="text-[10px] font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">' + ref + '</p>' +
+                            '<p class="text-sm text-surface-600 dark:text-surface-400 italic scripture-text">Loading...</p>' +
+                        '</div>' +
+                    '</span>';
+                })
+                .replace(/\n/g, '<br>');
+        },
+    }
+}
+
+// Toggle inline scripture expand/collapse
+async function toggleScripture(btn, ref, id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const chevron = btn.querySelector('.scripture-chevron');
+    if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(90deg)';
+        // Fetch verse text if not loaded yet
+        const textEl = el.querySelector('.scripture-text');
+        if (textEl && textEl.textContent === 'Loading...') {
+            try {
+                const r = await fetch('/Bible-Study/api/verse-text?ref=' + encodeURIComponent(ref));
+                const d = await r.json();
+                textEl.textContent = d.text || 'Could not load verse.';
+            } catch (e) {
+                textEl.textContent = 'Error loading verse.';
+            }
+        }
+    } else {
+        el.classList.add('hidden');
+        if (chevron) chevron.style.transform = '';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends "bible_study/base.html" %}
+{% block page_title %}Questions{% endblock %}
+{% block content %}
+<div class="h-full overflow-y-auto custom-scrollbar" x-data="questionsPage()" x-init="init()">
+    <div class="p-4 md:p-6 max-w-3xl mx-auto">
+        <h2 class="text-xl font-bold text-surface-900 dark:text-white mb-1">Questions</h2>
+        <p class="text-sm text-surface-500 mb-4">Questions about Scripture — grouped by passage.</p>
+
+        <!-- Add standalone question -->
+        <div class="glass-card p-4 mb-4">
+            <textarea spellcheck="true" autocomplete="off" x-model="newBody" rows="2" placeholder="Ask a question..." class="w-full px-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring resize-none"></textarea>
+            <button @click="addQuestion()" :disabled="!newBody.trim()" class="mt-2 w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 min-h-[44px]">Add Question</button>
+        </div>
+
+        <!-- Search + Filter -->
+        <div class="flex gap-2 mb-4">
+            <input x-model="search" @input.debounce.200ms type="text" placeholder="Search questions..." class="flex-1 px-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring">
+        </div>
+        <div class="flex gap-2 mb-4">
+            <div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+                <button @click="open = !open" class="flex items-center justify-between gap-2 text-sm bg-white dark:bg-surface-900 border border-gray-200 dark:border-white/10 rounded-xl pl-3.5 pr-3 py-2.5 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20 transition-all cursor-pointer min-w-[140px]">
+                    <span x-text="filter === 'unanswered' ? 'Unanswered' : filter === 'answered' ? 'Answered' : 'All'"></span>
+                    <svg :class="{ 'rotate-180': open }" class="w-4 h-4 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                </button>
+                <div x-show="open" x-cloak x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-1"
+                     class="absolute z-50 top-full mt-1.5 left-0 min-w-full bg-white dark:bg-surface-800 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 overflow-y-auto max-h-64 py-1">
+                    <button @click="filter = 'all'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="filter === 'all' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">All</button>
+                    <button @click="filter = 'unanswered'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="filter === 'unanswered' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">Unanswered</button>
+                    <button @click="filter = 'answered'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="filter === 'answered' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">Answered</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Questions grouped by book -->
+        <template x-for="group in grouped" :key="group.label">
+            <div class="mb-4">
+                <button @click="group.open = !group.open" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-100 dark:bg-white/5 min-h-[44px]">
+                    <span class="text-sm font-bold text-surface-900 dark:text-white" x-text="group.label"></span>
+                    <span class="text-xs text-surface-400" x-text="group.items.length"></span>
+                </button>
+                <div x-show="group.open" x-cloak class="mt-2 space-y-2 pl-2">
+                    <template x-for="q in group.items" :key="q.id">
+                        <div class="glass-card p-3">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="flex-1">
+                                    <p class="text-sm" :class="q.is_answered ? 'text-surface-500' : 'text-surface-800 dark:text-surface-200'" x-text="q.body"></p>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <template x-if="q.reference"><a :href="'/Bible-Study/read/'+encodeURIComponent(q.book)+'/'+q.chapter" class="text-[11px] font-semibold text-brand-600 dark:text-brand-400" x-text="q.reference"></a></template>
+                                        <span class="text-[10px] text-surface-400" x-text="formatDate(q.created_at)"></span>
+                                    </div>
+                                    <!-- Answer -->
+                                    <div x-data="{ editing: false, draft: q.answer || '' }" class="mt-2">
+                                        <div x-show="q.answer && !editing" class="pl-3 border-l-2 border-emerald-500/30">
+                                            <p class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Answer</p>
+                                            <p class="text-sm text-surface-700 dark:text-surface-300" x-text="q.answer"></p>
+                                            <button @click="editing = true; draft = q.answer" class="text-[10px] text-brand-500 mt-1">Edit</button>
+                                        </div>
+                                        <div x-show="!q.answer && !editing"><button @click="editing = true" class="text-xs text-brand-600 dark:text-brand-400">+ Write answer</button></div>
+                                        <div x-show="editing" x-cloak>
+                                            <textarea spellcheck="true" autocomplete="off" x-model="draft" rows="3" placeholder="Write your answer..." class="w-full px-3 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring resize-none"></textarea>
+                                            <div class="flex gap-2 mt-1">
+                                                <button @click="saveAnswer(q.id, draft); editing = false" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded-lg min-h-[36px]">Save</button>
+                                                <button @click="editing = false" class="px-3 py-1.5 text-xs text-surface-500 bg-surface-100 dark:bg-white/5 rounded-lg min-h-[36px]">Cancel</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex gap-1 flex-shrink-0">
+                                    <button @click="toggle(q.id,!q.is_answered)" class="p-2"><svg class="w-4 h-4" :class="q.is_answered?'text-emerald-500':'text-surface-400'" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+                                    <button @click="remove(q.id)" class="p-2 text-surface-400 hover:text-red-500"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+        <p x-show="grouped.length === 0 && !loading" class="text-sm text-surface-400 italic text-center py-8">No questions.</p>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function questionsPage() {
+    return {
+        questions:[], filter:'all', search:'', newBody:'', loading:true,
+        async init() { this.questions = await (await fetch('/Bible-Study/api/questions')).json(); this.loading = false; },
+        get filtered() {
+            let qs = this.questions;
+            if (this.filter==='unanswered') qs = qs.filter(q=>!q.is_answered);
+            if (this.filter==='answered') qs = qs.filter(q=>q.is_answered);
+            if (this.search) { const s=this.search.toLowerCase(); qs = qs.filter(q=>q.body.toLowerCase().includes(s)||(q.reference||'').toLowerCase().includes(s)); }
+            return qs;
+        },
+        get grouped() {
+            const map = {};
+            for (const q of this.filtered) {
+                const label = q.reference || 'Standalone';
+                if (!map[label]) map[label] = { label, items: [], open: true };
+                map[label].items.push(q);
+            }
+            return Object.values(map);
+        },
+        async addQuestion() { if(!this.newBody.trim())return; await fetch('/Bible-Study/api/questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:this.newBody})}); this.newBody=''; await this.init(); },
+        async toggle(id,val) { await fetch('/Bible-Study/api/questions/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_answered:val})}); await this.init(); },
+        async saveAnswer(id,answer) { await fetch('/Bible-Study/api/questions/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:answer,is_answered:!!answer.trim()})}); await this.init(); },
+        async remove(id) { await fetch('/Bible-Study/api/questions/'+id,{method:'DELETE'}); await this.init(); },
+        formatDate(iso){return iso?new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';}
+    }
+}
+</script>
+{% endblock %}

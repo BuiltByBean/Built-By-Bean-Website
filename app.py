@@ -39,12 +39,21 @@ def create_app():
     db.init_app(app)
     migrate = Migrate(app, db)
 
+    # ── Flask-Mail (for Bible Study invites) ──────────────────
+    from flask_mail import Mail
+    mail = Mail(app)
+
     login_manager = LoginManager(app)
     login_manager.login_view = "login"
     login_manager.login_message = ""
 
     @login_manager.user_loader
     def load_user(user_id):
+        # Bible Study users have IDs prefixed with "bs_"
+        uid = str(user_id)
+        if uid.startswith("bs_"):
+            from bible_study.bs_models import BibleStudyUser
+            return db.session.get(BibleStudyUser, int(uid[3:]))
         return db.session.get(User, int(user_id))
 
     # ── S3 Client ─────────────────────────────────────────────
@@ -192,6 +201,11 @@ def create_app():
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
     app.register_blueprint(pluralism_bp)
+
+    # ── Bible Study Project ────────────────────────────────
+    from bible_study import bible_study_bp, init_bible_study
+    app.register_blueprint(bible_study_bp)
+    init_bible_study(app)
 
     # ── Helpers ──────────────────────────────────────────────
 

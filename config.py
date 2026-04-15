@@ -20,3 +20,8 @@ class Config:
     MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
     CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mbean@builtbybeans.com")
+    MAIL_USE_TLS = True
+    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USERNAME", "")
+    # Bible Study
+    ESV_API_KEY = os.environ.get("ESV_API_KEY", "")
+    APP_URL = os.environ.get("APP_URL", "https://builtbybeans.com")

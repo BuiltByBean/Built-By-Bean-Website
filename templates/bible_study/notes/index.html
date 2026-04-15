@@ -1,0 +1,62 @@
+{% extends "bible_study/base.html" %}
+{% block page_title %}My Notes{% endblock %}
+{% block content %}
+<div class="h-full overflow-y-auto custom-scrollbar" x-data="notesPage()" x-init="init()">
+    <div class="p-4 md:p-6 max-w-3xl mx-auto">
+        <h2 class="text-xl font-bold text-surface-900 dark:text-white mb-1">Notes</h2>
+        <p class="text-sm text-surface-500 mb-4">All your study notes, grouped by book and chapter.</p>
+
+        <!-- Live search -->
+        <input x-model="search" @input.debounce.200ms="filterNotes()" type="text" placeholder="Search notes..."
+               class="w-full px-4 py-3 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-xl input-ring mb-4">
+
+        <div x-show="loading" class="text-center py-8 text-surface-400 animate-pulse">Loading...</div>
+
+        <!-- Grouped by book -->
+        <template x-for="group in filtered" :key="group.book">
+            <div class="mb-4">
+                <button @click="group.open = !group.open" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-100 dark:bg-white/5 min-h-[44px]">
+                    <span class="text-sm font-bold text-surface-900 dark:text-white" x-text="group.book"></span>
+                    <span class="text-xs text-surface-400" x-text="group.notes.length + ' notes'"></span>
+                </button>
+                <div x-show="group.open" x-cloak class="mt-2 space-y-2 pl-2">
+                    <template x-for="n in group.notes" :key="n.id">
+                        <div class="glass-card p-3">
+                            <div class="flex items-center justify-between mb-1">
+                                <a :href="n.chapter ? '/Bible-Study/read/' + encodeURIComponent(n.book) + '/' + n.chapter : '#'"
+                                   class="text-xs font-semibold text-brand-600 dark:text-brand-400" x-text="n.reference"></a>
+                                <span class="text-[10px] text-surface-400" x-text="formatDate(n.created_at)"></span>
+                            </div>
+                            <div class="text-sm text-surface-700 dark:text-surface-300" x-html="n.body"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+        <p x-show="!loading && filtered.length === 0" class="text-sm text-surface-400 italic text-center py-8">No notes found.</p>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function notesPage() {
+    return {
+        allNotes: [], search: '', filtered: [], loading: true,
+        async init() {
+            const r = await fetch('/Bible-Study/api/notes/all');
+            this.allNotes = await r.json();
+            this.filterNotes();
+            this.loading = false;
+        },
+        filterNotes() {
+            const q = this.search.toLowerCase();
+            const notes = q ? this.allNotes.filter(n => n.body.toLowerCase().includes(q) || n.reference.toLowerCase().includes(q)) : this.allNotes;
+            const map = {};
+            for (const n of notes) { if (!map[n.book]) map[n.book] = { book: n.book, notes: [], open: true }; map[n.book].notes.push(n); }
+            this.filtered = Object.values(map);
+        },
+        formatDate(iso) { return iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''; },
+    }
+}
+</script>
+{% endblock %}

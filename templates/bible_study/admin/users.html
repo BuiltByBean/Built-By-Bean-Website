@@ -1,0 +1,269 @@
+{% extends "bible_study/base.html" %}
+{% block page_title %}Users{% endblock %}
+{% block content %}
+<div class="h-full overflow-y-auto custom-scrollbar" x-data="usersAdmin()" x-init="init()">
+    <div class="p-4 md:p-6 max-w-5xl mx-auto">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h2 class="text-xl font-bold text-surface-900 dark:text-white">Users</h2>
+                <p class="text-sm text-surface-500">Manage accounts and permissions</p>
+            </div>
+            <button @click="showCreate = !showCreate" class="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 min-h-[44px]">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                New User
+            </button>
+        </div>
+
+        <!-- Invite New User Form -->
+        <div x-show="showCreate" x-cloak x-transition class="glass-card p-4 mb-6">
+            <h3 class="text-sm font-bold text-surface-900 dark:text-white mb-1">Invite New User</h3>
+            <p class="text-xs text-surface-500 mb-3">Enter their email and they'll receive a link to set up their account.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                    <label class="text-[10px] font-semibold text-surface-500 uppercase tracking-wider block mb-1">Email *</label>
+                    <input x-model="newUser.email" type="email" placeholder="user@example.com" class="w-full px-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring">
+                </div>
+                <div>
+                    <label class="text-[10px] font-semibold text-surface-500 uppercase tracking-wider block mb-1">Name (optional)</label>
+                    <input x-model="newUser.display_name" type="text" placeholder="Their name" class="w-full px-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring">
+                </div>
+                <div>
+                    <label class="text-[10px] font-semibold text-surface-500 uppercase tracking-wider block mb-1">Role</label>
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+                        <button @click="open = !open" class="flex items-center justify-between gap-2 w-full text-sm bg-white dark:bg-surface-900 border border-gray-200 dark:border-white/10 rounded-xl pl-3.5 pr-3 py-2.5 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20 transition-all cursor-pointer">
+                            <span x-text="newUser.role === 'admin' ? 'Admin' : 'User'"></span>
+                            <svg :class="{ 'rotate-180': open }" class="w-4 h-4 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                        <div x-show="open" x-cloak x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-1"
+                             class="absolute z-50 top-full mt-1.5 left-0 min-w-full bg-white dark:bg-surface-800 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 overflow-y-auto max-h-64 py-1">
+                            <button @click="newUser.role = 'user'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="newUser.role === 'user' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">User</button>
+                            <button @click="newUser.role = 'admin'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="newUser.role === 'admin' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">Admin</button>
+                        </div>
+                        <input type="hidden" name="role" :value="newUser.role">
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 mt-3">
+                <button @click="createUser()" class="px-4 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 min-h-[44px]">Send Invite</button>
+                <button @click="showCreate = false" class="px-4 py-2.5 text-sm text-surface-500 bg-surface-100 dark:bg-white/5 rounded-lg min-h-[44px]">Cancel</button>
+                <span x-show="inviteSent" x-cloak class="text-sm text-emerald-500 ml-2">Invite sent!</span>
+            </div>
+            <p x-show="createError" x-cloak class="text-sm text-red-500 mt-2" x-text="createError"></p>
+        </div>
+
+        <!-- Search & Filter -->
+        <div class="glass-card p-4 mb-4">
+            <div class="flex flex-col md:flex-row gap-3">
+                <div class="flex-1">
+                    <label class="text-[10px] font-semibold text-surface-500 uppercase tracking-wider block mb-1">Search</label>
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+                        <input x-model="search" type="text" placeholder="Start typing a name..." class="w-full pl-10 pr-3 py-2.5 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring">
+                    </div>
+                </div>
+                <div class="w-full md:w-48">
+                    <label class="text-[10px] font-semibold text-surface-500 uppercase tracking-wider block mb-1">Role</label>
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+                        <button @click="open = !open" class="flex items-center justify-between gap-2 w-full text-sm bg-white dark:bg-surface-900 border border-gray-200 dark:border-white/10 rounded-xl pl-3.5 pr-3 py-2.5 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20 transition-all cursor-pointer">
+                            <span x-text="roleFilter === 'admin' ? 'Admin' : roleFilter === 'user' ? 'User' : 'All Roles'"></span>
+                            <svg :class="{ 'rotate-180': open }" class="w-4 h-4 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                        <div x-show="open" x-cloak x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-1"
+                             class="absolute z-50 top-full mt-1.5 left-0 min-w-full bg-white dark:bg-surface-800 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 overflow-y-auto max-h-64 py-1">
+                            <button @click="roleFilter = ''; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="!roleFilter ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">All Roles</button>
+                            <button @click="roleFilter = 'admin'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="roleFilter === 'admin' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">Admin</button>
+                            <button @click="roleFilter = 'user'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="roleFilter === 'user' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">User</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="glass-card overflow-hidden">
+            <!-- Table header -->
+            <div class="hidden md:grid grid-cols-12 gap-2 px-4 py-3 border-b border-surface-200 dark:border-white/5 text-[10px] font-semibold text-surface-500 uppercase tracking-wider">
+                <div class="col-span-3">User</div>
+                <div class="col-span-3">Email</div>
+                <div class="col-span-1">Role</div>
+                <div class="col-span-2">Created</div>
+                <div class="col-span-3 text-right">Actions</div>
+            </div>
+
+            <!-- User rows -->
+            <template x-for="u in filtered" :key="u.id">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2 px-4 py-3 border-b border-surface-200/50 dark:border-white/5 items-center hover:bg-surface-50/50 dark:hover:bg-white/[0.02] transition-colors">
+
+                    <!-- Edit mode -->
+                    <template x-if="editingId === u.id">
+                        <div class="col-span-12 space-y-3">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="text-[10px] text-surface-500 uppercase tracking-wider">Display Name</label>
+                                    <input x-model="editData.display_name" class="w-full px-2 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded input-ring">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-surface-500 uppercase tracking-wider">Email</label>
+                                    <input x-model="editData.email" class="w-full px-2 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded input-ring">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-surface-500 uppercase tracking-wider">Role</label>
+                                    <div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+                                        <button @click="open = !open" class="flex items-center justify-between gap-2 w-full text-sm bg-white dark:bg-surface-900 border border-gray-200 dark:border-white/10 rounded-xl pl-3.5 pr-3 py-2 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20 transition-all cursor-pointer">
+                                            <span x-text="editData.role === 'admin' ? 'Admin' : 'User'"></span>
+                                            <svg :class="{ 'rotate-180': open }" class="w-4 h-4 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                                        </button>
+                                        <div x-show="open" x-cloak x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-1"
+                                             class="absolute z-50 top-full mt-1.5 left-0 min-w-full bg-white dark:bg-surface-800 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 overflow-y-auto max-h-64 py-1">
+                                            <button @click="editData.role = 'user'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="editData.role === 'user' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">User</button>
+                                            <button @click="editData.role = 'admin'; open = false" class="w-full text-left px-3.5 py-2 text-sm transition-colors" :class="editData.role === 'admin' ? 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]'">Admin</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="saveEdit(u.id)" class="px-3 py-2 bg-brand-600 text-white text-xs rounded hover:bg-brand-700 min-h-[44px]">Save</button>
+                                <button @click="editingId = null" class="px-3 py-2 text-xs text-surface-500 bg-surface-100 dark:bg-white/5 rounded min-h-[44px]">Cancel</button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Reset password mode -->
+                    <template x-if="resetId === u.id">
+                        <div class="col-span-12 flex items-center gap-3">
+                            <input x-model="resetPassword" type="password" placeholder="New password (6+ chars)" class="flex-1 px-3 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded input-ring">
+                            <button @click="doReset(u.id)" class="px-3 py-2 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 min-h-[44px]">Set</button>
+                            <button @click="resetId = null" class="px-3 py-2 text-xs text-surface-500 bg-surface-100 dark:bg-white/5 rounded min-h-[44px]">Cancel</button>
+                        </div>
+                    </template>
+
+                    <!-- Delete confirm mode -->
+                    <template x-if="deleteId === u.id">
+                        <div class="col-span-12 flex items-center gap-3">
+                            <p class="text-sm text-red-500 flex-1">Delete <strong x-text="u.username"></strong> and all their data?</p>
+                            <button @click="doDelete(u.id)" class="px-3 py-2 bg-red-600 text-white text-xs rounded hover:bg-red-700 min-h-[44px]">Delete</button>
+                            <button @click="deleteId = null" class="px-3 py-2 text-xs text-surface-500 bg-surface-100 dark:bg-white/5 rounded min-h-[44px]">Cancel</button>
+                        </div>
+                    </template>
+
+                    <!-- Normal view -->
+                    <template x-if="editingId !== u.id && resetId !== u.id && deleteId !== u.id">
+                        <div class="contents">
+                            <!-- User -->
+                            <div class="col-span-3 flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full bg-brand-500/10 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-xs font-bold text-brand-600 dark:text-brand-400" x-text="(u.display_name || u.username).split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)"></span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-medium text-surface-900 dark:text-white truncate">
+                                        <span x-text="u.display_name || u.username"></span>
+                                        <span x-show="u.is_you" class="text-[10px] text-brand-500 font-normal ml-1">(you)</span>
+                                    </p>
+                                    <p class="text-[11px] text-surface-400 truncate" x-text="u.username"></p>
+                                </div>
+                            </div>
+                            <!-- Email -->
+                            <div class="col-span-3 text-sm text-surface-600 dark:text-surface-400 truncate hidden md:block" x-text="u.email || '—'"></div>
+                            <!-- Role -->
+                            <div class="col-span-1 hidden md:block">
+                                <span :class="u.role === 'admin' ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'bg-surface-100 dark:bg-white/5 text-surface-500'"
+                                      class="text-[10px] px-2 py-1 rounded-full font-semibold uppercase" x-text="u.role"></span>
+                            </div>
+                            <!-- Created -->
+                            <div class="col-span-2 text-xs text-surface-400 hidden md:block" x-text="u.created_at"></div>
+                            <!-- Actions -->
+                            <div class="col-span-3 flex items-center justify-end gap-2">
+                                <button @click="startEdit(u)" class="px-3 py-1.5 text-xs font-medium text-surface-600 dark:text-surface-400 bg-surface-100 dark:bg-white/5 rounded-lg hover:bg-surface-200 dark:hover:bg-white/10 min-h-[36px]">Edit</button>
+                                <template x-if="!u.is_you">
+                                    <button @click="resetId = u.id; resetPassword = ''" class="px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 min-h-[36px]">Reset PW</button>
+                                </template>
+                                <template x-if="!u.is_you">
+                                    <button @click="deleteId = u.id" class="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-500/10 rounded-lg hover:bg-red-500/20 min-h-[36px]">Delete</button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <p x-show="filtered.length === 0" class="text-sm text-surface-400 italic text-center py-8">No users match your search.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function usersAdmin() {
+    return {
+        users: [], search: '', roleFilter: '',
+        showCreate: false, createError: '', inviteSent: false,
+        newUser: { display_name: '', email: '', role: 'user' },
+        editingId: null, editData: {},
+        resetId: null, resetPassword: '',
+        deleteId: null,
+
+        async init() {
+            // Load users from server-rendered data
+            this.users = [
+                {% for user in users %}
+                {
+                    id: {{ user.id }},
+                    username: {{ user.username | tojson }},
+                    display_name: {{ (user.display_name or '') | tojson }},
+                    email: {{ (user.email or '') | tojson }},
+                    role: {{ (user.role or 'user') | tojson }},
+                    is_admin: {{ 'true' if user.is_admin else 'false' }},
+                    is_you: {{ 'true' if user.id == current_user.id else 'false' }},
+                    created_at: '{{ user.created_at.strftime("%b %d, %Y") if user.created_at else "" }}',
+                },
+                {% endfor %}
+            ];
+        },
+
+        get filtered() {
+            let list = this.users;
+            if (this.search) {
+                const s = this.search.toLowerCase();
+                list = list.filter(u => u.username.toLowerCase().includes(s) || (u.display_name||'').toLowerCase().includes(s) || (u.email||'').toLowerCase().includes(s));
+            }
+            if (this.roleFilter) list = list.filter(u => u.role === this.roleFilter);
+            return list;
+        },
+
+        async createUser() {
+            this.createError = ''; this.inviteSent = false;
+            if (!this.newUser.email) { this.createError = 'Email is required'; return; }
+            const r = await fetch('/Bible-Study/api/admin/users', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.newUser) });
+            if (!r.ok) { const d = await r.json(); this.createError = d.error || 'Failed'; return; }
+            this.inviteSent = true;
+            this.newUser = { display_name: '', email: '', role: 'user' };
+            setTimeout(() => location.reload(), 2000);
+        },
+
+        startEdit(u) {
+            this.editingId = u.id;
+            this.editData = { display_name: u.display_name, email: u.email, role: u.role };
+        },
+
+        async saveEdit(uid) {
+            await fetch('/Bible-Study/api/admin/users/' + uid, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.editData) });
+            location.reload();
+        },
+
+        async doReset(uid) {
+            if (!this.resetPassword || this.resetPassword.length < 6) return;
+            await fetch('/Bible-Study/api/admin/users/' + uid + '/reset-password', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: this.resetPassword }) });
+            this.resetId = null; this.resetPassword = '';
+        },
+
+        async doDelete(uid) {
+            await fetch('/Bible-Study/api/admin/users/' + uid + '/delete', { method: 'POST' });
+            location.reload();
+        },
+    }
+}
+</script>
+{% endblock %}

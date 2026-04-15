@@ -1,0 +1,143 @@
+{% extends "bible_study/base.html" %}
+{% block page_title %}Tag: {{ tag.name }}{% endblock %}
+
+{% block content %}
+<div class="h-full overflow-y-auto custom-scrollbar">
+    <div class="p-6 max-w-3xl mx-auto" x-data="tagDetail()" x-init="init()">
+
+        <!-- Header -->
+        <div class="flex items-center gap-3 mb-6">
+            <a href="/Bible-Study/tags" class="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+            </a>
+            <span class="w-4 h-4 rounded-full" style="background: {{ tag.color }}"></span>
+            <h2 class="text-2xl font-bold text-surface-900 dark:text-white">{{ tag.name }}</h2>
+            <span class="text-sm text-surface-400" x-text="verses.length + ' verses'"></span>
+        </div>
+
+        <!-- Tag-level notes -->
+        <div class="mb-8">
+            <h3 class="text-sm font-bold text-surface-900 dark:text-white mb-3">General Notes on {{ tag.name }}</h3>
+
+            {% for tn in notes %}
+            <div class="glass-card p-3 mb-3">
+                <span class="text-[10px] font-medium text-surface-400 uppercase tracking-wider">
+                    {{ tn.created_at.strftime('%b %d, %Y') if tn.created_at else '' }}
+                </span>
+                <div class="text-sm text-surface-700 dark:text-surface-300 mt-1">{{ tn.body | safe }}</div>
+            </div>
+            {% endfor %}
+
+            <div class="mt-3">
+                <textarea spellcheck="true" autocomplete="off" x-model="newNote" rows="3" placeholder="General thoughts on &quot;{{ tag.name }}&quot;..."
+                          class="w-full px-3 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-white/10 rounded-lg input-ring resize-none"></textarea>
+                <button @click="saveNote()" class="mt-2 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded-lg transition-colors">
+                    Save Note
+                </button>
+            </div>
+        </div>
+
+        <!-- Tagged verses (reorderable) -->
+        <h3 class="text-sm font-bold text-surface-900 dark:text-white mb-3">Tagged Verses</h3>
+        <div class="space-y-3">
+            <template x-for="(v, idx) in verses" :key="v.id">
+                <div class="glass-card p-4 flex gap-3">
+                    <!-- Reorder buttons -->
+                    <div class="flex flex-col items-center justify-center gap-0.5 flex-shrink-0">
+                        <button @click="moveUp(idx)" :disabled="idx === 0"
+                                class="p-1 rounded hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5"/></svg>
+                        </button>
+                        <span class="text-[9px] text-surface-400 font-medium" x-text="idx + 1"></span>
+                        <button @click="moveDown(idx)" :disabled="idx === verses.length - 1"
+                                class="p-1 rounded hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                    </div>
+                    <!-- Verse content -->
+                    <div class="flex-1 min-w-0">
+                        <a :href="'/Bible-Study/read/' + encodeURIComponent(v.book) + '/' + v.chapter"
+                           class="text-sm font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors"
+                           x-text="v.reference"></a>
+                        <p x-show="v.text" class="text-sm text-surface-600 dark:text-surface-400 mt-1 italic" x-text="'&ldquo;' + v.text + '&rdquo;'"></p>
+                        <p x-show="v.note" class="text-sm text-surface-700 dark:text-surface-300 mt-2 pl-3 border-l-2 border-brand-500/30" x-text="v.note"></p>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <p x-show="verses.length === 0" class="text-sm text-surface-400 italic">No verses tagged yet.</p>
+
+        <!-- ESV copyright -->
+        <template x-if="verses.length > 0">
+            <p class="esv-copyright mt-6">{{ copyright }}</p>
+        </template>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function tagDetail() {
+    return {
+        tagId: {{ tag.id }},
+        newNote: '',
+        verses: [
+            {% for v in verses %}
+            {
+                id: {{ v.id }},
+                book: '{{ v.book }}',
+                chapter: {{ v.chapter or 0 }},
+                verse_start: {{ v.verse_start or 0 }},
+                verse_end: {{ v.verse_end or 0 }},
+                note: {{ v.note | tojson if v.note else 'null' }},
+                reference: '{{ format_ref(v.book, v.chapter, v.verse_start, v.verse_end) }}',
+                text: {{ verse_texts.get(v.id, '') | tojson }},
+            },
+            {% endfor %}
+        ],
+
+        init() {},
+
+        async saveNote() {
+            if (!this.newNote.trim()) return;
+            await fetch('/Bible-Study/api/tag-notes', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tag_id: this.tagId, body: this.newNote })
+            });
+            location.reload();
+        },
+
+        async moveUp(idx) {
+            if (idx === 0) return;
+            // Swap with previous
+            const temp = this.verses[idx];
+            this.verses[idx] = this.verses[idx - 1];
+            this.verses[idx - 1] = temp;
+            // Force reactivity
+            this.verses = [...this.verses];
+            await this.saveOrder();
+        },
+
+        async moveDown(idx) {
+            if (idx >= this.verses.length - 1) return;
+            const temp = this.verses[idx];
+            this.verses[idx] = this.verses[idx + 1];
+            this.verses[idx + 1] = temp;
+            this.verses = [...this.verses];
+            await this.saveOrder();
+        },
+
+        async saveOrder() {
+            const ids = this.verses.map(v => v.id);
+            await fetch('/Bible-Study/api/tag-verses/reorder', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ids })
+            });
+        },
+    }
+}
+</script>
+{% endblock %}
