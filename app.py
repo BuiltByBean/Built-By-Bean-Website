@@ -59,12 +59,14 @@ def create_app():
     # ── S3 Client ─────────────────────────────────────────────
     _s3_bucket = os.environ.get("AWS_S3_BUCKET")
     _s3_region = os.environ.get("AWS_S3_REGION", "us-east-2")
+    _s3_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    _s3_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
     _s3_client = boto3.client(
         "s3",
         region_name=_s3_region,
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    ) if _s3_bucket else None
+        aws_access_key_id=_s3_access_key,
+        aws_secret_access_key=_s3_secret_key,
+    ) if (_s3_bucket and _s3_access_key and _s3_secret_key) else None
 
     with app.app_context():
         if not _s3_client:
