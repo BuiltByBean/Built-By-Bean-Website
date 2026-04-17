@@ -219,12 +219,21 @@ def create_app():
             if _s3_client:
                 s3_key = f"{subfolder}/{stored_name}"
                 file_data = file.read()
-                _s3_client.put_object(
-                    Bucket=_s3_bucket,
-                    Key=s3_key,
-                    Body=file_data,
-                    ContentType=file.content_type or "application/octet-stream",
-                )
+                try:
+                    _s3_client.put_object(
+                        Bucket=_s3_bucket,
+                        Key=s3_key,
+                        Body=file_data,
+                        ContentType=file.content_type or "application/octet-stream",
+                    )
+                except Exception as e:
+                    app.logger.error(f"S3 upload failed for {s3_key} (bucket={_s3_bucket}): {e}")
+                    # Fall back to local storage
+                    folder = os.path.join(app.config["UPLOAD_FOLDER"], subfolder)
+                    os.makedirs(folder, exist_ok=True)
+                    filepath = os.path.join(folder, stored_name)
+                    with open(filepath, "wb") as f:
+                        f.write(file_data)
                 size = len(file_data)
             else:
                 folder = os.path.join(app.config["UPLOAD_FOLDER"], subfolder)
@@ -247,16 +256,40 @@ def create_app():
                 os.remove(filepath)
 
     def download_upload(stored_name, original_name, subfolder="documents"):
+        local_folder = os.path.join(app.config["UPLOAD_FOLDER"], subfolder)
+        local_path = os.path.join(local_folder, stored_name) if stored_name else None
+
         if _s3_client:
-            s3_obj = _s3_client.get_object(Bucket=_s3_bucket, Key=f"{subfolder}/{stored_name}")
-            data = s3_obj["Body"].read()
-            return Response(
-                data,
-                headers={"Content-Disposition": f'attachment; filename="{original_name}"'},
-                content_type=s3_obj.get("ContentType", "application/octet-stream"),
-            )
-        folder = os.path.join(app.config["UPLOAD_FOLDER"], subfolder)
-        return send_from_directory(folder, stored_name, as_attachment=True, download_name=original_name)
+            try:
+                s3_obj = _s3_client.get_object(Bucket=_s3_bucket, Key=f"{subfolder}/{stored_name}")
+                data = s3_obj["Body"].read()
+                return Response(
+                    data,
+                    headers={"Content-Disposition": f'attachment; filename="{original_name}"'},
+                    content_type=s3_obj.get("ContentType", "application/octet-stream"),
+                )
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "Unknown")
+                app.logger.error(
+                    f"S3 download failed for {subfolder}/{stored_name} "
+                    f"(bucket={_s3_bucket}, code={code}): {e}"
+                )
+                if local_path and os.path.exists(local_path):
+                    return send_from_directory(local_folder, stored_name, as_attachment=True, download_name=original_name)
+                if code in ("NoSuchKey", "404"):
+                    flash(f"File '{original_name}' is no longer available. It may have been lost during a previous deploy.", "danger")
+                else:
+                    flash(f"Download failed ({code}). Please try again or contact support.", "danger")
+                return redirect(request.referrer or url_for("index"))
+            except Exception as e:
+                app.logger.error(f"Unexpected download error for {subfolder}/{stored_name}: {e}")
+                flash("Download failed due to an unexpected error.", "danger")
+                return redirect(request.referrer or url_for("index"))
+
+        if local_path and os.path.exists(local_path):
+            return send_from_directory(local_folder, stored_name, as_attachment=True, download_name=original_name)
+        flash(f"File '{original_name}' could not be found on the server.", "danger")
+        return redirect(request.referrer or url_for("index"))
 
     # ── Auto-Expense Helpers ──────────────────────────────────
 
