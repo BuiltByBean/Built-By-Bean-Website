@@ -159,6 +159,16 @@
       if (!kindEnabled.has(f.slug)) kindEnabled.set(f.slug, true);
     }
 
+    // Sqrt-scale adherent counts → node radius so the visual conveys
+    // influence (Roman Catholicism dwarfs everything; extinct sects sit
+    // at the floor). Sqrt because the range spans 0 → 1.4B, and a linear
+    // scale would shrink everything but Catholicism to a dot.
+    const maxAdh = Math.max(1, ...graph.nodes.map(n => n.adherents || 0));
+    const sqrtMax = Math.sqrt(maxAdh);
+    const R_MIN = 4;
+    const R_MAX = 28;
+    const R_EXTINCT = 6; // small but still clickable
+
     const N = graph.nodes.length;
     for (let i = 0; i < N; i++) {
       const n = graph.nodes[i];
@@ -176,8 +186,13 @@
         (n.founder || '') + ' ' + (n.founded != null ? n.founded : '') + ' ' +
         ((n.keyDoctrines || []).join(' '))
       ).toLowerCase();
-      const d = (n.degree || 0);
-      n._radius = Math.max(3.2, Math.min(18, 3 + Math.sqrt(d) * 1.6));
+      if (n.extinct) {
+        n._radius = R_EXTINCT;
+      } else {
+        const adh = Math.max(0, n.adherents || 0);
+        const t = Math.sqrt(adh) / sqrtMax; // 0..1
+        n._radius = Math.max(R_MIN, R_MIN + t * (R_MAX - R_MIN));
+      }
       const c = FAMILY_COLORS[n.kind] || '#888';
       n._rgb = hexToRgb(c);
       nodeIndex.set(n.id, n);
