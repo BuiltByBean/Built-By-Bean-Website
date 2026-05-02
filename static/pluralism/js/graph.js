@@ -1103,10 +1103,18 @@
 
       // Cap by zoom + mode. Hover/select/match always survive because
       // their priorities (1e11+) sort them to the top, well within any
-      // cap. Global view at low zoom shows just the heaviest hubs.
+      // cap. Global view at default zoom (~0.7x) shows only ~6 major
+      // hubs — Roman Catholicism, Charismatic, Pentecostalism, Eastern
+      // Orthodoxy, Russian Orthodox, Baptists — and reveals more as
+      // you zoom in.
       const MAX_LABELS = hasSearch
         ? (scale < 0.6 ? 22 : scale < 1.0 ? 45 : scale < 1.6 ? 90 : 250)
-        : (scale < 0.6 ? 10 : scale < 1.0 ? 22 : scale < 1.6 ? 45 : scale < 2.4 ? 90 : 200);
+        : (scale < 0.5 ? 4
+           : scale < 0.85 ? 6
+           : scale < 1.2 ? 14
+           : scale < 1.8 ? 32
+           : scale < 2.6 ? 70
+           : 200);
       if (candidates.length > MAX_LABELS) candidates.length = MAX_LABELS;
 
       const placed = [];
