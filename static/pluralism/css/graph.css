@@ -97,6 +97,52 @@ html, body {
 }
 .pg-canvas.is-dragging { cursor: grabbing; }
 
+/* ── Themed scrollbars on every scrollable surface in the graph
+   viewer. Default OS scrollbars (white/blue on dark) clash with the
+   gold-on-black palette. Firefox uses scrollbar-color; WebKit / Blink
+   uses ::-webkit-scrollbar. */
+.pg-side,
+.pg-sidebar,
+.pg-typeahead,
+.pg-gear {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(201, 180, 88, 0.35) transparent;
+}
+.pg-side::-webkit-scrollbar,
+.pg-sidebar::-webkit-scrollbar,
+.pg-typeahead::-webkit-scrollbar,
+.pg-gear::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.pg-side::-webkit-scrollbar-track,
+.pg-sidebar::-webkit-scrollbar-track,
+.pg-typeahead::-webkit-scrollbar-track,
+.pg-gear::-webkit-scrollbar-track {
+    background: transparent;
+}
+.pg-side::-webkit-scrollbar-thumb,
+.pg-sidebar::-webkit-scrollbar-thumb,
+.pg-typeahead::-webkit-scrollbar-thumb,
+.pg-gear::-webkit-scrollbar-thumb {
+    background: rgba(201, 180, 88, 0.28);
+    border-radius: 4px;
+    border: 1px solid rgba(201, 180, 88, 0.18);
+}
+.pg-side::-webkit-scrollbar-thumb:hover,
+.pg-sidebar::-webkit-scrollbar-thumb:hover,
+.pg-typeahead::-webkit-scrollbar-thumb:hover,
+.pg-gear::-webkit-scrollbar-thumb:hover {
+    background: rgba(201, 180, 88, 0.5);
+    border-color: rgba(201, 180, 88, 0.4);
+}
+.pg-side::-webkit-scrollbar-corner,
+.pg-sidebar::-webkit-scrollbar-corner,
+.pg-typeahead::-webkit-scrollbar-corner,
+.pg-gear::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
 .pg-meta {
     position: absolute;
     bottom: 12px;
