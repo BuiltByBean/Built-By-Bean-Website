@@ -1056,38 +1056,32 @@
         ctx.fillStyle = `rgb(${r8},${g8},${b8})`;
         ctx.beginPath();
         ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-        if (n.extinct) {
-          // Hollow ring for extinct traditions — same visual language
-          // as the old tree's dashed swatch.
-          ctx.fill();
-          ctx.globalAlpha = Math.min(1, nodeAlpha + 0.15);
-          ctx.strokeStyle = 'rgba(13,13,13,0.85)';
-          ctx.lineWidth = Math.max(1.3, r * 0.45);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-        } else {
-          ctx.fill();
-        }
+        ctx.fill();
         ctx.lineWidth = strokeW;
         ctx.strokeStyle = stroke;
         ctx.stroke();
+        // Thin red outer ring marks extinct traditions — sits just
+        // outside the dot so it reads as a halo, not a fat border.
+        if (n.extinct) {
+          ctx.globalAlpha = Math.min(1, nodeAlpha + 0.1);
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = '#d04a3f';
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, r + 2.2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
       ctx.globalAlpha = 1;
     }
     paint(dim, true);
     paint(vivid, false);
 
-    if (hasSearch || sel) {
+    // Labels run on every frame — the priority + MAX_LABELS cap below
+    // keeps the global view calm, while focus + hover surface specifics.
+    {
       ctx.font = '600 12px "Source Serif 4", Georgia, serif';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 3;
-      const labelDegreeFloor =
-        scale < tune.label_zoom * 0.6 ? Infinity
-        : scale < tune.label_zoom        ? 60
-        : scale < tune.label_zoom * 1.6  ? 25
-        : scale < tune.label_zoom * 2.4  ? 10
-        : 0;
 
       const candidates = [];
       for (const n of graph.nodes) {
@@ -1095,24 +1089,24 @@
         if (n._hidden) continue;
         const s = worldToScreen(n.x, n.y);
         if (s.x < -100 || s.y < -100 || s.x > w + 100 || s.y > h + 100) continue;
-        let show = false;
-        let priority = (n.degree || 0);
-        if (sel && n.id === sel.id) { show = true; priority = 1e12; }
-        else if (hoveredId === n.id) { show = true; priority = 1e11; }
-        else if (n._matchHit && hasSearch) { show = true; priority += 1e8; }
-        else if (sel && selectedNeighbors && selectedNeighbors.has(n.id)) { show = true; priority += 1e7; }
-        else if (hasSearch) {
-          show = scale >= tune.label_zoom * 0.85;
-        }
-        else if (!sel && (n.degree || 0) >= labelDegreeFloor) show = true;
-        if (!show) continue;
+        // Priority by adherent count (which already drives node size),
+        // so the visually biggest traditions get labeled first. +1 so
+        // zero-adherent nodes still rank above unset entries.
+        let priority = (n.adherents || 0) + 1;
+        if (sel && n.id === sel.id)                                       priority = 1e15;
+        else if (hoveredId === n.id)                                      priority = 1e14;
+        else if (n._matchHit && hasSearch)                                priority += 1e12;
+        else if (sel && selectedNeighbors && selectedNeighbors.has(n.id)) priority += 1e11;
         candidates.push({ n, s, priority });
       }
       candidates.sort((a, b) => b.priority - a.priority);
 
+      // Cap by zoom + mode. Hover/select/match always survive because
+      // their priorities (1e11+) sort them to the top, well within any
+      // cap. Global view at low zoom shows just the heaviest hubs.
       const MAX_LABELS = hasSearch
         ? (scale < 0.6 ? 22 : scale < 1.0 ? 45 : scale < 1.6 ? 90 : 250)
-        : (scale < 0.6 ?  8 : scale < 1.0 ? 16 : scale < 1.6 ? 32 : scale < 2.4 ? 70 : 200);
+        : (scale < 0.6 ? 10 : scale < 1.0 ? 22 : scale < 1.6 ? 45 : scale < 2.4 ? 90 : 200);
       if (candidates.length > MAX_LABELS) candidates.length = MAX_LABELS;
 
       const placed = [];
