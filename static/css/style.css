@@ -33,13 +33,7 @@ html {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    /* Single continuous gradient pinned to viewport instead of per-section
-       backgrounds — eliminates the visible color bands at section edges. */
-    background:
-        radial-gradient(ellipse 80% 60% at 30% 30%, rgba(99, 102, 241, 0.06), transparent 60%),
-        radial-gradient(ellipse 80% 60% at 70% 70%, rgba(168, 85, 247, 0.05), transparent 60%),
-        linear-gradient(180deg, #0a0a0b 0%, #0d0d10 35%, #101015 65%, #0a0a0b 100%);
-    background-attachment: fixed;
+    background: var(--bg);
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -502,11 +496,15 @@ html.is-scrolling .scroll-arrow {
     position: relative;
 }
 
-/* .section-alt no longer carries its own background — body provides one
-   continuous gradient across the whole page. Class kept in case anything
-   else hangs styling off it. */
 .section-alt {
-    background: transparent;
+    background:
+        linear-gradient(
+            to bottom,
+            var(--bg) 0%,
+            var(--bg-alt) 18%,
+            var(--bg-alt) 82%,
+            var(--bg) 100%
+        );
 }
 
 /* Scroll snap + fade-on-scroll */
@@ -1014,11 +1012,10 @@ html {
 /* ===== Why Custom vs Off-the-Shelf ===== */
 .why-section {
     position: relative;
-    /* Keep the decorative radial glows but drop the solid base — body's
-       continuous gradient shows through for a seamless transition. */
     background:
         radial-gradient(ellipse 700px 500px at 20% 60%, rgba(var(--accent-rgb), 0.09), transparent 65%),
-        radial-gradient(ellipse 800px 500px at 80% 40%, var(--primary-glow), transparent 65%);
+        radial-gradient(ellipse 800px 500px at 80% 40%, var(--primary-glow), transparent 65%),
+        var(--bg);
 }
 
 /* Three-way option comparison: Manual / Off-the-shelf / Custom */
