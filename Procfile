@@ -1,1 +1,1 @@
-web: python -m flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
+web: python -m flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
