@@ -1,0 +1,171 @@
+<!-- Live working-session timer — rendered in the PM header on every page. -->
+<div x-data="timerWidget({{ active_timer | tojson }}, {{ timer_projects | tojson }})" x-cloak class="relative">
+
+    <!-- IDLE: start control -->
+    <template x-if="!state">
+        <div class="relative">
+            <button @click="open = !open"
+                    class="flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold text-white
+                           bg-gradient-to-br from-brand-500 to-brand-600 shadow-lg shadow-brand-500/25
+                           hover:from-brand-400 hover:to-brand-600 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="hidden sm:inline">Start timer</span>
+            </button>
+
+            <!-- Start popover -->
+            <div x-show="open" x-cloak @click.outside="open = false"
+                 x-transition
+                 class="absolute right-0 mt-2 w-80 glass-card p-4 z-50 space-y-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-surface-400">New working session</p>
+
+                <div>
+                    <label class="block text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Project</label>
+                    <select x-model="startProjectId" class="select-field w-full text-sm">
+                        <option value="">— Pick later —</option>
+                        <template x-for="p in projects" :key="p.id">
+                            <option :value="p.id" x-text="p.label"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Rate</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" @click="startRate = 'maintenance'"
+                                :class="startRate === 'maintenance'
+                                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                                    : 'border-surface-200 dark:border-white/10 text-surface-500'"
+                                class="rounded-xl border px-3 py-2 text-left transition">
+                            <span class="block text-sm font-semibold">Maintenance</span>
+                            <span class="block text-xs opacity-70">$100/hr</span>
+                        </button>
+                        <button type="button" @click="startRate = 'new_feature'"
+                                :class="startRate === 'new_feature'
+                                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                                    : 'border-surface-200 dark:border-white/10 text-surface-500'"
+                                class="rounded-xl border px-3 py-2 text-left transition">
+                            <span class="block text-sm font-semibold">New feature</span>
+                            <span class="block text-xs opacity-70">$200/hr</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button @click="start()" :disabled="busy"
+                        class="w-full py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold
+                               disabled:opacity-50 transition">
+                    Start timing
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <!-- RUNNING / PAUSED -->
+    <template x-if="state">
+        <div class="flex items-center gap-2 glass-card pl-3 pr-2 py-1.5">
+            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  :class="state.is_paused ? 'bg-amber-500' : 'bg-red-500 animate-pulse'"></span>
+            <span class="font-mono tabular-nums text-sm font-semibold text-surface-900 dark:text-white" x-text="clock"></span>
+            <span class="hidden md:inline text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  :class="state.rate_type === 'new_feature'
+                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
+                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'"
+                  x-text="state.rate_type === 'new_feature' ? 'New feature' : 'Maintenance'"></span>
+            <span class="hidden lg:inline max-w-[140px] truncate text-xs text-surface-500 dark:text-surface-400"
+                  x-text="state.project_name || 'No project'" :title="state.project_name"></span>
+
+            <button @click="togglePause()" :disabled="busy" title="Pause / resume"
+                    class="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-white/10 text-surface-600 dark:text-surface-300 transition">
+                <svg x-show="!state.is_paused" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>
+                <svg x-show="state.is_paused" x-cloak class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+
+            <a :href="cfg.reviewUrl"
+               class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition">
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                <span class="hidden sm:inline">Stop &amp; save</span>
+            </a>
+
+            <button @click="discard()" :disabled="busy" title="Discard — log nothing"
+                    class="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-white/10 text-surface-400 hover:text-red-500 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+    </template>
+</div>
+
+<script>
+function timerWidget(initialState, projects) {
+    const cfg = {
+        start:   "{{ url_for('pm.timer_start') }}",
+        pause:   "{{ url_for('pm.timer_pause') }}",
+        resume:  "{{ url_for('pm.timer_resume') }}",
+        cancel:  "{{ url_for('pm.timer_cancel') }}",
+        reviewUrl: "{{ url_for('pm.timer_review') }}",
+    };
+    return {
+        cfg,
+        state: initialState,
+        projects: projects || [],
+        open: false,
+        busy: false,
+        startProjectId: "",
+        startRate: "maintenance",
+        elapsed: initialState ? initialState.elapsed_seconds : 0,
+        _tick: null,
+
+        init() {
+            this.$watch('state', () => this.syncTicker());
+            this.syncTicker();
+        },
+        syncTicker() {
+            clearInterval(this._tick);
+            if (this.state) {
+                this.elapsed = this.state.elapsed_seconds;
+                if (!this.state.is_paused) {
+                    this._tick = setInterval(() => { this.elapsed += 1; }, 1000);
+                }
+            }
+        },
+        get clock() {
+            let s = Math.max(0, Math.floor(this.elapsed));
+            const h = Math.floor(s / 3600); s -= h * 3600;
+            const m = Math.floor(s / 60); s -= m * 60;
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(h)}:${pad(m)}:${pad(s)}`;
+        },
+        async post(url, data) {
+            this.busy = true;
+            try {
+                const body = new URLSearchParams(data || {});
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'fetch' },
+                    body,
+                });
+                if (!res.ok) return null;
+                return await res.json();
+            } finally {
+                this.busy = false;
+            }
+        },
+        async start() {
+            const data = { rate_type: this.startRate };
+            if (this.startProjectId) data.project_id = this.startProjectId;
+            const s = await this.post(cfg.start, data);
+            if (s && s.id) { this.state = s; this.open = false; }
+        },
+        async togglePause() {
+            const s = await this.post(this.state.is_paused ? cfg.resume : cfg.pause);
+            if (s) this.state = s;
+        },
+        async discard() {
+            if (!confirm('Discard this timer? Nothing will be logged.')) return;
+            const r = await this.post(cfg.cancel);
+            if (r) this.state = null;
+        },
+    };
+}
+</script>

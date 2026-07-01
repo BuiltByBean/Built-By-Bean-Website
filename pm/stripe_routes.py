@@ -133,6 +133,8 @@ def invoice_create():
         project_id = request.form.get("project_id", type=int) or None
         due_days = request.form.get("due_days", 30, type=int)
         notes = request.form.get("notes", "").strip()
+        period_start = _parse_date_arg(request.form.get("period_start"))
+        period_end = _parse_date_arg(request.form.get("period_end"))
         time_entry_ids = request.form.getlist("time_entries", type=int)
         expense_ids = request.form.getlist("expenses", type=int)
 
@@ -194,6 +196,8 @@ def invoice_create():
             total=subtotal,
             amount_due=subtotal,
             due_date=date.today() + timedelta(days=due_days),
+            period_start=period_start,
+            period_end=period_end,
             notes=notes,
         )
         db.session.add(local_invoice)
@@ -322,21 +326,46 @@ def invoice_sync(id):
     return redirect(url_for("stripe.invoice_detail", id=id))
 
 
+# ── Date-range helper ───────────────────────────────────────
+
+
+def _parse_date_arg(value):
+    """Parse a YYYY-MM-DD query arg into a date, or None if absent/invalid."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
 # ── API: Uninvoiced Time Entries ────────────────────────────
 
 
 @stripe_bp.route("/api/uninvoiced-entries/<int:client_id>")
 @login_required
 def api_uninvoiced_entries(client_id):
+    start = _parse_date_arg(request.args.get("start"))
+    end = _parse_date_arg(request.args.get("end"))
+    project_id = request.args.get("project_id", type=int)
+
     invoiced_ids = db.session.query(InvoiceLineItem.time_entry_id).filter(
         InvoiceLineItem.time_entry_id.isnot(None),
         InvoiceLineItem.invoice.has(Invoice.status.in_(["draft", "open", "paid"]))
     ).subquery()
 
-    entries = TimeEntry.query.filter(
+    query = TimeEntry.query.filter(
         TimeEntry.client_id == client_id,
         ~TimeEntry.id.in_(db.session.query(invoiced_ids)),
-    ).order_by(TimeEntry.date.desc()).all()
+    )
+    if start:
+        query = query.filter(TimeEntry.date >= start)
+    if end:
+        query = query.filter(TimeEntry.date <= end)
+    if project_id:
+        query = query.filter(TimeEntry.project_id == project_id)
+
+    entries = query.order_by(TimeEntry.date.desc()).all()
 
     return jsonify([{
         "id": e.id,
@@ -357,15 +386,32 @@ def api_uninvoiced_entries(client_id):
 @stripe_bp.route("/api/uninvoiced-expenses/<int:client_id>")
 @login_required
 def api_uninvoiced_expenses(client_id):
+    start = _parse_date_arg(request.args.get("start"))
+    end = _parse_date_arg(request.args.get("end"))
+    project_id = request.args.get("project_id", type=int)
+
     invoiced_ids = db.session.query(InvoiceLineItem.expense_id).filter(
         InvoiceLineItem.expense_id.isnot(None),
         InvoiceLineItem.invoice.has(Invoice.status.in_(["draft", "open", "paid"]))
     ).subquery()
 
-    expenses = Expense.query.filter(
+    query = Expense.query.filter(
         Expense.client_id == client_id,
+        # Exclude auto-generated "billable_time" mirror expenses — the underlying
+        # TimeEntry is already billed as its own line item, so surfacing the mirror
+        # here would double-bill the same work. Mirrors up via time_entry_id
+        # (see _sync_expense_for_time_entry / Project.total_expenses).
+        Expense.time_entry_id.is_(None),
         ~Expense.id.in_(db.session.query(invoiced_ids)),
-    ).order_by(Expense.date.desc()).all()
+    )
+    if start:
+        query = query.filter(Expense.date >= start)
+    if end:
+        query = query.filter(Expense.date <= end)
+    if project_id:
+        query = query.filter(Expense.project_id == project_id)
+
+    expenses = query.order_by(Expense.date.desc()).all()
 
     return jsonify([{
         "id": e.id,

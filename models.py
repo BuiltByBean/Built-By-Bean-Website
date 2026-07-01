@@ -277,6 +277,44 @@ class TimeEntry(db.Model):
         return f"<TimeEntry {self.hours}h @ {self.rate_type}>"
 
 
+class TimerSession(db.Model):
+    """A live start/stop working-session timer. At most one active timer per user.
+
+    Elapsed time accumulates across pause/resume: while running, elapsed is
+    ``accumulated_seconds`` plus the time since ``last_resumed_at``; while paused,
+    elapsed is frozen at ``accumulated_seconds``. Stopping converts elapsed time
+    into a TimeEntry.
+    """
+    __tablename__ = "timer_sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, unique=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    rate_type = db.Column(db.String(20), nullable=False, default="maintenance")
+    description = db.Column(db.Text, default="")
+    accumulated_seconds = db.Column(db.Integer, default=0, nullable=False)
+    is_paused = db.Column(db.Boolean, default=False, nullable=False)
+    last_resumed_at = db.Column(db.DateTime, nullable=True)  # UTC; set while running
+    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref=db.backref("timer_session", uselist=False))
+    project = db.relationship("Project")
+
+    @property
+    def elapsed_seconds(self):
+        secs = float(self.accumulated_seconds or 0)
+        if not self.is_paused and self.last_resumed_at:
+            resumed = self.last_resumed_at
+            if resumed.tzinfo is None:
+                resumed = resumed.replace(tzinfo=timezone.utc)
+            secs += (datetime.now(timezone.utc) - resumed).total_seconds()
+        return max(0.0, secs)
+
+    def __repr__(self):
+        return f"<TimerSession user={self.user_id} {self.elapsed_seconds:.0f}s>"
+
+
 class Document(db.Model):
     __tablename__ = "documents"
 

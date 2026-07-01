@@ -1,10 +1,12 @@
 import os
+import math
 import uuid
 from datetime import datetime, timezone, date, timedelta
 from dateutil.relativedelta import relativedelta
 
 import boto3
 from botocore.exceptions import ClientError
+from sqlalchemy.exc import IntegrityError
 from flask import (
     Flask, Blueprint, render_template, redirect, url_for, flash, request, abort,
     send_from_directory, jsonify, Response,
@@ -14,13 +16,21 @@ from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
 
 from config import Config
-from models import db, Client, Project, Task, Expense, TimeEntry, Document, User, Invoice, InvoiceLineItem
+from models import db, Client, Project, Task, Expense, TimeEntry, Document, User, Invoice, InvoiceLineItem, TimerSession
 from forms import (
     ClientForm, ProjectForm, TaskForm, ExpenseForm, TimeEntryForm, LoginForm,
     PHASE_CHOICES, PROJECT_STATUS_CHOICES, TASK_STATUS_CHOICES,
     PRIORITY_CHOICES, RATE_TYPE_CHOICES, EXPENSE_CATEGORY_CHOICES,
     FREQUENCY_CHOICES,
 )
+
+
+def _billable_hours_from_seconds(seconds):
+    """Convert elapsed seconds to billable hours, rounded UP to the nearest 15 min
+    (0.25h), with a minimum of one quarter-hour for any tracked time."""
+    hours = (seconds or 0) / 3600.0
+    quarters = math.ceil(hours * 4 - 1e-9)  # tolerance so an exact 0.25 stays 0.25
+    return max(0.25, quarters / 4.0)
 
 
 def create_app():
@@ -427,8 +437,37 @@ def create_app():
     # Asset cache-busting version (updates on each process boot → each deploy)
     _asset_version = str(int(datetime.now(timezone.utc).timestamp()))
 
+    def _timer_state(timer):
+        """Serialize a TimerSession for the front-end widget."""
+        if not timer:
+            return None
+        return {
+            "id": timer.id,
+            "elapsed_seconds": round(timer.elapsed_seconds),
+            "is_paused": bool(timer.is_paused),
+            "rate_type": timer.rate_type,
+            "project_id": timer.project_id,
+            "project_name": timer.project.name if timer.project else None,
+            "description": timer.description or "",
+        }
+
     @app.context_processor
     def inject_globals():
+        active_timer = None
+        timer_projects = []
+        if current_user.is_authenticated and not str(current_user.get_id()).startswith("bs_"):
+            try:
+                timer = TimerSession.query.filter_by(user_id=current_user.id).first()
+                active_timer = _timer_state(timer)
+                timer_projects = [
+                    {"id": p.id, "label": f"{p.name} ({p.client.name})"}
+                    for p in Project.query.join(Client).filter(Project.status == "active")
+                                          .order_by(Project.name).all()
+                ]
+            except Exception:
+                # Table may not exist yet (pre-migration) — fail open, hide widget.
+                active_timer = None
+                timer_projects = []
         return {
             "now": datetime.now(timezone.utc),
             "asset_version": _asset_version,
@@ -439,6 +478,8 @@ def create_app():
             "rate_type_choices": RATE_TYPE_CHOICES,
             "expense_category_choices": EXPENSE_CATEGORY_CHOICES,
             "frequency_choices": FREQUENCY_CHOICES,
+            "active_timer": active_timer,
+            "timer_projects": timer_projects,
         }
 
     # ── Force password change ─────────────────────────────────
@@ -1823,6 +1864,175 @@ def create_app():
         db.session.delete(entry)
         db.session.commit()
         flash("Time entry deleted.", "success")
+        return redirect(url_for("pm.time_list"))
+
+    # ── Live Working-Session Timer ───────────────────────────
+
+    def _current_timer():
+        return TimerSession.query.filter_by(user_id=current_user.id).first()
+
+    def _valid_rate_type(value):
+        valid = {c[0] for c in RATE_TYPE_CHOICES}
+        return value if value in valid else "maintenance"
+
+    @pm_bp.route("/time/timer/state")
+    @login_required
+    def timer_state():
+        return jsonify(_timer_state(_current_timer()))
+
+    @pm_bp.route("/time/timer/start", methods=["POST"])
+    @login_required
+    def timer_start():
+        if _current_timer():
+            return jsonify(error="A timer is already running."), 409
+        project_id = request.form.get("project_id", type=int)
+        project = db.session.get(Project, project_id) if project_id else None
+        timer = TimerSession(
+            user_id=current_user.id,
+            project_id=project.id if project else None,
+            rate_type=_valid_rate_type(request.form.get("rate_type", "maintenance")),
+            description="",
+            accumulated_seconds=0,
+            is_paused=False,
+            last_resumed_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc),
+        )
+        db.session.add(timer)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Concurrent double-start raced past the guard above; the unique
+            # user_id constraint rejected this one. Report the existing timer.
+            db.session.rollback()
+            return jsonify(error="A timer is already running."), 409
+        return jsonify(_timer_state(timer))
+
+    @pm_bp.route("/time/timer/pause", methods=["POST"])
+    @login_required
+    def timer_pause():
+        timer = _current_timer()
+        if not timer:
+            return jsonify(error="No active timer."), 404
+        if not timer.is_paused:
+            timer.accumulated_seconds = int(round(timer.elapsed_seconds))
+            timer.is_paused = True
+            timer.last_resumed_at = None
+            db.session.commit()
+        return jsonify(_timer_state(timer))
+
+    @pm_bp.route("/time/timer/resume", methods=["POST"])
+    @login_required
+    def timer_resume():
+        timer = _current_timer()
+        if not timer:
+            return jsonify(error="No active timer."), 404
+        if timer.is_paused:
+            timer.is_paused = False
+            timer.last_resumed_at = datetime.now(timezone.utc)
+            db.session.commit()
+        return jsonify(_timer_state(timer))
+
+    @pm_bp.route("/time/timer/update", methods=["POST"])
+    @login_required
+    def timer_update():
+        """Live-save the rate/project/description while a timer runs."""
+        timer = _current_timer()
+        if not timer:
+            return jsonify(error="No active timer."), 404
+        if "rate_type" in request.form:
+            timer.rate_type = _valid_rate_type(request.form.get("rate_type"))
+        if "project_id" in request.form:
+            pid = request.form.get("project_id", type=int)
+            timer.project_id = pid if pid else None
+        if "description" in request.form:
+            timer.description = request.form.get("description", "")
+        db.session.commit()
+        return jsonify(_timer_state(timer))
+
+    @pm_bp.route("/time/timer/cancel", methods=["POST"])
+    @login_required
+    def timer_cancel():
+        timer = _current_timer()
+        if timer:
+            db.session.delete(timer)
+            db.session.commit()
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify(ok=True)
+        flash("Timer discarded — nothing was logged.", "warning")
+        return redirect(url_for("pm.time_list"))
+
+    @pm_bp.route("/time/timer/review", methods=["GET"])
+    @login_required
+    def timer_review():
+        """Stop the clock and show the save form pre-filled from the session."""
+        timer = _current_timer()
+        if not timer:
+            flash("No active timer to save.", "warning")
+            return redirect(url_for("pm.time_list"))
+        # Freeze the clock so the elapsed total can't drift while reviewing.
+        if not timer.is_paused:
+            timer.accumulated_seconds = int(round(timer.elapsed_seconds))
+            timer.is_paused = True
+            timer.last_resumed_at = None
+            db.session.commit()
+        projects = Project.query.join(Client).order_by(Project.name).all()
+        billable_hours = _billable_hours_from_seconds(timer.accumulated_seconds)
+        return render_template(
+            "pm/time/timer_review.html",
+            timer=timer,
+            projects=projects,
+            billable_hours=billable_hours,
+            today=date.today().isoformat(),
+        )
+
+    @pm_bp.route("/time/timer/save", methods=["POST"])
+    @login_required
+    def timer_save():
+        timer = _current_timer()
+        if not timer:
+            flash("No active timer to save.", "warning")
+            return redirect(url_for("pm.time_list"))
+
+        project_id = request.form.get("project_id", type=int)
+        project = db.session.get(Project, project_id) if project_id else None
+        if not project:
+            flash("Pick a project to apply this session to.", "error")
+            return redirect(url_for("pm.timer_review"))
+
+        hours = request.form.get("hours", type=float)
+        if not hours or hours <= 0:
+            hours = _billable_hours_from_seconds(timer.accumulated_seconds)
+
+        entry_date = date.today()
+        raw_date = request.form.get("date", "")
+        if raw_date:
+            try:
+                entry_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        entry = TimeEntry(
+            project_id=project.id,
+            client_id=project.client_id,
+            date=entry_date,
+            hours=hours,
+            description=request.form.get("description", "") or "",
+            rate_type=_valid_rate_type(request.form.get("rate_type", timer.rate_type)),
+        )
+        db.session.add(entry)
+        db.session.flush()
+        billed = _sync_expense_for_time_entry(entry, project)
+        db.session.delete(timer)
+        db.session.commit()
+
+        if billed:
+            flash(f"Session saved: {entry.hours}h ({entry.rate_type.replace('_', ' ')}) "
+                  f"= {format_currency(entry.cost)} — added to {project.name}", "success")
+        elif _in_free_maintenance(project, entry.rate_type):
+            flash(f"Session saved: {entry.hours}h — free maintenance window, no charge", "success")
+        else:
+            flash(f"Session saved: {entry.hours}h ({entry.rate_type.replace('_', ' ')}) "
+                  f"= {format_currency(entry.cost)}", "success")
         return redirect(url_for("pm.time_list"))
 
     # ── API: Tasks for Project (for dynamic dropdowns) ───────

@@ -1,0 +1,109 @@
+{% extends "pm/base.html" %}
+
+{% block title %}Save Working Session{% endblock %}
+{% block page_title %}Save Working Session{% endblock %}
+{% block page_subtitle %}Describe what you worked on and apply it to a project{% endblock %}
+
+{% set elapsed = timer.accumulated_seconds or 0 %}
+{% set e_h = (elapsed // 3600) %}
+{% set e_m = ((elapsed % 3600) // 60) %}
+
+{% block content %}
+<div class="max-w-2xl">
+
+    <!-- Elapsed summary -->
+    <div class="glass-card p-5 mb-6 flex items-center justify-between">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-surface-400">Tracked time</p>
+            <p class="text-2xl font-bold text-surface-900 dark:text-white font-mono tabular-nums">
+                {{ '%02d:%02d'|format(e_h, e_m) }}
+            </p>
+        </div>
+        <svg class="w-8 h-8 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+    </div>
+
+    <div class="glass-card p-6">
+        <form method="POST" action="{{ url_for('pm.timer_save') }}"
+              x-data="{
+                rateType: '{{ timer.rate_type or 'maintenance' }}',
+                hours: {{ billable_hours }},
+                get cost() { return this.hours * (this.rateType === 'maintenance' ? 100 : 200); }
+              }">
+
+            <div class="space-y-5">
+                <!-- Project -->
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Apply to project *</label>
+                    <select name="project_id" required class="select-field w-full">
+                        <option value="">Select a project…</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}" {% if p.id == timer.project_id %}selected{% endif %}>{{ p.name }} ({{ p.client.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Rate + Date + Hours -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Rate *</label>
+                        <select name="rate_type" x-model="rateType" class="select-field w-full">
+                            <option value="maintenance">Maintenance ($100/hr)</option>
+                            <option value="new_feature">New Feature ($200/hr)</option>
+                            <option value="mvp_build">MVP Build (flat fee)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Date *</label>
+                        <input type="date" name="date" value="{{ today }}" required
+                               class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Billable hours *</label>
+                        <input type="number" name="hours" step="0.25" min="0.25" required
+                               x-model.number="hours"
+                               class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm">
+                        <p class="mt-1 text-[11px] text-surface-400">Rounded up to nearest 15 min</p>
+                    </div>
+                </div>
+
+                <!-- Live cost preview -->
+                <div class="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/30"
+                     x-show="rateType !== 'mvp_build'">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Estimated charge</span>
+                        <span class="text-xl font-bold text-emerald-700 dark:text-emerald-300" x-text="'$' + cost.toFixed(2)"></span>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
+                        What did you work on? <span class="text-surface-400 font-normal">(plain language — this is what the client sees)</span>
+                    </label>
+                    <textarea name="description" rows="4"
+                              class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400"
+                              placeholder="e.g. Fixed the checkout page so orders go through on mobile, and added a confirmation email.">{{ timer.description }}</textarea>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+                <button type="submit"
+                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                    Save &amp; apply session
+                </button>
+            </div>
+        </form>
+
+        <!-- Discard -->
+        <form method="POST" action="{{ url_for('pm.timer_cancel') }}" class="mt-4"
+              onsubmit="return confirm('Discard this session? Nothing will be logged.');">
+            <button type="submit"
+                    class="text-sm text-surface-500 hover:text-red-500 transition-colors">
+                Discard session
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

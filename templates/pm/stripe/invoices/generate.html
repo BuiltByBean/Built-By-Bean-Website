@@ -26,7 +26,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Project (optional)</label>
-                    <select name="project_id" x-model="projectId"
+                    <select name="project_id" x-model="projectId" @change="loadEntries()"
                             class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
                         <option value="">All projects</option>
                         {% for p in projects %}
@@ -35,7 +35,30 @@
                     </select>
                 </div>
             </div>
+
+            <!-- Billing period -->
+            <div class="mt-4 pt-4 border-t border-surface-200 dark:border-surface-700" x-show="clientId" x-transition>
+                <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">Billing period</label>
+                <div class="flex flex-wrap items-center gap-2">
+                    <template x-for="preset in periodPresets" :key="preset.key">
+                        <button type="button" @click="setPeriod(preset.key)"
+                                class="px-3 py-1.5 rounded-full text-xs font-semibold border transition"
+                                :class="period === preset.key
+                                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                                    : 'border-surface-200 dark:border-white/10 text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'"
+                                x-text="preset.label"></button>
+                    </template>
+                    <input type="month" x-model="monthValue" @change="applyCustomMonth()"
+                           class="input-ring px-3 py-1.5 text-xs bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
+                    <span class="text-xs text-surface-400" x-text="periodLabel"></span>
+                </div>
+                <p class="mt-2 text-xs text-surface-400">Pick a month to load and auto-select all uninvoiced work in that period.</p>
+            </div>
         </div>
+
+        <!-- Hidden: billing period submitted with the invoice -->
+        <input type="hidden" name="period_start" :value="range.start || ''">
+        <input type="hidden" name="period_end" :value="range.end || ''">
 
         <!-- Step 2: Time Entries -->
         <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
@@ -200,7 +223,15 @@
 </div>
 
 <script>
+// Base API paths (blueprint-prefixed via url_for; trailing client-id placeholder stripped).
+const TIME_API_BASE = "{{ url_for('stripe.api_uninvoiced_entries', client_id=0)[:-1] }}";
+const EXPENSE_API_BASE = "{{ url_for('stripe.api_uninvoiced_expenses', client_id=0)[:-1] }}";
+
 function invoiceGenerator() {
+    const pad = n => String(n).padStart(2, '0');
+    const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;          // m is 1-based
+    const lastDay = (y, m) => new Date(y, m, 0).getDate();       // m is 1-based
+
     return {
         clientId: '{{ preselect_client or "" }}',
         projectId: '{{ preselect_project or "" }}',
@@ -211,11 +242,58 @@ function invoiceGenerator() {
         loading: false,
         submitting: false,
 
+        period: 'all',
+        monthValue: '',
+        range: { start: null, end: null },
+        periodPresets: [
+            { key: 'this_month', label: 'This month' },
+            { key: 'last_month', label: 'Last month' },
+            { key: 'all', label: 'All time' },
+        ],
+
         init() {
             if (this.clientId) this.loadEntries();
         },
 
-        async loadEntries() {
+        // Compute an inclusive {start,end} ISO range for the active period.
+        computeRange() {
+            const now = new Date();
+            let y = now.getFullYear();
+            let m = now.getMonth() + 1; // 1-based
+            if (this.period === 'all') {
+                this.range = { start: null, end: null };
+            } else if (this.period === 'this_month') {
+                this.range = { start: iso(y, m, 1), end: iso(y, m, lastDay(y, m)) };
+                this.monthValue = `${y}-${pad(m)}`;
+            } else if (this.period === 'last_month') {
+                if (m === 1) { y -= 1; m = 12; } else { m -= 1; }
+                this.range = { start: iso(y, m, 1), end: iso(y, m, lastDay(y, m)) };
+                this.monthValue = `${y}-${pad(m)}`;
+            } else if (this.period === 'custom' && this.monthValue) {
+                const [cy, cm] = this.monthValue.split('-').map(Number);
+                this.range = { start: iso(cy, cm, 1), end: iso(cy, cm, lastDay(cy, cm)) };
+            }
+        },
+
+        get periodLabel() {
+            if (this.period === 'all' || !this.range.start) return 'All uninvoiced work';
+            return `${this.range.start} → ${this.range.end}`;
+        },
+
+        setPeriod(key) {
+            this.period = key;
+            this.computeRange();
+            this.loadEntries(true);
+        },
+
+        applyCustomMonth() {
+            if (!this.monthValue) return;
+            this.period = 'custom';
+            this.computeRange();
+            this.loadEntries(true);
+        },
+
+        async loadEntries(autoselect = false) {
             if (!this.clientId) {
                 this.timeEntries = [];
                 this.expenses = [];
@@ -225,13 +303,23 @@ function invoiceGenerator() {
             this.selectedTimeIds = [];
             this.selectedExpenseIds = [];
 
+            const params = new URLSearchParams();
+            if (this.range.start) params.set('start', this.range.start);
+            if (this.range.end) params.set('end', this.range.end);
+            if (this.projectId) params.set('project_id', this.projectId);
+            const qs = params.toString() ? `?${params.toString()}` : '';
+
             try {
                 const [timeRes, expenseRes] = await Promise.all([
-                    fetch(`/stripe/api/uninvoiced-entries/${this.clientId}`),
-                    fetch(`/stripe/api/uninvoiced-expenses/${this.clientId}`),
+                    fetch(`${TIME_API_BASE}${this.clientId}${qs}`),
+                    fetch(`${EXPENSE_API_BASE}${this.clientId}${qs}`),
                 ]);
                 this.timeEntries = await timeRes.json();
                 this.expenses = await expenseRes.json();
+                if (autoselect) {
+                    this.selectedTimeIds = this.timeEntries.filter(e => !e.is_free).map(e => String(e.id));
+                    this.selectedExpenseIds = this.expenses.map(e => String(e.id));
+                }
             } catch (e) {
                 console.error('Failed to load entries:', e);
             }
