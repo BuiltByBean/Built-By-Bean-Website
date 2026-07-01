@@ -92,29 +92,55 @@ def invoices_list():
     page = request.args.get("page", 1, type=int)
     status = request.args.get("status", "")
     client_id = request.args.get("client_id", "", type=str)
+    month = request.args.get("month", "")  # 'YYYY-MM'
 
-    query = Invoice.query
+    # Resolve month -> [start, end) bounds on created_at (the visible "Date").
+    month_start = month_end = None
+    if month:
+        try:
+            y, m = (int(x) for x in month.split("-"))
+            month_start = datetime(y, m, 1)
+            month_end = datetime(y + 1, 1, 1) if m == 12 else datetime(y, m + 1, 1)
+        except (ValueError, TypeError):
+            month = ""
+
+    # Scope = client + month. Drives both the table and the summary cards, so
+    # the totals answer "for this client, this month" — the status dropdown
+    # only narrows the table rows, keeping all three cards meaningful.
+    def apply_scope(q):
+        if client_id:
+            q = q.filter(Invoice.client_id == int(client_id))
+        if month_start is not None:
+            q = q.filter(Invoice.created_at >= month_start, Invoice.created_at < month_end)
+        return q
+
+    query = apply_scope(Invoice.query)
     if status:
         query = query.filter(Invoice.status == status)
-    if client_id:
-        query = query.filter(Invoice.client_id == int(client_id))
 
     query = query.order_by(Invoice.created_at.desc())
     pagination = query.paginate(page=page, per_page=20, error_out=False)
 
     clients = Client.query.order_by(Client.name).all()
 
-    total_invoiced = db.session.query(db.func.sum(Invoice.total)).scalar() or 0
-    total_paid = db.session.query(db.func.sum(Invoice.amount_paid)).scalar() or 0
-    total_outstanding = db.session.query(
-        db.func.sum(Invoice.amount_due)
+    total_invoiced = apply_scope(db.session.query(db.func.sum(Invoice.total))).scalar() or 0
+    total_paid = apply_scope(db.session.query(db.func.sum(Invoice.amount_paid))).scalar() or 0
+    total_outstanding = apply_scope(
+        db.session.query(db.func.sum(Invoice.amount_due))
     ).filter(Invoice.status.in_(["draft", "open"])).scalar() or 0
+
+    today = date.today()
+    this_month = today.strftime("%Y-%m")
+    last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
     return render_template("pm/stripe/invoices/list.html",
         invoices=pagination.items,
         pagination=pagination,
         status=status,
         client_id=client_id,
+        month=month,
+        this_month=this_month,
+        last_month=last_month,
         clients=clients,
         total_invoiced=total_invoiced,
         total_paid=total_paid,
