@@ -28,14 +28,15 @@
 </div>
 
 <div class="glass-card p-6">
-    <!-- Filters -->
-    <form method="GET" class="flex flex-wrap gap-3 mb-6">
+    <!-- Filters (auto-apply on selection) -->
+    <form method="GET" class="flex flex-wrap gap-3 mb-6"
+          x-data @dropdown-change="$el.requestSubmit()">
         {% set cat_opts = [["", "All Categories"]] + expense_category_choices|list %}
         {{ select_dropdown("category", cat_opts, category) }}
         {% set ns = namespace(proj_opts=[["", "All Projects"]]) %}
         {% for p in projects %}{% set ns.proj_opts = ns.proj_opts + [[p.id, p.name]] %}{% endfor %}
         {{ select_dropdown("project_id", ns.proj_opts, project_id) }}
-        <button type="submit" class="px-4 py-2.5 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">Filter</button>
+        <noscript><button type="submit" class="px-4 py-2.5 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">Filter</button></noscript>
         {% if category or project_id %}
         <a href="{{ url_for('pm.expenses_list') }}" class="px-4 py-2.5 text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 rounded-xl transition-colors">Clear</a>
         {% endif %}
