@@ -1,5 +1,5 @@
 <!-- Live working-session timer — rendered in the PM header on every page. -->
-<div x-data="timerWidget({{ active_timer | tojson }}, {{ timer_projects | tojson }})" x-cloak class="relative">
+<div x-data='timerWidget({{ active_timer | tojson }}, {{ timer_projects | tojson }})' x-cloak class="relative">
 
     <!-- IDLE: start control -->
     <template x-if="!state">
