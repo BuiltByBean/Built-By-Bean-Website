@@ -8,7 +8,10 @@ class Config:
     _db_url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(basedir, "data", "project_manager.db"))
     SQLALCHEMY_DATABASE_URI = _db_url.replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    UPLOAD_FOLDER = os.path.join(basedir, "static", "uploads")
+    # Where uploaded files (receipts, documents, generated PDFs) are stored when
+    # not using S3. Set UPLOAD_FOLDER=/data/uploads in prod and mount a persistent
+    # volume at /data so files survive redeploys. Defaults to the local static dir.
+    UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", os.path.join(basedir, "static", "uploads"))
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "jpg", "jpeg", "png", "webp", "gif", "xlsx", "csv", "txt"}
     STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
