@@ -584,18 +584,21 @@ def create_app():
     def dashboard():
         today = date.today()
 
-        # All-time financials
+        # All-time financials. Revenue is pulled live from Stripe (actual paid
+        # invoices + subscription charges) rather than local invoice records,
+        # since billing may happen directly in Stripe.
+        from stripe_service import get_stripe_revenue
+        stripe_total, stripe_by_customer = get_stripe_revenue()
+
         total_contracted = db.session.query(db.func.sum(Client.contract_revenue)).scalar() or 0
-        total_revenue = db.session.query(db.func.sum(Invoice.amount_paid)).filter(
-            Invoice.status == "paid"
-        ).scalar() or 0
+        total_revenue = stripe_total
         total_expenses = db.session.query(db.func.sum(Expense.amount)).scalar() or 0
 
         # Per-client financials
         clients = Client.query.order_by(Client.name).all()
         client_financials = []
         for c in clients:
-            c_revenue = sum(inv.amount_paid for inv in c.invoices if inv.status == "paid")
+            c_revenue = stripe_by_customer.get(c.stripe_customer_id, 0.0) if c.stripe_customer_id else 0.0
             c_expenses = sum(e.amount for e in Expense.query.filter_by(client_id=c.id).all()) if hasattr(Expense, 'client_id') else 0
             client_financials.append({
                 "id": c.id,

@@ -258,6 +258,40 @@ def get_stripe_invoices_list(status=None, limit=20):
         return []
 
 
+# Small in-process cache so the dashboard doesn't call Stripe on every page load.
+_revenue_cache = {"ts": 0.0, "total": 0.0, "by_customer": {}}
+
+
+def get_stripe_revenue(ttl=300):
+    """Actual paid revenue pulled live from Stripe.
+
+    Returns (total_paid_dollars, {stripe_customer_id: paid_dollars}). It sums all
+    paid invoices, which in Stripe covers both one-off invoices and recurring
+    subscription charges. Result is cached for `ttl` seconds; on any Stripe error
+    it falls back to the last cached value (or zero) so the dashboard never breaks.
+    """
+    import time
+    if not stripe.api_key:
+        return 0.0, {}
+    now = time.time()
+    if _revenue_cache["ts"] and (now - _revenue_cache["ts"] < ttl):
+        return _revenue_cache["total"], _revenue_cache["by_customer"]
+    total = 0.0
+    by_customer = {}
+    try:
+        for inv in stripe.Invoice.list(status="paid", limit=100).auto_paging_iter():
+            amt = (inv.amount_paid or 0) / 100.0
+            total += amt
+            cust = inv.customer
+            if cust:
+                by_customer[cust] = by_customer.get(cust, 0.0) + amt
+    except Exception as e:
+        current_app.logger.error(f"Stripe revenue error: {e}")
+        return _revenue_cache["total"], _revenue_cache["by_customer"]
+    _revenue_cache.update({"ts": now, "total": total, "by_customer": by_customer})
+    return total, by_customer
+
+
 # ── Webhook Processing ──────────────────────────────────────
 
 
