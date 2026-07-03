@@ -564,7 +564,6 @@ def create_app():
         from stripe_service import get_stripe_revenue
         stripe_total, stripe_by_customer = get_stripe_revenue()
 
-        total_contracted = db.session.query(db.func.sum(Client.contract_revenue)).scalar() or 0
         total_revenue = stripe_total
         # Material expenses only — exclude any time-entry-linked (billable time) rows.
         total_expenses = db.session.query(db.func.sum(Expense.amount)).filter(
@@ -598,7 +597,6 @@ def create_app():
                 "id": c.id,
                 "name": c.name,
                 "stage": c.stage or "lead",
-                "contracted": c.contract_revenue or 0,
                 "revenue": c_revenue,
                 "unbilled": unbilled_by_client.get(c.id, 0.0),
                 "expenses": c_expenses,
@@ -610,7 +608,6 @@ def create_app():
         ).order_by(Task.due_date.asc()).limit(10).all()
 
         return render_template("pm/dashboard/index.html",
-            total_contracted=total_contracted,
             total_revenue=total_revenue,
             total_unbilled=total_unbilled,
             total_expenses=total_expenses,
