@@ -202,7 +202,7 @@ class Expense(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     time_entry_id = db.Column(db.Integer, db.ForeignKey("time_entries.id", ondelete="CASCADE"), nullable=True, unique=True)
     amount = db.Column(db.Float, nullable=False)
-    description = db.Column(db.String(300), default="")
+    description = db.Column(db.Text, default="")
     category = db.Column(db.String(50), default="misc")
     date = db.Column(db.Date, nullable=False, default=lambda: date.today())
     receipt_filename = db.Column(db.String(300), nullable=True)

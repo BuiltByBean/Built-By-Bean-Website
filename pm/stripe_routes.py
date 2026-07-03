@@ -17,6 +17,15 @@ from stripe_service import (
 stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/pm/stripe")
 
 
+def _clip(text, limit=380):
+    """Trim a free-text body so the derived invoice line-item description stays
+    within Stripe's ~500-char description limit and the InvoiceLineItem column.
+    Long work-session write-ups live in full on the time entry/expense; the
+    invoice line item only needs a readable summary."""
+    text = (text or "").strip()
+    return (text[:limit].rstrip() + "…") if len(text) > limit else text
+
+
 # ── Stripe Dashboard ────────────────────────────────────────
 
 
@@ -183,7 +192,8 @@ def invoice_create():
         if time_entry_ids:
             time_entries = TimeEntry.query.filter(TimeEntry.id.in_(time_entry_ids)).all()
             for entry in time_entries:
-                desc = f"{entry.rate_type.replace('_', ' ').title()} - {entry.description or 'Development work'} ({entry.date.strftime('%b %d')})"
+                body = _clip(entry.description or "Development work")
+                desc = f"{entry.rate_type.replace('_', ' ').title()} - {body} ({entry.date.strftime('%b %d')})"
                 line_items_data.append({
                     "description": desc,
                     "quantity": entry.hours,
@@ -193,7 +203,8 @@ def invoice_create():
         if expense_ids:
             expenses = Expense.query.filter(Expense.id.in_(expense_ids)).all()
             for expense in expenses:
-                desc = f"Expense: {expense.description or expense.category} ({expense.date.strftime('%b %d')})"
+                body = _clip(expense.description or expense.category)
+                desc = f"Expense: {body} ({expense.date.strftime('%b %d')})"
                 line_items_data.append({
                     "description": desc,
                     "quantity": 1,
