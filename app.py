@@ -313,40 +313,14 @@ def create_app():
         return False
 
     def _sync_expense_for_time_entry(entry, project):
-        """Create, update, or delete the auto-generated expense for a time entry."""
-        skip = entry.rate_type == "mvp_build" or _in_free_maintenance(project, entry.rate_type)
-
-        if skip:
-            # Remove existing auto-expense if switching into free window
-            if entry.expense:
-                db.session.delete(entry.expense)
-            return False  # no expense created
-
-        desc = f"{entry.hours}h {entry.rate_type.replace('_', ' ')} — {entry.description or 'Time entry'}"
-
+        """Billable time is pipeline revenue, not an expense — so we do NOT create a
+        mirror expense for it. This used to generate a "billable_time" Expense per
+        time entry, which wrongly inflated Total Expenses and cluttered the expenses
+        list. Here we just remove any legacy mirror still attached to this entry and
+        report whether the entry is billable (used for the save/flash message)."""
         if entry.expense:
-            # Update existing
-            expense = entry.expense
-            expense.client_id = entry.client_id
-            expense.project_id = entry.project_id
-            expense.task_id = entry.task_id
-            expense.amount = entry.cost
-            expense.description = desc
-            expense.date = entry.date
-        else:
-            # Create new
-            expense = Expense(
-                time_entry_id=entry.id,
-                client_id=entry.client_id,
-                project_id=entry.project_id,
-                task_id=entry.task_id,
-                amount=entry.cost,
-                description=desc,
-                category="billable_time",
-                date=entry.date,
-            )
-            db.session.add(expense)
-        return True  # expense was created/updated
+            db.session.delete(entry.expense)
+        return entry.cost > 0
 
     # ── Recurring Expense Helpers ─────────────────────────────
 
@@ -592,20 +566,41 @@ def create_app():
 
         total_contracted = db.session.query(db.func.sum(Client.contract_revenue)).scalar() or 0
         total_revenue = stripe_total
-        total_expenses = db.session.query(db.func.sum(Expense.amount)).scalar() or 0
+        # Material expenses only — exclude any time-entry-linked (billable time) rows.
+        total_expenses = db.session.query(db.func.sum(Expense.amount)).filter(
+            Expense.time_entry_id.is_(None)
+        ).scalar() or 0
+
+        # Unbilled: the dollar value of logged time not yet on a draft/open/paid
+        # invoice — money in the pipeline that still needs to be billed.
+        invoiced_ids = db.session.query(InvoiceLineItem.time_entry_id).filter(
+            InvoiceLineItem.time_entry_id.isnot(None),
+            InvoiceLineItem.invoice.has(Invoice.status.in_(["draft", "open", "paid"]))
+        ).subquery()
+        unbilled_entries = TimeEntry.query.filter(
+            ~TimeEntry.id.in_(db.session.query(invoiced_ids))
+        ).all()
+        total_unbilled = sum(e.cost for e in unbilled_entries)
+        unbilled_by_client = {}
+        for e in unbilled_entries:
+            if e.cost:
+                unbilled_by_client[e.client_id] = unbilled_by_client.get(e.client_id, 0.0) + e.cost
 
         # Per-client financials
         clients = Client.query.order_by(Client.name).all()
         client_financials = []
         for c in clients:
             c_revenue = stripe_by_customer.get(c.stripe_customer_id, 0.0) if c.stripe_customer_id else 0.0
-            c_expenses = sum(e.amount for e in Expense.query.filter_by(client_id=c.id).all()) if hasattr(Expense, 'client_id') else 0
+            c_expenses = sum(e.amount for e in Expense.query.filter(
+                Expense.client_id == c.id, Expense.time_entry_id.is_(None)
+            ).all())
             client_financials.append({
                 "id": c.id,
                 "name": c.name,
                 "stage": c.stage or "lead",
                 "contracted": c.contract_revenue or 0,
                 "revenue": c_revenue,
+                "unbilled": unbilled_by_client.get(c.id, 0.0),
                 "expenses": c_expenses,
             })
 
@@ -617,6 +612,7 @@ def create_app():
         return render_template("pm/dashboard/index.html",
             total_contracted=total_contracted,
             total_revenue=total_revenue,
+            total_unbilled=total_unbilled,
             total_expenses=total_expenses,
             client_financials=client_financials,
             upcoming_tasks=upcoming_tasks,
@@ -2056,7 +2052,9 @@ def create_app():
         category = request.args.get("category", "")
         project_id = request.args.get("project_id", "", type=str)
 
-        query = Expense.query.outerjoin(Client, Expense.client_id == Client.id).outerjoin(Project, Expense.project_id == Project.id).outerjoin(Task, Expense.task_id == Task.id)
+        # Only real (material) expenses — time-entry-linked "billable time" rows are
+        # pipeline revenue, not expenses, and are shown on the Time Tracking side.
+        query = Expense.query.filter(Expense.time_entry_id.is_(None)).outerjoin(Client, Expense.client_id == Client.id).outerjoin(Project, Expense.project_id == Project.id).outerjoin(Task, Expense.task_id == Task.id)
         if category:
             query = query.filter(Expense.category == category)
         if project_id:
@@ -2065,7 +2063,7 @@ def create_app():
         query = query.order_by(Expense.date.desc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
 
-        all_filtered = Expense.query
+        all_filtered = Expense.query.filter(Expense.time_entry_id.is_(None))
         if category:
             all_filtered = all_filtered.filter(Expense.category == category)
         if project_id:
@@ -2260,7 +2258,8 @@ def create_app():
 
         expense_by_cat = {}
         for cat_val, cat_label in EXPENSE_CATEGORY_CHOICES:
-            total = sum(e.amount for e in Expense.query.filter_by(category=cat_val).all())
+            total = sum(e.amount for e in Expense.query.filter_by(category=cat_val).filter(
+                Expense.time_entry_id.is_(None)).all())
             if total > 0:
                 expense_by_cat[cat_label] = total
 

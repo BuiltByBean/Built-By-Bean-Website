@@ -167,7 +167,8 @@ class Task(db.Model):
 
     @property
     def total_expenses(self):
-        return sum(e.amount for e in self.expenses)
+        # Material expenses only — exclude time-entry-linked billable time rows.
+        return sum(e.amount for e in self.expenses if e.time_entry_id is None)
 
     @property
     def total_hours(self):
