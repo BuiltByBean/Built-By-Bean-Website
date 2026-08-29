@@ -262,6 +262,16 @@ class Ticket(db.Model):
     out_of_scope = db.Column(db.Boolean, nullable=False, default=False,
                              server_default=db.false())
 
+    # The status this client's app was last told about. The drain pushes
+    # whenever it disagrees with `status`, so marking a ticket resolved here
+    # reaches them without my having to type a reply as well.
+    #
+    # It is also the echo guard: a status arriving FROM their app sets both
+    # columns at once, so it never reads as a change of mine and never gets
+    # sent straight back. Without that the two sides tell each other the same
+    # news forever.
+    hub_status_sent = db.Column(db.String(20), nullable=True)
+
     billing_bucket = db.Column(db.String(20), nullable=False, default="",
                                server_default="")
     billed_minutes = db.Column(db.Integer, nullable=False, default=0, server_default="0")

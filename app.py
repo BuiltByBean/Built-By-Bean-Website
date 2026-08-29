@@ -918,6 +918,10 @@ def create_app():
             # my open board. Found by backfilling J&D and reading the result.
             if data.get("status") in TICKET_STATUSES:
                 ticket.status = data["status"]
+            # They told me this status a moment ago, so they already know it.
+            # Left null, the status drain would read it as a change of mine and
+            # push it straight back, which is one half of a loop.
+            ticket.hub_status_sent = ticket.status
             db.session.add(ticket)
 
         ticket.description = (data.get("description") or "")[:20000]
@@ -936,6 +940,40 @@ def create_app():
                         "created" if created else "updated",
                         client.origin_slug, their_id, ticket.id)
         return jsonify({"ok": True, "id": ticket.id, "created": created}), 201 if created else 200
+
+    @pm_bp.route("/api/hub/status", methods=["POST"])
+    def hub_ingest_status():
+        """Their app changed where the work stands, and is telling me.
+
+        Last change wins. These are two people acting minutes apart rather than
+        two processes racing, so the newer statement of fact is the true one and
+        there is nothing here worth a merge strategy.
+
+        `hub_status_sent` is set to the same value in the same breath. That is
+        the echo guard: the drain only pushes when the two disagree, so a status
+        that arrived from them never reads as a change of mine and never goes
+        straight back to them.
+        """
+        client, refusal = _hub_client()
+        if refusal:
+            return refusal
+        data = request.get_json(silent=True) or {}
+        their_id, status = data.get("ticket_id"), data.get("status")
+        if not isinstance(their_id, int):
+            return jsonify({"error": "ticket_id must be an integer"}), 400
+        if status not in TICKET_STATUSES:
+            return jsonify({"error": "unknown status"}), 400
+
+        ticket = Ticket.query.filter_by(origin=client.origin_slug,
+                                        origin_ticket_id=their_id).first()
+        if ticket is None:
+            return jsonify({"error": "no such ticket here yet"}), 404
+        ticket.status = status
+        ticket.hub_status_sent = status
+        ticket.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        app.logger.info("hub: %s/%s is now %s", client.origin_slug, their_id, status)
+        return jsonify({"ok": True}), 200
 
     @pm_bp.route("/api/hub/notes", methods=["POST"])
     def hub_ingest_note():
@@ -1271,6 +1309,46 @@ def create_app():
     # table to keep in step with the first, and nothing can be marked sent
     # without the thing itself being sent.
 
+    def deliver_pending_statuses(limit=100):
+        """Push every status I have changed and not yet told them about.
+
+        Driven by the two columns disagreeing rather than by a queue table: the
+        ticket itself is the record of what they were last told, so there is no
+        second list to keep in step with the first and nothing can be marked
+        sent without the sending having happened.
+
+        Returns (sent, skipped, failed). Never raises.
+        """
+        sent = skipped = failed = 0
+        stale = (Ticket.query
+                 .filter(Ticket.origin != "local",
+                         db.or_(Ticket.hub_status_sent.is_(None),
+                                Ticket.hub_status_sent != Ticket.status))
+                 .limit(limit).all())
+        for ticket in stale:
+            client = ticket.client
+            if (client is None or not client.origin_base_url
+                    or not client.ingest_secret or not ticket.origin_ticket_id):
+                skipped += 1
+                continue
+            try:
+                hub.post(client.origin_base_url, "/api/hub/status",
+                         {"ticket_id": ticket.origin_ticket_id, "status": ticket.status},
+                         secret=client.ingest_secret, origin_slug=client.origin_slug)
+            except hub.DeliveryError as exc:
+                # Left disagreeing on purpose, so the next pass tries again.
+                failed += 1
+                app.logger.warning("hub: status for %s failed: %s", ticket.id, exc)
+                continue
+            # Stamped only after they took it. The other order is how a ticket
+            # comes to read as synced when nothing left the building.
+            ticket.hub_status_sent = ticket.status
+            db.session.commit()
+            sent += 1
+        return sent, skipped, failed
+
+    app.deliver_pending_statuses = deliver_pending_statuses
+
     def deliver_pending_replies(limit=50):
         """Push every reply that is still owed to a client's app.
 
@@ -1354,6 +1432,7 @@ def create_app():
                 try:
                     with app.app_context():
                         deliver_pending_replies()
+                        deliver_pending_statuses()
                 except Exception as exc:            # noqa: BLE001
                     # A dead thread is a queue that silently stops draining, so
                     # nothing is allowed out of this loop.
