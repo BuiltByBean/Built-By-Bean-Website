@@ -8,3 +8,4 @@ static/uploads/
 instance/
 *.db
 .claude/
+static/images/*.bak
