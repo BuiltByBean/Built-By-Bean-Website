@@ -39,8 +39,8 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Task (Optional)</label>
-                    {{ select_dropdown(form.task_id.name, form.task_id.choices, form.task_id.data or 0, "— No specific task —", full_width=true) }}
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Ticket (Optional)</label>
+                    {{ select_dropdown(form.ticket_id.name, form.ticket_id.choices, form.ticket_id.data or 0, "No specific ticket", full_width=true) }}
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">

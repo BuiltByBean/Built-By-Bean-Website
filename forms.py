@@ -18,18 +18,42 @@ PROJECT_STATUS_CHOICES = [
     ("archived", "Archived"),
 ]
 
-TASK_STATUS_CHOICES = [
-    ("todo", "To Do"),
-    ("in_progress", "In Progress"),
-    ("review", "Review"),
-    ("done", "Done"),
+# Where the work has got to, and nothing else. The old task words (todo,
+# in_progress, review, done) described my own queue; these describe a request
+# somebody made, which is what a ticket is. They match the vocabulary the
+# client apps already use, so a ticket does not change meaning in transit.
+TICKET_STATUS_CHOICES = [
+    ("new", "New"),
+    ("in-progress", "In progress"),
+    ("resolved", "Resolved"),
+    ("dismissed", "Dismissed"),
 ]
 
+# How badly the person who raised it needs it. Their voice, not my triage call,
+# which is why "medium" is gone: nobody reporting a problem calls it medium.
+# Ordered most urgent first, and that order IS the board's sort order.
 PRIORITY_CHOICES = [
-    ("low", "Low"),
-    ("medium", "Medium"),
-    ("high", "High"),
     ("urgent", "Urgent"),
+    ("soon", "Soon"),
+    ("normal", "Normal"),
+    ("backlog", "Backlog"),
+]
+
+TICKET_CATEGORY_CHOICES = [
+    ("bug", "Bug"),
+    ("feature", "Feature"),
+    ("enhancement", "Enhancement"),
+    ("other", "Other"),
+]
+
+# Blank is deliberately first and deliberately not "Free": an unclassified
+# ticket has to stay distinguishable from a no-charge one, or undecided work
+# gets presented on an invoice as free.
+BILLING_BUCKET_CHOICES = [
+    ("", "Not classified"),
+    ("free", "Free fix"),
+    ("maintenance", "Maintenance ($100/hr)"),
+    ("new", "New development ($200/hr)"),
 ]
 
 RATE_TYPE_CHOICES = [
@@ -78,6 +102,13 @@ class ClientForm(FlaskForm):
     address = TextAreaField("Address", validators=[Optional()])
     notes = TextAreaField("Notes", validators=[Optional()])
 
+    # If this client has an app of their own, these three are how its tickets
+    # reach this board and how my replies get back. Empty for a client who has
+    # no app, which is the ordinary case.
+    origin_slug = StringField("App slug", validators=[Optional()])
+    ingest_secret = StringField("Shared secret", validators=[Optional()])
+    origin_base_url = StringField("App URL", validators=[Optional()])
+
 
 class ProjectForm(FlaskForm):
     name = StringField("Project Name", validators=[DataRequired()])
@@ -90,20 +121,27 @@ class ProjectForm(FlaskForm):
     notes = TextAreaField("Notes", validators=[Optional()])
 
 
-class TaskForm(FlaskForm):
-    title = StringField("Task Title", validators=[DataRequired()])
-    project_id = SelectField("Project", coerce=int, validators=[DataRequired()])
-    description = TextAreaField("Description", validators=[Optional()])
+class TicketForm(FlaskForm):
+    # The client is required and the project is not. A bug report from a live
+    # app belongs to whoever reported it from the moment it lands; it does not
+    # become project work until I decide it is, and most never do.
+    client_id = SelectField("Client", coerce=int, validators=[DataRequired()])
+    project_id = SelectField("Project", coerce=int, validators=[Optional()])
+    # Optional, because neither app that feeds this board has one. A ticket
+    # with no title is named by its own first sentence.
+    title = StringField("Title", validators=[Optional()])
+    description = TextAreaField("What's up", validators=[DataRequired()])
     detailed_notes = TextAreaField("Detailed Notes", validators=[Optional()])
-    status = SelectField("Status", choices=TASK_STATUS_CHOICES, default="todo")
-    priority = SelectField("Priority", choices=PRIORITY_CHOICES, default="medium")
+    category = SelectField("Kind", choices=TICKET_CATEGORY_CHOICES, default="bug")
+    status = SelectField("Status", choices=TICKET_STATUS_CHOICES, default="new")
+    priority = SelectField("Priority", choices=PRIORITY_CHOICES, default="normal")
     due_date = DateField("Due Date", validators=[Optional()])
 
 
 class ExpenseForm(FlaskForm):
     client_id = SelectField("Client", coerce=int, validators=[Optional()])
     project_id = SelectField("Project", coerce=int, validators=[Optional()])
-    task_id = SelectField("Task", coerce=int, validators=[Optional()])
+    ticket_id = SelectField("Ticket", coerce=int, validators=[Optional()])
     amount = FloatField("Amount ($)", validators=[DataRequired(), NumberRange(min=0.01)])
     description = StringField("Description", validators=[Optional()])
     category = SelectField("Category", choices=EXPENSE_CATEGORY_CHOICES, default="misc")
@@ -116,7 +154,7 @@ class ExpenseForm(FlaskForm):
 
 class TimeEntryForm(FlaskForm):
     project_id = SelectField("Project", coerce=int, validators=[DataRequired()])
-    task_id = SelectField("Task (Optional)", coerce=int, validators=[Optional()])
+    ticket_id = SelectField("Ticket (Optional)", coerce=int, validators=[Optional()])
     date = DateField("Date", validators=[DataRequired()])
     hours = FloatField("Hours", validators=[DataRequired(), NumberRange(min=0.25)])
     description = TextAreaField("Description", validators=[Optional()])

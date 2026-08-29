@@ -38,6 +38,28 @@
                     {{ form.address(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="2", placeholder="Street address, city, state, zip") }}
                 </div>
 
+                {# Only for a client whose app feeds this board. Blank for everyone
+                   else, which is most of them. #}
+                <div class="pt-4 mt-2 border-t border-surface-200 dark:border-surface-700">
+                    <p class="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-1">Their app</p>
+                    <p class="text-xs text-surface-400 mb-3">Only if this client has an app that sends tickets here. The secret must match
+                        <code>HUB_SECRET</code> in that app, and it signs both directions.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">App slug</label>
+                            {{ form.origin_slug(class="input-ring w-full min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="kuper") }}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Shared secret</label>
+                            {{ form.ingest_secret(class="input-ring w-full min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="long random string") }}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">App URL</label>
+                            {{ form.origin_base_url(class="input-ring w-full min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="https://kuperplumbing.com") }}
+                        </div>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Notes</label>
                     {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="Any additional notes...") }}

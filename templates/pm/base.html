@@ -278,12 +278,12 @@
                 </svg>
                 Projects
             </a>
-            <a href="{{ url_for('pm.tasks_list') }}"
+            <a href="{{ url_for('pm.tickets_list') }}"
                class="sidebar-link {% if request.endpoint and 'task' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
-                Tasks
+                Tickets
             </a>
             <a href="{{ url_for('pm.time_list') }}"
                class="sidebar-link {% if request.endpoint and 'time' in request.endpoint %}active{% endif %}">

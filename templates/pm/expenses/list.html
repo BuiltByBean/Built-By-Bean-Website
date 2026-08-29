@@ -48,7 +48,7 @@
             <thead>
                 <tr class="border-b border-surface-200 dark:border-surface-700">
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Date</th>
-                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Task / Project</th>
+                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Ticket / Project</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider hidden md:table-cell">Description</th>
                     <th class="text-center py-3 px-4 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Category</th>
                     <th class="text-right py-3 px-4 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Amount</th>
@@ -62,8 +62,8 @@
                     <td class="py-3 px-4 text-sm text-surface-600 dark:text-surface-300">{{ expense.date | format_date }}</td>
                     <td class="py-3 px-4">
                         <div class="flex items-center gap-1.5">
-                        {% if expense.task %}
-                        <p class="text-sm font-medium text-surface-900 dark:text-white">{{ expense.task.title }}</p>
+                        {% if expense.ticket %}
+                        <p class="text-sm font-medium text-surface-900 dark:text-white">{{ expense.ticket.display_title }}</p>
                         {% elif expense.project %}
                         <p class="text-sm font-medium text-surface-900 dark:text-white">{{ expense.project.name }}</p>
                         {% elif expense.client %}

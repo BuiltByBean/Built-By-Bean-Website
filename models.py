@@ -51,12 +51,30 @@ class Client(db.Model):
     address = db.Column(db.Text, default="")
     notes = db.Column(db.Text, default="")
     stripe_customer_id = db.Column(db.String(100), nullable=True, unique=True)
+    # Which app this client's tickets arrive from, and the shared secret that
+    # signs them. One secret per client, so a leak is one client's problem and
+    # is rotated without touching anybody else.
+    #
+    # Nullable rather than "" and unique: a client with no app of their own is
+    # the normal case, and several of those would collide on a unique empty
+    # string. Null does not collide with null.
+    origin_slug = db.Column(db.String(40), nullable=True, unique=True)
+    ingest_secret = db.Column(db.String(120), default="")
+    # Where my replies get pushed back to, e.g. https://kuperplumbing.com.
+    # Empty means their app cannot receive them, so a reply stays here and is
+    # visible as undelivered rather than being silently dropped.
+    origin_base_url = db.Column(db.String(300), default="")
+
     stage = db.Column(db.String(30), default="lead")
     contract_revenue = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     projects = db.relationship("Project", back_populates="client", cascade="all, delete-orphan", lazy="dynamic")
+    # Every ticket belongs to a client, project or no project, because the board
+    # is grouped by who asked rather than by what it is filed under.
+    tickets = db.relationship("Ticket", back_populates="client",
+                              cascade="all, delete-orphan", lazy="dynamic")
     time_entries = db.relationship("TimeEntry", backref="client", lazy="dynamic")
 
     @property
@@ -95,7 +113,7 @@ class Project(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     client = db.relationship("Client", back_populates="projects")
-    tasks = db.relationship("Task", back_populates="project", cascade="all, delete-orphan", lazy="dynamic")
+    tickets = db.relationship("Ticket", back_populates="project", lazy="dynamic")
     time_entries = db.relationship("TimeEntry", backref="project", lazy="dynamic")
 
     @property
@@ -138,32 +156,156 @@ class Project(db.Model):
         return f"<Project {self.name}>"
 
 
-class Task(db.Model):
-    __tablename__ = "tasks"
+# ---------------------------------------------------------------- tickets
+#
+# What used to be Task. A task was a thing I wrote down for myself; a ticket is
+# a thing a client asked for, and most of them arrive through that client's own
+# app rather than being typed here. The money model hangs off it either way, so
+# the columns Task carried for expenses, time and documents carry over
+# unchanged.
+#
+# Subtasks go with it. A ticket has no parent and no children: the boards this
+# one is modelled on have never needed them, and a nested board is a second way
+# of saying "these are related" alongside the project a ticket already belongs
+# to. Existing subtasks are flattened into ordinary tickets by the migration
+# rather than deleted, so nothing anybody wrote down is lost.
+#
+# The vocabulary is Talent Booker's, copied rather than reinvented, because
+# that board has already made and fixed the mistakes this one would make.
+
+# What kind of work it is.
+TICKET_CATEGORIES = ("bug", "feature", "enhancement", "other")
+TICKET_CATEGORY_LABELS = {
+    "bug": "Bug", "feature": "Feature", "enhancement": "Enhancement", "other": "Other",
+}
+
+# Where the work has got to, and nothing else. Out of scope and follow-up are
+# NOT in here: see the flags on the model for why.
+TICKET_STATUSES = ("new", "in-progress", "resolved", "dismissed")
+TICKET_STATUS_LABELS = {
+    "new": "New", "in-progress": "In progress", "resolved": "Resolved",
+    "dismissed": "Dismissed",
+}
+# One tuple, so the board filter, the open filter and the header counts cannot
+# end up with three opinions about what "still open" means.
+TICKET_CLOSED_STATUSES = ("resolved", "dismissed")
+
+# How badly the person who raised it needs it. Their voice, not my triage call.
+# Ordered most urgent first, and that order IS the sort order.
+TICKET_PRIORITIES = ("urgent", "soon", "normal", "backlog")
+TICKET_PRIORITY_LABELS = {
+    "urgent": "Urgent", "soon": "Soon", "normal": "Normal", "backlog": "Backlog",
+}
+
+# What the work costs. Blank is not a fourth bucket: an unclassified ticket has
+# to stay distinguishable from a free one, or undecided work reads as free on
+# an invoice.
+TICKET_BILLING_BUCKETS = ("free", "maintenance", "new")
+TICKET_BILLING_LABELS = {
+    "free": "Free fix", "maintenance": "Maintenance", "new": "New development",
+}
+TICKET_BILLING_RATES = {"free": 0, "maintenance": 100, "new": 200}
+
+
+class Ticket(db.Model):
+    """One thing a client has asked for, on one board across every client.
+
+    Four facts about a ticket are true at the same time and therefore live in
+    four columns: `category` is what kind of work it is, `status` is where the
+    work has got to, `priority` is how badly the person who raised it needs it,
+    and `followup_flagged` is "come back to this".
+
+    `out_of_scope` is a fifth. Both flags are flags rather than statuses for the
+    same reason, which is the single mistake this family of boards keeps making:
+    wanting to revisit something and having finished it are both allowed to be
+    true, and so are being mid-repair and being outside what an app is for.
+    Talent Booker shipped follow-up as a status and flagging a resolved ticket
+    silently un-resolved it. Kuper then shipped out-of-scope as a status and did
+    the same thing one column along. Neither may share a column with status.
+    """
+    __tablename__ = "tickets"
 
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    parent_task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
-    title = db.Column(db.String(300), nullable=False)
+    # The aggregation key, and the reason this table exists. Every ticket
+    # belongs to a client whether or not it belongs to a project: a bug report
+    # from a live app is not project work until I decide it is.
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+                           nullable=True, index=True)
+
+    # Where it came from. `origin` is the app's own slug ("kuper", "talent-booker"),
+    # `origin_ticket_id` is its id over there, and the pair is unique so the same
+    # ticket arriving twice updates rather than duplicates. A ticket raised here
+    # by hand carries origin "local" and no origin id.
+    origin = db.Column(db.String(40), nullable=False, default="local", index=True)
+    origin_ticket_id = db.Column(db.Integer, nullable=True)
+    origin_url = db.Column(db.String(500), default="")
+
+    # Denormalised on purpose: there is no user row here for Cason or Kenali and
+    # there should not be. They do not log into this app.
+    reporter_name = db.Column(db.String(200), default="")
+    reporter_email = db.Column(db.String(200), default="")
+
+    title = db.Column(db.String(300), nullable=False, default="")
     description = db.Column(db.Text, default="")
     detailed_notes = db.Column(db.Text, default="")
-    status = db.Column(db.String(20), default="todo")
-    priority = db.Column(db.String(20), default="medium")
+    # The screen they were standing on, captured rather than typed.
+    source_label = db.Column(db.String(200), default="")
+    source_path = db.Column(db.String(500), default="")
+
+    category = db.Column(db.String(20), nullable=False, default="bug")
+    status = db.Column(db.String(20), nullable=False, default="new", index=True)
+    priority = db.Column(db.String(20), nullable=False, default="normal")
+    followup_flagged = db.Column(db.Boolean, nullable=False, default=False,
+                                 server_default=db.false())
+    out_of_scope = db.Column(db.Boolean, nullable=False, default=False,
+                             server_default=db.false())
+
+    billing_bucket = db.Column(db.String(20), nullable=False, default="",
+                               server_default="")
+    billed_minutes = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
     due_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
 
-    project = db.relationship("Project", back_populates="tasks")
-    subtasks = db.relationship(
-        "Task",
-        backref=db.backref("parent_task", remote_side="Task.id"),
-        cascade="all, delete-orphan",
-        lazy="dynamic",
-        order_by="Task.created_at",
+    client = db.relationship("Client", back_populates="tickets")
+    project = db.relationship("Project", back_populates="tickets")
+    # Cascade is required rather than tidy: ticket_id is NOT NULL on the note,
+    # so the default on parent-delete is to null the child FK, which raises and
+    # 500s the delete.
+    notes = db.relationship("TicketNote", back_populates="ticket",
+                            cascade="all, delete-orphan",
+                            order_by="TicketNote.created_at")
+    expenses = db.relationship("Expense", back_populates="ticket",
+                               cascade="all, delete-orphan", lazy="dynamic")
+    time_entries = db.relationship("TimeEntry", backref="ticket", lazy="dynamic")
+    documents = db.relationship("Document", back_populates="ticket",
+                                cascade="all, delete-orphan", lazy="dynamic")
+
+    __table_args__ = (
+        # Named, because SQLite batch mode cannot drop an unnamed constraint.
+        db.UniqueConstraint("origin", "origin_ticket_id", name="uq_ticket_origin"),
     )
-    expenses = db.relationship("Expense", back_populates="task", cascade="all, delete-orphan", lazy="dynamic")
-    time_entries = db.relationship("TimeEntry", backref="task", lazy="dynamic")
-    documents = db.relationship("Document", back_populates="task", cascade="all, delete-orphan", lazy="dynamic")
+
+    @property
+    def display_title(self):
+        """What to call this on a list.
+
+        Neither app that feeds this board has a title field: Cason and Kenali
+        both type one box and press send, which is the right form to give
+        somebody reporting a problem. Asking for a subject line would get
+        "help" on half of them. So a title is optional here, and a ticket
+        without one is named by its own first sentence rather than by "Untitled".
+        """
+        if self.title:
+            return self.title
+        text = " ".join((self.description or "").split())
+        if not text:
+            return f"Ticket #{self.id}"
+        return text if len(text) <= 80 else text[:77] + "..."
 
     @property
     def total_expenses(self):
@@ -175,23 +317,70 @@ class Task(db.Model):
         return sum(e.hours for e in self.time_entries)
 
     @property
-    def is_subtask(self):
-        return self.parent_task_id is not None
+    def billed_hours(self):
+        return (self.billed_minutes or 0) / 60.0
 
     @property
-    def subtask_count(self):
-        return self.subtasks.count()
+    def billed_cost(self):
+        """What this ticket is worth at its bucket's rate.
 
-    @property
-    def completed_subtask_count(self):
-        return self.subtasks.filter(Task.status == "done").count()
+        Unclassified is not free, it is undecided, so it earns nothing here and
+        is counted separately wherever this is totalled. Returning 0.0 for both
+        is what would quietly present undecided work as a no-charge fix.
+        """
+        rate = TICKET_BILLING_RATES.get(self.billing_bucket)
+        if rate is None:
+            return None
+        return self.billed_hours * rate
 
-    @property
-    def subtask_progress(self):
-        return (self.completed_subtask_count, self.subtask_count)
+    def unread_for_dev(self):
+        """Notes from the reporter that I have not read yet."""
+        return sum(1 for n in self.notes if n.read_at is None and not n.is_staff_reply)
 
     def __repr__(self):
-        return f"<Task {self.title}>"
+        return f"<Ticket {self.id} {self.category} ({self.status}) {self.origin}>"
+
+
+class TicketNote(db.Model):
+    """One message in the back and forth on a ticket.
+
+    Both directions live in the same table on purpose. A reply recorded only as
+    an outbound email leaves the person who raised it with nothing to read and
+    nothing to reply to, which is not a conversation. Talent Booker shipped it
+    that way first and had to come back for it.
+
+    `is_staff_reply` is stored rather than derived from who wrote it, because
+    the answer must not change later. It also has to survive arriving from
+    another app, where the author is not a row in this database at all.
+    """
+    __tablename__ = "ticket_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey("tickets.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    author_name = db.Column(db.String(200), default="")
+    body = db.Column(db.Text, default="")
+    is_staff_reply = db.Column(db.Boolean, nullable=False, default=False)
+
+    # The note's id in the app it came from, so the same note arriving twice is
+    # recognised. Null for a note written here.
+    origin_note_id = db.Column(db.Integer, nullable=True)
+    # When this was successfully pushed back to the client app. Null on a note
+    # written here means it is still owed to them, which is what the outbox
+    # drains on. Always null for a note that arrived from them.
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    # When the recipient saw it, the recipient being whoever did not write it.
+    read_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    ticket = db.relationship("Ticket", back_populates="notes")
+
+    __table_args__ = (
+        db.UniqueConstraint("ticket_id", "origin_note_id", name="uq_note_origin"),
+    )
+
+    def __repr__(self):
+        return f"<TicketNote {self.id} on Ticket {self.ticket_id}>"
 
 
 class Expense(db.Model):
@@ -200,7 +389,7 @@ class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey("tickets.id", ondelete="SET NULL"), nullable=True)
     time_entry_id = db.Column(db.Integer, db.ForeignKey("time_entries.id", ondelete="CASCADE"), nullable=True, unique=True)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text, default="")
@@ -219,7 +408,7 @@ class Expense(db.Model):
 
     client = db.relationship("Client", backref="expenses")
     project = db.relationship("Project", backref="expenses")
-    task = db.relationship("Task", back_populates="expenses")
+    ticket = db.relationship("Ticket", back_populates="expenses")
     time_entry = db.relationship("TimeEntry", backref=db.backref("expense", uselist=False))
     children = db.relationship("Expense", backref=db.backref("parent_expense", remote_side="Expense.id"), lazy="dynamic")
 
@@ -244,7 +433,7 @@ class TimeEntry(db.Model):
     __tablename__ = "time_entries"
 
     id = db.Column(db.Integer, primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey("tickets.id", ondelete="SET NULL"), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
     date = db.Column(db.Date, nullable=False, default=lambda: date.today())
@@ -320,7 +509,7 @@ class Document(db.Model):
     __tablename__ = "documents"
 
     id = db.Column(db.Integer, primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey("tickets.id", ondelete="CASCADE"), nullable=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     filename = db.Column(db.String(300), nullable=False)
@@ -328,7 +517,7 @@ class Document(db.Model):
     file_size = db.Column(db.Integer, default=0)
     uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    task = db.relationship("Task", back_populates="documents")
+    ticket = db.relationship("Ticket", back_populates="documents")
     client = db.relationship("Client", backref=db.backref("documents", lazy="dynamic", cascade="all, delete-orphan"))
     project = db.relationship("Project", backref=db.backref("documents", lazy="dynamic", cascade="all, delete-orphan"))
 

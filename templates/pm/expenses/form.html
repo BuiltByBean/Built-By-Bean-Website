@@ -21,8 +21,8 @@
                         {{ select_dropdown(form.project_id.name, form.project_id.choices, form.project_id.data or 0, "— No project —", full_width=true) }}
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Task</label>
-                        {{ select_dropdown(form.task_id.name, form.task_id.choices, form.task_id.data or 0, "— No task —", full_width=true) }}
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Ticket</label>
+                        {{ select_dropdown(form.ticket_id.name, form.ticket_id.choices, form.ticket_id.data or 0, "No ticket", full_width=true) }}
                     </div>
                 </div>
 

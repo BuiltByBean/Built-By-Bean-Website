@@ -16,10 +16,19 @@ from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
 
 from config import Config
-from models import db, Client, Project, Task, Expense, TimeEntry, Document, User, Invoice, InvoiceLineItem, TimerSession
+import hub
+import time
+from models import (
+    db, Client, Project, Ticket, TicketNote, Expense, TimeEntry, Document, User,
+    Invoice, InvoiceLineItem, TimerSession,
+    TICKET_CATEGORIES, TICKET_CATEGORY_LABELS,
+    TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_CLOSED_STATUSES,
+    TICKET_PRIORITIES, TICKET_PRIORITY_LABELS,
+    TICKET_BILLING_BUCKETS, TICKET_BILLING_LABELS, TICKET_BILLING_RATES,
+)
 from forms import (
-    ClientForm, ProjectForm, TaskForm, ExpenseForm, TimeEntryForm, LoginForm,
-    PHASE_CHOICES, PROJECT_STATUS_CHOICES, TASK_STATUS_CHOICES,
+    ClientForm, ProjectForm, TicketForm, ExpenseForm, TimeEntryForm, LoginForm,
+    PHASE_CHOICES, PROJECT_STATUS_CHOICES, TICKET_STATUS_CHOICES,
     PRIORITY_CHOICES, RATE_TYPE_CHOICES, EXPENSE_CATEGORY_CHOICES,
     FREQUENCY_CHOICES,
 )
@@ -362,7 +371,7 @@ def create_app():
                 child = Expense(
                     client_id=parent.client_id,
                     project_id=parent.project_id,
-                    task_id=parent.task_id,
+                    ticket_id=parent.ticket_id,
                     amount=parent.amount,
                     description=parent.description,
                     category=parent.category,
@@ -447,7 +456,7 @@ def create_app():
             "asset_version": _asset_version,
             "phase_choices": PHASE_CHOICES,
             "status_choices": PROJECT_STATUS_CHOICES,
-            "task_status_choices": TASK_STATUS_CHOICES,
+            "ticket_status_choices": TICKET_STATUS_CHOICES,
             "priority_choices": PRIORITY_CHOICES,
             "rate_type_choices": RATE_TYPE_CHOICES,
             "expense_category_choices": EXPENSE_CATEGORY_CHOICES,
@@ -603,16 +612,16 @@ def create_app():
             })
 
         # Upcoming deadlines
-        upcoming_tasks = Task.query.filter(
-            Task.due_date >= today, Task.status != "done"
-        ).order_by(Task.due_date.asc()).limit(10).all()
+        upcoming_tickets = Ticket.query.filter(
+            Ticket.due_date >= today, Ticket.status != "done"
+        ).order_by(Ticket.due_date.asc()).limit(10).all()
 
         return render_template("pm/dashboard/index.html",
             total_revenue=total_revenue,
             total_unbilled=total_unbilled,
             total_expenses=total_expenses,
             client_financials=client_financials,
-            upcoming_tasks=upcoming_tasks,
+            upcoming_tickets=upcoming_tickets,
         )
 
     # ── Clients ──────────────────────────────────────────────
@@ -631,6 +640,20 @@ def create_app():
         pagination = query.paginate(page=page, per_page=20, error_out=False)
         return render_template("pm/clients/list.html", clients=pagination.items, pagination=pagination, search=search)
 
+    def _apply_client_app_fields(client, form):
+        """The three fields that wire a client's own app to this board.
+
+        origin_slug is UNIQUE and nullable, so an empty one has to be stored as
+        NULL rather than "". Two clients with no app of their own would both
+        carry the empty string and the second save would fail on the unique
+        constraint, which reads as a database error over a field the user left
+        blank on purpose. Null does not collide with null.
+        """
+        slug = (form.origin_slug.data or "").strip()
+        client.origin_slug = slug or None
+        client.ingest_secret = (form.ingest_secret.data or "").strip()
+        client.origin_base_url = (form.origin_base_url.data or "").strip().rstrip("/")
+
     @pm_bp.route("/clients/new", methods=["GET", "POST"])
     @login_required
     def client_create():
@@ -644,6 +667,7 @@ def create_app():
                 address=form.address.data or "",
                 notes=form.notes.data or "",
             )
+            _apply_client_app_fields(client, form)
             db.session.add(client)
             db.session.commit()
             from stripe_service import create_stripe_customer
@@ -674,6 +698,9 @@ def create_app():
         form = ClientForm(obj=client)
         if form.validate_on_submit():
             form.populate_obj(client)
+            # After populate_obj, which would otherwise write "" into a unique
+            # column.
+            _apply_client_app_fields(client, form)
             db.session.commit()
             from stripe_service import update_stripe_customer
             update_stripe_customer(client)
@@ -744,12 +771,12 @@ def create_app():
     @login_required
     def project_detail(id):
         project = db.session.get(Project, id) or abort(404)
-        tasks = project.tasks.filter(Task.parent_task_id.is_(None)).order_by(Task.created_at.desc()).all()
+        tickets = project.tickets.order_by(Ticket.created_at.desc()).all()
         time_entries = project.time_entries.order_by(TimeEntry.date.desc()).all()
         expenses = Expense.query.filter(Expense.project_id == project.id).order_by(Expense.date.desc()).all()
         documents = project.documents.order_by(Document.uploaded_at.desc()).all()
         return render_template("pm/projects/detail.html",
-            project=project, tasks=tasks, time_entries=time_entries, expenses=expenses, documents=documents)
+            project=project, tickets=tickets, time_entries=time_entries, expenses=expenses, documents=documents)
 
     @pm_bp.route("/projects/<int:id>/edit", methods=["GET", "POST"])
     @login_required
@@ -787,215 +814,545 @@ def create_app():
             flash(f"Phase updated to '{dict(PHASE_CHOICES)[new_phase]}'.", "success")
         return redirect(url_for("pm.project_detail", id=project.id))
 
-    # ── Tasks ────────────────────────────────────────────────
+    def _ticket_choices(blank="No specific ticket"):
+        """Every ticket, labelled by client, for the pickers on time and expenses.
 
-    def _propagate_task_completion(task):
-        """Walk up the parent chain. If every sibling subtask is done,
-        mark the parent done too. Recurse."""
-        parent = task.parent_task
-        while parent is not None:
-            total = parent.subtasks.count()
-            done = parent.subtasks.filter(Task.status == "done").count()
-            if total > 0 and total == done and parent.status != "done":
-                parent.status = "done"
-                parent = parent.parent_task
-            else:
-                break
+        Joined to Client and NOT to Project. A ticket's project is nullable now,
+        so an inner join to Project silently drops every ticket not filed under
+        one, which is most of them once they start arriving from a client's app.
+        The label carries the client for the same reason: the project used to be
+        how you told two similar ones apart and is no longer always there.
+        """
+        rows = (Ticket.query.join(Client, Ticket.client_id == Client.id)
+                .order_by(Client.name, Ticket.created_at.desc()).all())
+        return [(0, blank)] + [
+            (t.id, f"{t.display_title} ({t.client.name})") for t in rows
+        ]
 
-    def _reopen_task_ancestors(task):
-        """If a subtask moves away from 'done', reopen any ancestor that is 'done'."""
-        parent = task.parent_task
-        while parent is not None:
-            if parent.status == "done":
-                parent.status = "in_progress"
-                parent = parent.parent_task
-            else:
-                break
+    # ── The hub: tickets arriving from a client's own app ────────
+    #
+    # Signed with that client's own secret, never authenticated by URL. See
+    # hub.py for why, and for the copy of this protocol each client app holds.
 
-    @pm_bp.route("/tasks")
-    @login_required
-    def tasks_list():
-        page = request.args.get("page", 1, type=int)
-        search = request.args.get("search", "")
-        status = request.args.get("status", "")
-        priority = request.args.get("priority", "")
-        project_id = request.args.get("project_id", "", type=str)
+    def _hub_client():
+        """Which client is posting, and are they really them.
 
-        query = Task.query.join(Project).join(Client).filter(Task.parent_task_id.is_(None))
-        if search:
-            query = query.filter(Task.title.ilike(f"%{search}%"))
-        if status:
-            query = query.filter(Task.status == status)
-        if priority:
-            query = query.filter(Task.priority == priority)
-        if project_id:
-            query = query.filter(Task.project_id == int(project_id))
+        Returns (client, None) or (None, response). The origin names who is
+        claiming to post; the signature over the exact body proves it.
+        """
+        slug = (request.headers.get(hub.ORIGIN_HEADER) or "").strip()
+        if not slug:
+            return None, (jsonify({"error": "no origin"}), 400)
+        client = Client.query.filter_by(origin_slug=slug).first()
+        if client is None:
+            # Deliberately the same shape of answer as a bad signature. Saying
+            # "no such client" tells an unauthenticated caller which slugs
+            # exist, which is the one thing they cannot otherwise find out.
+            app.logger.warning("hub: no client for origin %r", slug)
+            return None, (jsonify({"error": "unauthorised"}), 401)
+        reason = hub.verify(client.ingest_secret, request.get_data(),
+                            request.headers.get(hub.TIMESTAMP_HEADER),
+                            request.headers.get(hub.SIGNATURE_HEADER))
+        if reason:
+            app.logger.warning("hub: refused %s: %s", slug, reason)
+            return None, (jsonify({"error": "unauthorised"}), 401)
+        return client, None
 
-        query = query.order_by(Task.created_at.desc())
-        pagination = query.paginate(page=page, per_page=20, error_out=False)
-        projects = Project.query.order_by(Project.name).all()
-        return render_template("pm/tasks/list.html",
-            tasks=pagination.items, pagination=pagination, projects=projects,
-            search=search, status=status, priority=priority, project_id=project_id)
+    @pm_bp.route("/api/hub/tickets", methods=["POST"])
+    def hub_ingest_ticket():
+        """One ticket from a client's app, created or brought up to date.
 
-    @pm_bp.route("/tasks/quick", methods=["POST"])
-    @login_required
-    def task_create_quick():
-        project_id = request.form.get("project_id", type=int)
-        project = db.session.get(Project, project_id) or abort(404)
-        title = request.form.get("title", "").strip()
-        if not title:
-            flash("Task title is required.", "error")
-            return redirect(request.form.get("redirect") or url_for("pm.project_detail", id=project_id))
-        due_date = None
-        raw_date = request.form.get("due_date")
-        if raw_date:
-            try:
-                due_date = date.fromisoformat(raw_date)
-            except ValueError:
-                pass
-        task = Task(
-            project_id=project_id,
-            title=title,
-            description=request.form.get("description", ""),
-            status="todo",
-            priority=request.form.get("priority", "medium"),
-            due_date=due_date,
-        )
-        db.session.add(task)
+        Keyed on (origin, origin_ticket_id) with a unique index behind it, so
+        the same ticket arriving twice updates rather than duplicating. Their
+        outbox retries on any failure, which means a duplicate delivery is the
+        normal case rather than the exceptional one.
+
+        **What an update is allowed to touch is the whole design.** They own
+        what was reported: the words, the screen it came from, who reported it,
+        and how badly they need it. I own where the work has got to and what it
+        costs, so `status`, `billing_bucket`, `billed_minutes` and both flags
+        are never taken from the wire. Without that, triaging a ticket here and
+        the reporter then editing it over there would quietly un-resolve work
+        that is finished.
+
+        `category` is taken on creation only, for the same reason: reclassifying
+        a "bug" that is really a feature request is a triage call, and it must
+        not be undone by their next save.
+        """
+        client, refusal = _hub_client()
+        if refusal:
+            return refusal
+        data = request.get_json(silent=True) or {}
+        their_id = data.get("ticket_id")
+        if not isinstance(their_id, int):
+            return jsonify({"error": "ticket_id must be an integer"}), 400
+
+        ticket = Ticket.query.filter_by(origin=client.origin_slug,
+                                        origin_ticket_id=their_id).first()
+        created = ticket is None
+        if created:
+            ticket = Ticket(client_id=client.id, origin=client.origin_slug,
+                            origin_ticket_id=their_id)
+            ticket.category = data.get("category") if data.get("category") in TICKET_CATEGORIES else "bug"
+            db.session.add(ticket)
+
+        ticket.description = (data.get("description") or "")[:20000]
+        ticket.title = (data.get("title") or "")[:300]
+        ticket.source_label = (data.get("source_label") or "")[:200]
+        ticket.source_path = (data.get("source_path") or "")[:500]
+        ticket.origin_url = (data.get("url") or "")[:500]
+        ticket.reporter_name = (data.get("reporter_name") or "")[:200]
+        ticket.reporter_email = (data.get("reporter_email") or "")[:200]
+        if data.get("priority") in TICKET_PRIORITIES:
+            ticket.priority = data["priority"]
+        ticket.updated_at = datetime.now(timezone.utc)
         db.session.commit()
-        flash(f"Task '{task.title}' created.", "success")
-        return redirect(request.form.get("redirect") or url_for("pm.project_detail", id=project_id))
 
-    @pm_bp.route("/tasks/<int:id>/subtasks", methods=["POST"])
-    @login_required
-    def subtask_create(id):
-        parent = db.session.get(Task, id) or abort(404)
-        title = request.form.get("title", "").strip()
-        if not title:
-            flash("Subtask title is required.", "error")
-            return redirect(url_for("pm.task_detail", id=parent.id))
-        due_date = None
-        raw_date = request.form.get("due_date")
-        if raw_date:
-            try:
-                due_date = date.fromisoformat(raw_date)
-            except ValueError:
-                pass
-        sub = Task(
-            project_id=parent.project_id,
-            parent_task_id=parent.id,
-            title=title,
-            priority=request.form.get("priority", parent.priority),
-            due_date=due_date,
-            status="todo",
-        )
-        db.session.add(sub)
-        # A new incomplete child means the parent (and ancestors) can't remain "done"
-        _reopen_task_ancestors(sub)
+        app.logger.info("hub: %s ticket %s/%s -> %s",
+                        "created" if created else "updated",
+                        client.origin_slug, their_id, ticket.id)
+        return jsonify({"ok": True, "id": ticket.id, "created": created}), 201 if created else 200
+
+    @pm_bp.route("/api/hub/notes", methods=["POST"])
+    def hub_ingest_note():
+        """Something the reporter said, onto the thread it belongs to.
+
+        Deduplicated on (ticket_id, origin_note_id), which is a unique index,
+        so a retried delivery is a no-op rather than the same sentence twice.
+
+        A note from the reporter on a resolved ticket reopens it, exactly as it
+        does inside their own app. Dismissed is left alone: that status is a
+        decision, not an oversight.
+        """
+        client, refusal = _hub_client()
+        if refusal:
+            return refusal
+        data = request.get_json(silent=True) or {}
+        their_ticket = data.get("ticket_id")
+        their_note = data.get("note_id")
+        if not isinstance(their_ticket, int) or not isinstance(their_note, int):
+            return jsonify({"error": "ticket_id and note_id must be integers"}), 400
+
+        ticket = Ticket.query.filter_by(origin=client.origin_slug,
+                                        origin_ticket_id=their_ticket).first()
+        if ticket is None:
+            # Their outbox will retry, by which time the ticket that this note
+            # hangs off will have arrived. Saying "not yet" is the honest answer
+            # and 404 is what makes them keep it queued.
+            return jsonify({"error": "no such ticket here yet"}), 404
+
+        existing = TicketNote.query.filter_by(ticket_id=ticket.id,
+                                              origin_note_id=their_note).first()
+        if existing is not None:
+            return jsonify({"ok": True, "id": existing.id, "duplicate": True}), 200
+
+        db.session.add(TicketNote(
+            ticket_id=ticket.id,
+            origin_note_id=their_note,
+            author_name=(data.get("author_name") or "")[:200],
+            body=(data.get("body") or "")[:5000],
+            is_staff_reply=False,          # it came from them, by definition
+        ))
+        ticket.updated_at = datetime.now(timezone.utc)
+        if ticket.status == "resolved":
+            ticket.status = "in-progress"
         db.session.commit()
-        flash(f"Subtask '{sub.title}' created.", "success")
-        return redirect(url_for("pm.task_detail", id=parent.id))
+        return jsonify({"ok": True}), 201
 
-    @pm_bp.route("/tasks/new", methods=["GET", "POST"])
+    # ── Tickets ────────────────────────────────────────────────
+    #
+    # One board across every client. The shape is Talent Booker's, which is the
+    # one that has been in daily use longest and has already made and fixed the
+    # mistakes this one would otherwise make.
+
+    def _ticket_board_order(query):
+        """Bugs first, always. Then urgent. Then newest.
+
+        Something broken outranks something wished for whatever priority either
+        carries, so category is the FIRST key rather than priority. The
+        consequence worth knowing: an urgent new feature sits below every bug,
+        which is what "always" asks for.
+
+        Each key only breaks ties in the one before it. Priority alone would
+        shuffle a month of ordinary tickets into no order at all.
+        """
+        bugs_first = db.case({"bug": 0}, value=Ticket.category, else_=1)
+        priority_rank = db.case(
+            {name: i for i, name in enumerate(TICKET_PRIORITIES)},
+            value=Ticket.priority, else_=len(TICKET_PRIORITIES),
+        )
+        return query.order_by(bugs_first, priority_rank, Ticket.created_at.desc())
+
+    def _ticket_counts():
+        """Header badges. Each counts EXACTLY what clicking it shows.
+
+        Out of scope is excluded from "open" because the open board excludes it:
+        it renders in its own section underneath. A badge that counts what the
+        list below it does not show is the badge lying.
+        """
+        out = {name: 0 for name in TICKET_STATUSES}
+        out["follow-up"] = out["out-of-scope"] = out["open"] = 0
+        for t in Ticket.query.all():
+            out[t.status] = out.get(t.status, 0) + 1
+            if t.followup_flagged:
+                out["follow-up"] += 1
+            if t.out_of_scope:
+                out["out-of-scope"] += 1
+            elif t.status not in TICKET_CLOSED_STATUSES:
+                out["open"] += 1
+        out["total"] = sum(out[name] for name in TICKET_STATUSES)
+        return out
+
+    @pm_bp.route("/tickets")
     @login_required
-    def task_create():
-        form = TaskForm()
-        form.project_id.choices = [
-            (p.id, f"{p.name} ({p.client.name})") for p in Project.query.join(Client).order_by(Project.name).all()
+    def tickets_list():
+        status_filter = request.args.get("status", "open")
+        category_filter = request.args.get("category", "all")
+        client_filter = request.args.get("client_id", type=int)
+
+        query = Ticket.query
+        if status_filter == "open":
+            query = query.filter(~Ticket.status.in_(TICKET_CLOSED_STATUSES))
+        elif status_filter == "follow-up":
+            # The flag, so this list can hold a finished ticket I still want to
+            # talk about. That is the entire point of it.
+            query = query.filter(Ticket.followup_flagged.is_(True))
+        elif status_filter == "out-of-scope":
+            query = query.filter(Ticket.out_of_scope.is_(True))
+        elif status_filter in TICKET_STATUSES:
+            query = query.filter(Ticket.status == status_filter)
+        if status_filter in ("open", "all"):
+            # They render in their own section below, so they must not also be
+            # in the list above it. One ticket, one place on the page.
+            query = query.filter(Ticket.out_of_scope.is_(False))
+        if category_filter in TICKET_CATEGORIES:
+            query = query.filter(Ticket.category == category_filter)
+        if client_filter:
+            query = query.filter(Ticket.client_id == client_filter)
+
+        tickets = _ticket_board_order(query).all()
+
+        # A separate query rather than sorted to the bottom of the main one:
+        # they are not work in the queue, and anything that filters the board
+        # must not interleave them back in.
+        out_of_scope = []
+        if status_filter in ("open", "all"):
+            oos = Ticket.query.filter(Ticket.out_of_scope.is_(True))
+            if category_filter in TICKET_CATEGORIES:
+                oos = oos.filter(Ticket.category == category_filter)
+            if client_filter:
+                oos = oos.filter(Ticket.client_id == client_filter)
+            out_of_scope = oos.order_by(Ticket.updated_at.desc()).all()
+
+        return render_template(
+            "pm/tickets/list.html",
+            tickets=tickets, out_of_scope=out_of_scope, counts=_ticket_counts(),
+            clients=Client.query.order_by(Client.name).all(),
+            status_filter=status_filter, category_filter=category_filter,
+            client_filter=client_filter,
+            statuses=TICKET_STATUSES, status_labels=TICKET_STATUS_LABELS,
+            categories=TICKET_CATEGORIES, category_labels=TICKET_CATEGORY_LABELS,
+            priority_labels=TICKET_PRIORITY_LABELS,
+            billing_labels=TICKET_BILLING_LABELS,
+            billing_buckets=TICKET_BILLING_BUCKETS,
+        )
+
+    @pm_bp.route("/tickets/new", methods=["GET", "POST"])
+    @login_required
+    def ticket_create():
+        form = TicketForm()
+        form.client_id.choices = [
+            (c.id, c.name) for c in Client.query.order_by(Client.name).all()
+        ]
+        form.project_id.choices = [(0, "No project")] + [
+            (p.id, f"{p.name} ({p.client.name})")
+            for p in Project.query.join(Client).order_by(Project.name).all()
         ]
         pre_project = request.args.get("project_id", type=int)
         if request.method == "GET" and pre_project:
-            form.project_id.data = pre_project
+            project = db.session.get(Project, pre_project)
+            if project:
+                form.project_id.data = pre_project
+                form.client_id.data = project.client_id
         if form.validate_on_submit():
-            task = Task(
-                project_id=form.project_id.data,
-                title=form.title.data,
+            ticket = Ticket(
+                client_id=form.client_id.data,
+                project_id=form.project_id.data or None,
+                origin="local",          # raised here, not pushed in by an app
+                reporter_name=current_user.full_name,
+                title=(form.title.data or "").strip(),
                 description=form.description.data or "",
                 detailed_notes=form.detailed_notes.data or "",
+                category=form.category.data,
                 status=form.status.data,
                 priority=form.priority.data,
                 due_date=form.due_date.data,
             )
-            db.session.add(task)
+            db.session.add(ticket)
             db.session.commit()
-            flash(f"Task '{task.title}' created.", "success")
-            return redirect(url_for("pm.task_detail", id=task.id))
-        return render_template("pm/tasks/form.html", form=form, editing=False)
+            flash(f"Ticket '{ticket.display_title}' created.", "success")
+            return redirect(url_for("pm.ticket_detail", id=ticket.id))
+        return render_template("pm/tickets/form.html", form=form, editing=False)
 
-    @pm_bp.route("/tasks/<int:id>")
+    @pm_bp.route("/tickets/<int:id>")
     @login_required
-    def task_detail(id):
-        task = db.session.get(Task, id) or abort(404)
-        documents = task.documents.order_by(Document.uploaded_at.desc()).all()
-        expenses = task.expenses.order_by(Expense.date.desc()).all()
-        time_entries = task.time_entries.order_by(TimeEntry.date.desc()).all()
-        return render_template("pm/tasks/detail.html",
-            task=task, documents=documents, expenses=expenses, time_entries=time_entries)
+    def ticket_detail(id):
+        ticket = db.session.get(Ticket, id) or abort(404)
+        # Stamped by the view that RENDERS the note, so the badge clears by the
+        # thing being read rather than by a count being dismissed.
+        stamped = 0
+        for note in ticket.notes:
+            if note.read_at is None and not note.is_staff_reply:
+                note.read_at = datetime.now(timezone.utc)
+                stamped += 1
+        if stamped:
+            db.session.commit()
+        return render_template(
+            "pm/tickets/detail.html", ticket=ticket,
+            documents=ticket.documents.order_by(Document.uploaded_at.desc()).all(),
+            expenses=ticket.expenses.order_by(Expense.date.desc()).all(),
+            time_entries=ticket.time_entries.order_by(TimeEntry.date.desc()).all(),
+            status_labels=TICKET_STATUS_LABELS, statuses=TICKET_STATUSES,
+            categories=TICKET_CATEGORIES, category_labels=TICKET_CATEGORY_LABELS,
+            priorities=TICKET_PRIORITIES, priority_labels=TICKET_PRIORITY_LABELS,
+            billing_buckets=TICKET_BILLING_BUCKETS, billing_labels=TICKET_BILLING_LABELS,
+        )
 
-    @pm_bp.route("/tasks/<int:id>/edit", methods=["GET", "POST"])
+    @pm_bp.route("/tickets/<int:id>/edit", methods=["GET", "POST"])
     @login_required
-    def task_edit(id):
-        task = db.session.get(Task, id) or abort(404)
-        form = TaskForm(obj=task)
-        form.project_id.choices = [
-            (p.id, f"{p.name} ({p.client.name})") for p in Project.query.join(Client).order_by(Project.name).all()
+    def ticket_edit(id):
+        ticket = db.session.get(Ticket, id) or abort(404)
+        form = TicketForm(obj=ticket)
+        form.client_id.choices = [
+            (c.id, c.name) for c in Client.query.order_by(Client.name).all()
         ]
+        form.project_id.choices = [(0, "No project")] + [
+            (p.id, f"{p.name} ({p.client.name})")
+            for p in Project.query.join(Client).order_by(Project.name).all()
+        ]
+        if request.method == "GET" and not ticket.project_id:
+            form.project_id.data = 0
         if form.validate_on_submit():
-            form.populate_obj(task)
+            form.populate_obj(ticket)
+            ticket.project_id = form.project_id.data or None
             db.session.commit()
-            flash(f"Task '{task.title}' updated.", "success")
-            return redirect(url_for("pm.task_detail", id=task.id))
-        return render_template("pm/tasks/form.html", form=form, editing=True, task=task)
+            flash(f"Ticket '{ticket.display_title}' updated.", "success")
+            return redirect(url_for("pm.ticket_detail", id=ticket.id))
+        return render_template("pm/tickets/form.html", form=form, editing=True, ticket=ticket)
 
-    @pm_bp.route("/tasks/<int:id>/delete", methods=["POST"])
+    @pm_bp.route("/tickets/<int:id>/delete", methods=["POST"])
     @login_required
-    def task_delete(id):
-        task = db.session.get(Task, id) or abort(404)
-        project_id = task.project_id
-        parent_id = task.parent_task_id
-        title = task.title
-        db.session.delete(task)
+    def ticket_delete(id):
+        ticket = db.session.get(Ticket, id) or abort(404)
+        title = ticket.display_title
+        db.session.delete(ticket)          # notes cascade
         db.session.commit()
-        flash(f"Task '{title}' deleted.", "success")
-        if parent_id:
-            return redirect(url_for("pm.task_detail", id=parent_id))
-        return redirect(url_for("pm.project_detail", id=project_id))
+        flash(f"Ticket '{title}' deleted.", "success")
+        return redirect(url_for("pm.tickets_list"))
 
-    @pm_bp.route("/tasks/<int:id>/status", methods=["POST"])
+    @pm_bp.route("/tickets/<int:id>/triage", methods=["POST"])
     @login_required
-    def task_status_update(id):
-        task = db.session.get(Task, id) or abort(404)
-        new_status = request.form.get("status")
-        valid = [s[0] for s in TASK_STATUS_CHOICES]
-        if new_status in valid:
-            task.status = new_status
-            if new_status == "done":
-                _propagate_task_completion(task)
-            else:
-                _reopen_task_ancestors(task)
+    def ticket_triage(id):
+        """Status, category, priority and billing from one row of controls.
+
+        Each is applied only if it was actually submitted, so a form carrying
+        one of them cannot blank the other three.
+        """
+        ticket = db.session.get(Ticket, id) or abort(404)
+        if "status" in request.form and request.form["status"] in TICKET_STATUSES:
+            ticket.status = request.form["status"]
+        if "category" in request.form and request.form["category"] in TICKET_CATEGORIES:
+            ticket.category = request.form["category"]
+        if "priority" in request.form and request.form["priority"] in TICKET_PRIORITIES:
+            ticket.priority = request.form["priority"]
+        if "billing_bucket" in request.form:
+            bucket = request.form["billing_bucket"]
+            # Anything unrecognised clears it back to undecided rather than
+            # guessing, because a guess here is presented to the client as free.
+            ticket.billing_bucket = bucket if bucket in TICKET_BILLING_BUCKETS else ""
+        if "billed_minutes" in request.form:
+            ticket.billed_minutes = max(0, request.form.get("billed_minutes", type=int) or 0)
+        db.session.commit()
+        return redirect(request.referrer or url_for("pm.tickets_list"))
+
+    @pm_bp.route("/tickets/<int:id>/flag", methods=["POST"])
+    @login_required
+    def ticket_flag(id):
+        """Come back to this one. A flag alongside any status, including done."""
+        ticket = db.session.get(Ticket, id) or abort(404)
+        ticket.followup_flagged = not ticket.followup_flagged
+        ticket.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return redirect(request.referrer or url_for("pm.tickets_list"))
+
+    @pm_bp.route("/tickets/<int:id>/scope", methods=["POST"])
+    @login_required
+    def ticket_scope(id):
+        """Rule it outside what their app is for. Touches nothing else.
+
+        Deliberately does not set status, exactly like the follow-up flag and
+        for the same reason: status is what the reporter is shown, and this is
+        my own note about what I am not going to build. The ticket keeps
+        whatever status it had and nothing changes on their side.
+        """
+        ticket = db.session.get(Ticket, id) or abort(404)
+        ticket.out_of_scope = not ticket.out_of_scope
+        ticket.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        flash("Filed as out of scope. Nothing changed on their side."
+              if ticket.out_of_scope else "Back on the board.", "success")
+        return redirect(request.referrer or url_for("pm.tickets_list"))
+
+    @pm_bp.route("/tickets/<int:id>/reply", methods=["POST"])
+    @login_required
+    def ticket_reply(id):
+        """Answer from here, on the board, rather than in three separate apps.
+
+        The note is recorded in the shared thread FIRST and independently of
+        whether it can be delivered. Talent Booker shipped this as email only,
+        so the reporter had no way to see a reply in the app and nothing to
+        reply TO: the conversation existed solely in an inbox, and a reply to
+        somebody with no address on file vanished entirely.
+
+        `delivered_at` stays null, which is what marks it as still owed to the
+        client's app. Nothing drains that yet, so the reply lives here and is
+        visible as undelivered rather than being quietly dropped.
+        """
+        ticket = db.session.get(Ticket, id) or abort(404)
+        body = (request.form.get("body") or "").strip()
+        if not body:
+            flash("Write something first.", "error")
+            return redirect(request.referrer or url_for("pm.ticket_detail", id=id))
+        db.session.add(TicketNote(
+            ticket_id=ticket.id,
+            author_name=current_user.full_name,
+            body=body[:5000],
+            is_staff_reply=True,
+        ))
+        ticket.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        # Name every destination. Saying only "sent" is how Talent Booker's own
+        # thread came to look like a feature that did not exist.
+        if ticket.origin == "local" or not ticket.client.origin_base_url:
+            flash("Posted to the thread. Their app is not wired up to receive it yet.",
+                  "success")
+        else:
+            flash("Posted to the thread, and queued to go back to their app.", "success")
+        return redirect(url_for("pm.ticket_detail", id=ticket.id))
+
+    # ── Sending my replies back to the client's app ───────────────
+    #
+    # `TicketNote.delivered_at` IS the outbox. A staff reply with a null
+    # delivered_at is one they have not been told about, so there is no second
+    # table to keep in step with the first, and nothing can be marked sent
+    # without the thing itself being sent.
+
+    def deliver_pending_replies(limit=50):
+        """Push every reply that is still owed to a client's app.
+
+        Returns (sent, skipped, failed). Never raises: this runs on a timer and
+        on a CLI, and a thrown exception on either would stop the queue rather
+        than the one message.
+
+        A note whose client has no origin_base_url is SKIPPED, not failed and
+        not retried forever. There is nowhere to send it, which is a
+        configuration fact rather than an outage, and the thread already says
+        so in as many words on the ticket.
+        """
+        sent = skipped = failed = 0
+        pending = (TicketNote.query
+                   .filter(TicketNote.is_staff_reply.is_(True),
+                           TicketNote.delivered_at.is_(None))
+                   .order_by(TicketNote.created_at)
+                   .limit(limit).all())
+        for note in pending:
+            ticket = note.ticket
+            client = ticket.client if ticket else None
+            if (ticket is None or client is None or ticket.origin == "local"
+                    or not client.origin_base_url or not client.ingest_secret
+                    or not ticket.origin_ticket_id):
+                skipped += 1
+                continue
+            try:
+                hub.post(
+                    client.origin_base_url, "/api/hub/reply",
+                    {
+                        "ticket_id": ticket.origin_ticket_id,
+                        "note_id": note.id,          # MY id, their dedupe key
+                        "body": note.body or "",
+                        "author_name": note.author_name or "",
+                        "status": ticket.status,
+                    },
+                    secret=client.ingest_secret,
+                    origin_slug=client.origin_slug,
+                )
+            except hub.DeliveryError as exc:
+                # Left pending on purpose. The next pass tries again, and the
+                # ticket goes on saying it has not been sent, which is true.
+                failed += 1
+                app.logger.warning("hub: reply %s to %s failed: %s",
+                                   note.id, client.origin_slug, exc)
+                continue
+            # Stamped only after the far end took it. Stamping first and
+            # sending after is how a reply comes to read as delivered when
+            # nothing left the building.
+            note.delivered_at = datetime.now(timezone.utc)
             db.session.commit()
-            flash(f"Task status updated to '{dict(TASK_STATUS_CHOICES)[new_status]}'.", "success")
-        redirect_to = request.form.get("redirect")
-        if redirect_to:
-            return redirect(redirect_to)
-        if task.parent_task_id:
-            return redirect(url_for("pm.task_detail", id=task.parent_task_id))
-        return redirect(url_for("pm.task_detail", id=task.id))
+            sent += 1
+        return sent, skipped, failed
+
+    app.deliver_pending_replies = deliver_pending_replies
+
+    @app.cli.command("push-replies")
+    def push_replies_cmd():
+        """Drain the reply queue by hand."""
+        sent, skipped, failed = deliver_pending_replies()
+        print(f"sent {sent}, skipped {skipped}, failed {failed}")
+
+    def _start_reply_sender():
+        """Drain the queue on a timer, in the background.
+
+        Guarded on a flag so it starts once per process. Under gunicorn each
+        worker gets its own, which is fine: a note is claimed by its own commit
+        and the far end deduplicates on note_id anyway, so the worst two
+        workers can do is send the same reply twice to an endpoint that ignores
+        the second.
+        """
+        import threading
+
+        interval = int(os.environ.get("HUB_PUSH_INTERVAL_SECONDS", "60"))
+        if interval <= 0 or os.environ.get("HUB_PUSH_DISABLED") == "1":
+            return
+
+        def loop():
+            while True:
+                time.sleep(interval)
+                try:
+                    with app.app_context():
+                        deliver_pending_replies()
+                except Exception as exc:            # noqa: BLE001
+                    # A dead thread is a queue that silently stops draining, so
+                    # nothing is allowed out of this loop.
+                    app.logger.warning("hub: reply sender pass failed: %s", exc)
+
+        threading.Thread(target=loop, daemon=True, name="hub-reply-sender").start()
+
+    _start_reply_sender()
+
 
     # ── Documents ────────────────────────────────────────────
 
-    @pm_bp.route("/tasks/<int:id>/documents/upload", methods=["POST"])
+    @pm_bp.route("/tickets/<int:id>/documents/upload", methods=["POST"])
     @login_required
-    def task_upload_document(id):
-        task = db.session.get(Task, id) or abort(404)
+    def ticket_upload_document(id):
+        ticket = db.session.get(Ticket, id) or abort(404)
         files = request.files.getlist("documents")
         count = 0
         for f in files:
             stored_name, original_name, size = save_upload(f, "documents")
             if stored_name:
                 doc = Document(
-                    task_id=task.id,
+                    ticket_id=ticket.id,
                     filename=stored_name,
                     original_name=original_name,
                     file_size=size,
@@ -1007,7 +1364,7 @@ def create_app():
             flash(f"{count} document(s) uploaded.", "success")
         else:
             flash("No valid files to upload.", "warning")
-        return redirect(url_for("pm.task_detail", id=task.id))
+        return redirect(url_for("pm.ticket_detail", id=ticket.id))
 
     @pm_bp.route("/documents/<int:id>/download")
     @login_required
@@ -1067,15 +1424,15 @@ def create_app():
     @login_required
     def document_delete(id):
         doc = db.session.get(Document, id) or abort(404)
-        task_id = doc.task_id
+        ticket_id = doc.ticket_id
         project_id = doc.project_id
         client_id = doc.client_id
         delete_upload(doc.filename, "documents")
         db.session.delete(doc)
         db.session.commit()
         flash("Document deleted.", "success")
-        if task_id:
-            return redirect(url_for("pm.task_detail", id=task_id))
+        if ticket_id:
+            return redirect(url_for("pm.ticket_detail", id=ticket_id))
         elif project_id:
             return redirect(url_for("pm.project_detail", id=project_id))
         elif client_id:
@@ -1786,17 +2143,15 @@ def create_app():
         form = TimeEntryForm()
         projects = Project.query.join(Client).order_by(Project.name).all()
         form.project_id.choices = [(p.id, f"{p.name} ({p.client.name})") for p in projects]
-        form.task_id.choices = [(0, "— No specific task —")] + [
-            (t.id, t.title) for t in Task.query.join(Project).order_by(Task.title).all()
-        ]
+        form.ticket_id.choices = _ticket_choices()
 
         pre_project = request.args.get("project_id", type=int)
-        pre_task = request.args.get("task_id", type=int)
+        pre_ticket = request.args.get("ticket_id", type=int)
         if request.method == "GET":
             if pre_project:
                 form.project_id.data = pre_project
-            if pre_task:
-                form.task_id.data = pre_task
+            if pre_ticket:
+                form.ticket_id.data = pre_ticket
             if not form.date.data:
                 form.date.data = date.today()
 
@@ -1804,7 +2159,7 @@ def create_app():
             project = db.session.get(Project, form.project_id.data)
             entry = TimeEntry(
                 project_id=form.project_id.data,
-                task_id=form.task_id.data if form.task_id.data != 0 else None,
+                ticket_id=form.ticket_id.data if form.ticket_id.data != 0 else None,
                 client_id=project.client_id if project else None,
                 date=form.date.data,
                 hours=form.hours.data,
@@ -1831,15 +2186,13 @@ def create_app():
         form = TimeEntryForm(obj=entry)
         projects = Project.query.join(Client).order_by(Project.name).all()
         form.project_id.choices = [(p.id, f"{p.name} ({p.client.name})") for p in projects]
-        form.task_id.choices = [(0, "— No specific task —")] + [
-            (t.id, t.title) for t in Task.query.join(Project).order_by(Task.title).all()
-        ]
-        if not entry.task_id:
-            form.task_id.data = 0
+        form.ticket_id.choices = _ticket_choices()
+        if not entry.ticket_id:
+            form.ticket_id.data = 0
         if form.validate_on_submit():
             project = db.session.get(Project, form.project_id.data)
             entry.project_id = form.project_id.data
-            entry.task_id = form.task_id.data if form.task_id.data != 0 else None
+            entry.ticket_id = form.ticket_id.data if form.ticket_id.data != 0 else None
             entry.client_id = project.client_id if project else None
             entry.date = form.date.data
             entry.hours = form.hours.data
@@ -2031,13 +2384,14 @@ def create_app():
                   f"= {format_currency(entry.cost)}", "success")
         return redirect(url_for("pm.time_list"))
 
-    # ── API: Tasks for Project (for dynamic dropdowns) ───────
+    # ── API: Tickets for Project (for dynamic dropdowns) ───────
 
-    @pm_bp.route("/api/projects/<int:project_id>/tasks")
+    @pm_bp.route("/api/projects/<int:project_id>/tickets")
     @login_required
-    def api_project_tasks(project_id):
-        tasks = Task.query.filter_by(project_id=project_id, parent_task_id=None).order_by(Task.title).all()
-        return jsonify([{"id": t.id, "title": t.title} for t in tasks])
+    def api_project_tickets(project_id):
+        rows = (Ticket.query.filter_by(project_id=project_id)
+                .order_by(Ticket.created_at.desc()).all())
+        return jsonify([{"id": t.id, "title": t.display_title} for t in rows])
 
     # ── Expenses ─────────────────────────────────────────────
 
@@ -2051,7 +2405,7 @@ def create_app():
 
         # Only real (material) expenses — time-entry-linked "billable time" rows are
         # pipeline revenue, not expenses, and are shown on the Time Tracking side.
-        query = Expense.query.filter(Expense.time_entry_id.is_(None)).outerjoin(Client, Expense.client_id == Client.id).outerjoin(Project, Expense.project_id == Project.id).outerjoin(Task, Expense.task_id == Task.id)
+        query = Expense.query.filter(Expense.time_entry_id.is_(None)).outerjoin(Client, Expense.client_id == Client.id).outerjoin(Project, Expense.project_id == Project.id).outerjoin(Ticket, Expense.ticket_id == Ticket.id)
         if category:
             query = query.filter(Expense.category == category)
         if project_id:
@@ -2078,19 +2432,22 @@ def create_app():
         form = ExpenseForm()
         clients = Client.query.order_by(Client.name).all()
         projects = Project.query.order_by(Project.name).all()
-        tasks = Task.query.join(Project).order_by(Project.name, Task.title).all()
         form.client_id.choices = [(0, "— No client —")] + [(c.id, c.name) for c in clients]
         form.project_id.choices = [(0, "— No project —")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
-        form.task_id.choices = [(0, "— No task —")] + [(t.id, f"{t.title} ({t.project.name})") for t in tasks]
+        form.ticket_id.choices = _ticket_choices("No ticket")
 
-        pre_task = request.args.get("task_id", type=int)
+        pre_ticket = request.args.get("ticket_id", type=int)
         if request.method == "GET":
-            if pre_task:
-                form.task_id.data = pre_task
-                task_obj = db.session.get(Task, pre_task)
-                if task_obj:
-                    form.project_id.data = task_obj.project_id
-                    form.client_id.data = task_obj.project.client_id
+            if pre_ticket:
+                form.ticket_id.data = pre_ticket
+                ticket_obj = db.session.get(Ticket, pre_ticket)
+                if ticket_obj:
+                    form.project_id.data = ticket_obj.project_id
+                    # Off the ticket, not through the project. A ticket carries
+                    # its own client now and its project is nullable, so the old
+                    # hop through .project raised AttributeError the moment one
+                    # arrived without being filed under a project.
+                    form.client_id.data = ticket_obj.client_id
             if not form.date.data:
                 form.date.data = date.today()
 
@@ -2103,7 +2460,7 @@ def create_app():
             expense = Expense(
                 client_id=form.client_id.data or None,
                 project_id=form.project_id.data or None,
-                task_id=form.task_id.data or None,
+                ticket_id=form.ticket_id.data or None,
                 amount=form.amount.data,
                 description=form.description.data or "",
                 category=form.category.data,
@@ -2131,15 +2488,14 @@ def create_app():
         form = ExpenseForm(obj=expense)
         clients = Client.query.order_by(Client.name).all()
         projects = Project.query.order_by(Project.name).all()
-        tasks = Task.query.join(Project).order_by(Project.name, Task.title).all()
         form.client_id.choices = [(0, "— No client —")] + [(c.id, c.name) for c in clients]
         form.project_id.choices = [(0, "— No project —")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
-        form.task_id.choices = [(0, "— No task —")] + [(t.id, f"{t.title} ({t.project.name})") for t in tasks]
+        form.ticket_id.choices = _ticket_choices("No ticket")
 
         if request.method == "GET":
             form.client_id.data = expense.client_id or 0
             form.project_id.data = expense.project_id or 0
-            form.task_id.data = expense.task_id or 0
+            form.ticket_id.data = expense.ticket_id or 0
             form.is_recurring.data = expense.is_recurring
             form.frequency.data = expense.frequency or ""
             form.recurring_end_date.data = expense.recurring_end_date
@@ -2147,7 +2503,7 @@ def create_app():
         if form.validate_on_submit():
             expense.client_id = form.client_id.data or None
             expense.project_id = form.project_id.data or None
-            expense.task_id = form.task_id.data or None
+            expense.ticket_id = form.ticket_id.data or None
             expense.amount = form.amount.data
             expense.description = form.description.data or ""
             expense.category = form.category.data

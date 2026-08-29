@@ -1,8 +1,8 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
-{% block page_title %}{{ 'Edit Task' if editing else 'New Task' }}{% endblock %}
-{% block page_subtitle %}{{ task.title if editing else 'Create a new task' }}{% endblock %}
+{% block page_title %}{{ 'Edit ticket' if editing else 'New ticket' }}{% endblock %}
+{% block page_subtitle %}{{ ticket.display_title if editing else 'Raise one against a client' }}{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl">
@@ -12,8 +12,14 @@
 
             <div class="space-y-5">
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Task Title *</label>
-                    {{ form.title(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="What needs to be done?") }}
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Client *</label>
+                    {{ select_dropdown(form.client_id.name, form.client_id.choices, form.client_id.data, "Select client...", full_width=true) }}
+                    {% for error in form.client_id.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Title</label>
+                    {{ form.title(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="Optional. Left blank, its first sentence names it.") }}
                     {% for error in form.title.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
                 </div>
 
@@ -25,12 +31,16 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Kind</label>
+                        {{ select_dropdown(form.category.name, form.category.choices, form.category.data or 'bug', "Kind...", full_width=true) }}
+                    </div>
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Status</label>
-                        {{ select_dropdown(form.status.name, form.status.choices, form.status.data or 'todo', "Status...", full_width=true) }}
+                        {{ select_dropdown(form.status.name, form.status.choices, form.status.data or 'new', "Status...", full_width=true) }}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Priority</label>
-                        {{ select_dropdown(form.priority.name, form.priority.choices, form.priority.data or 'medium', "Priority...", full_width=true) }}
+                        {{ select_dropdown(form.priority.name, form.priority.choices, form.priority.data or 'normal', "Priority...", full_width=true) }}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Due Date</label>
@@ -40,21 +50,21 @@
 
                 <div>
                     <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Description</label>
-                    {{ form.description(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="Brief description of the task...") }}
+                    {{ form.description(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="What is actually wrong, in their words") }}
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Detailed Notes</label>
-                    {{ form.detailed_notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="5", placeholder="Detailed requirements, specs, acceptance criteria...") }}
+                    {{ form.detailed_notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="5", placeholder="My own notes. Never shown to them.") }}
                 </div>
             </div>
 
             <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
                 <button type="submit"
                         class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
-                    {{ 'Update Task' if editing else 'Create Task' }}
+                    {{ 'Update ticket' if editing else 'Create ticket' }}
                 </button>
-                <a href="{{ url_for('pm.task_detail', id=task.id) if editing else url_for('pm.tasks_list') }}"
+                <a href="{{ url_for('pm.ticket_detail', id=ticket.id) if editing else url_for('pm.tickets_list') }}"
                    class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
                     Cancel
                 </a>

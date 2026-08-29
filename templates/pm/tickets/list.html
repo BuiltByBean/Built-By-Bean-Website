@@ -1,0 +1,152 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{% block page_title %}Tickets{% endblock %}
+{% block page_subtitle %}Every client, worst first{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('pm.ticket_create') }}"
+   class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    New ticket
+</a>
+{% endblock %}
+
+{#
+  One card, used by the board and by the out-of-scope section below it, so the
+  two cannot drift into showing different things about the same ticket.
+#}
+{% macro ticket_card(t) %}
+<div class="rounded-2xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800/40 p-4 mb-3">
+  <div class="flex flex-wrap items-center gap-2 mb-2">
+    {# Category first, because bugs sort first and the eye should agree with the order. #}
+    <span class="px-2 py-0.5 rounded-lg text-xs font-semibold
+      {% if t.category == 'bug' %}bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400
+      {% else %}bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400{% endif %}">
+      {{ category_labels[t.category] }}</span>
+
+    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300">
+      {{ status_labels[t.status] }}</span>
+
+    {% if t.priority != 'normal' %}
+    <span class="px-2 py-0.5 rounded-lg text-xs font-medium
+      {% if t.priority == 'urgent' %}bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400
+      {% else %}bg-surface-100 text-surface-500 dark:bg-surface-700 dark:text-surface-400{% endif %}">
+      {{ priority_labels[t.priority] }}</span>
+    {% endif %}
+
+    {# Both of these sit ALONGSIDE the status, never instead of it. That is the
+       whole reason they are flags and not statuses. #}
+    {% if t.followup_flagged %}
+    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400">Circle back</span>
+    {% endif %}
+    {% if t.out_of_scope %}
+    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-200 text-surface-600 dark:bg-surface-700 dark:text-surface-400">Out of scope</span>
+    {% endif %}
+
+    <span class="ml-auto text-xs text-surface-400">{{ t.created_at | format_date }}</span>
+  </div>
+
+  <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
+     class="block text-sm font-medium text-surface-900 dark:text-white hover:text-brand-500">
+    {{ t.display_title }}</a>
+
+  <p class="mt-1 text-xs text-surface-500 dark:text-surface-400">
+    {{ t.client.name }}{% if t.project %} · {{ t.project.name }}{% endif %}
+    {% if t.origin != 'local' %} · via {{ t.origin }}{% endif %}
+    {% if t.reporter_name %} · {{ t.reporter_name }}{% endif %}
+    {% if t.unread_for_dev() %}
+    <span class="ml-1 px-1.5 py-0.5 rounded bg-brand-500 text-white font-semibold">{{ t.unread_for_dev() }} new</span>
+    {% endif %}
+  </p>
+
+  {# Triage: status, priority, category and billing are four independent facts,
+     so they are four controls and one Save. #}
+  <form method="POST" action="{{ url_for('pm.ticket_triage', id=t.id) }}"
+        class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-2">
+    <select name="status" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if s == t.status }}>{{ status_labels[s] }}</option>{% endfor %}
+    </select>
+    <select name="priority" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
+      {% for p in ['urgent','soon','normal','backlog'] %}<option value="{{ p }}" {{ 'selected' if p == t.priority }}>{{ priority_labels[p] }}</option>{% endfor %}
+    </select>
+    <select name="category" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
+      {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == t.category }}>{{ category_labels[c] }}</option>{% endfor %}
+    </select>
+    <select name="billing_bucket" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
+      {# Blank is first and is NOT "Free": undecided work must not read as free. #}
+      <option value="" {{ 'selected' if not t.billing_bucket }}>Not classified</option>
+      {% for b in billing_buckets %}<option value="{{ b }}" {{ 'selected' if b == t.billing_bucket }}>{{ billing_labels[b] }}</option>{% endfor %}
+    </select>
+    <div class="flex gap-2">
+      <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
+             class="input-ring w-full min-w-0 px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
+      <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Save</button>
+    </div>
+  </form>
+
+  <div class="mt-2 flex flex-wrap gap-2">
+    <form method="POST" action="{{ url_for('pm.ticket_flag', id=t.id) }}">
+      <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700">
+        {{ "Stop circling back" if t.followup_flagged else "Circle back on this" }}</button>
+    </form>
+    <form method="POST" action="{{ url_for('pm.ticket_scope', id=t.id) }}">
+      <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700">
+        {{ "Bring back in scope" if t.out_of_scope else "Out of scope" }}</button>
+    </form>
+    <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
+       class="px-3 py-2 text-xs font-medium rounded-lg border border-brand-200 dark:border-brand-500/40 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10">
+      Open and reply</a>
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="glass-card p-6">
+  {# Each tab counts EXACTLY what clicking it shows. #}
+  <div class="flex flex-wrap gap-2 mb-5">
+    {% for key, label in [("open", "Open"), ("follow-up", "Circle back"), ("resolved", "Resolved"), ("out-of-scope", "Out of scope"), ("all", "All")] %}
+    {% set n = counts.get('total' if key == 'all' else key) %}
+    <a href="{{ url_for('pm.tickets_list', status=key, category=category_filter, client_id=client_filter) }}"
+       class="px-4 py-2 rounded-xl text-sm font-medium transition-colors
+       {% if key == status_filter %}bg-brand-500 text-white shadow-lg shadow-brand-500/25
+       {% else %}bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700{% endif %}">
+      {{ label }}{% if n %} <span class="opacity-70">{{ n }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+
+  <form method="GET" class="flex flex-wrap gap-3 mb-6">
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    {% set ns = namespace(cat=[["all", "All kinds"]], cli=[["", "All clients"]]) %}
+    {% for c in categories %}{% set ns.cat = ns.cat + [[c, category_labels[c]]] %}{% endfor %}
+    {% for c in clients %}{% set ns.cli = ns.cli + [[c.id, c.name]] %}{% endfor %}
+    {{ select_dropdown("category", ns.cat, category_filter) }}
+    {{ select_dropdown("client_id", ns.cli, client_filter) }}
+    <button type="submit" class="px-4 py-2.5 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">Filter</button>
+    {% if category_filter != 'all' or client_filter %}
+    <a href="{{ url_for('pm.tickets_list', status=status_filter) }}" class="px-4 py-2.5 text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 rounded-xl transition-colors">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if tickets %}
+    {% for t in tickets %}{{ ticket_card(t) }}{% endfor %}
+  {% elif not out_of_scope %}
+  <div class="text-center py-12">
+    <p class="text-surface-500 dark:text-surface-400 mb-4">Nothing here.</p>
+    <a href="{{ url_for('pm.ticket_create') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Raise one
+    </a>
+  </div>
+  {% endif %}
+
+  {# Below the board rather than sorted to the bottom of it: these are not work
+     in the queue, and anything that filters the board must not mix them in. #}
+  {% if out_of_scope %}
+  <h2 class="mt-8 mb-1 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Outside what these apps are for</h2>
+  <p class="mb-3 text-xs text-surface-400">Fair asks that sit outside the app they came from. Kept as a record, not turned down, and nothing about this shows on their side.</p>
+  {% for t in out_of_scope %}{{ ticket_card(t) }}{% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

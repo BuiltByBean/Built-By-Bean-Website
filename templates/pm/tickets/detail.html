@@ -1,20 +1,22 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/status_badge.html" import badge %}
 
-{% block page_title %}{{ task.title }}{% endblock %}
-{% block page_subtitle %}{{ task.project.name }} &middot; {{ task.project.client.name }}{% endblock %}
+{% block page_title %}{{ ticket.display_title }}{% endblock %}
+{# The project is optional now, so the subtitle leads with the client, which
+   is the one thing every ticket has. #}
+{% block page_subtitle %}{{ ticket.client.name }}{% if ticket.project %} &middot; {{ ticket.project.name }}{% endif %}{% if ticket.origin != 'local' %} &middot; via {{ ticket.origin }}{% endif %}{% endblock %}
 
 {% block header_actions %}
 <div class="flex items-center gap-2">
-    <a href="{{ url_for('pm.time_create', project_id=task.project_id, task_id=task.id) }}"
+    <a href="{{ url_for('pm.time_create', project_id=ticket.project_id, ticket_id=ticket.id) }}"
        class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
         Log Time
     </a>
-    <a href="{{ url_for('pm.expense_create', task_id=task.id) }}"
+    <a href="{{ url_for('pm.expense_create', ticket_id=ticket.id) }}"
        class="px-3 py-2 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Add Expense
     </a>
-    <a href="{{ url_for('pm.task_edit', id=task.id) }}"
+    <a href="{{ url_for('pm.ticket_edit', id=ticket.id) }}"
        class="px-3 py-2 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-600 dark:text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Edit
     </a>
@@ -22,24 +24,14 @@
 {% endblock %}
 
 {% block content %}
-{% if task.parent_task %}
-<div class="mb-4">
-    <a href="{{ url_for('pm.task_detail', id=task.parent_task.id) }}"
-       class="inline-flex items-center gap-1 text-xs font-medium text-surface-500 dark:text-surface-400 hover:text-brand-500 dark:hover:text-brand-400 transition-colors">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        {{ task.parent_task.title }}
-    </a>
-</div>
-{% endif %}
-
-<!-- Task Info -->
+<!-- Ticket Info -->
 <div class="glass-card p-6 mb-6">
     <div class="flex flex-wrap items-center gap-3 mb-4">
-        {{ badge(task.status) }}
-        {{ badge(task.priority) }}
-        {% if task.due_date %}
-        <span class="text-sm {% if task.due_date < now.date() and task.status != 'done' %}text-red-500 font-medium{% else %}text-surface-500 dark:text-surface-400{% endif %}">
-            Due {{ task.due_date | format_date }}
+        {{ badge(ticket.status) }}
+        {{ badge(ticket.priority) }}
+        {% if ticket.due_date %}
+        <span class="text-sm {% if ticket.due_date < now.date() and ticket.status not in ('resolved', 'dismissed') %}text-red-500 font-medium{% else %}text-surface-500 dark:text-surface-400{% endif %}">
+            Due {{ ticket.due_date | format_date }}
         </span>
         {% endif %}
     </div>
@@ -47,105 +39,79 @@
     <!-- Quick Status Change -->
     <div class="flex items-center gap-2 mb-4">
         <span class="text-xs font-medium text-surface-500 dark:text-surface-400">Status:</span>
-        {% for val, label in task_status_choices %}
-        <form method="POST" action="{{ url_for('pm.task_status_update', id=task.id) }}" class="inline">
+        {% for val, label in ticket_status_choices %}
+        <form method="POST" action="{{ url_for('pm.ticket_triage', id=ticket.id) }}" class="inline">
             <input type="hidden" name="status" value="{{ val }}">
             <button type="submit"
                     class="px-3 py-1 text-xs font-medium rounded-lg transition-colors
-                           {% if task.status == val %}bg-brand-500 text-white shadow-sm{% else %}bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700{% endif %}">
+                           {% if ticket.status == val %}bg-brand-500 text-white shadow-sm{% else %}bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700{% endif %}">
                 {{ label }}
             </button>
         </form>
         {% endfor %}
     </div>
 
-    {% if task.description %}
+    {% if ticket.description %}
     <div class="mb-4">
-        <h3 class="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">Description</h3>
-        <p class="text-sm text-surface-700 dark:text-surface-200 whitespace-pre-line">{{ task.description }}</p>
+        <h3 class="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">What they said</h3>
+        <p class="text-sm text-surface-700 dark:text-surface-200 whitespace-pre-line">{{ ticket.description }}</p>
+        {% if ticket.source_label or ticket.source_path %}
+        {# Captured from the screen they were on, not typed. "The thing on the
+           money page" is a report nobody can act on. #}
+        <p class="mt-2 text-xs text-surface-400">
+            Reported from {{ ticket.source_label or ticket.source_path }}
+            {% if ticket.origin_url %}
+            &middot; <a href="{{ ticket.origin_url }}" target="_blank" rel="noopener"
+                        class="text-brand-500 hover:text-brand-600">open in their app</a>
+            {% endif %}
+        </p>
+        {% endif %}
     </div>
     {% endif %}
 
-    {% if task.detailed_notes %}
+    {# ---- the conversation -------------------------------------------------
+       Both directions in one thread. A reply recorded only as an outbound email
+       leaves the person who raised it nothing to read and nothing to reply to,
+       which is not a conversation. Talent Booker shipped it that way and had to
+       come back for it. #}
+    <div class="mb-4 pt-4 border-t border-surface-200 dark:border-surface-700">
+        <h3 class="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">Conversation</h3>
+
+        {% for note in ticket.notes %}
+        <div class="mb-3 flex {% if note.is_staff_reply %}justify-end{% endif %}">
+            <div class="max-w-[85%] rounded-2xl px-4 py-2.5
+                {% if note.is_staff_reply %}bg-brand-500 text-white
+                {% else %}bg-surface-100 dark:bg-surface-800 text-surface-800 dark:text-surface-100{% endif %}">
+                <p class="text-sm whitespace-pre-line">{{ note.body }}</p>
+                <p class="mt-1 text-xs {% if note.is_staff_reply %}text-white/70{% else %}text-surface-400{% endif %}">
+                    {{ note.author_name or "Them" }} &middot; {{ note.created_at | format_date }}
+                    {% if note.is_staff_reply %}
+                        {# Says out loud whether it actually reached them. A reply
+                           that only ever sat in this database, presented as sent,
+                           is the failure this column exists to make visible. #}
+                        &middot; {{ "delivered" if note.delivered_at else "not sent to their app yet" }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400 mb-3">Nothing said yet.</p>
+        {% endfor %}
+
+        <form method="POST" action="{{ url_for('pm.ticket_reply', id=ticket.id) }}" class="flex gap-2 mt-3">
+            <input type="text" name="body" required placeholder="Reply to {{ ticket.reporter_name or 'them' }}"
+                   class="input-ring flex-1 min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400 rounded-xl">
+            <button type="submit" class="shrink-0 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl">Send</button>
+        </form>
+    </div>
+
+    {% if ticket.detailed_notes %}
     <div>
         <h3 class="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">Detailed Notes</h3>
         <div class="p-4 rounded-xl bg-surface-50 dark:bg-surface-800/50">
-            <p class="text-sm text-surface-700 dark:text-surface-200 whitespace-pre-line">{{ task.detailed_notes }}</p>
+            <p class="text-sm text-surface-700 dark:text-surface-200 whitespace-pre-line">{{ ticket.detailed_notes }}</p>
         </div>
     </div>
-    {% endif %}
-</div>
-
-<!-- Subtasks -->
-<div class="glass-card p-6 mb-6">
-    <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-semibold text-surface-900 dark:text-white uppercase tracking-wider">Subtasks</h3>
-        {% set done_count, total_count = task.subtask_progress %}
-        {% if total_count > 0 %}
-        <span class="text-xs font-medium text-surface-500 dark:text-surface-400">{{ done_count }} / {{ total_count }} complete</span>
-        {% endif %}
-    </div>
-
-    {% if total_count > 0 %}
-    <div class="w-full h-1.5 rounded-full bg-surface-200 dark:bg-surface-700 mb-4 overflow-hidden">
-        <div class="h-full bg-gradient-to-r from-brand-500 to-brand-600 rounded-full transition-all"
-             style="width: {{ (done_count / total_count * 100) | round(1) }}%"></div>
-    </div>
-    {% endif %}
-
-    <!-- Inline create form -->
-    <form method="POST" action="{{ url_for('pm.subtask_create', id=task.id) }}" class="mb-4">
-        <div class="flex flex-col sm:flex-row items-stretch gap-2">
-            <input type="text" name="title" placeholder="Add a subtask…" required
-                   class="flex-1 px-3 py-2 rounded-xl bg-surface-50 dark:bg-surface-800/50 border border-surface-200 dark:border-surface-700 text-sm text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-500">
-            <select name="priority"
-                    class="px-3 py-2 rounded-xl bg-surface-50 dark:bg-surface-800/50 border border-surface-200 dark:border-surface-700 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
-                {% for val, label in priority_choices %}
-                <option value="{{ val }}" {% if val == task.priority %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit"
-                    class="px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all">
-                Add
-            </button>
-        </div>
-    </form>
-
-    {% set subtask_list = task.subtasks.all() %}
-    {% if subtask_list %}
-    <div class="space-y-2">
-        {% for sub in subtask_list %}
-        <div class="flex items-center gap-3 p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50">
-            <form method="POST" action="{{ url_for('pm.task_status_update', id=sub.id) }}" class="inline flex-shrink-0">
-                <input type="hidden" name="status" value="{% if sub.status == 'done' %}todo{% else %}done{% endif %}">
-                <input type="hidden" name="redirect" value="{{ url_for('pm.task_detail', id=task.id) }}">
-                <button type="submit"
-                        class="w-5 h-5 rounded border-2 {% if sub.status == 'done' %}bg-brand-500 border-brand-500{% else %}border-surface-300 dark:border-surface-600 hover:border-brand-400{% endif %} flex items-center justify-center transition-colors"
-                        title="Toggle done">
-                    {% if sub.status == 'done' %}
-                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                    {% endif %}
-                </button>
-            </form>
-            <a href="{{ url_for('pm.task_detail', id=sub.id) }}" class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-medium text-surface-900 dark:text-white truncate {% if sub.status == 'done' %}line-through opacity-60{% endif %}">{{ sub.title }}</span>
-                    {{ badge(sub.status) }}
-                    {{ badge(sub.priority) }}
-                    {% if sub.subtask_count > 0 %}
-                    <span class="text-xs text-surface-500 dark:text-surface-400">· {{ sub.completed_subtask_count }}/{{ sub.subtask_count }} subtasks</span>
-                    {% endif %}
-                    {% if sub.due_date %}
-                    <span class="text-xs {% if sub.due_date < now.date() and sub.status != 'done' %}text-red-500 font-medium{% else %}text-surface-500 dark:text-surface-400{% endif %}">Due {{ sub.due_date | format_date }}</span>
-                    {% endif %}
-                </div>
-            </a>
-            <svg class="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="text-sm text-surface-400 dark:text-surface-500 text-center py-2">No subtasks yet</p>
     {% endif %}
 </div>
 
@@ -157,11 +123,11 @@
     </div>
     <div class="glass-card p-4">
         <p class="text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Hours Logged</p>
-        <p class="text-lg font-bold text-surface-900 dark:text-white">{{ task.total_hours | format_hours }}</p>
+        <p class="text-lg font-bold text-surface-900 dark:text-white">{{ ticket.total_hours | format_hours }}</p>
     </div>
     <div class="glass-card p-4">
         <p class="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Expenses</p>
-        <p class="text-lg font-bold text-red-700 dark:text-red-300">{{ task.total_expenses | format_currency }}</p>
+        <p class="text-lg font-bold text-red-700 dark:text-red-300">{{ ticket.total_expenses | format_currency }}</p>
     </div>
 </div>
 
@@ -170,7 +136,7 @@
     <h3 class="text-sm font-semibold text-surface-900 dark:text-white mb-4 uppercase tracking-wider">Documents</h3>
 
     <!-- Upload Form -->
-    <form method="POST" action="{{ url_for('pm.task_upload_document', id=task.id) }}" enctype="multipart/form-data" class="mb-4">
+    <form method="POST" action="{{ url_for('pm.ticket_upload_document', id=ticket.id) }}" enctype="multipart/form-data" class="mb-4">
         <div class="flex items-center gap-3">
             <label class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600 hover:border-brand-400 dark:hover:border-brand-500 cursor-pointer transition-colors">
                 <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,8 +162,8 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-                <a href="{{ url_for('pm.document_download', id=doc.id) }}" class="px-2 py-1 text-xs text-brand-500 hover:text-brand-600 font-medium">Download</a>
-                <form method="POST" action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline" x-data="{ confirm: false }">
+                <a href="{{ url_for('document_download', id=doc.id) }}" class="px-2 py-1 text-xs text-brand-500 hover:text-brand-600 font-medium">Download</a>
+                <form method="POST" action="{{ url_for('document_delete', id=doc.id) }}" class="inline" x-data="{ confirm: false }">
                     <button type="button" @click="confirm = true" x-show="!confirm" class="px-2 py-1 text-xs text-red-500 hover:text-red-600 font-medium">Delete</button>
                     <div x-show="confirm" class="flex items-center gap-1">
                         <button type="submit" class="px-2 py-1 text-xs bg-red-500 text-white rounded-lg">Yes</button>
@@ -217,7 +183,7 @@
 <div class="glass-card p-6 mb-6">
     <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold text-surface-900 dark:text-white uppercase tracking-wider">Time Entries</h3>
-        <a href="{{ url_for('pm.time_create', project_id=task.project_id, task_id=task.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">+ Log Time</a>
+        <a href="{{ url_for('pm.time_create', project_id=ticket.project_id, ticket_id=ticket.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">+ Log Time</a>
     </div>
     {% if time_entries %}
     <div class="overflow-x-auto">
@@ -253,7 +219,7 @@
 <div class="glass-card p-6 mb-6">
     <div class="flex items-center justify-between mb-4">
         <h3 class="text-sm font-semibold text-surface-900 dark:text-white uppercase tracking-wider">Expenses</h3>
-        <a href="{{ url_for('pm.expense_create', task_id=task.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">+ Add Expense</a>
+        <a href="{{ url_for('pm.expense_create', ticket_id=ticket.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">+ Add Expense</a>
     </div>
     {% if expenses %}
     <div class="overflow-x-auto">
@@ -278,7 +244,7 @@
                     <td class="py-2 px-3 text-sm text-right font-medium text-red-600 dark:text-red-400">{{ expense.amount | format_currency }}</td>
                     <td class="py-2 px-3 text-right">
                         {% if expense.receipt_filename %}
-                        <a href="{{ url_for('pm.expense_receipt', id=expense.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">View</a>
+                        <a href="{{ url_for('expense_receipt', id=expense.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">View</a>
                         {% else %}
                         <span class="text-xs text-surface-400">—</span>
                         {% endif %}
@@ -295,9 +261,9 @@
 
 <!-- Delete -->
 <div x-data="{ confirmDelete: false }">
-    <button @click="confirmDelete = true" x-show="!confirmDelete" class="text-xs text-red-500 hover:text-red-600 font-medium">Delete Task</button>
-    <form x-show="confirmDelete" method="POST" action="{{ url_for('pm.task_delete', id=task.id) }}" class="inline-flex items-center gap-2">
-        <span class="text-xs text-red-500">Delete this task and all its data?</span>
+    <button @click="confirmDelete = true" x-show="!confirmDelete" class="text-xs text-red-500 hover:text-red-600 font-medium">Delete Ticket</button>
+    <form x-show="confirmDelete" method="POST" action="{{ url_for('pm.ticket_delete', id=ticket.id) }}" class="inline-flex items-center gap-2">
+        <span class="text-xs text-red-500">Delete this ticket, its thread and all its data?</span>
         <button type="submit" class="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
         <button type="button" @click="confirmDelete = false" class="px-3 py-1 text-xs text-surface-500 hover:text-surface-700 dark:hover:text-surface-300">Cancel</button>
     </form>
