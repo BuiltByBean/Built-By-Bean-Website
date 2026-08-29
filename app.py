@@ -910,6 +910,14 @@ def create_app():
             ticket = Ticket(client_id=client.id, origin=client.origin_slug,
                             origin_ticket_id=their_id)
             ticket.category = data.get("category") if data.get("category") in TICKET_CATEGORIES else "bug"
+            # Status is taken on CREATION only, for the same reason as category.
+            # On an update I own it and theirs must not overwrite my triage. On
+            # creation I have no opinion yet and theirs is the only truth there
+            # is: without this, a client connected after years of history has
+            # every resolved ticket land as New and their finished work fills
+            # my open board. Found by backfilling J&D and reading the result.
+            if data.get("status") in TICKET_STATUSES:
+                ticket.status = data["status"]
             db.session.add(ticket)
 
         ticket.description = (data.get("description") or "")[:20000]
