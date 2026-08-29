@@ -641,17 +641,33 @@ def create_app():
         return render_template("pm/clients/list.html", clients=pagination.items, pagination=pagination, search=search)
 
     def _apply_client_app_fields(client, form):
-        """The three fields that wire a client's own app to this board.
+        """Wire a client's own app to this board.
 
         origin_slug is UNIQUE and nullable, so an empty one has to be stored as
         NULL rather than "". Two clients with no app of their own would both
         carry the empty string and the second save would fail on the unique
         constraint, which reads as a database error over a field the user left
         blank on purpose. Null does not collide with null.
+
+        **The secret writes itself.** Naming a slug is the whole of the
+        decision; generating a random string is not, and asking somebody to go
+        and produce one before the feature works is how it stays unconfigured.
+        So the first save with a slug and no secret mints one, and it is then
+        shown on the form to be copied into that app once.
+
+        It is only ever generated, never regenerated. Rotating is deliberate:
+        clearing the field and saving mints a fresh one, and until the app is
+        updated to match, its pushes come back 401 and sit in its outbox. Doing
+        that silently on every save would break the link every time anybody
+        edited a phone number.
         """
         slug = (form.origin_slug.data or "").strip()
         client.origin_slug = slug or None
-        client.ingest_secret = (form.ingest_secret.data or "").strip()
+        secret = (form.ingest_secret.data or "").strip()
+        if slug and not secret:
+            import secrets as _secrets
+            secret = _secrets.token_urlsafe(32)
+        client.ingest_secret = secret if slug else ""
         client.origin_base_url = (form.origin_base_url.data or "").strip().rstrip("/")
 
     @pm_bp.route("/clients/new", methods=["GET", "POST"])
