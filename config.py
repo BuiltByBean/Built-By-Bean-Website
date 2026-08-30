@@ -1,10 +1,44 @@
 import os
+import secrets
+from datetime import timedelta
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
+# Railway sets this in every deployed environment; it is absent locally.
+_IN_PRODUCTION = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+
+
+def _session_secret():
+    """The Flask session-signing key.
+
+    This must never fall back to a literal. The repo is public, so a committed
+    default would let anyone forge a signed session cookie for any user —
+    including an admin — without knowing a password. A missing key is a hard
+    failure in production; locally we mint a random per-process key, so
+    sessions just don't survive a restart, which is fine for development.
+    """
+    key = os.environ.get("SECRET_KEY", "")
+    if key:
+        return key
+    if _IN_PRODUCTION:
+        raise RuntimeError(
+            "SECRET_KEY is not set. Refusing to start with a default signing key; "
+            "set SECRET_KEY in the Railway service variables."
+        )
+    return secrets.token_hex(32)
+
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "built-by-bean-project-manager-secret-key-change-me")
+    SECRET_KEY = _session_secret()
+
+    # Session hardening. Cookies are HTTPS-only in production; locally we serve
+    # plain http, where forcing Secure would silently drop the session.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = _IN_PRODUCTION
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SECURE = _IN_PRODUCTION
+    PERMANENT_SESSION_LIFETIME = timedelta(days=14)
     _db_url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(basedir, "data", "project_manager.db"))
     SQLALCHEMY_DATABASE_URI = _db_url.replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_TRACK_MODIFICATIONS = False

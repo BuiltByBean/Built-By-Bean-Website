@@ -149,7 +149,10 @@ def create_app():
             db.session.add(admin)
             db.session.commit()
 
-        if not User.query.filter(User.username.ilike("tlane")).first():
+        # Seeded only when an explicit password is supplied. This repo is
+        # public, so a literal password here is a published admin credential.
+        _dev_password = os.environ.get("DEV_PASSWORD", "")
+        if _dev_password and not User.query.filter(User.username.ilike("tlane")).first():
             dev = User(
                 username="tlane",
                 first_name="T",
@@ -158,33 +161,37 @@ def create_app():
                 role="admin",
                 must_change_password=True,
             )
-            dev.set_password("password")
+            dev.set_password(_dev_password)
             db.session.add(dev)
             db.session.commit()
 
-        # One-time admin upsert: ensure Mbean exists with the known password.
-        # Remove this block once login is verified.
+        # Ensure the Mbean admin exists. A password is set ONLY when the account
+        # is first created, and only from MBEAN_PASSWORD. Booting the app must
+        # never reset an existing account's password — the previous version did
+        # that on every boot with a hardcoded literal.
         _mbean = User.query.filter(User.username.ilike("Mbean")).first()
         if _mbean is None:
             _mbean_by_email = User.query.filter(User.email.ilike("mbean@builtbybean.com")).first()
             if _mbean_by_email is not None:
+                # Same person under an older username: adopt it, leave the
+                # password alone.
                 _mbean_by_email.username = "Mbean"
-                _mbean = _mbean_by_email
+                _mbean_by_email.role = "admin"
+                db.session.commit()
             else:
-                _mbean = User(
-                    username="Mbean",
-                    first_name="Matthew",
-                    last_name="Bean",
-                    email="mbean@builtbybean.com",
-                    role="admin",
-                    must_change_password=False,
-                )
-                db.session.add(_mbean)
-        _mbean.set_password("Scout0213!")
-        if hasattr(_mbean, "must_change_password"):
-            _mbean.must_change_password = False
-        _mbean.role = "admin"
-        db.session.commit()
+                _mbean_password = os.environ.get("MBEAN_PASSWORD", "")
+                if _mbean_password:
+                    _mbean = User(
+                        username="Mbean",
+                        first_name="Matthew",
+                        last_name="Bean",
+                        email="mbean@builtbybean.com",
+                        role="admin",
+                        must_change_password=False,
+                    )
+                    _mbean.set_password(_mbean_password)
+                    db.session.add(_mbean)
+                    db.session.commit()
 
         # Add stripe_customer_id column if it doesn't exist yet
         with db.engine.connect() as conn2:
