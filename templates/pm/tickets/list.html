@@ -61,23 +61,21 @@
   </p>
 
   {# Triage: status, priority, category and billing are four independent facts,
-     so they are four controls and one Save. #}
+     so they are four controls and one Save.
+
+     Blank leads the billing list and is NOT "Free": undecided work must not
+     read as free. #}
+  {%- set o = namespace(status=[], priority=[], category=[], billing=[('', 'Not classified')]) -%}
+  {%- for s in statuses -%}{%- set o.status = o.status + [(s, status_labels[s])] -%}{%- endfor -%}
+  {%- for p in ['urgent','soon','normal','backlog'] -%}{%- set o.priority = o.priority + [(p, priority_labels[p])] -%}{%- endfor -%}
+  {%- for c in categories -%}{%- set o.category = o.category + [(c, category_labels[c])] -%}{%- endfor -%}
+  {%- for b in billing_buckets -%}{%- set o.billing = o.billing + [(b, billing_labels[b])] -%}{%- endfor -%}
   <form method="POST" action="{{ url_for('pm.ticket_triage', id=t.id) }}"
         class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-2">
-    <select name="status" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
-      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if s == t.status }}>{{ status_labels[s] }}</option>{% endfor %}
-    </select>
-    <select name="priority" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
-      {% for p in ['urgent','soon','normal','backlog'] %}<option value="{{ p }}" {{ 'selected' if p == t.priority }}>{{ priority_labels[p] }}</option>{% endfor %}
-    </select>
-    <select name="category" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
-      {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == t.category }}>{{ category_labels[c] }}</option>{% endfor %}
-    </select>
-    <select name="billing_bucket" class="input-ring px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">
-      {# Blank is first and is NOT "Free": undecided work must not read as free. #}
-      <option value="" {{ 'selected' if not t.billing_bucket }}>Not classified</option>
-      {% for b in billing_buckets %}<option value="{{ b }}" {{ 'selected' if b == t.billing_bucket }}>{{ billing_labels[b] }}</option>{% endfor %}
-    </select>
+    {{ select_dropdown("status", o.status, t.status, size="sm", full_width=true) }}
+    {{ select_dropdown("priority", o.priority, t.priority, size="sm", full_width=true) }}
+    {{ select_dropdown("category", o.category, t.category, size="sm", full_width=true) }}
+    {{ select_dropdown("billing_bucket", o.billing, t.billing_bucket or '', "Not classified", size="sm", full_width=true) }}
     <div class="flex gap-2">
       <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
              class="input-ring w-full min-w-0 px-2 py-2 text-xs bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white rounded-lg">

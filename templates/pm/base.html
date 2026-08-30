@@ -1,11 +1,8 @@
 <!DOCTYPE html>
-<html lang="en" x-data="{ darkMode: localStorage.getItem('darkMode') !== 'false', sidebarOpen: false }"
-      :class="{ 'dark': darkMode }"
-      x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))">
+<html lang="en" class="dark" x-data="{ sidebarOpen: false }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script>if(localStorage.getItem('darkMode')!=='false')document.documentElement.classList.add('dark')</script>
     <title>{% block title %}Built By Bean - Project Manager{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +11,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            // Kept, with `dark` hard-coded on <html>: this app is dark only,
+            // and every dark: variant already written across the templates
+            // resolves through this. Removing it would silently unstyle them.
             darkMode: 'class',
             theme: {
                 extend: {
@@ -223,8 +223,138 @@
         ::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.2); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(59, 130, 246, 0.4); }
     </style>
+
+    <!--
+      The dropdown behind every select in this app.
+
+      A native <select> paints its option list with the OS widget, and no CSS
+      reaches inside it: square corners, system grey, system font, and not one
+      of them aware of whether the app is in dark mode. That list is the thing
+      that looks wrong, and styling the closed control cannot fix it, so the
+      list is ours and the only native part left is the hidden input that
+      carries the value to the server, which is all a form ever needed.
+
+      Everything a native select gave away for free is therefore ours to give
+      back, and the reason this is longer than a <select>: arrow keys, Home and
+      End, type-ahead, Escape, focus returning to the trigger when it closes,
+      and the roles that let a screen reader still call it a listbox.
+
+      Registered on alpine:init, which is safe from here: this script is inline
+      and runs while the Alpine bundle is still deferred.
+    -->
+    <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('bbbSelect', (config) => ({
+            name: config.name,
+            options: config.options,
+            placeholder: config.placeholder,
+            value: String(config.value ?? ''),
+            open: false,
+            active: -1,      // the row the keyboard is on, -1 when closed
+            dropUp: false,
+            _typed: '',
+            _typedAt: 0,
+
+            get chosen() {
+                return this.options.find(o => o.v === this.value) || null;
+            },
+            /* Asked by index, never by embedding the value in the markup: a
+               value spliced into an attribute has to be quoted, and a quote is
+               how the attribute ends early. */
+            isPicked(i) {
+                return !!this.options[i] && this.options[i].v === this.value;
+            },
+            get label() {
+                return this.chosen ? this.chosen.l : this.placeholder;
+            },
+
+            toggle() { this.open ? this.close() : this.reveal(); },
+
+            reveal() {
+                this.measure();
+                this.open = true;
+                const i = this.options.findIndex(o => o.v === this.value);
+                this.active = i < 0 ? 0 : i;
+                this.$nextTick(() => this.scrollActiveIntoView());
+            },
+
+            close(refocus = true) {
+                if (!this.open) return;
+                this.open = false;
+                this.active = -1;
+                if (refocus && this.$refs.trigger) this.$refs.trigger.focus();
+            },
+
+            /* Open upward when the list would run off the bottom of the window
+               and there is more room above it. The triage row on the last card
+               of a long board is otherwise a list you have to scroll the page
+               to read. */
+            measure() {
+                const r = this.$refs.trigger.getBoundingClientRect();
+                const need = Math.min(256, this.options.length * 36 + 10) + 12;
+                this.dropUp = (window.innerHeight - r.bottom) < need && r.top > need;
+            },
+
+            move(step) {
+                if (!this.open) return this.reveal();
+                const n = this.options.length;
+                if (!n) return;
+                this.active = (this.active + step + n) % n;
+                this.scrollActiveIntoView();
+            },
+
+            jump(where) {
+                if (!this.open) this.reveal();
+                this.active = where === 'first' ? 0 : this.options.length - 1;
+                this.scrollActiveIntoView();
+            },
+
+            scrollActiveIntoView() {
+                const row = this.$refs.list && this.$refs.list.children[this.active];
+                if (row) row.scrollIntoView({ block: 'nearest' });
+            },
+
+            /* Type-ahead, because a native select has it and a list of forty
+               clients is miserable without it. Letters typed within a second of
+               each other build one search rather than starting a new one, so
+               "ke" finds Kenali rather than landing on everything with an e. */
+            seek(key) {
+                const now = Date.now();
+                this._typed = (now - this._typedAt < 1000 ? this._typed : '') + key.toLowerCase();
+                this._typedAt = now;
+                const n = this.options.length;
+                if (!n) return;
+                const from = this.active < 0 ? 0 : this.active;
+                /* A repeat of the same single letter steps to the next match;
+                   a longer search re-reads from where we already are. */
+                const offset = this._typed.length > 1 ? 0 : 1;
+                for (let k = 0; k < n; k++) {
+                    const i = (from + k + offset) % n;
+                    if (this.options[i].l.toLowerCase().startsWith(this._typed)) {
+                        if (!this.open) this.reveal();
+                        this.active = i;
+                        this.scrollActiveIntoView();
+                        return;
+                    }
+                }
+            },
+
+            pick(i) {
+                const opt = this.options[i];
+                if (!opt) return;
+                this.value = opt.v;
+                /* Written to the input by hand as well as by binding. A form
+                   that submits on change reads the DOM in this same tick, and
+                   Alpine's own write to it is a tick away. */
+                if (this.$refs.input) this.$refs.input.value = opt.v;
+                this.close();
+                this.$dispatch('dropdown-change', { name: this.name, value: opt.v });
+            },
+        }));
+    });
+    </script>
 </head>
-<body class="mesh-bg noise min-h-screen" @keydown.window="if ($event.key === 'd' && !['INPUT','TEXTAREA','SELECT'].includes($event.target.tagName)) darkMode = !darkMode">
+<body class="mesh-bg noise min-h-screen">
 
     <!-- Mobile sidebar overlay -->
     <div x-show="sidebarOpen" x-cloak
@@ -338,23 +468,6 @@
                 Service Costs
             </a>
         </nav>
-
-        <!-- Dark mode toggle -->
-        <div class="px-4 pb-4">
-            <button @click="darkMode = !darkMode"
-                    class="sidebar-link w-full justify-between text-xs opacity-70 hover:opacity-100">
-                <span class="flex items-center gap-2">
-                    <svg x-show="!darkMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-                    </svg>
-                    <svg x-show="darkMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                    </svg>
-                    <span x-text="darkMode ? 'Light Mode' : 'Dark Mode'"></span>
-                </span>
-                <kbd class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 font-mono">D</kbd>
-            </button>
-        </div>
 
         <!-- Footer -->
         <div class="px-6 py-4 border-t border-white/10">

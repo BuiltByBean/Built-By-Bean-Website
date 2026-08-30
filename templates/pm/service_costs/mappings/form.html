@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}{{ 'Edit' if editing else 'New' }} Mapping - Built By Bean{% endblock %}
 {% block page_title %}{{ 'Edit' if editing else 'New' }} Resource Mapping{% endblock %}
@@ -14,16 +15,12 @@
 
             <div>
                 <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Provider</label>
-                <select name="provider_id" x-model="providerId" @change="loadResources()" {% if editing %}disabled{% endif %}
-                        class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white" required>
-                    <option value="">Select provider...</option>
-                    {% for p in providers %}
-                    <option value="{{ p.id }}" {% if editing and mapping.provider_id == p.id %}selected{% endif %}>{{ p.display_name }}</option>
-                    {% endfor %}
-                </select>
-                {% if editing %}
-                <input type="hidden" name="provider_id" value="{{ mapping.provider_id }}">
-                {% endif %}
+                {% set mf = namespace(prov=[("", "Select provider...")], cli=[("", "No client")], proj=[("", "No project")]) %}
+                {% for p in providers %}{% set mf.prov = mf.prov + [(p.id, p.display_name)] %}{% endfor %}
+                {% for c in clients %}{% set mf.cli = mf.cli + [(c.id, c.name)] %}{% endfor %}
+                {% for p in projects %}{% set mf.proj = mf.proj + [(p.id, p.name ~ " (" ~ p.client.name ~ ")")] %}{% endfor %}
+                {{ select_dropdown("provider_id", mf.prov, mapping.provider_id if editing else '', "Select provider...",
+                                   full_width=true, model="providerId", on_change="loadResources()", disabled=editing) }}
             </div>
 
             <div>
@@ -60,21 +57,11 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Client</label>
-                    <select name="client_id" class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
-                        <option value="">No client</option>
-                        {% for c in clients %}
-                        <option value="{{ c.id }}" {% if editing and mapping.client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
-                        {% endfor %}
-                    </select>
+                    {{ select_dropdown("client_id", mf.cli, mapping.client_id if editing else '', "No client", full_width=true) }}
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Project (optional)</label>
-                    <select name="project_id" class="w-full input-ring px-4 py-2.5 text-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white">
-                        <option value="">No project</option>
-                        {% for p in projects %}
-                        <option value="{{ p.id }}" {% if editing and mapping.project_id == p.id %}selected{% endif %}>{{ p.name }} ({{ p.client.name }})</option>
-                        {% endfor %}
-                    </select>
+                    {{ select_dropdown("project_id", mf.proj, mapping.project_id if editing else '', "No project", full_width=true) }}
                 </div>
             </div>
 

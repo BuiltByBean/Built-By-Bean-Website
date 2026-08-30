@@ -1,4 +1,5 @@
 <!-- Live working-session timer — rendered in the PM header on every page. -->
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 <div x-data='timerWidget({{ active_timer | tojson }}, {{ timer_projects | tojson }})' x-cloak class="relative">
 
     <!-- IDLE: start control -->
@@ -23,12 +24,9 @@
 
                 <div>
                     <label class="block text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Project</label>
-                    <select x-model="startProjectId" class="select-field w-full text-sm">
-                        <option value="">— Pick later —</option>
-                        <template x-for="p in projects" :key="p.id">
-                            <option :value="p.id" x-text="p.label"></option>
-                        </template>
-                    </select>
+                    {% set tw = namespace(proj=[("", "— Pick later —")]) %}
+                    {% for p in timer_projects %}{% set tw.proj = tw.proj + [(p.id, p.label)] %}{% endfor %}
+                    {{ select_dropdown("start_project_id", tw.proj, "", "— Pick later —", full_width=true, model="startProjectId") }}
                 </div>
 
                 <div>

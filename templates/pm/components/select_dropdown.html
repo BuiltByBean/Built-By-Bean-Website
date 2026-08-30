@@ -1,35 +1,118 @@
-{% macro select_dropdown(name, options, selected='', placeholder='Select...', full_width=false) %}
+{#
+  One dropdown, standing in for every native <select> in the app.
+
+  Why this exists rather than a styled <select>: see the note on bbbSelect in
+  base.html. The short of it is that the option list of a native select is an
+  OS widget that CSS cannot reach, so it stays square and system-grey in a dark
+  themed app no matter what is done to the closed control.
+
+    name       submitted under this, via the hidden input
+    options    [(value, label), ...] — values are compared as strings
+    selected   current value, or none
+    size       'md' for filter bars and forms, 'sm' for tight grids
+    model      an Alpine expression in the SURROUNDING scope to keep in step,
+               for the places that used to reach for x-model
+    on_change  an Alpine expression to run after a pick, e.g. submitting a form
+    extra_class  extra classes for the wrapper, for callers that need to bound
+               the width in a crowded filter row
+
+  `dropdown-change` still fires with {name, value} and still bubbles, because
+  two templates listen for it on the form above.
+
+  Dark only, with no light counterpart, because this app is dark only. Nothing
+  here needs a `dark:` variant and nothing new should grow one.
+#}
+{% macro select_dropdown(name, options, selected='', placeholder='Select...', full_width=false, size='md', model='', on_change='', disabled=false, extra_class='') %}
 {%- if selected is none -%}{%- set sel_str = '' -%}{%- else -%}{%- set sel_str = selected|string -%}{%- endif -%}
-{%- set ns = namespace(label=placeholder) -%}
-{%- for opt in options -%}{%- if opt[0]|string == sel_str -%}{%- set ns.label = opt[1] -%}{%- endif -%}{%- endfor -%}
-<div class="relative {% if full_width %}w-full{% else %}flex-1{% endif %}"
-     x-data="{ open: false, value: '{{ sel_str }}', labels: { {% for opt in options %}'{{ opt[0] }}': '{{ opt[1]|replace("'", "\\'") }}'{% if not loop.last %}, {% endif %}{% endfor %} }, get label() { return this.labels[this.value] ?? '{{ placeholder }}'; } }"
-     @click.outside="open = false"
-     @keydown.escape.window="open = false">
+{#- Values are stringified here, once, so the template never has to care that a
+    client id arrives as an int and a status as a str. -#}
+{%- set opts = [] -%}
+{%- for opt in options -%}{%- set _ = opts.append({'v': opt[0]|string, 'l': opt[1]|string}) -%}{%- endfor -%}
+{%- set sm = size == 'sm' -%}
+{%- set reaction = [] -%}
+{%- if model -%}{%- set _ = reaction.append(model ~ " = $event.detail.value") -%}{%- endif -%}
+{%- if on_change -%}{%- set _ = reaction.append(on_change) -%}{%- endif -%}
+{#- Single quotes on x-data are load-bearing: |tojson escapes < > & and ' for
+    exactly this, but leaves " alone, so a label with a quote in it would end
+    the attribute early were this delimited the other way round. -#}
+<div class="relative {% if full_width %}w-full{% else %}flex-1{% endif %}{% if sm %} min-w-0{% endif %} {{ extra_class }}"
+     x-id="['bbbsel']"
+     x-data='bbbSelect({{ {"name": name, "options": opts, "value": sel_str, "placeholder": placeholder}|tojson }})'
+     {% if reaction %}@dropdown-change="{{ reaction|join('; ') }}"{% endif %}
+     @click.outside="close(false)">
 
   <button type="button"
-          @click="open = !open"
-          class="flex items-center justify-between gap-2 w-full text-sm bg-white dark:bg-surface-900 border border-gray-200 dark:border-white/10 rounded-full pl-4 pr-3 py-2.5 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20 transition-all cursor-pointer">
-    <span x-text="label">{{ ns.label }}</span>
-    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-150" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          x-ref="trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          :aria-expanded="open"
+          :aria-activedescendant="open && active >= 0 ? $id('bbbsel', active) : null"
+          {% if disabled %}disabled{% endif %}
+          @click="toggle()"
+          @keydown.arrow-down.prevent="move(1)"
+          @keydown.arrow-up.prevent="move(-1)"
+          @keydown.home.prevent="jump('first')"
+          @keydown.end.prevent="jump('last')"
+          @keydown.enter.prevent="open ? pick(active) : reveal()"
+          @keydown.space.prevent="open ? pick(active) : reveal()"
+          @keydown.escape.prevent.stop="close()"
+          @keydown.tab="close(false)"
+          @keydown="if ($event.key.length === 1 && /\S/.test($event.key) && !$event.metaKey && !$event.ctrlKey && !$event.altKey) { $event.preventDefault(); seek($event.key) }"
+          class="group flex items-center justify-between gap-1.5 w-full text-left
+                 bg-surface-900/70 border border-white/10 text-surface-200
+                 hover:border-white/20 hover:bg-surface-900/80
+                 focus:outline-none focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/25
+                 disabled:opacity-50 disabled:cursor-not-allowed
+                 transition-all duration-150 cursor-pointer
+                 {% if sm %}text-xs rounded-lg pl-2.5 pr-1.5 py-2{% else %}text-sm rounded-full pl-4 pr-3 py-2.5{% endif %}"
+          :class="{ 'border-brand-500/70 ring-[3px] ring-brand-500/25': open }">
+    <span class="truncate" :class="{ 'text-surface-500': !chosen }" x-text="label">{{ placeholder }}</span>
+    <svg class="{% if sm %}w-3.5 h-3.5{% else %}w-4 h-4{% endif %} shrink-0 text-surface-500 transition-transform duration-200"
+         :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
     </svg>
   </button>
 
+  {#- w-max over min-w-full: in a five-column triage grid the column is
+      narrower than "Not classified", and a panel pinned to the trigger's width
+      wraps every row onto three lines. -#}
   <div x-show="open" x-cloak
-       x-transition:enter="transition ease-out duration-100"
-       x-transition:enter-start="opacity-0 translate-y-1"
-       x-transition:enter-end="opacity-100 translate-y-0"
-       x-transition:leave="transition ease-in duration-75"
-       x-transition:leave-start="opacity-100 translate-y-0"
-       x-transition:leave-end="opacity-0 translate-y-1"
-       class="absolute z-50 top-full mt-1.5 left-0 min-w-full bg-white dark:bg-surface-800 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 overflow-y-auto max-h-64 py-1">
-    {% for opt in options %}
+       x-ref="list"
+       role="listbox"
+       :aria-label="'{{ name }}'"
+       x-transition:enter="transition ease-out duration-150"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-100"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95"
+       :class="dropUp ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'"
+       class="absolute z-50 left-0 min-w-full w-max max-w-[min(20rem,calc(100vw-3rem))]
+              max-h-64 overflow-y-auto overscroll-contain p-1.5
+              bg-surface-800 border border-white/10
+              rounded-2xl shadow-xl shadow-black/50">
+    {% for opt in opts %}
     <button type="button"
-            @click="value = '{{ opt[0] }}'; $refs.input.value = '{{ opt[0] }}'; open = false; $dispatch('dropdown-change', { name: '{{ name }}', value: '{{ opt[0] }}' })"
-            class="w-full text-left px-3.5 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors"
-            :class="{ 'font-semibold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-500/5': value === '{{ opt[0] }}' }">
-      {{ opt[1] }}
+            :id="$id('bbbsel', {{ loop.index0 }})"
+            role="option"
+            :aria-selected="isPicked({{ loop.index0 }})"
+            tabindex="-1"
+            @click="pick({{ loop.index0 }})"
+            @mouseenter="active = {{ loop.index0 }}"
+            class="flex items-center gap-2 w-full text-left rounded-xl transition-colors duration-100
+                   {% if sm %}px-2.5 py-1.5 text-xs{% else %}px-3 py-2 text-sm{% endif %}"
+            :class="isPicked({{ loop.index0 }})
+                      ? 'bg-brand-500/15 text-brand-300 font-semibold'
+                      : (active === {{ loop.index0 }}
+                          ? 'bg-white/[0.07] text-surface-100'
+                          : 'text-surface-300')">
+      <span class="flex-1 truncate">{{ opt.l }}</span>
+      {#- A tick as well as the colour, so "which one is set" survives being
+          read by someone who cannot see the tint. -#}
+      <svg x-show="isPicked({{ loop.index0 }})" x-cloak class="w-3.5 h-3.5 shrink-0 text-brand-400"
+           fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+      </svg>
     </button>
     {% endfor %}
   </div>

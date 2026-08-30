@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}Resource Mappings - Built By Bean{% endblock %}
 {% block page_title %}Resource Mappings{% endblock %}
@@ -17,12 +18,9 @@
     <!-- Filter -->
     <div class="glass-card p-4">
         <form method="GET" class="flex flex-wrap items-center gap-3">
-            <select name="provider_id" class="select-field text-sm" onchange="this.form.submit()">
-                <option value="">All Providers</option>
-                {% for p in providers %}
-                <option value="{{ p.id }}" {% if provider_id == p.id|string %}selected{% endif %}>{{ p.display_name }}</option>
-                {% endfor %}
-            </select>
+            {% set po = namespace(list=[("", "All Providers")]) %}
+            {% for p in providers %}{% set po.list = po.list + [(p.id, p.display_name)] %}{% endfor %}
+            {{ select_dropdown("provider_id", po.list, provider_id, "All Providers", on_change="$el.closest('form').requestSubmit()", extra_class="max-w-[15rem]") }}
             {% if provider_id %}
             <a href="{{ url_for('service_costs.mappings_list') }}" class="text-sm text-brand-500 hover:text-brand-600">Clear</a>
             {% endif %}

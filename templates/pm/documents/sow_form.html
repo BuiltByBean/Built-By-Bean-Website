@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block page_title %}Generate Statement of Work{% endblock %}
 {% block page_subtitle %}Create a new SOW from template{% endblock %}
@@ -103,11 +104,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Billing Cycle</label>
-                        <select name="hosting_cycle" class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm">
-                            <option value="monthly">Monthly</option>
-                            <option value="quarterly">Quarterly</option>
-                            <option value="annually">Annually</option>
-                        </select>
+                        {{ select_dropdown("hosting_cycle", [("monthly", "Monthly"), ("quarterly", "Quarterly"), ("annually", "Annually")], "monthly", full_width=true) }}
                     </div>
                 </div>
 

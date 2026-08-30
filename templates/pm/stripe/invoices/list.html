@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}Invoices - Built By Bean{% endblock %}
 {% block page_title %}Invoices{% endblock %}
@@ -33,20 +34,10 @@
     <!-- Filters -->
     <div class="glass-card p-4">
         <form method="GET" class="flex flex-wrap items-center gap-3">
-            <select name="status" class="select-field text-sm" onchange="this.form.submit()">
-                <option value="">All Statuses</option>
-                <option value="draft" {% if status == 'draft' %}selected{% endif %}>Draft</option>
-                <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
-                <option value="paid" {% if status == 'paid' %}selected{% endif %}>Paid</option>
-                <option value="void" {% if status == 'void' %}selected{% endif %}>Void</option>
-                <option value="uncollectible" {% if status == 'uncollectible' %}selected{% endif %}>Uncollectible</option>
-            </select>
-            <select name="client_id" class="select-field text-sm" onchange="this.form.submit()">
-                <option value="">All Clients</option>
-                {% for c in clients %}
-                <option value="{{ c.id }}" {% if client_id == c.id|string %}selected{% endif %}>{{ c.name }}</option>
-                {% endfor %}
-            </select>
+            {% set fo = namespace(status=[("", "All Statuses"), ("draft", "Draft"), ("open", "Open"), ("paid", "Paid"), ("void", "Void"), ("uncollectible", "Uncollectible")], cli=[("", "All Clients")]) %}
+            {% for c in clients %}{% set fo.cli = fo.cli + [(c.id, c.name)] %}{% endfor %}
+            {{ select_dropdown("status", fo.status, status, "All Statuses", on_change="$el.closest('form').requestSubmit()", extra_class="max-w-[13rem]") }}
+            {{ select_dropdown("client_id", fo.cli, client_id, "All Clients", on_change="$el.closest('form').requestSubmit()", extra_class="max-w-[15rem]") }}
 
             <span class="w-px h-6 bg-surface-200 dark:bg-surface-700"></span>
 
