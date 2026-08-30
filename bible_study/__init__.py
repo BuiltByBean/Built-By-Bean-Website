@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import secrets
@@ -109,16 +110,24 @@ def init_bible_study(app):
     with app.app_context():
         db.create_all()
         _migrate(app)
-        # Seed admin user
+        # Seed admin user. The password comes from BIBLE_STUDY_ADMIN_PASSWORD —
+        # never a literal, because this repo is public. With no env var set the
+        # account simply isn't created rather than shipping a known credential.
         u = BibleStudyUser.query.filter(BibleStudyUser.username.ilike("mbean21")).first()
         if not u:
-            u = BibleStudyUser(
-                username="mbean21", is_admin=True, role="admin",
-                display_name="Michael Bean",
-            )
-            u.set_password("Scout0213!")
-            db.session.add(u)
-            db.session.commit()
+            _bs_password = os.environ.get("BIBLE_STUDY_ADMIN_PASSWORD", "")
+            if _bs_password:
+                u = BibleStudyUser(
+                    username="mbean21", is_admin=True, role="admin",
+                    display_name="Michael Bean",
+                )
+                u.set_password(_bs_password)
+                db.session.add(u)
+                db.session.commit()
+            else:
+                app.logger.warning(
+                    "Bible Study admin 'mbean21' not seeded: BIBLE_STUDY_ADMIN_PASSWORD is unset."
+                )
         else:
             changed = False
             if not u.is_admin:
