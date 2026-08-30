@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"
-      x-data="{ darkMode: localStorage.getItem('darkMode') !== 'false', sidebarOpen: false, scriptureRef: '', scriptureText: '', scriptureOpen: false }"
-      x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))"
-      :class="{ 'dark': darkMode }">
+      x-data="{ sidebarOpen: false, scriptureRef: '', scriptureText: '', scriptureOpen: false }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -14,7 +12,9 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
+            // No darkMode setting and no `dark` class on <html>: this app has one
+            // theme and every colour below is simply it. A dark: variant would
+            // need both back, so do not reach for one.
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
@@ -28,19 +28,16 @@
     </script>
     <style>
         [x-cloak]{display:none!important}
-        .glass-card{background:rgba(255,255,255,0.98);border:1px solid rgba(148,163,184,0.25);border-radius:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
-        .dark .glass-card{background:rgba(30,41,59,0.7);border-color:rgba(255,255,255,0.08)}
+        .glass-card{background:rgba(30,41,59,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
         .sidebar-gradient{background:linear-gradient(180deg,#1e1b4b 0%,#0f172a 100%)}
         .sidebar-link{display:flex;align-items:center;gap:0.625rem;padding:0.625rem 0.75rem;border-radius:0.5rem;font-size:0.8125rem;color:rgba(255,255,255,0.7);transition:all 0.15s;min-height:44px}
         .sidebar-link:hover{background:rgba(255,255,255,0.05);color:#fff}
         .sidebar-link.active{background:rgba(99,102,241,0.3);color:#fff;box-shadow:inset 0 0 0 1px rgba(99,102,241,0.3)}
         .gradient-text{background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#a78bfa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-        .input-ring:focus{outline:none;box-shadow:0 0 0 3px rgba(99,102,241,0.15);border-color:#6366f1}
-        .dark .input-ring:focus{box-shadow:0 0 0 3px rgba(99,102,241,0.3)}
+        .input-ring:focus{outline:none;box-shadow:0 0 0 3px rgba(99,102,241,0.3);border-color:#6366f1}
         .custom-scrollbar::-webkit-scrollbar{width:4px}.custom-scrollbar::-webkit-scrollbar-track{background:transparent}.custom-scrollbar::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.3);border-radius:3px}
         .esv-copyright{font-size:0.65rem;color:#94a3b8;line-height:1.4}
-        .scripture-ref{color:#6366f1;text-decoration:underline;text-decoration-style:dotted;cursor:pointer}
-        .dark .scripture-ref{color:#818cf8}
+        .scripture-ref{color:#818cf8;text-decoration:underline;text-decoration-style:dotted;cursor:pointer}
         /* Mobile touch targets */
         @media(max-width:768px){button,a{min-height:44px;min-width:44px}.sidebar-link{padding:0.75rem}}
         /* Hide desktop sidebar on mobile, show bottom nav */
@@ -51,7 +48,7 @@
         .page-fade.fade-out{opacity:0}
     </style>
 </head>
-<body class="font-sans bg-surface-50 text-surface-900 dark:bg-surface-950 dark:text-surface-100 antialiased h-screen overflow-hidden page-fade">
+<body class="font-sans bg-surface-950 text-surface-100 antialiased h-screen overflow-hidden page-fade">
 
 <div class="flex h-full">
     <!-- Desktop Sidebar -->
@@ -83,11 +80,6 @@
             {% endif %}
         </nav>
         <div class="px-3 py-2 border-t border-white/10 flex items-center justify-between">
-            <button @click="darkMode = !darkMode" class="text-[10px] text-white/40 hover:text-white/70 flex items-center gap-1">
-                <svg x-show="!darkMode" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/></svg>
-                <svg x-show="darkMode" x-cloak class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/></svg>
-                Theme
-            </button>
             <a href="/Bible-Study/logout" class="text-[10px] text-white/40 hover:text-white/70">Sign out</a>
         </div>
     </aside>
@@ -112,7 +104,6 @@
                 {% endif %}
             </nav>
             <div class="p-4 border-t border-white/10 flex justify-between">
-                <button @click="darkMode = !darkMode" class="text-xs text-white/40">Toggle theme</button>
                 <a href="/Bible-Study/logout" class="text-xs text-white/40">Sign out</a>
             </div>
         </aside>
@@ -121,17 +112,13 @@
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
         <!-- Top bar -->
-        <header class="flex items-center justify-between px-3 py-2 border-b border-surface-200 dark:border-white/5 bg-white/80 dark:bg-surface-900/80 backdrop-blur-sm z-40 flex-shrink-0 min-h-[44px]">
+        <header class="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-surface-900/80 backdrop-blur-sm z-40 flex-shrink-0 min-h-[44px]">
             <div class="flex items-center gap-2">
-                <button @click="sidebarOpen = true" class="lg:hidden p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-white/5">
-                    <svg class="w-5 h-5 text-surface-600 dark:text-surface-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+                <button @click="sidebarOpen = true" class="lg:hidden p-2 rounded-lg hover:bg-white/5">
+                    <svg class="w-5 h-5 text-surface-400" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
                 </button>
-                <h1 class="text-sm font-bold text-surface-900 dark:text-white truncate">{% block page_title %}Bible Study{% endblock %}</h1>
+                <h1 class="text-sm font-bold text-white truncate">{% block page_title %}Bible Study{% endblock %}</h1>
             </div>
-            <button @click="darkMode = !darkMode" class="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400 hidden lg:block">
-                <svg x-show="!darkMode" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/></svg>
-                <svg x-show="darkMode" x-cloak class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/></svg>
-            </button>
         </header>
 
         <!-- Page content -->
@@ -140,7 +127,7 @@
         </main>
 
         <!-- Mobile Bottom Nav -->
-        <nav class="bottom-nav fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-surface-900 border-t border-surface-200 dark:border-white/5 px-1 py-1 justify-around lg:hidden">
+        <nav class="bottom-nav fixed bottom-0 left-0 right-0 z-40 bg-surface-900 border-t border-white/5 px-1 py-1 justify-around lg:hidden">
             <a href="/Bible-Study/" class="flex flex-col items-center py-1 px-2 rounded-lg {% if request.endpoint == 'reader' %}text-brand-500{% else %}text-surface-400{% endif %}">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
                 <span class="text-[9px] mt-0.5">Read</span></a>
@@ -167,16 +154,16 @@
 <div x-show="scriptureOpen" x-cloak x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
      class="fixed inset-0 z-[100] flex items-center justify-center p-4" @keydown.escape.window="scriptureOpen = false">
     <div class="absolute inset-0 bg-black/60" @click="scriptureOpen = false"></div>
-    <div class="relative bg-white dark:bg-surface-800 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+    <div class="relative bg-surface-800 rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-bold text-surface-900 dark:text-white" x-text="scriptureRef"></h3>
-            <button @click="scriptureOpen = false" class="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-white/5 text-surface-400">
+            <h3 class="text-lg font-bold text-white" x-text="scriptureRef"></h3>
+            <button @click="scriptureOpen = false" class="p-2 rounded-lg hover:bg-white/5 text-surface-400">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
-        <div class="text-sm leading-7 text-surface-700 dark:text-surface-300" x-show="scriptureText" x-text="scriptureText"></div>
+        <div class="text-sm leading-7 text-surface-300" x-show="scriptureText" x-text="scriptureText"></div>
         <div x-show="!scriptureText" class="text-sm text-surface-400 animate-pulse">Loading verse...</div>
-        <p class="esv-copyright mt-4 pt-3 border-t border-surface-200 dark:border-white/5">{{ ESV_COPYRIGHT }}</p>
+        <p class="esv-copyright mt-4 pt-3 border-t border-white/5">{{ ESV_COPYRIGHT }}</p>
     </div>
 </div>
 
@@ -196,12 +183,6 @@ window.openScripture = async function(ref) {
         root.__x.$data.scriptureText = 'Error loading verse.';
     }
 };
-// Keyboard shortcut for dark mode
-document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-    if (e.key === 'd') { document.documentElement.classList.toggle('dark'); localStorage.setItem('darkMode', document.documentElement.classList.contains('dark')); }
-});
-
 // Smooth page transitions — no white flash
 document.addEventListener('click', e => {
     const link = e.target.closest('a[href]');

@@ -23,27 +23,27 @@
                 <p class="text-xs font-semibold uppercase tracking-wide text-surface-400">New working session</p>
 
                 <div>
-                    <label class="block text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Project</label>
+                    <label class="block text-xs font-medium text-surface-400 mb-1">Project</label>
                     {% set tw = namespace(proj=[("", "— Pick later —")]) %}
                     {% for p in timer_projects %}{% set tw.proj = tw.proj + [(p.id, p.label)] %}{% endfor %}
                     {{ select_dropdown("start_project_id", tw.proj, "", "— Pick later —", full_width=true, model="startProjectId") }}
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">Rate</label>
+                    <label class="block text-xs font-medium text-surface-400 mb-1">Rate</label>
                     <div class="grid grid-cols-2 gap-2">
                         <button type="button" @click="startRate = 'maintenance'"
                                 :class="startRate === 'maintenance'
-                                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
-                                    : 'border-surface-200 dark:border-white/10 text-surface-500'"
+                                    ? 'border-brand-500 bg-brand-500/10 text-brand-300'
+                                    : 'border-white/10 text-surface-500'"
                                 class="rounded-xl border px-3 py-2 text-left transition">
                             <span class="block text-sm font-semibold">Maintenance</span>
                             <span class="block text-xs opacity-70">$100/hr</span>
                         </button>
                         <button type="button" @click="startRate = 'new_feature'"
                                 :class="startRate === 'new_feature'
-                                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
-                                    : 'border-surface-200 dark:border-white/10 text-surface-500'"
+                                    ? 'border-brand-500 bg-brand-500/10 text-brand-300'
+                                    : 'border-white/10 text-surface-500'"
                                 class="rounded-xl border px-3 py-2 text-left transition">
                             <span class="block text-sm font-semibold">New feature</span>
                             <span class="block text-xs opacity-70">$200/hr</span>
@@ -65,17 +65,17 @@
         <div class="flex items-center gap-2 glass-card pl-3 pr-2 py-1.5">
             <span class="w-2.5 h-2.5 rounded-full flex-shrink-0"
                   :class="state.is_paused ? 'bg-amber-500' : 'bg-red-500 animate-pulse'"></span>
-            <span class="font-mono tabular-nums text-sm font-semibold text-surface-900 dark:text-white" x-text="clock"></span>
+            <span class="font-mono tabular-nums text-sm font-semibold text-white" x-text="clock"></span>
             <span class="hidden md:inline text-[11px] font-semibold px-2 py-0.5 rounded-full"
                   :class="state.rate_type === 'new_feature'
-                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
-                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'"
+                      ? 'bg-purple-500/15 text-purple-300'
+                      : 'bg-emerald-500/15 text-emerald-300'"
                   x-text="state.rate_type === 'new_feature' ? 'New feature' : 'Maintenance'"></span>
-            <span class="hidden lg:inline max-w-[140px] truncate text-xs text-surface-500 dark:text-surface-400"
+            <span class="hidden lg:inline max-w-[140px] truncate text-xs text-surface-400"
                   x-text="state.project_name || 'No project'" :title="state.project_name"></span>
 
             <button @click="togglePause()" :disabled="busy" title="Pause / resume"
-                    class="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-white/10 text-surface-600 dark:text-surface-300 transition">
+                    class="p-1.5 rounded-lg hover:bg-white/10 text-surface-300 transition">
                 <svg x-show="!state.is_paused" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>
                 <svg x-show="state.is_paused" x-cloak class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             </button>
@@ -87,7 +87,7 @@
             </a>
 
             <button @click="discard()" :disabled="busy" title="Discard — log nothing"
-                    class="p-1.5 rounded-lg hover:bg-surface-200 dark:hover:bg-white/10 text-surface-400 hover:text-red-500 transition">
+                    class="p-1.5 rounded-lg hover:bg-white/10 text-surface-400 hover:text-red-500 transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>

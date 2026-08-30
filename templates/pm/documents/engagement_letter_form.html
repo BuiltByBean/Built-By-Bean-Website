@@ -10,29 +10,29 @@
             <div class="space-y-5">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Client Name *</label>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Client Name *</label>
                         <input type="text" name="client_name" required value="{{ request.args.get('client_name', '') }}"
-                               class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                                placeholder="e.g. J&D Entertainment">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Date *</label>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
                         <input type="date" name="date" required value="{{ today }}"
-                               class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm">
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Project Description *</label>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Project Description *</label>
                     <textarea name="project_description" required rows="3"
-                              class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400"
+                              class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400"
                               placeholder="e.g. design and develop a professional web presence for J&D Entertainment to support talent booking for events">{{ request.args.get('project_description', '') }}</textarea>
-                    <p class="mt-1 text-xs text-surface-500 dark:text-surface-400">This follows "Built by Bean LLC will..." in the letter</p>
+                    <p class="mt-1 text-xs text-surface-400">This follows "Built by Bean LLC will..." in the letter</p>
                 </div>
 
             </div>
 
-            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-700">
                 <button type="submit"
                         class="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -41,7 +41,7 @@
                     Generate PDF
                 </button>
                 <a href="{{ url_for('pm.dashboard') }}"
-                   class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
+                   class="px-6 py-2.5 text-sm text-surface-300 hover:text-white transition-colors">
                     Cancel
                 </a>
             </div>

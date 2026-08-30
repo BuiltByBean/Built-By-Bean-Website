@@ -11,70 +11,70 @@
 
             <div class="space-y-5">
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Client Name *</label>
-                    {{ form.name(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="Enter client name") }}
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Client Name *</label>
+                    {{ form.name(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="Enter client name") }}
                     {% for error in form.name.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Email</label>
-                        {{ form.email(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="client@email.com") }}
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Email</label>
+                        {{ form.email(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="client@email.com") }}
                         {% for error in form.email.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Phone</label>
-                        {{ form.phone(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="(555) 123-4567") }}
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Phone</label>
+                        {{ form.phone(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="(555) 123-4567") }}
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Company</label>
-                    {{ form.company(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="Company name") }}
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Company</label>
+                    {{ form.company(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="Company name") }}
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Address</label>
-                    {{ form.address(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="2", placeholder="Street address, city, state, zip") }}
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Address</label>
+                    {{ form.address(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="2", placeholder="Street address, city, state, zip") }}
                 </div>
 
                 {# Only for a client whose app feeds this board. Blank for everyone
                    else, which is most of them. #}
-                <div class="pt-4 mt-2 border-t border-surface-200 dark:border-surface-700">
-                    <p class="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-1">Their app</p>
+                <div class="pt-4 mt-2 border-t border-surface-700">
+                    <p class="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Their app</p>
                     <p class="text-xs text-surface-400 mb-3">Only if this client has an app that sends tickets here.
                         Give it a slug and save; the secret writes itself. Then copy it into that app as
                         <code>HUB_SECRET</code> and set nothing else. Clearing the secret and saving mints a new one,
                         which stops their app until you update it to match.</p>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">App slug</label>
-                            {{ form.origin_slug(class="input-ring w-full min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="kuper") }}
+                            <label class="block text-sm font-medium text-surface-300 mb-1.5">App slug</label>
+                            {{ form.origin_slug(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="kuper") }}
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Shared secret</label>
-                            {{ form.ingest_secret(class="input-ring w-full min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="long random string") }}
+                            <label class="block text-sm font-medium text-surface-300 mb-1.5">Shared secret</label>
+                            {{ form.ingest_secret(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="long random string") }}
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">App URL</label>
-                            {{ form.origin_base_url(class="input-ring w-full min-w-0 px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", placeholder="https://kuperplumbing.com") }}
+                            <label class="block text-sm font-medium text-surface-300 mb-1.5">App URL</label>
+                            {{ form.origin_base_url(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="https://kuperplumbing.com") }}
                         </div>
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">Notes</label>
-                    {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-white dark:bg-surface-800/50 text-surface-900 dark:text-white text-sm placeholder-surface-400", rows="3", placeholder="Any additional notes...") }}
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
+                    {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="Any additional notes...") }}
                 </div>
             </div>
 
-            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-700">
                 <button type="submit"
                         class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
                     {{ 'Update Client' if editing else 'Create Client' }}
                 </button>
                 <a href="{{ url_for('pm.client_detail', id=client.id) if editing else url_for('pm.clients_list') }}"
-                   class="px-6 py-2.5 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white transition-colors">
+                   class="px-6 py-2.5 text-sm text-surface-300 hover:text-white transition-colors">
                     Cancel
                 </a>
             </div>

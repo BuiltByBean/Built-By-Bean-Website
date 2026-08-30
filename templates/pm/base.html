@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" x-data="{ sidebarOpen: false }">
+<html lang="en" x-data="{ sidebarOpen: false }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,10 +11,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            // Kept, with `dark` hard-coded on <html>: this app is dark only,
-            // and every dark: variant already written across the templates
-            // resolves through this. Removing it would silently unstyle them.
-            darkMode: 'class',
+            // No darkMode setting and no `dark` class on <html>: this app has one
+            // theme and every colour below is simply it. A dark: variant would
+            // need both back, so do not reach for one.
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
@@ -53,13 +52,6 @@
         body { font-family: 'Inter', system-ui, sans-serif; }
 
         .mesh-bg {
-            background-color: #f8fafc;
-            background-image:
-                radial-gradient(at 40% 20%, rgba(59, 130, 246, 0.08) 0px, transparent 50%),
-                radial-gradient(at 80% 0%, rgba(96, 165, 250, 0.06) 0px, transparent 50%),
-                radial-gradient(at 0% 50%, rgba(59, 130, 246, 0.05) 0px, transparent 50%);
-        }
-        .dark .mesh-bg {
             background-color: #020617;
             background-image:
                 radial-gradient(at 40% 20%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
@@ -72,27 +64,18 @@
         }
 
         .glass {
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(15, 23, 42, 0.7);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        .dark .glass {
-            background: rgba(15, 23, 42, 0.7);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .glass-card {
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(226, 232, 240, 0.8);
-            border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-        }
-        .dark .glass-card {
-            background: rgba(15, 23, 42, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
@@ -101,9 +84,6 @@
         }
         .card-hover:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.08), 0 4px 10px rgba(0, 0, 0, 0.04);
-        }
-        .dark .card-hover:hover {
             box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15), 0 4px 10px rgba(0, 0, 0, 0.2);
         }
 
@@ -137,20 +117,13 @@
 
         .input-ring {
             border-radius: 12px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.5);
+            color: #f1f5f9;
             transition: all 0.2s ease;
         }
         .input-ring:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-        }
-        .dark .input-ring {
-            border-color: rgba(255, 255, 255, 0.1);
-            background: rgba(15, 23, 42, 0.5);
-            color: #f1f5f9;
-        }
-        .dark .input-ring:focus {
             border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
         }
@@ -172,49 +145,6 @@
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
             pointer-events: none;
             z-index: 1;
-        }
-
-        /* Select / Dropdown */
-        .select-field {
-            appearance: none;
-            -webkit-appearance: none;
-            background-color: #fff;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 0.875rem center;
-            background-size: 1rem;
-            border-radius: 9999px;
-            border: 1px solid #e2e8f0;
-            padding: 0.625rem 2.75rem 0.625rem 1.25rem;
-            font-size: 0.875rem;
-            color: #0f172a;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            overflow-y: auto;
-        }
-        .select-field:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-        }
-        .dark .select-field {
-            background-color: rgba(15, 23, 42, 0.5);
-            border-color: rgba(255, 255, 255, 0.1);
-            color: #f1f5f9;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        }
-        .dark .select-field:focus {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
-        }
-        /* Option scroll for long lists */
-        .select-field option {
-            background: #fff;
-            color: #0f172a;
-        }
-        .dark .select-field option {
-            background: #1e293b;
-            color: #f1f5f9;
         }
 
         /* Scrollbar */
@@ -482,14 +412,14 @@
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-4">
                     <!-- Mobile menu button -->
-                    <button @click="sidebarOpen = !sidebarOpen" class="lg:hidden p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700">
-                        <svg class="w-5 h-5 text-surface-600 dark:text-surface-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button @click="sidebarOpen = !sidebarOpen" class="lg:hidden p-2 rounded-lg hover:bg-surface-700">
+                        <svg class="w-5 h-5 text-surface-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
                     </button>
                     <div>
-                        <h2 class="text-lg font-bold text-surface-900 dark:text-white">{% block page_title %}Dashboard{% endblock %}</h2>
-                        <p class="text-sm text-surface-500 dark:text-surface-400">{% block page_subtitle %}{% endblock %}</p>
+                        <h2 class="text-lg font-bold text-white">{% block page_title %}Dashboard{% endblock %}</h2>
+                        <p class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -513,8 +443,8 @@
                         {% elif category == 'error' %}border-l-4 border-l-red-500
                         {% elif category == 'warning' %}border-l-4 border-l-amber-500
                         {% else %}border-l-4 border-l-brand-500{% endif %}">
-                <p class="text-sm text-surface-700 dark:text-surface-200">{{ message }}</p>
-                <button @click="show = false" class="text-surface-400 hover:text-surface-600 dark:hover:text-surface-200">
+                <p class="text-sm text-surface-200">{{ message }}</p>
+                <button @click="show = false" class="text-surface-400 hover:text-surface-200">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
