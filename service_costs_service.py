@@ -307,8 +307,12 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
     One row per mapping when the resource is allocated and one unallocated row
     when it is not, with an Expense against every one of them either way.
     """
-    month_label = p_start.strftime('%b %Y')
-    description = f"{desc_prefix} ({month_label})"
+    # A one day period is a single dated charge rather than a month's usage, so
+    # it gets the day. Anthropic billed twice in March and twice in May, and
+    # two expense lines both reading "Claude (Mar 2026)" are indistinguishable
+    # on the very screen they exist to explain.
+    label = p_start.strftime('%d %b %Y') if p_start == p_end else p_start.strftime('%b %Y')
+    description = f"{desc_prefix} ({label})"
 
     # `or [None]` is the unallocated case: one pass, no mapping, no client.
     for mapping in _find_mapping(provider.id, resource_id) or [None]:
