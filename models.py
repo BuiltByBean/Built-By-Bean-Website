@@ -624,6 +624,10 @@ class ServiceProvider(db.Model):
     display_name = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     credentials_json = db.Column(db.Text, nullable=True)
+    # For a vendor whose API will not report spend. Railway's schema is all
+    # CPU, memory, disk and network and has no measurement denominated in
+    # money, so the only way to book it is a figure set here once.
+    monthly_cost = db.Column(db.Float, nullable=True)
     last_sync_at = db.Column(db.DateTime, nullable=True)
     sync_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -664,8 +668,11 @@ class ServiceMapping(db.Model):
 class ServiceCostEntry(db.Model):
     __tablename__ = "service_cost_entries"
     __table_args__ = (
+        # mapping_id is in the key so one resource split across two clients
+        # writes one row per allocation instead of violating the constraint
+        # and killing the sync.
         db.UniqueConstraint("provider_id", "resource_identifier", "period_start", "period_end",
-                            name="uq_service_cost_entry"),
+                            "mapping_id", name="uq_service_cost_entry_alloc"),
     )
 
     id = db.Column(db.Integer, primary_key=True)

@@ -97,15 +97,33 @@
             </div>
         </div>
 
-        {% if editing %}
-        <div class="glass-card p-6">
-            <label class="flex items-center gap-3 cursor-pointer">
+        <div class="glass-card p-6 space-y-4">
+            <div>
+                <label for="monthly-cost" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Flat monthly cost
+                    <span class="text-surface-500 font-normal">(optional)</span>
+                </label>
+                <input id="monthly-cost" type="number" step="0.01" min="0" name="monthly_cost"
+                       value="{{ provider.monthly_cost if editing and provider.monthly_cost else '' }}"
+                       placeholder="0.00"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+                {# Railway is the case this exists for: its API reports CPU,
+                   memory, disk and network, and nothing denominated in money,
+                   so the only way to book it is a figure set here. #}
+                <p class="text-xs text-surface-500 mt-1.5">
+                    For a vendor whose API will not report spend. Booked automatically
+                    each month. Leave blank when the sync can read real amounts.
+                </p>
+            </div>
+
+            {% if editing %}
+            <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
                 <input type="checkbox" name="is_active" {{ 'checked' if provider.is_active else '' }}
-                       class="w-4 h-4 rounded border-surface-600 text-brand-500 focus:ring-brand-500">
+                       class="w-5 h-5 flex-shrink-0 rounded border-surface-600 text-brand-500 focus:ring-brand-500">
                 <span class="text-sm font-medium text-surface-300">Active</span>
             </label>
+            {% endif %}
         </div>
-        {% endif %}
 
         <div class="flex items-center gap-3">
             <button type="submit" x-show="providerType || {{ 'true' if editing else 'false' }}"

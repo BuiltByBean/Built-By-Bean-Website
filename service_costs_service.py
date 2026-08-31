@@ -24,33 +24,72 @@ def _find_mapping(provider_id, resource_identifier):
     ).all()
 
 
-def _existing_entry(provider_id, resource_id, period_start, period_end):
+def _existing_entry(provider_id, resource_id, period_start, period_end, mapping_id=None):
     return ServiceCostEntry.query.filter_by(
         provider_id=provider_id,
         resource_identifier=resource_id,
         period_start=period_start,
         period_end=period_end,
+        mapping_id=mapping_id,
     ).first()
 
 
-def _create_expense_from_cost(cost_entry, mapping):
-    if not mapping or not mapping.client_id:
-        return None
-    expense = Expense(
-        client_id=mapping.client_id,
-        project_id=mapping.project_id,
-        amount=cost_entry.allocated_amount,
-        description=cost_entry.description,
-        category="service_cost",
-        date=cost_entry.period_end,
-    )
-    db.session.add(expense)
+def _month_bounds(when=None):
+    """The calendar month `when` falls in, first and last day inclusive.
+
+    Every sync used to end its period at today. A daily run therefore invented
+    a new period each day, each holding the month to date, and because the
+    period was part of the key nothing ever matched what yesterday wrote. The
+    same spend booked itself over and over. A stable month is the single thing
+    that makes running this on a schedule safe.
+    """
+    when = when or date.today()
+    first = when.replace(day=1)
+    return first, (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+
+def _sync_expense(cost_entry, mapping):
+    """Keep an Expense in step with a cost entry, creating one if absent.
+
+    An unallocated cost gets an expense too, carrying no client. It is money
+    the business spent whether or not anybody has said which client it was
+    for, and refusing to book it is why the ledger contained nothing but hand
+    typed rows while four vendors were syncing happily.
+
+    Updates rather than inserts on a second run, because the entry it mirrors
+    is itself updated in place as the month accumulates.
+    """
+    expense = cost_entry.expense
+    if expense is None:
+        expense = Expense(category="service_cost")
+        db.session.add(expense)
+    expense.client_id = mapping.client_id if mapping else None
+    expense.project_id = mapping.project_id if mapping else None
+    expense.amount = cost_entry.allocated_amount
+    expense.description = cost_entry.description
+    expense.date = cost_entry.period_end
     db.session.flush()
     cost_entry.expense_id = expense.id
     return expense
 
 
 # ── Main Sync Dispatcher ────────────────────────────────────
+
+
+def sync_all_providers():
+    """Sync every active provider. Returns [(name, count, error), ...].
+
+    One provider's failure does not stop the others: `sync_provider` records
+    the error against the provider and returns it rather than raising, so a
+    Twilio outage cannot cost you a month of Cloudflare charges.
+    """
+    results = []
+    for provider in ServiceProvider.query.filter_by(is_active=True).order_by(
+        ServiceProvider.name
+    ).all():
+        count, error = sync_provider(provider.id)
+        results.append((provider.name, count, error))
+    return results
 
 
 def sync_provider(provider_id):
@@ -123,9 +162,6 @@ def _sync_aws(provider):
                 continue  # handle S3 separately below
 
             resource_id = f"aws:{service_name}"
-            if _existing_entry(provider.id, resource_id, p_start, p_end):
-                continue
-
             count += _record_cost_entry(provider, resource_id, p_start, p_end,
                                         amount, f"AWS {service_name}", group)
 
@@ -201,9 +237,6 @@ def _sync_aws_s3_by_bucket(provider, creds, s3_total, p_start, p_end):
             continue
 
         resource_id = f"aws-s3:{bucket_name}"
-        if _existing_entry(provider.id, resource_id, p_start, p_end):
-            continue
-
         count += _record_cost_entry(
             provider, resource_id, p_start, p_end, bucket_cost,
             f"AWS S3 - {bucket_name}",
@@ -214,43 +247,41 @@ def _sync_aws_s3_by_bucket(provider, creds, s3_total, p_start, p_end):
 
 
 def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefix, raw_data):
-    month_label = p_start.strftime('%b %Y')
-    mappings = _find_mapping(provider.id, resource_id)
-    count = 0
+    """Write, or correct, the cost of one resource for one period.
 
-    if mappings:
-        for mapping in mappings:
-            allocated = amount * (mapping.split_percentage / 100.0)
+    Upsert rather than insert. A month to date figure grows all month, so a
+    daily sync has to correct the row it wrote yesterday rather than stack
+    another one beside it. The callers no longer skip a period they have
+    already seen, for the same reason.
+
+    One row per mapping when the resource is allocated and one unallocated row
+    when it is not, with an Expense against every one of them either way.
+    """
+    month_label = p_start.strftime('%b %Y')
+    description = f"{desc_prefix} ({month_label})"
+
+    # `or [None]` is the unallocated case: one pass, no mapping, no client.
+    for mapping in _find_mapping(provider.id, resource_id) or [None]:
+        share = (mapping.split_percentage or 0) / 100.0 if mapping else 1.0
+        entry = _existing_entry(provider.id, resource_id, p_start, p_end,
+                                mapping.id if mapping else None)
+        if entry is None:
             entry = ServiceCostEntry(
                 provider_id=provider.id,
-                mapping_id=mapping.id,
+                mapping_id=mapping.id if mapping else None,
                 resource_identifier=resource_id,
                 period_start=p_start,
                 period_end=p_end,
-                raw_amount=amount,
-                allocated_amount=round(allocated, 2),
-                description=f"{desc_prefix} ({month_label})",
-                raw_data_json=json.dumps(raw_data) if raw_data else None,
             )
             db.session.add(entry)
-            db.session.flush()
-            _create_expense_from_cost(entry, mapping)
-            count += 1
-    else:
-        entry = ServiceCostEntry(
-            provider_id=provider.id,
-            resource_identifier=resource_id,
-            period_start=p_start,
-            period_end=p_end,
-            raw_amount=amount,
-            allocated_amount=amount,
-            description=f"{desc_prefix} ({month_label}) [unallocated]",
-            raw_data_json=json.dumps(raw_data) if raw_data else None,
-        )
-        db.session.add(entry)
-        count += 1
+        entry.raw_amount = amount
+        entry.allocated_amount = round(amount * share, 2)
+        entry.description = description if mapping else f"{description} [unallocated]"
+        entry.raw_data_json = json.dumps(raw_data) if raw_data else None
+        db.session.flush()
+        _sync_expense(entry, mapping)
 
-    return count
+    return len(_find_mapping(provider.id, resource_id) or [None])
 
 
 # ── Railway ─────────────────────────────────────────────────
@@ -293,49 +324,39 @@ def _sync_railway(provider):
 
     projects = data.get("data", {}).get("projects", {}).get("edges", [])
 
-    # Railway API doesn't expose per-project cost data publicly.
-    # We discover projects for mapping purposes and record them.
-    # Users enter costs manually or Railway adds billing API support later.
-    now = date.today()
-    p_start = now.replace(day=1)
-    p_end = now
-
-    # Store monthly subscription cost split across mapped projects
-    # User can set their Railway plan cost in a mapping
+    # Railway's API will not tell you what you are spending. Its
+    # MetricMeasurement enum is CPU_USAGE, MEMORY_USAGE_GB, DISK_USAGE_GB,
+    # NETWORK_TX_GB and friends, and not one value in it is denominated in
+    # money. Probed 2026-08-31 with the account's own token; `me` and the
+    # workspace queries are Not Authorized for a project token, so the
+    # workspace level billing is out of reach as well.
+    #
+    # So the account's monthly figure is the one on the provider, set by hand
+    # once, and this books it for the calendar month. Per project splitting is
+    # still available through mappings with their own monthly_cost, for anyone
+    # who wants it later.
+    p_start, p_end = _month_bounds()
     count = 0
+
+    flat = provider.monthly_cost or 0
+    if flat > 0:
+        count += _record_cost_entry(
+            provider, "railway:account", p_start, p_end, flat,
+            "Railway", {"projects": len(projects)},
+        )
+
     for edge in projects:
         node = edge.get("node", {})
-        project_id = node.get("id", "")
+        resource_id = f"railway:{node.get('id', '')}"
         project_name = node.get("name", "Unknown")
-        resource_id = f"railway:{project_id}"
 
-        mappings = _find_mapping(provider.id, resource_id)
-        if not mappings:
-            continue
-
-        if _existing_entry(provider.id, resource_id, p_start, p_end):
-            continue
-
-        for mapping in mappings:
+        for mapping in _find_mapping(provider.id, resource_id):
             cost = mapping.monthly_cost or 0
             if cost <= 0:
                 continue
-            allocated = cost * (mapping.split_percentage / 100.0)
-            entry = ServiceCostEntry(
-                provider_id=provider.id,
-                mapping_id=mapping.id,
-                resource_identifier=resource_id,
-                period_start=p_start,
-                period_end=p_end,
-                raw_amount=cost,
-                allocated_amount=round(allocated, 2),
-                description=f"Railway - {project_name} ({p_start.strftime('%b %Y')})",
-                raw_data_json=json.dumps(node),
-            )
-            db.session.add(entry)
-            db.session.flush()
-            _create_expense_from_cost(entry, mapping)
-            count += 1
+            count += _record_cost_entry(provider, resource_id, p_start, p_end,
+                                        cost, f"Railway - {project_name}", node)
+            break  # _record_cost_entry already writes a row per mapping
 
     db.session.commit()
     return count
@@ -374,43 +395,10 @@ def _sync_twilio(provider):
         p_start = date.fromisoformat(record.get("start_date", start.isoformat()))
         p_end = date.fromisoformat(record.get("end_date", now.isoformat()))
 
-        if _existing_entry(provider.id, resource_id, p_start, p_end):
-            continue
-
         description_text = record.get("description", category)
 
-        mappings = _find_mapping(provider.id, resource_id)
-        if mappings:
-            for mapping in mappings:
-                allocated = price * (mapping.split_percentage / 100.0)
-                entry = ServiceCostEntry(
-                    provider_id=provider.id,
-                    mapping_id=mapping.id,
-                    resource_identifier=resource_id,
-                    period_start=p_start,
-                    period_end=p_end,
-                    raw_amount=price,
-                    allocated_amount=round(allocated, 2),
-                    description=f"Twilio - {description_text} ({p_start.strftime('%b %Y')})",
-                    raw_data_json=json.dumps(record),
-                )
-                db.session.add(entry)
-                db.session.flush()
-                _create_expense_from_cost(entry, mapping)
-                count += 1
-        else:
-            entry = ServiceCostEntry(
-                provider_id=provider.id,
-                resource_identifier=resource_id,
-                period_start=p_start,
-                period_end=p_end,
-                raw_amount=price,
-                allocated_amount=price,
-                description=f"Twilio - {description_text} ({p_start.strftime('%b %Y')}) [unallocated]",
-                raw_data_json=json.dumps(record),
-            )
-            db.session.add(entry)
-            count += 1
+        count += _record_cost_entry(provider, resource_id, p_start, p_end,
+                                    price, f"Twilio - {description_text}", record)
 
     db.session.commit()
     return count
@@ -444,14 +432,14 @@ def _sync_cloudflare(provider):
     zones = zones_data.get("result", [])
 
     # Get billing history
-    billing_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/billing/history?per_page=20&order=occured_at&direction=desc"
+    billing_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/billing/history?per_page=20&order=occurred_at&direction=desc"
     resp2 = requests.get(billing_url, headers=headers, timeout=30)
     resp2.raise_for_status()
     billing_data = resp2.json()
 
-    now = date.today()
-    p_start = now.replace(day=1)
-    p_end = now
+    # Zone plan charges are recurring, so they belong to the current calendar
+    # month. Billing history items carry their own date and override this.
+    p_start, p_end = _month_bounds()
 
     count = 0
 
@@ -463,24 +451,19 @@ def _sync_cloudflare(provider):
                 continue
 
             item_id = item.get("id", "unknown")
-            description = item.get("description", "Cloudflare charge")
+            description = item.get("description") or f"{item.get('type', 'charge')} {item.get('receipt_id', '')}".strip()
             resource_id = f"cloudflare:{item_id}"
 
-            if _existing_entry(provider.id, resource_id, p_start, p_end):
-                continue
+            # A charge belongs to the month it happened in, not the month the
+            # sync happened to run in. This used to stamp every charge with
+            # today, which filed an April invoice under July and made the
+            # ledger disagree with the card statement.
+            occurred = item.get("occurred_at") or item.get("occured_at")
+            when = date.fromisoformat(occurred[:10]) if occurred else date.today()
+            c_start, c_end = _month_bounds(when)
 
-            entry = ServiceCostEntry(
-                provider_id=provider.id,
-                resource_identifier=resource_id,
-                period_start=p_start,
-                period_end=p_end,
-                raw_amount=amount,
-                allocated_amount=amount,
-                description=f"Cloudflare - {description} ({p_start.strftime('%b %Y')})",
-                raw_data_json=json.dumps(item),
-            )
-            db.session.add(entry)
-            count += 1
+            count += _record_cost_entry(provider, resource_id, c_start, c_end,
+                                        amount, f"Cloudflare - {description}", item)
 
     # Also track per-zone as resources (even if free) so they can be mapped
     for zone in zones:
@@ -494,41 +477,8 @@ def _sync_cloudflare(provider):
         if plan_price <= 0:
             continue
 
-        if _existing_entry(provider.id, resource_id, p_start, p_end):
-            continue
-
-        mappings = _find_mapping(provider.id, resource_id)
-        if mappings:
-            for mapping in mappings:
-                allocated = plan_price * (mapping.split_percentage / 100.0)
-                entry = ServiceCostEntry(
-                    provider_id=provider.id,
-                    mapping_id=mapping.id,
-                    resource_identifier=resource_id,
-                    period_start=p_start,
-                    period_end=p_end,
-                    raw_amount=plan_price,
-                    allocated_amount=round(allocated, 2),
-                    description=f"Cloudflare - {zone_name} ({p_start.strftime('%b %Y')})",
-                    raw_data_json=json.dumps(zone),
-                )
-                db.session.add(entry)
-                db.session.flush()
-                _create_expense_from_cost(entry, mapping)
-                count += 1
-        else:
-            entry = ServiceCostEntry(
-                provider_id=provider.id,
-                resource_identifier=resource_id,
-                period_start=p_start,
-                period_end=p_end,
-                raw_amount=plan_price,
-                allocated_amount=plan_price,
-                description=f"Cloudflare - {zone_name} ({p_start.strftime('%b %Y')}) [unallocated]",
-                raw_data_json=json.dumps(zone),
-            )
-            db.session.add(entry)
-            count += 1
+        count += _record_cost_entry(provider, resource_id, p_start, p_end,
+                                    plan_price, f"Cloudflare - {zone_name}", zone)
 
     db.session.commit()
     return count

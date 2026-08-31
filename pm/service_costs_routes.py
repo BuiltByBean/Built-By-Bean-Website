@@ -44,6 +44,22 @@ def _extract_credentials(name):
     return {}
 
 
+def _monthly_cost():
+    """The flat monthly figure, or None when the field is left blank.
+
+    None and 0 mean different things here: None is "this vendor reports its
+    own spend", 0 would be "this vendor costs nothing", and storing the second
+    when the user meant the first books a zero every month.
+    """
+    raw = (request.form.get("monthly_cost") or "").strip()
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return None
+
+
 # ── Dashboard ───────────────────────────────────────────────
 
 
@@ -89,6 +105,7 @@ def provider_create():
             name=name,
             display_name=display_name,
             credentials_json=json.dumps(creds),
+            monthly_cost=_monthly_cost(),
         )
         db.session.add(provider)
         db.session.commit()
@@ -110,6 +127,7 @@ def provider_edit(id):
     if request.method == "POST":
         creds = _extract_credentials(provider.name)
         provider.credentials_json = json.dumps(creds)
+        provider.monthly_cost = _monthly_cost()
         provider.is_active = "is_active" in request.form
         db.session.commit()
         flash(f"{provider.display_name} updated.", "success")
