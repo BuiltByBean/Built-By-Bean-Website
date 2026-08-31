@@ -226,7 +226,11 @@ def get_recent_payments(limit=10):
     if not stripe.api_key:
         return []
     try:
-        charges = stripe.Charge.list(limit=limit)
+        # The customer comes back expanded, because the only name a charge
+        # carries on its own is the cardholder name off the payment method,
+        # which an invoice paid against a saved card does not have. One
+        # expanded list request beats a customer lookup per row.
+        charges = stripe.Charge.list(limit=limit, expand=["data.customer"])
         return charges.data
     except Exception as e:
         current_app.logger.error(f"Stripe payments error: {e}")

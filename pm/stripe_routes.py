@@ -29,6 +29,42 @@ def _clip(text, limit=380):
 # ── Stripe Dashboard ────────────────────────────────────────
 
 
+def _payer_name(charge, client_names):
+    """Who paid, in the name this business actually uses for them.
+
+    This used to read `billing_details.name`, which is the cardholder name a
+    payment form captured rather than anything about the customer. Stripe fills
+    it for a Checkout session that collected a name and leaves it empty for an
+    invoice paid against a saved payment method. That is the whole reason the
+    two subscription signups showed a name here and every invoice payment
+    showed "Unknown" while having a perfectly good customer attached to it.
+
+    So read the customer, and prefer the local client's name over Stripe's.
+    The PM is where these names are curated: a client renamed here should not
+    go on showing whatever was typed into Stripe when the account was opened.
+
+    Falls back through the customer's own name, then their email, then the
+    cardholder name, and only says "Unknown" when a charge genuinely has
+    nobody attached to it.
+    """
+    customer = getattr(charge, "customer", None)
+    customer_id = customer if isinstance(customer, str) else getattr(customer, "id", None)
+
+    if customer_id and customer_id in client_names:
+        return client_names[customer_id]
+
+    # A deleted customer still expands, but to a stub carrying an id and
+    # nothing else, so `deleted` has to be checked before trusting the fields.
+    if customer is not None and not isinstance(customer, str) and not getattr(customer, "deleted", False):
+        for field in ("name", "email"):
+            value = getattr(customer, field, None)
+            if value:
+                return value
+
+    billing = getattr(charge, "billing_details", None)
+    return (getattr(billing, "name", None) if billing else None) or "Unknown"
+
+
 @stripe_bp.route("/")
 @login_required
 def stripe_dashboard():
@@ -47,10 +83,17 @@ def stripe_dashboard():
                 if b.currency == "usd":
                     pending = b.amount / 100.0
 
+        # Read once for the whole list rather than per row. Duplicated ids
+        # would be a mapping mistake somewhere else; last one wins here.
+        client_names = {
+            c.stripe_customer_id: c.name
+            for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
+        }
+
         raw_payments = get_recent_payments(limit=10)
         for p in raw_payments:
             payments.append({
-                "name": (p.billing_details.name if p.billing_details else None) or "Unknown",
+                "name": _payer_name(p, client_names),
                 "description": p.description or "Payment",
                 "amount": (p.amount or 0) / 100.0,
                 "status": p.status or "unknown",
