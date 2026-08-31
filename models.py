@@ -837,3 +837,103 @@ class TaxSetting(db.Model):
 
     def __repr__(self):
         return f"<TaxSetting {self.filing_status} wages={self.household_income}>"
+
+
+# Statuses come from the portal, which is the only place they are decided.
+SIGNATURE_STATUS_LABELS = {
+    "draft": "Draft",
+    "sent": "Out for signature",
+    "completed": "Signed",
+    "declined": "Declined",
+    "voided": "Voided",
+}
+# Full class strings rather than a colour name spliced into one. Tailwind is
+# scanned for whole class names, and a template that builds `bg-{{ x }}-500`
+# is a template whose colours silently stop existing.
+SIGNATURE_STATUS_COLORS = {
+    "draft": "bg-surface-800 text-surface-300",
+    "sent": "bg-amber-900/30 text-amber-400",
+    "completed": "bg-emerald-900/30 text-emerald-400",
+    "declined": "bg-red-900/30 text-red-400",
+    "voided": "bg-surface-800 text-surface-400",
+}
+
+
+class SignatureRequest(db.Model):
+    """A contract this board sent to the signing portal, and where it went.
+
+    Deliberately thin. The portal owns the envelope: its status, its audit
+    chain, its sealed PDF. What is kept here is the join the portal has no way
+    to know — which client this was for, which project, which of our documents
+    it came from — plus the last status seen, so a list can be drawn without
+    waiting on the network first.
+
+    `status` is therefore a cache and nothing more. It is refreshed from the
+    portal whenever these pages are opened, and the portal wins every time.
+    """
+
+    __tablename__ = "signature_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # The portal's own id. Unique because one envelope is one request; a
+    # second row for the same envelope would be two answers to one question.
+    envelope_id = db.Column(db.String(64), nullable=False, unique=True, index=True)
+
+    title = db.Column(db.String(200), nullable=False)
+    # engagement_letter | sow | document — what produced the PDF, so the list
+    # can say what was sent without opening it.
+    kind = db.Column(db.String(30), nullable=False, default="document")
+
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    # The unsigned PDF as filed here when it was generated.
+    source_document_id = db.Column(db.Integer, db.ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    # The sealed PDF, filed back against the client once everyone has signed.
+    signed_document_id = db.Column(db.Integer, db.ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+
+    signer_name = db.Column(db.String(120), nullable=False)
+    signer_email = db.Column(db.String(200), nullable=False)
+    # The portal's per-signer id, needed to mint a fresh link for them later.
+    signer_ref = db.Column(db.String(64), nullable=True)
+    # The one-click link that signs them in and opens the ceremony. Kept
+    # because without SMTP it is the only way the client ever gets it, and
+    # because "resend the link" is the most common thing anyone asks for.
+    signing_url = db.Column(db.Text, nullable=True)
+
+    status = db.Column(db.String(20), nullable=False, default="sent")
+    # Whether the portal actually emailed them, or only wrote to its outbox.
+    mail_mode = db.Column(db.String(10), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    sent_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    synced_at = db.Column(db.DateTime, nullable=True)
+
+    client = db.relationship("Client", backref=db.backref("signature_requests", lazy="dynamic"))
+    project = db.relationship("Project", backref=db.backref("signature_requests", lazy="dynamic"))
+    source_document = db.relationship("Document", foreign_keys=[source_document_id])
+    signed_document = db.relationship("Document", foreign_keys=[signed_document_id])
+
+    @property
+    def status_label(self):
+        return SIGNATURE_STATUS_LABELS.get(self.status, self.status.title())
+
+    @property
+    def status_classes(self):
+        return SIGNATURE_STATUS_COLORS.get(self.status, "bg-surface-800 text-surface-400")
+
+    @property
+    def is_open(self):
+        """Still waiting on somebody. Only these need refreshing."""
+        return self.status in ("draft", "sent")
+
+    @property
+    def kind_label(self):
+        return {
+            "engagement_letter": "Engagement letter",
+            "sow": "Statement of work",
+        }.get(self.kind, "Document")
+
+    def __repr__(self):
+        return f"<SignatureRequest {self.envelope_id} {self.status}>"

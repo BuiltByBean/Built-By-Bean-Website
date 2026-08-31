@@ -17,6 +17,7 @@ from werkzeug.utils import secure_filename
 
 from config import Config
 import hub
+import signadoc_service
 import time
 from models import (
     db, Client, Project, Ticket, TicketNote, Expense, TimeEntry, Document, User,
@@ -32,6 +33,13 @@ from forms import (
     PRIORITY_CHOICES, RATE_TYPE_CHOICES, EXPENSE_CATEGORY_CHOICES,
     FREQUENCY_CHOICES,
 )
+
+
+# Where a signature field goes on the signature blocks below. The label cell
+# runs from the 30mm left margin to 60mm and the underscore rule starts there,
+# so a 6mm-tall box from the top of the row sits on the rule rather than
+# through it. Millimetres, because that is what fpdf measures in.
+SIGN_FIELD_X, SIGN_FIELD_W, SIGN_FIELD_H = 61.0, 86.0, 6.0
 
 
 def _billable_hours_from_seconds(seconds):
@@ -233,6 +241,10 @@ def create_app():
     # ── Tax Estimate ────────────────────────────────────────
     from pm.tax_routes import tax_bp
     app.register_blueprint(tax_bp)
+
+    # ── Signatures (SignaDoc) ───────────────────────────────
+    from pm.signature_routes import signatures_bp, send_generated
+    app.register_blueprint(signatures_bp)
 
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
@@ -1786,14 +1798,25 @@ def create_app():
         body_text(f"By signing below, {client_name} acknowledges receipt of this engagement letter and agrees to the terms outlined herein.")
         pdf.ln(4)
 
+        # Note where each line lands as it is drawn, so the signing portal can
+        # put a field on it. Recorded here rather than searched for in the
+        # finished PDF: this code knows exactly where it put them, and a
+        # heuristic looking for something signature-shaped would not.
+        sign_anchors = []
         for label in ["Signature", "Printed Name", "Title", "Date"]:
             pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(*BLACK)
+            sign_anchors.append({"label": label, "page": pdf.page_no(), "y": pdf.get_y(),
+                                 "x": SIGN_FIELD_X, "w": SIGN_FIELD_W, "h": SIGN_FIELD_H})
             pdf.cell(30, 8, f"{label}:")
             pdf.cell(100, 8, "_" * 50, new_x="LMARGIN", new_y="NEXT")
             pdf.ln(3)
 
-        # Add footers
+        # Add footers. Auto page break comes off first: the footer sits 20mm
+        # from the bottom, which is already past the 25mm break margin, so
+        # writing it triggers a new page and every letter ends on a blank
+        # sheet. Nothing is drawn after this, so it is not turned back on.
+        pdf.set_auto_page_break(auto=False)
         for page_num in range(1, pdf.pages_count + 1):
             pdf.page = page_num
             add_footer()
@@ -1803,6 +1826,7 @@ def create_app():
         filename = f"{safe_name}_Engagement_Letter.pdf"
 
         # Auto-save PDF to client
+        doc = None
         client = Client.query.filter(Client.name.ilike(client_name)).first()
         if client:
             stored_name = f"{uuid.uuid4().hex}.pdf"
@@ -1824,6 +1848,19 @@ def create_app():
             )
             db.session.add(doc)
             db.session.commit()
+
+        # Straight out for signature, if that was asked for. The fields go on
+        # the lines just drawn, so the client signs where the letter says to
+        # sign rather than wherever a guess put a box.
+        sent = send_generated(
+            bytes(pdf_bytes), filename=filename,
+            title=f"Engagement Letter - {client_name}",
+            kind="engagement_letter",
+            fields=signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h),
+            client=client, document=doc,
+        )
+        if sent:
+            return redirect(url_for("signatures.signature_detail", id=sent.id))
 
         from flask import make_response as _make_response
         response = _make_response(pdf_bytes)
@@ -2188,9 +2225,15 @@ def create_app():
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, client_name, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
+        # Only the client's block is captured. The Built by Bean signature
+        # above it is already on the page, and offering to collect it again
+        # would be asking somebody to sign their own document.
+        sign_anchors = []
         for label in ["Signature", "Printed Name", "Title", "Date"]:
             pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(*BLACK)
+            sign_anchors.append({"label": label, "page": pdf.page_no(), "y": pdf.get_y(),
+                                 "x": SIGN_FIELD_X, "w": SIGN_FIELD_W, "h": SIGN_FIELD_H})
             pdf.cell(30, 8, f"{label}:")
             pdf.cell(100, 8, "_" * 50, new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
@@ -2209,6 +2252,8 @@ def create_app():
         filename = f"{safe_name}_SOW_{project_name.replace(' ', '_')}.pdf"
 
         # Auto-save PDF to client and update stage/revenue
+        doc = None
+        project = None
         client = Client.query.filter(Client.name.ilike(client_name)).first()
         if client:
             stored_name = f"{uuid.uuid4().hex}.pdf"
@@ -2249,6 +2294,16 @@ def create_app():
                 project.phase = "contracted"
                 project.budget = price_val
             db.session.commit()
+
+        sent = send_generated(
+            bytes(pdf_bytes), filename=filename,
+            title=f"Statement of Work - {project_name}",
+            kind="sow",
+            fields=signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h),
+            client=client, project=project, document=doc,
+        )
+        if sent:
+            return redirect(url_for("signatures.signature_detail", id=sent.id))
 
         from flask import make_response
         response = make_response(pdf_bytes)

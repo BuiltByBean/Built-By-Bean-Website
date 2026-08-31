@@ -1,0 +1,88 @@
+{% extends "pm/base.html" %}
+
+{#
+  Send a document that is already filed here out for signature.
+
+  This board did not draw this PDF, so it does not know where its signature
+  line is. The fields go at the bottom of the last page, which is where a
+  signature block sits on almost every contract, and the page says so plainly
+  rather than letting somebody discover it after the client has signed in the
+  wrong place.
+#}
+
+{% block page_title %}Send for signature{% endblock %}
+{% block page_subtitle %}{{ document.original_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+
+    {% if not configured %}
+    <div class="glass-card p-5 border border-amber-500/30">
+        <h3 class="text-sm font-bold text-amber-300 mb-1">Signing is not switched on</h3>
+        <p class="text-sm text-surface-300">
+            Set <code class="text-brand-300">SIGNADOC_URL</code> and
+            <code class="text-brand-300">SIGNADOC_API_KEY</code> first.
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="glass-card p-6">
+        <form method="POST" action="{{ url_for('signatures.send_document', document_id=document.id) }}">
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Title *</label>
+                    <input type="text" name="title" required value="{{ document.original_name }}"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    <p class="mt-1 text-xs text-surface-400">What the signer sees in their email and on the page.</p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Signer name *</label>
+                        <input type="text" name="signer_name" required
+                               value="{{ client.name if client else '' }}"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                               placeholder="e.g. Cason Kuper">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Signer email *</label>
+                        <input type="email" name="signer_email" required
+                               value="{{ client.email if client and client.email else '' }}"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                               placeholder="name@example.com">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Message</label>
+                    <textarea name="message" rows="2"
+                              class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400"
+                              placeholder="Optional note included in the signing request"></textarea>
+                </div>
+
+                <div class="rounded-xl bg-surface-800/40 border border-white/10 p-4">
+                    <p class="text-xs text-surface-300">
+                        The signature and date fields are placed at the bottom of the last page.
+                        Engagement letters and statements of work generated here place them on
+                        their own signature lines instead.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-700">
+                <button type="submit" {% if not configured %}disabled{% endif %}
+                        class="inline-flex items-center gap-2 px-6 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                    </svg>
+                    Send for signature
+                </button>
+                <a href="{{ url_for('signatures.signatures_index') }}"
+                   class="px-6 py-2.5 text-sm text-surface-300 hover:text-white transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

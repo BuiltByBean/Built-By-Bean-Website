@@ -1,0 +1,129 @@
+{% extends "pm/base.html" %}
+
+{#
+  Every contract that has gone out, and where it stopped.
+
+  Status is refreshed from SignaDoc on the way into this page rather than by a
+  button somebody has to remember to press. When the portal cannot be reached
+  the page still draws from what was last known and says so, because a stale
+  number that admits it is stale is useful and one that pretends is not.
+#}
+
+{% block title %}Signatures - Built By Bean{% endblock %}
+{% block page_title %}Signatures{% endblock %}
+{% block page_subtitle %}Contracts out for signing{% endblock %}
+
+{% block header_actions %}
+{% if portal_url %}
+<a href="{{ portal_url }}" target="_blank" rel="noopener"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+    </svg>
+    Open SignaDoc
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+
+    {% if not configured %}
+    <div class="glass-card p-5 border border-amber-500/30">
+        <h3 class="text-sm font-bold text-amber-300 mb-1">Signing is not switched on</h3>
+        <p class="text-sm text-surface-300">
+            Set <code class="text-brand-300">SIGNADOC_URL</code> and
+            <code class="text-brand-300">SIGNADOC_API_KEY</code> so contracts generated here
+            can be sent for signature.
+        </p>
+    </div>
+    {% elif stale %}
+    <div class="glass-card p-5 border border-amber-500/30">
+        <h3 class="text-sm font-bold text-amber-300 mb-1">SignaDoc did not answer</h3>
+        <p class="text-sm text-surface-300">
+            These statuses are the last ones seen and may have moved on since.
+        </p>
+    </div>
+    {% endif %}
+
+    {% if requests %}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {% for key, label in [('sent', 'Out for signature'), ('completed', 'Signed'),
+                              ('declined', 'Declined'), ('voided', 'Voided')] %}
+        <div class="glass-card p-4">
+            <p class="text-xs text-surface-400 uppercase tracking-wide">{{ label }}</p>
+            <p class="text-2xl font-bold text-white mt-1">{{ counts.get(key, 0) }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="glass-card overflow-hidden">
+        {# Wide content scrolls inside its own box; the page body must not. #}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-white/10 text-left text-xs uppercase tracking-wide text-surface-400">
+                        <th class="px-4 py-3 font-medium">Document</th>
+                        <th class="px-4 py-3 font-medium">Signer</th>
+                        <th class="px-4 py-3 font-medium">Client</th>
+                        <th class="px-4 py-3 font-medium">Sent</th>
+                        <th class="px-4 py-3 font-medium">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr class="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors">
+                        <td class="px-4 py-3">
+                            <a href="{{ url_for('signatures.signature_detail', id=req.id) }}"
+                               class="font-medium text-white hover:text-brand-300 transition-colors">
+                                {{ req.title }}
+                            </a>
+                            <p class="text-xs text-surface-400 mt-0.5">{{ req.kind_label }}</p>
+                        </td>
+                        <td class="px-4 py-3">
+                            <p class="text-surface-200">{{ req.signer_name }}</p>
+                            <p class="text-xs text-surface-400 break-all">{{ req.signer_email }}</p>
+                        </td>
+                        <td class="px-4 py-3 text-surface-300">
+                            {% if req.client %}
+                            <a href="{{ url_for('pm.client_detail', id=req.client.id) }}"
+                               class="hover:text-brand-300 transition-colors">{{ req.client.name }}</a>
+                            {% else %}
+                            <span class="text-surface-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-surface-300 whitespace-nowrap">
+                            {{ req.sent_at|format_date or '-' }}
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ req.status_classes }}">
+                                {{ req.status_label }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+        </svg>
+        <p class="text-surface-400 mb-4">Nothing has been sent for signature yet</p>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+            <a href="{{ url_for('pm.engagement_letter_form') }}"
+               class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
+                New engagement letter
+            </a>
+            <a href="{{ url_for('pm.sow_form') }}"
+               class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                New statement of work
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
