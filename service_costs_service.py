@@ -48,7 +48,7 @@ def _month_bounds(when=None):
     return first, (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
 
-def _sync_expense(cost_entry, mapping):
+def _sync_expense(cost_entry, mapping, default_client_id=None):
     """Keep an Expense in step with a cost entry, creating one if absent.
 
     An unallocated cost gets an expense too, carrying no client. It is money
@@ -63,7 +63,12 @@ def _sync_expense(cost_entry, mapping):
     if expense is None:
         expense = Expense(category="service_cost")
         db.session.add(expense)
-    expense.client_id = mapping.client_id if mapping else None
+    # A mapping wins, then whatever the caller already knows. Stripe fees are
+    # the case for the second: the customer that paid is on the balance
+    # transaction and the client behind it is on Client.stripe_customer_id, so
+    # the owner is known without anybody making a mapping by hand. A mapping
+    # still overrides, for splitting a cost or reassigning it.
+    expense.client_id = mapping.client_id if mapping else default_client_id
     expense.project_id = mapping.project_id if mapping else None
     expense.amount = cost_entry.allocated_amount
     expense.description = cost_entry.description
@@ -103,6 +108,7 @@ def sync_provider(provider_id):
         "twilio": _sync_twilio,
         "cloudflare": _sync_cloudflare,
         "flat": _sync_flat,
+        "stripe": _sync_stripe,
     }
 
     func = sync_funcs.get(provider.name)
@@ -120,6 +126,88 @@ def sync_provider(provider_id):
         provider.last_sync_at = datetime.now(timezone.utc)
         db.session.commit()
         return 0, str(e)
+
+
+# ── Stripe processing fees ──────────────────────────────────
+
+
+def _sync_stripe(provider):
+    """Book Stripe's cut as an expense, per customer, per month.
+
+    Every card payment is charged for twice: the customer pays you and Stripe
+    keeps roughly 2.9% plus 30 cents. Revenue was being read gross, so the fee
+    never appeared anywhere and a deductible cost went unclaimed. It runs about
+    3% of everything collected, which is not small.
+
+    Fees come off balance transactions rather than charges, because that is the
+    one place every kind of fee lands: card processing, refunds, and Stripe's
+    own periodic billing all carry a `fee` there, and reading charges alone
+    would miss the last two.
+
+    No credentials on the provider. Stripe is already configured for the app
+    and the key lives in STRIPE_SECRET_KEY; storing a second copy on a provider
+    row would be one more place to leak it from and one more to rotate.
+
+    Grouped by customer so the fee lands on the client whose payment caused it.
+    The owner comes from Client.stripe_customer_id, which is already maintained
+    for revenue, so no mapping has to be made by hand. A mapping still wins if
+    one exists, for splitting or reassigning.
+    """
+    import stripe as stripe_sdk
+    from models import Client
+
+    if not stripe_sdk.api_key:
+        raise ValueError("Stripe is not configured (STRIPE_SECRET_KEY unset)")
+
+    client_by_customer = {
+        c.stripe_customer_id: c.id
+        for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
+    }
+    name_by_customer = {
+        c.stripe_customer_id: c.name
+        for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
+    }
+
+    # (customer_id or None, period) -> fee dollars
+    buckets = {}
+    for txn in stripe_sdk.BalanceTransaction.list(limit=100, expand=["data.source"]).auto_paging_iter():
+        fee = (getattr(txn, "fee", 0) or 0) / 100.0
+        if fee <= 0:
+            continue
+        created = getattr(txn, "created", None)
+        if not created:
+            continue
+        when = datetime.fromtimestamp(created, timezone.utc).date()
+
+        source = getattr(txn, "source", None)
+        customer = None
+        if source is not None and not isinstance(source, str):
+            customer = getattr(source, "customer", None)
+            if customer is not None and not isinstance(customer, str):
+                customer = getattr(customer, "id", None)
+
+        key = (customer, _month_bounds(when))
+        buckets[key] = buckets.get(key, 0.0) + fee
+
+    count = 0
+    for (customer, (p_start, p_end)), amount in buckets.items():
+        if customer:
+            resource_id = f"stripe-fees:{customer}"
+            who = name_by_customer.get(customer)
+            label = f"Stripe fees - {who}" if who else "Stripe fees"
+        else:
+            # Stripe's own periodic charges, and anything whose source carries
+            # no customer. Real money, nobody in particular to bill it to.
+            resource_id = "stripe-fees:account"
+            label = "Stripe fees - account"
+
+        count += _record_cost_entry(
+            provider, resource_id, p_start, p_end, round(amount, 2), label,
+            {"customer": customer}, default_client_id=client_by_customer.get(customer),
+        )
+
+    db.session.commit()
+    return count
 
 
 # ── Flat monthly, for a vendor with no billing API ──────────
@@ -296,7 +384,8 @@ def _sync_aws_s3_by_bucket(provider, creds, s3_total, p_start, p_end):
     return count
 
 
-def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefix, raw_data):
+def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefix,
+                       raw_data, default_client_id=None):
     """Write, or correct, the cost of one resource for one period.
 
     Upsert rather than insert. A month to date figure grows all month, so a
@@ -333,7 +422,7 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
         entry.description = description if mapping else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
-        _sync_expense(entry, mapping)
+        _sync_expense(entry, mapping, default_client_id=default_client_id)
 
     return len(_find_mapping(provider.id, resource_id) or [None])
 

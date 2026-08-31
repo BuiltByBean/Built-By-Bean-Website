@@ -97,6 +97,21 @@
             </div>
         </div>
 
+        {# Stripe needs nothing entered: the app already holds the key. Saying so
+           is better than an empty panel, which reads as a broken form. #}
+        <div x-show="providerType === 'stripe'" x-transition class="glass-card p-6">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-3">Credentials</h3>
+            <p class="text-sm text-surface-300">
+                Nothing to enter. This uses the app's own Stripe key, so there is no
+                second copy to leak or rotate.
+            </p>
+            <p class="text-xs text-surface-400 mt-2">
+                Books Stripe's processing fees, roughly 3% of everything collected,
+                grouped by month and attributed to the client whose payment caused
+                them. Leave the flat monthly cost blank.
+            </p>
+        </div>
+
         {# A flat provider has no credentials, because there is nothing to call.
            It needs a name of its own instead: "Flat monthly (no API)" is a
            category and several vendors will sit under it. #}

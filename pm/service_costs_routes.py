@@ -23,6 +23,9 @@ PROVIDER_TYPES = [
     # Anthropic is the first, and there will be more: a display name and a
     # billing day are supplied on the form rather than fixed by the type.
     ("flat", "Flat monthly (no API)"),
+    # Uses the app's own STRIPE_SECRET_KEY, so there is nothing to enter
+    # and no second copy of the key to leak or rotate.
+    ("stripe", "Stripe (processing fees)"),
 ]
 
 
