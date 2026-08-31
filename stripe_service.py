@@ -262,38 +262,215 @@ def get_stripe_invoices_list(status=None, limit=20):
         return []
 
 
-# Small in-process cache so the dashboard doesn't call Stripe on every page load.
-_revenue_cache = {"ts": 0.0, "total": 0.0, "by_customer": {}}
+# What a Stripe invoice status means for money that has actually been asked
+# for. `draft` was never sent, so nobody owes it. `void` was cancelled after
+# the fact, so nobody owes it any more. `uncollectible` was issued and then
+# written off, which still means it was invoiced, so it counts as billed and
+# not as outstanding.
+ISSUED_STATUSES = ("open", "paid", "uncollectible")
+
+_invoice_cache = {"ts": 0, "data": None}
+
+
+def _empty_invoice_totals():
+    """One bucket per state an invoice's money can be in.
+
+    Deliberately no "invoiced" key. The dashboard uses that word for something
+    narrower, money billed or committed and not yet paid, and a second meaning
+    for the same word in the layer underneath it is how the two quietly drift
+    apart. Callers add the buckets they mean.
+    """
+    return {
+        "paid": 0.0,          # collected
+        "open": 0.0,          # sent, still owed
+        "draft": 0.0,         # written, possibly dated, not sent yet
+        "open_count": 0,      # how many invoices are sitting sent and unpaid
+        "paid_by_customer": {},
+        "open_by_customer": {},
+        "draft_by_customer": {},
+    }
+
+
+def get_stripe_invoice_totals(ttl=300):
+    """Every Stripe invoice, bucketed by what state its money is in.
+
+    One pass serves the whole dashboard. `get_stripe_revenue` used to make its
+    own `status="paid"` request, and asking again for the other statuses would
+    have meant a second full listing on every page load.
+
+    Amounts are read per bucket rather than all from one field, because they
+    answer different questions. `paid` uses `amount_paid` and `open` uses
+    `amount_due`, so a part-paid invoice contributes only what has actually
+    landed to one and only what is still owed to the other. `draft` uses the
+    invoice total, since nothing has been paid against it by definition.
+
+    Cached for `ttl` seconds, falling back to the last good value on a Stripe
+    error, so a brief API problem never renders as a confident $0.
+    """
+    import time
+    if not stripe.api_key:
+        return _empty_invoice_totals()
+
+    now = time.time()
+    if _invoice_cache["data"] and (now - _invoice_cache["ts"] < ttl):
+        return _invoice_cache["data"]
+
+    out = _empty_invoice_totals()
+    try:
+        for inv in stripe.Invoice.list(limit=100).auto_paging_iter():
+            status = getattr(inv, "status", None)
+            customer = getattr(inv, "customer", None)
+            total = (getattr(inv, "total", 0) or 0) / 100.0
+
+            if status == "draft":
+                out["draft"] += total
+                if customer:
+                    out["draft_by_customer"][customer] = out["draft_by_customer"].get(customer, 0.0) + total
+                continue
+            if status not in ISSUED_STATUSES:
+                continue
+
+            if status == "paid":
+                amount = (getattr(inv, "amount_paid", 0) or 0) / 100.0
+                out["paid"] += amount
+                if customer:
+                    out["paid_by_customer"][customer] = out["paid_by_customer"].get(customer, 0.0) + amount
+            elif status == "open":
+                amount = (getattr(inv, "amount_due", 0) or 0) / 100.0
+                out["open"] += amount
+                out["open_count"] += 1
+                if customer:
+                    out["open_by_customer"][customer] = out["open_by_customer"].get(customer, 0.0) + amount
+    except Exception as e:
+        current_app.logger.error(f"Stripe invoice totals error: {e}")
+        return _invoice_cache["data"] or _empty_invoice_totals()
+
+    _invoice_cache.update({"ts": now, "data": out})
+    return out
+
+
+_recurring_cache = {"ts": 0, "data": None}
+
+# A recurring price can be billed on any of these; only the two that convert
+# cleanly to whole months are projected. A weekly or daily plan would need a
+# different cursor and there are none.
+_MONTHS_PER_INTERVAL = {"month": 1, "year": 12}
+
+
+def _recurring_plan(ttl=300):
+    """Every recurring charge Stripe is going to raise, as plain tuples.
+
+    (customer_id, amount_dollars, first_charge_at, months_between, stop_before)
+
+    `stop_before` is None for a running subscription, which bills until someone
+    cancels it, and the phase end for a scheduled one, which stops when its
+    phase does. Collapsing both into one shape lets the caller project them
+    with a single loop.
+
+    Two sources, because they are two different objects. A subscription that is
+    already running is a Subscription; one that starts next month is a
+    SubscriptionSchedule with no Subscription behind it yet, and listing only
+    the first would silently miss it.
+
+    Note `current_period_end` is read off the subscription *item*. Stripe moved
+    it there, and the field on the subscription itself now comes back empty.
+    """
+    import time
+    from datetime import datetime, timezone
+
+    if not stripe.api_key:
+        return []
+    now = time.time()
+    if _recurring_cache["data"] is not None and (now - _recurring_cache["ts"] < ttl):
+        return _recurring_cache["data"]
+
+    def _at(value):
+        return datetime.fromtimestamp(value, timezone.utc) if value else None
+
+    plan = []
+    try:
+        for sub in stripe.Subscription.list(status="all", limit=100).auto_paging_iter():
+            if getattr(sub, "status", None) not in ("active", "trialing", "past_due"):
+                continue
+            customer = getattr(sub, "customer", None)
+            for item in sub["items"].data:
+                price = getattr(item, "price", None)
+                recurring = getattr(price, "recurring", None) if price else None
+                months = _MONTHS_PER_INTERVAL.get(getattr(recurring, "interval", None), 0)
+                months *= getattr(recurring, "interval_count", 1) or 1 if recurring else 0
+                starts = _at(getattr(item, "current_period_end", None)
+                             or getattr(sub, "current_period_end", None))
+                amount = ((getattr(price, "unit_amount", 0) or 0) / 100.0) * (getattr(item, "quantity", 1) or 1)
+                if months and starts and amount:
+                    plan.append((customer, amount, starts, months, None))
+
+        for sched in stripe.SubscriptionSchedule.list(limit=100).auto_paging_iter():
+            if getattr(sched, "status", None) != "not_started":
+                continue  # a running schedule already shows up as a Subscription
+            customer = getattr(sched, "customer", None)
+            for phase in getattr(sched, "phases", None) or []:
+                starts, ends = _at(phase["start_date"]), _at(phase["end_date"])
+                for item in phase["items"]:
+                    price = item["price"]
+                    if isinstance(price, str):
+                        price = stripe.Price.retrieve(price)
+                    recurring = getattr(price, "recurring", None)
+                    months = _MONTHS_PER_INTERVAL.get(getattr(recurring, "interval", None), 0)
+                    months *= getattr(recurring, "interval_count", 1) or 1 if recurring else 0
+                    amount = ((getattr(price, "unit_amount", 0) or 0) / 100.0) * (getattr(item, "quantity", None) or 1)
+                    if months and starts and amount:
+                        plan.append((customer, amount, starts, months, ends))
+    except Exception as e:
+        current_app.logger.error(f"Stripe recurring plan error: {e}")
+        return _recurring_cache["data"] or []
+
+    _recurring_cache.update({"ts": now, "data": plan})
+    return plan
+
+
+def get_scheduled_subscription_revenue(customer_ids, until=None, ttl=300):
+    """What the recurring plans will bill between now and `until`.
+
+    `customer_ids` is an allowlist, and it is not optional by accident: this
+    figure sits on a client dashboard, so a subscriber who is not a client has
+    no business inflating it.
+
+    Defaults to the end of the current calendar year. Counts whole billing
+    cycles only, so a plan whose next charge falls after the horizon
+    contributes nothing rather than a fraction.
+
+    Returns (total_dollars, {customer_id: dollars}).
+    """
+    from datetime import datetime, timezone
+    from dateutil.relativedelta import relativedelta
+
+    now = datetime.now(timezone.utc)
+    if until is None:
+        until = datetime(now.year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+    total = 0.0
+    by_customer = {}
+    for customer, amount, first, months, stop_before in _recurring_plan(ttl=ttl):
+        if customer not in customer_ids:
+            continue
+        cursor = max(first, now)
+        while cursor <= until and (stop_before is None or cursor < stop_before):
+            total += amount
+            by_customer[customer] = by_customer.get(customer, 0.0) + amount
+            cursor += relativedelta(months=months)
+    return total, by_customer
 
 
 def get_stripe_revenue(ttl=300):
     """Actual paid revenue pulled live from Stripe.
 
-    Returns (total_paid_dollars, {stripe_customer_id: paid_dollars}). It sums all
-    paid invoices, which in Stripe covers both one-off invoices and recurring
-    subscription charges. Result is cached for `ttl` seconds; on any Stripe error
-    it falls back to the last cached value (or zero) so the dashboard never breaks.
+    Returns (total_paid_dollars, {stripe_customer_id: paid_dollars}), which is
+    the shape the dashboard has always taken. The work now happens in
+    `get_stripe_invoice_totals`, which reads the other statuses in the same
+    pass.
     """
-    import time
-    if not stripe.api_key:
-        return 0.0, {}
-    now = time.time()
-    if _revenue_cache["ts"] and (now - _revenue_cache["ts"] < ttl):
-        return _revenue_cache["total"], _revenue_cache["by_customer"]
-    total = 0.0
-    by_customer = {}
-    try:
-        for inv in stripe.Invoice.list(status="paid", limit=100).auto_paging_iter():
-            amt = (inv.amount_paid or 0) / 100.0
-            total += amt
-            cust = inv.customer
-            if cust:
-                by_customer[cust] = by_customer.get(cust, 0.0) + amt
-    except Exception as e:
-        current_app.logger.error(f"Stripe revenue error: {e}")
-        return _revenue_cache["total"], _revenue_cache["by_customer"]
-    _revenue_cache.update({"ts": now, "total": total, "by_customer": by_customer})
-    return total, by_customer
+    totals = get_stripe_invoice_totals(ttl=ttl)
+    return totals["paid"], totals["paid_by_customer"]
 
 
 # ── Webhook Processing ──────────────────────────────────────

@@ -11,7 +11,7 @@ from stripe_service import (
     create_stripe_customer, get_stripe_balance, get_recent_payments,
     get_recent_payouts, create_stripe_invoice, finalize_and_send_invoice,
     void_stripe_invoice, sync_invoice_from_stripe, handle_webhook_event,
-    process_invoice_event, ensure_products_exist,
+    process_invoice_event, ensure_products_exist, get_stripe_invoice_totals,
 )
 
 stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/pm/stripe")
@@ -122,7 +122,14 @@ def stripe_dashboard():
         Invoice.paid_at.desc()
     ).limit(10).all()
 
-    total_outstanding = sum(inv.amount_due for inv in open_invoices)
+    # Outstanding comes from Stripe rather than from the rows above. A local
+    # Invoice record only exists for an invoice raised through this app's own
+    # New Invoice flow, and there are none of those: the billing has all been
+    # done in Stripe directly. Summing the local rows reported nothing owed
+    # while real invoices sat open, which is the most misleading number a money
+    # dashboard can print. The lists below are still the local rows, so they
+    # stay empty until those are sourced from Stripe too.
+    invoice_totals = get_stripe_invoice_totals()
 
     return render_template("pm/stripe/dashboard.html",
         available_balance=available,
@@ -131,7 +138,8 @@ def stripe_dashboard():
         payouts=payouts,
         open_invoices=open_invoices,
         paid_invoices=paid_invoices,
-        total_outstanding=total_outstanding,
+        total_outstanding=invoice_totals["open"],
+        open_invoice_count=invoice_totals["open_count"],
     )
 
 

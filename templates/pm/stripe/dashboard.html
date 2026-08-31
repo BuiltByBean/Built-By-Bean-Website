@@ -75,7 +75,9 @@
                     </svg>
                 </div>
             </div>
-            <p class="text-2xl font-bold text-white">{{ open_invoices|length }}</p>
+            {# Counted in Stripe, not from the local rows below, which only
+               cover invoices raised through this app and are currently none. #}
+            <p class="text-2xl font-bold text-white">{{ open_invoice_count }}</p>
         </div>
     </div>
 

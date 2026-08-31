@@ -578,13 +578,42 @@ def create_app():
     def dashboard():
         today = date.today()
 
-        # All-time financials. Revenue is pulled live from Stripe (actual paid
-        # invoices + subscription charges) rather than local invoice records,
-        # since billing may happen directly in Stripe.
-        from stripe_service import get_stripe_revenue
-        stripe_total, stripe_by_customer = get_stripe_revenue()
+        # All-time financials, pulled live from Stripe rather than from local
+        # invoice records, since billing happens directly in Stripe and there
+        # are no local rows for any of it.
+        #
+        # "Invoiced" here means money that has been billed or committed and is
+        # NOT yet paid. Three parts:
+        #
+        #   open      sent, sitting unpaid
+        #   draft     written and dated but not sent. This is the load bearing
+        #             one: a year of monthly work gets drafted up front, so
+        #             excluding drafts as "not really invoiced" hides most of
+        #             what is actually booked.
+        #   scheduled what the recurring plans will bill before year end
+        #
+        # Paid deliberately does not appear in it. Collected money is Total
+        # Revenue; adding it here would make one number mean two things.
+        from stripe_service import (
+            get_stripe_invoice_totals, get_scheduled_subscription_revenue,
+        )
+        stripe_totals = get_stripe_invoice_totals()
+        stripe_by_customer = stripe_totals["paid_by_customer"]
 
-        total_revenue = stripe_total
+        # Only clients count toward the forward figure. A Stripe subscriber
+        # with no client record is somebody else's line of business.
+        client_customer_ids = {
+            row[0] for row in db.session.query(Client.stripe_customer_id).filter(
+                Client.stripe_customer_id.isnot(None)
+            ).all()
+        }
+        scheduled_subscriptions, _ = get_scheduled_subscription_revenue(client_customer_ids)
+
+        total_revenue = stripe_totals["paid"]
+        total_awaiting = stripe_totals["open"]
+        total_invoiced = (
+            stripe_totals["open"] + stripe_totals["draft"] + scheduled_subscriptions
+        )
         # Material expenses only — exclude any time-entry-linked (billable time) rows.
         total_expenses = db.session.query(db.func.sum(Expense.amount)).filter(
             Expense.time_entry_id.is_(None)
@@ -629,6 +658,8 @@ def create_app():
 
         return render_template("pm/dashboard/index.html",
             total_revenue=total_revenue,
+            total_invoiced=total_invoiced,
+            total_awaiting=total_awaiting,
             total_unbilled=total_unbilled,
             total_expenses=total_expenses,
             client_financials=client_financials,
