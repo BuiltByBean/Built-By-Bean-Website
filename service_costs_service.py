@@ -419,7 +419,12 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
             db.session.add(entry)
         entry.raw_amount = amount
         entry.allocated_amount = round(amount * share, 2)
-        entry.description = description if mapping else f"{description} [unallocated]"
+        # "[unallocated]" has to follow whether the cost actually lands on a
+        # client, not whether a mapping exists. Since a caller can supply the
+        # owner directly, keying the label off the mapping alone labelled every
+        # Stripe fee unallocated while it sat correctly on a client's row.
+        attributed = (mapping.client_id if mapping else None) or default_client_id
+        entry.description = description if attributed else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
         _sync_expense(entry, mapping, default_client_id=default_client_id)
