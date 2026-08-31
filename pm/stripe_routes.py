@@ -12,6 +12,7 @@ from stripe_service import (
     get_recent_payouts, create_stripe_invoice, finalize_and_send_invoice,
     void_stripe_invoice, sync_invoice_from_stripe, handle_webhook_event,
     process_invoice_event, ensure_products_exist, get_stripe_invoice_totals,
+    get_stripe_invoices,
 )
 
 stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/pm/stripe")
@@ -65,6 +66,65 @@ def _payer_name(charge, client_names):
     return (getattr(billing, "name", None) if billing else None) or "Unknown"
 
 
+def _client_name_map():
+    """Stripe customer id to the name this business uses for them."""
+    return {
+        c.stripe_customer_id: c.name
+        for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
+    }
+
+
+def _decorate(invoices, client_names):
+    """Copy each invoice row with the name the templates should show.
+
+    Same precedence as the payments panel: the local client wins, because the
+    PM is where these names are curated, and Stripe's own name is the fallback
+    for a customer with no client record.
+    """
+    rows = []
+    for inv in invoices:
+        row = dict(inv)
+        row["client_name"] = (
+            client_names.get(inv["customer_id"]) or inv["customer_name"] or "Unknown"
+        )
+        rows.append(row)
+    return rows
+
+
+class _Page:
+    """Just enough of Flask-SQLAlchemy's pagination for the invoice table.
+
+    The rows come from Stripe now rather than a query, and Stripe pages by
+    cursor rather than by number. The full list is small and already cached, so
+    it gets sliced here and the template's existing page links keep working
+    without being rewritten around cursors.
+    """
+
+    def __init__(self, items, page, per_page):
+        self.total = len(items)
+        self.per_page = per_page
+        self.pages = max(1, -(-self.total // per_page))
+        self.page = min(max(page, 1), self.pages)
+        start = (self.page - 1) * per_page
+        self.items = items[start:start + per_page]
+        self.has_prev = self.page > 1
+        self.has_next = self.page < self.pages
+        self.prev_num = self.page - 1 if self.has_prev else None
+        self.next_num = self.page + 1 if self.has_next else None
+
+    def iter_pages(self, left_edge=2, left_current=2, right_current=5, right_edge=2):
+        """Page numbers with None where the template should draw a gap."""
+        last = 0
+        for num in range(1, self.pages + 1):
+            if (num <= left_edge
+                    or (self.page - left_current - 1 < num < self.page + right_current)
+                    or num > self.pages - right_edge):
+                if last + 1 != num:
+                    yield None
+                yield num
+                last = num
+
+
 @stripe_bp.route("/")
 @login_required
 def stripe_dashboard():
@@ -83,12 +143,9 @@ def stripe_dashboard():
                 if b.currency == "usd":
                     pending = b.amount / 100.0
 
-        # Read once for the whole list rather than per row. Duplicated ids
+        # Read once for the whole page rather than per row. Duplicated ids
         # would be a mapping mistake somewhere else; last one wins here.
-        client_names = {
-            c.stripe_customer_id: c.name
-            for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
-        }
+        client_names = _client_name_map()
 
         raw_payments = get_recent_payments(limit=10)
         for p in raw_payments:
@@ -114,21 +171,15 @@ def stripe_dashboard():
         import traceback
         traceback.print_exc()
 
-    open_invoices = Invoice.query.filter(Invoice.status.in_(["draft", "open"])).order_by(
-        Invoice.created_at.desc()
-    ).all()
-
-    paid_invoices = Invoice.query.filter_by(status="paid").order_by(
-        Invoice.paid_at.desc()
-    ).limit(10).all()
-
-    # Outstanding comes from Stripe rather than from the rows above. A local
-    # Invoice record only exists for an invoice raised through this app's own
-    # New Invoice flow, and there are none of those: the billing has all been
-    # done in Stripe directly. Summing the local rows reported nothing owed
-    # while real invoices sat open, which is the most misleading number a money
-    # dashboard can print. The lists below are still the local rows, so they
-    # stay empty until those are sourced from Stripe too.
+    # Everything on this page now comes from Stripe. A local Invoice record
+    # only exists for an invoice raised through this app's own New Invoice
+    # flow, and production has none: the billing is all done in Stripe
+    # directly. Reading the local rows showed nothing owed and no invoices at
+    # all while real money sat open, which is the most misleading thing a
+    # finance page can do.
+    all_invoices = _decorate(get_stripe_invoices(), _client_name_map())
+    open_invoices = [i for i in all_invoices if i["status"] in ("draft", "open")][:8]
+    paid_invoices = [i for i in all_invoices if i["status"] == "paid"][:10]
     invoice_totals = get_stripe_invoice_totals()
 
     return render_template("pm/stripe/dashboard.html",
@@ -159,35 +210,52 @@ def invoices_list():
     if month:
         try:
             y, m = (int(x) for x in month.split("-"))
-            month_start = datetime(y, m, 1)
-            month_end = datetime(y + 1, 1, 1) if m == 12 else datetime(y, m + 1, 1)
+            # Timezone aware, because they are compared against Stripe's
+            # created timestamps. Naive against aware is a TypeError, not a
+            # wrong answer, so it would take the whole page down.
+            month_start = datetime(y, m, 1, tzinfo=timezone.utc)
+            month_end = (
+                datetime(y + 1, 1, 1, tzinfo=timezone.utc) if m == 12
+                else datetime(y, m + 1, 1, tzinfo=timezone.utc)
+            )
         except (ValueError, TypeError):
             month = ""
 
-    # Scope = client + month. Drives both the table and the summary cards, so
-    # the totals answer "for this client, this month" — the status dropdown
-    # only narrows the table rows, keeping all three cards meaningful.
-    def apply_scope(q):
-        if client_id:
-            q = q.filter(Invoice.client_id == int(client_id))
-        if month_start is not None:
-            q = q.filter(Invoice.created_at >= month_start, Invoice.created_at < month_end)
-        return q
-
-    query = apply_scope(Invoice.query)
-    if status:
-        query = query.filter(Invoice.status == status)
-
-    query = query.order_by(Invoice.created_at.desc())
-    pagination = query.paginate(page=page, per_page=20, error_out=False)
-
     clients = Client.query.order_by(Client.name).all()
+    client_names = {c.stripe_customer_id: c.name for c in clients if c.stripe_customer_id}
 
-    total_invoiced = apply_scope(db.session.query(db.func.sum(Invoice.total))).scalar() or 0
-    total_paid = apply_scope(db.session.query(db.func.sum(Invoice.amount_paid))).scalar() or 0
-    total_outstanding = apply_scope(
-        db.session.query(db.func.sum(Invoice.amount_due))
-    ).filter(Invoice.status.in_(["draft", "open"])).scalar() or 0
+    # The filter is by local client; Stripe knows customers. A client with no
+    # Stripe customer matches nothing, which is the truthful answer rather
+    # than the whole unfiltered list.
+    selected_customer = ""
+    if client_id:
+        chosen = db.session.get(Client, int(client_id)) if client_id.isdigit() else None
+        selected_customer = (chosen.stripe_customer_id or "") if chosen else ""
+
+    # Scope = client + month. Drives both the table and the summary cards, so
+    # the totals answer "for this client, this month". The status dropdown
+    # narrows only the table rows, keeping all three cards meaningful.
+    def in_scope(inv):
+        if client_id and inv["customer_id"] != selected_customer:
+            return False
+        if month_start is not None:
+            created = inv["created_at"]
+            if created is None or not (month_start <= created < month_end):
+                return False
+        return True
+
+    scoped = [i for i in _decorate(get_stripe_invoices(), client_names) if in_scope(i)]
+    rows = [i for i in scoped if not status or i["status"] == status]
+    pagination = _Page(rows, page, 20)
+
+    # "Billed" rather than "Invoiced" deliberately. The dashboard's Invoiced
+    # means money still to come; this is a ledger of everything raised in the
+    # selected scope, paid included, and one word cannot be both.
+    total_billed = sum(i["total"] for i in scoped if i["status"] != "void")
+    total_paid = sum(i["amount_paid"] for i in scoped)
+    total_outstanding = sum(
+        i["amount_due"] for i in scoped if i["status"] in ("draft", "open")
+    )
 
     today = date.today()
     this_month = today.strftime("%Y-%m")
@@ -202,7 +270,7 @@ def invoices_list():
         this_month=this_month,
         last_month=last_month,
         clients=clients,
-        total_invoiced=total_invoiced,
+        total_billed=total_billed,
         total_paid=total_paid,
         total_outstanding=total_outstanding,
     )

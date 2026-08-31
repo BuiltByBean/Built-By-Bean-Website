@@ -607,7 +607,9 @@ def create_app():
                 Client.stripe_customer_id.isnot(None)
             ).all()
         }
-        scheduled_subscriptions, _ = get_scheduled_subscription_revenue(client_customer_ids)
+        scheduled_subscriptions, scheduled_by_customer = get_scheduled_subscription_revenue(
+            client_customer_ids
+        )
 
         total_revenue = stripe_totals["paid"]
         total_awaiting = stripe_totals["open"]
@@ -638,7 +640,16 @@ def create_app():
         clients = Client.query.order_by(Client.name).all()
         client_financials = []
         for c in clients:
-            c_revenue = stripe_by_customer.get(c.stripe_customer_id, 0.0) if c.stripe_customer_id else 0.0
+            cust = c.stripe_customer_id
+            c_revenue = stripe_by_customer.get(cust, 0.0) if cust else 0.0
+            # The same two figures as the cards, split per client: everything
+            # still to come, and the part of it that has actually been sent.
+            c_awaiting = stripe_totals["open_by_customer"].get(cust, 0.0) if cust else 0.0
+            c_invoiced = (
+                c_awaiting
+                + (stripe_totals["draft_by_customer"].get(cust, 0.0) if cust else 0.0)
+                + (scheduled_by_customer.get(cust, 0.0) if cust else 0.0)
+            )
             c_expenses = sum(e.amount for e in Expense.query.filter(
                 Expense.client_id == c.id, Expense.time_entry_id.is_(None)
             ).all())
@@ -647,6 +658,10 @@ def create_app():
                 "name": c.name,
                 "stage": c.stage or "lead",
                 "revenue": c_revenue,
+                "invoiced": c_invoiced,
+                "awaiting": c_awaiting,
+                # Still calculated while Unbilled Revenue is hidden rather than
+                # retired. The template's column and card are commented out.
                 "unbilled": unbilled_by_client.get(c.id, 0.0),
                 "expenses": c_expenses,
             })

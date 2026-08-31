@@ -55,6 +55,12 @@
         <p class="text-xs text-surface-500 mt-1">Invoiced, not yet paid</p>
     </div>
 
+    {#
+      Unbilled Revenue is hidden pending a decision on whether that feature
+      stays. The view still calculates `total_unbilled` and `cf.unbilled`, so
+      putting this card and its table column back is a matter of uncommenting
+      rather than rebuilding the query behind them.
+
     <div class="glass-card card-hover p-6">
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Unbilled Revenue</span>
@@ -67,6 +73,7 @@
         <p class="text-3xl font-bold text-amber-400">{{ total_unbilled | format_currency }}</p>
         <p class="text-xs text-surface-500 mt-1">Logged time, not yet invoiced</p>
     </div>
+    #}
 
     <div class="glass-card card-hover p-6">
         <div class="flex items-center justify-between mb-3">
@@ -104,7 +111,8 @@
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Client</th>
                     <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Stage</th>
                     <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Revenue</th>
-                    <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Unbilled</th>
+                    <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Invoiced</th>
+                    <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Awaiting</th>
                     <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Expenses</th>
                     <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Profit</th>
                 </tr>
@@ -117,7 +125,10 @@
                     </td>
                     <td class="py-3 px-4 text-center">{{ badge(cf.stage) }}</td>
                     <td class="py-3 px-4 text-right text-sm font-semibold text-emerald-400">{{ cf.revenue | format_currency }}</td>
-                    <td class="py-3 px-4 text-right text-sm font-semibold text-amber-400">{{ cf.unbilled | format_currency }}</td>
+                    {# Same two figures as the cards above, per client: everything
+                       still to come, and the part of it already sent. #}
+                    <td class="py-3 px-4 text-right text-sm font-semibold text-white">{{ cf.invoiced | format_currency }}</td>
+                    <td class="py-3 px-4 text-right text-sm font-semibold text-accent-400">{{ cf.awaiting | format_currency }}</td>
                     <td class="py-3 px-4 text-right text-sm font-semibold text-red-400">{{ cf.expenses | format_currency }}</td>
                     <td class="py-3 px-4 text-right text-sm font-bold {% if (cf.revenue - cf.expenses) >= 0 %}text-white{% else %}text-red-400{% endif %}">{{ (cf.revenue - cf.expenses) | format_currency }}</td>
                 </tr>

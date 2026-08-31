@@ -291,61 +291,120 @@ def _empty_invoice_totals():
     }
 
 
+def get_stripe_invoices(ttl=300):
+    """Every Stripe invoice, flattened into plain dicts, newest first.
+
+    The single source for everything invoice-shaped on the admin: the totals,
+    the dashboard's two lists and the invoice table all read this, so a page
+    load makes one invoice request instead of one per panel.
+
+    Plain dicts rather than StripeObjects on purpose. A StripeObject raises on
+    `.get`, which templates and ordinary Python both reach for, and it keeps a
+    live client attached to something that only needs to be read.
+
+    The customer is expanded so a name is available without a second lookup.
+    A deleted customer still expands, to a stub with no name, so `deleted` is
+    checked before the field is trusted.
+
+    Cached for `ttl` seconds, falling back to the last good list on a Stripe
+    error, because an empty invoice table is a far more convincing lie than a
+    slightly stale one.
+    """
+    import time
+    from datetime import datetime, timezone
+
+    if not stripe.api_key:
+        return []
+
+    now = time.time()
+    if _invoice_cache["data"] is not None and (now - _invoice_cache["ts"] < ttl):
+        return _invoice_cache["data"]
+
+    def _at(value):
+        return datetime.fromtimestamp(value, timezone.utc) if value else None
+
+    rows = []
+    try:
+        for inv in stripe.Invoice.list(limit=100, expand=["data.customer"]).auto_paging_iter():
+            customer = getattr(inv, "customer", None)
+            if isinstance(customer, str):
+                customer_id, customer_name = customer, None
+            elif customer is None:
+                customer_id, customer_name = None, None
+            else:
+                customer_id = getattr(customer, "id", None)
+                customer_name = None if getattr(customer, "deleted", False) else (
+                    getattr(customer, "name", None) or getattr(customer, "email", None)
+                )
+
+            transitions = getattr(inv, "status_transitions", None)
+            invoice_id = getattr(inv, "id", None)
+            rows.append({
+                "id": invoice_id,
+                "number": getattr(inv, "number", None),
+                "status": getattr(inv, "status", None),
+                "customer_id": customer_id,
+                "customer_name": customer_name,
+                "total": (getattr(inv, "total", 0) or 0) / 100.0,
+                "amount_due": (getattr(inv, "amount_due", 0) or 0) / 100.0,
+                "amount_paid": (getattr(inv, "amount_paid", 0) or 0) / 100.0,
+                "created_at": _at(getattr(inv, "created", None)),
+                "due_date": _at(getattr(inv, "due_date", None)),
+                "paid_at": _at(getattr(transitions, "paid_at", None) if transitions else None),
+                "description": getattr(inv, "description", None),
+                # Where the customer pays. Absent on a draft, which has not
+                # been finalised and so has no public page yet.
+                "hosted_url": getattr(inv, "hosted_invoice_url", None),
+                "pdf_url": getattr(inv, "invoice_pdf", None),
+                # Where *we* go to act on it. Exists for every status, drafts
+                # included, which is why the lists link here and not to the
+                # hosted page.
+                "admin_url": f"https://dashboard.stripe.com/invoices/{invoice_id}" if invoice_id else None,
+            })
+    except Exception as e:
+        current_app.logger.error(f"Stripe invoice list error: {e}")
+        return _invoice_cache["data"] or []
+
+    epoch = datetime.fromtimestamp(0, timezone.utc)
+    rows.sort(key=lambda r: r["created_at"] or epoch, reverse=True)
+    _invoice_cache.update({"ts": now, "data": rows})
+    return rows
+
+
 def get_stripe_invoice_totals(ttl=300):
     """Every Stripe invoice, bucketed by what state its money is in.
 
-    One pass serves the whole dashboard. `get_stripe_revenue` used to make its
-    own `status="paid"` request, and asking again for the other statuses would
-    have meant a second full listing on every page load.
+    Derived from `get_stripe_invoices` rather than fetching again, so the
+    numbers and the lists below them can never disagree about what is in
+    Stripe.
 
     Amounts are read per bucket rather than all from one field, because they
     answer different questions. `paid` uses `amount_paid` and `open` uses
     `amount_due`, so a part-paid invoice contributes only what has actually
     landed to one and only what is still owed to the other. `draft` uses the
     invoice total, since nothing has been paid against it by definition.
-
-    Cached for `ttl` seconds, falling back to the last good value on a Stripe
-    error, so a brief API problem never renders as a confident $0.
     """
-    import time
-    if not stripe.api_key:
-        return _empty_invoice_totals()
-
-    now = time.time()
-    if _invoice_cache["data"] and (now - _invoice_cache["ts"] < ttl):
-        return _invoice_cache["data"]
-
     out = _empty_invoice_totals()
-    try:
-        for inv in stripe.Invoice.list(limit=100).auto_paging_iter():
-            status = getattr(inv, "status", None)
-            customer = getattr(inv, "customer", None)
-            total = (getattr(inv, "total", 0) or 0) / 100.0
+    for inv in get_stripe_invoices(ttl=ttl):
+        status, customer = inv["status"], inv["customer_id"]
 
-            if status == "draft":
-                out["draft"] += total
-                if customer:
-                    out["draft_by_customer"][customer] = out["draft_by_customer"].get(customer, 0.0) + total
-                continue
-            if status not in ISSUED_STATUSES:
-                continue
+        if status == "draft":
+            out["draft"] += inv["total"]
+            if customer:
+                out["draft_by_customer"][customer] = out["draft_by_customer"].get(customer, 0.0) + inv["total"]
+            continue
+        if status not in ISSUED_STATUSES:
+            continue
 
-            if status == "paid":
-                amount = (getattr(inv, "amount_paid", 0) or 0) / 100.0
-                out["paid"] += amount
-                if customer:
-                    out["paid_by_customer"][customer] = out["paid_by_customer"].get(customer, 0.0) + amount
-            elif status == "open":
-                amount = (getattr(inv, "amount_due", 0) or 0) / 100.0
-                out["open"] += amount
-                out["open_count"] += 1
-                if customer:
-                    out["open_by_customer"][customer] = out["open_by_customer"].get(customer, 0.0) + amount
-    except Exception as e:
-        current_app.logger.error(f"Stripe invoice totals error: {e}")
-        return _invoice_cache["data"] or _empty_invoice_totals()
-
-    _invoice_cache.update({"ts": now, "data": out})
+        if status == "paid":
+            out["paid"] += inv["amount_paid"]
+            if customer:
+                out["paid_by_customer"][customer] = out["paid_by_customer"].get(customer, 0.0) + inv["amount_paid"]
+        elif status == "open":
+            out["open"] += inv["amount_due"]
+            out["open_count"] += 1
+            if customer:
+                out["open_by_customer"][customer] = out["open_by_customer"].get(customer, 0.0) + inv["amount_due"]
     return out
 
 
