@@ -9,6 +9,13 @@ month corrects the row the first one wrote instead of booking the cost twice.
 That property is the whole reason this can be automated at all, and it is the
 thing to protect if the sync is ever changed.
 
+The schedule lives in `railway.cron.json`, which the cron service reads instead
+of the default `railway.json` so the web service is unaffected by it. It is set
+to `0 13 * * *`, and **Railway cron is UTC**: that is 8am Central, not 1pm. A
+schedule written in local time here would drift by an hour twice a year and
+nobody would notice, because a sync running at the wrong hour still produces
+correct numbers.
+
 Exits non-zero only when every active provider failed, which is the shape of a
 real outage or a bad deploy. One provider failing is recorded against that
 provider and reported here, but does not fail the run: a Twilio outage should
