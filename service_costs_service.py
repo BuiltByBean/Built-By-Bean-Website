@@ -461,6 +461,64 @@ def _sync_twilio(provider):
 # ── Cloudflare ──────────────────────────────────────────────
 
 
+def _cloudflare_registrar_domains(account_id, headers):
+    """Domains registered through Cloudflare, or [] if the token cannot see them.
+
+    Deliberately swallows a failure. Registrar is a separate token permission
+    from billing, and an account with no Cloudflare-registered domains answers
+    403 rather than empty. Neither is a reason to fail a sync that is otherwise
+    reading real charges.
+    """
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/registrar/domains"
+    try:
+        data = requests.get(url, headers=headers, timeout=30).json()
+    except Exception as e:
+        current_app.logger.info(f"Cloudflare registrar unavailable: {e}")
+        return []
+    if not data.get("success"):
+        return []
+
+    domains = []
+    for row in data.get("result") or []:
+        name, expires = row.get("name"), row.get("expires_at")
+        if not name or not expires:
+            continue
+        try:
+            domains.append((name, date.fromisoformat(str(expires)[:10])))
+        except ValueError:
+            continue
+    return domains
+
+
+def _domain_for_charge(domains, charged_on, tolerance_days=2):
+    """Which domain a registrar charge paid for, or None if it is not clear.
+
+    A Cloudflare invoice says nothing about what it bought: no description, no
+    domain, just an amount and a receipt number. The link is the date. A
+    registration or renewal sets the expiry exactly one year later, so the day
+    a domain was last charged is its expiry minus a year, and an invoice
+    landing on that day is that domain's.
+
+    Verified against the two real charges on this account: both matched their
+    domain to the day, $50.00 on 2026-04-24 to datadungeon.io expiring
+    2027-04-24, and $10.46 on 2026-08-21 to kuperplumbing.com expiring
+    2027-08-21.
+
+    Returns None when two domains renew close enough together to both match.
+    An unattributed cost is a small problem; one confidently billed to the
+    wrong client is a much worse one.
+    """
+    hits = []
+    for name, expires in domains:
+        try:
+            charged = expires.replace(year=expires.year - 1)
+        except ValueError:  # 29 February
+            charged = expires.replace(year=expires.year - 1, day=28)
+        if abs((charged_on - charged).days) <= tolerance_days:
+            hits.append(name)
+    return hits[0] if len(hits) == 1 else None
+
+
 def _sync_cloudflare(provider):
     creds = _get_credentials(provider)
     api_token = creds.get("api_token", "")
@@ -491,6 +549,11 @@ def _sync_cloudflare(provider):
     resp2.raise_for_status()
     billing_data = resp2.json()
 
+    # Fetched before the charges are walked, so each one can be matched to the
+    # domain it paid for. Empty when the token lacks registrar permission, in
+    # which case charges fall back to being keyed on the invoice.
+    registrar_domains = _cloudflare_registrar_domains(account_id, headers)
+
     # Zone plan charges are recurring, so they belong to the current calendar
     # month. Billing history items carry their own date and override this.
     p_start, p_end = _month_bounds()
@@ -506,7 +569,6 @@ def _sync_cloudflare(provider):
 
             item_id = item.get("id", "unknown")
             description = item.get("description") or f"{item.get('type', 'charge')} {item.get('receipt_id', '')}".strip()
-            resource_id = f"cloudflare:{item_id}"
 
             # A charge belongs to the month it happened in, not the month the
             # sync happened to run in. This used to stamp every charge with
@@ -516,8 +578,21 @@ def _sync_cloudflare(provider):
             when = date.fromisoformat(occurred[:10]) if occurred else date.today()
             c_start, c_end = _month_bounds(when)
 
+            # Key a domain charge on the domain, not the invoice. An invoice id
+            # is unique per charge, so a mapping made against one would attribute
+            # this year's renewal and silently miss every one after it. The
+            # domain name is the thing that stays the same, which is what a
+            # client mapping needs to hang on.
+            domain = _domain_for_charge(registrar_domains, when)
+            if domain:
+                resource_id = f"cloudflare-domain:{domain}"
+                label = f"Cloudflare - {domain} registration"
+            else:
+                resource_id = f"cloudflare:{item_id}"
+                label = f"Cloudflare - {description}"
+
             count += _record_cost_entry(provider, resource_id, c_start, c_end,
-                                        amount, f"Cloudflare - {description}", item)
+                                        amount, label, item)
 
     # Also track per-zone as resources (even if free) so they can be mapped
     for zone in zones:
@@ -598,7 +673,16 @@ def list_provider_resources(provider):
             for zone in data.get("result", []):
                 resources.append({
                     "id": f"cloudflare-zone:{zone['id']}",
-                    "label": zone["name"],
+                    "label": f"Zone: {zone['name']}",
+                })
+
+            # Registered domains are the mappable thing here, because a
+            # registration or renewal is a real recurring charge and it belongs
+            # to whoever the domain is for. Zones are free on this account.
+            for name, expires in _cloudflare_registrar_domains(account_id, headers):
+                resources.append({
+                    "id": f"cloudflare-domain:{name}",
+                    "label": f"Domain: {name} (renews {expires:%d %b %Y})",
                 })
 
     except Exception as e:
