@@ -7,12 +7,12 @@
 {% block header_actions %}
 <div class="flex items-center gap-2" x-data="{ confirmDelete: false }">
     <button @click="$dispatch('open-ticket-modal')"
-       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+       class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Ticket
     </button>
     <a href="{{ url_for('pm.time_create', project_id=project.id) }}"
-       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+       class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
         Log Time
     </a>
     <a href="{{ url_for('pm.project_edit', id=project.id) }}"
@@ -58,8 +58,8 @@
             <form method="POST" action="{{ url_for('pm.project_phase_update', id=project.id) }}" class="flex flex-col items-center">
                 <input type="hidden" name="phase" value="{{ val }}">
                 <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
-                    {% if idx < current_idx %}bg-brand-500 text-white shadow-md shadow-brand-500/30 hover:bg-brand-600
-                    {% elif idx == current_idx %}bg-brand-500 text-white shadow-lg shadow-brand-500/40 ring-4 ring-brand-500/20
+                    {% if idx < current_idx %}bg-brand-600 text-white shadow-md shadow-brand-500/30 hover:bg-brand-700
+                    {% elif idx == current_idx %}bg-brand-600 text-white shadow-lg shadow-brand-500/40 ring-4 ring-brand-500/20
                     {% else %}bg-surface-700 text-surface-400 hover:bg-surface-600{% endif %}">
                     {% if idx < current_idx %}
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
@@ -121,23 +121,23 @@
 <!-- Tabs -->
 <div x-data="{ tab: 'tickets' }">
     <div class="flex gap-1 mb-4 p-1 glass-card w-fit">
-        <button @click="tab = 'tickets'" :class="tab === 'tickets' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'tickets'" :class="tab === 'tickets' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Tickets ({{ tickets | length }})
         </button>
-        <button @click="tab = 'time'" :class="tab === 'time' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'time'" :class="tab === 'time' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Time ({{ time_entries | length }})
         </button>
-        <button @click="tab = 'expenses'" :class="tab === 'expenses' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'expenses'" :class="tab === 'expenses' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Expenses ({{ expenses | length }})
         </button>
-        <button @click="tab = 'docs'" :class="tab === 'docs' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'docs'" :class="tab === 'docs' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Documents ({{ documents | length }})
         </button>
-        <button @click="tab = 'invoices'" :class="tab === 'invoices' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'invoices'" :class="tab === 'invoices' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Invoices ({{ project.invoices | length }})
         </button>
@@ -373,7 +373,7 @@
                 <div class="flex items-center justify-end gap-3 mt-6">
                     <button type="button" @click="open = false" class="px-4 py-2 text-sm font-medium text-surface-300 hover:text-white transition-colors">Cancel</button>
                     <button type="submit" :disabled="submitting"
-                            class="px-5 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all disabled:opacity-50">
+                            class="px-5 py-2 btn-brand text-sm font-medium rounded-xl transition-all disabled:opacity-50">
                         Create Ticket
                     </button>
                 </div>

@@ -9,7 +9,7 @@
 {% block header_actions %}
 <div class="flex items-center gap-2">
     <a href="{{ url_for('pm.time_create', project_id=ticket.project_id, ticket_id=ticket.id) }}"
-       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+       class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
         Log Time
     </a>
     <a href="{{ url_for('pm.expense_create', ticket_id=ticket.id) }}"
@@ -44,7 +44,7 @@
             <input type="hidden" name="status" value="{{ val }}">
             <button type="submit"
                     class="px-3 py-1 text-xs font-medium rounded-lg transition-colors
-                           {% if ticket.status == val %}bg-brand-500 text-white shadow-sm{% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
+                           {% if ticket.status == val %}bg-brand-600 text-white shadow-sm{% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
                 {{ label }}
             </button>
         </form>
@@ -80,7 +80,7 @@
         {% for note in ticket.notes %}
         <div class="mb-3 flex {% if note.is_staff_reply %}justify-end{% endif %}">
             <div class="max-w-[85%] rounded-2xl px-4 py-2.5
-                {% if note.is_staff_reply %}bg-brand-500 text-white
+                {% if note.is_staff_reply %}bg-brand-600 text-white
                 {% else %}bg-surface-800 text-surface-100{% endif %}">
                 <p class="text-sm whitespace-pre-line">{{ note.body }}</p>
                 <p class="mt-1 text-xs {% if note.is_staff_reply %}text-white/70{% else %}text-surface-400{% endif %}">
@@ -101,7 +101,7 @@
         <form method="POST" action="{{ url_for('pm.ticket_reply', id=ticket.id) }}" class="flex gap-2 mt-3">
             <input type="text" name="body" required placeholder="Reply to {{ ticket.reporter_name or 'them' }}"
                    class="input-ring flex-1 min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
-            <button type="submit" class="shrink-0 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl">Send</button>
+            <button type="submit" class="shrink-0 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
         </form>
     </div>
 

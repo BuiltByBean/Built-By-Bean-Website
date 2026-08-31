@@ -10,11 +10,11 @@
     <div class="glass-card p-4 mb-6">
         <div class="flex items-center gap-6">
             <div class="flex items-center gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/30 text-blue-400">Maintenance</span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent-900/30 text-accent-400">Maintenance</span>
                 <span class="text-sm font-semibold text-white">$100/hr</span>
             </div>
             <div class="flex items-center gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-900/30 text-purple-400">New Feature</span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-fuchsia-900/30 text-fuchsia-400">New Feature</span>
                 <span class="text-sm font-semibold text-white">$200/hr</span>
             </div>
         </div>
@@ -76,7 +76,7 @@
 
             <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-700">
                 <button type="submit"
-                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                        class="px-6 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
                     {{ 'Update Entry' if editing else 'Log Time' }}
                 </button>
                 <a href="{{ url_for('pm.time_list') }}"

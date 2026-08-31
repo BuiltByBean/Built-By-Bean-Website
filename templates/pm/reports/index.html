@@ -8,13 +8,13 @@
 <div x-data="{ tab: 'clients' }">
     <!-- Tab Navigation -->
     <div class="flex gap-1 mb-6 p-1 glass-card w-fit">
-        <button @click="tab = 'clients'" :class="tab === 'clients' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'clients'" :class="tab === 'clients' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Client Summary</button>
-        <button @click="tab = 'projects'" :class="tab === 'projects' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'projects'" :class="tab === 'projects' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Project Summary</button>
-        <button @click="tab = 'monthly'" :class="tab === 'monthly' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'monthly'" :class="tab === 'monthly' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Monthly Revenue</button>
-        <button @click="tab = 'expenses'" :class="tab === 'expenses' ? 'bg-brand-500 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+        <button @click="tab = 'expenses'" :class="tab === 'expenses' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">Expenses by Category</button>
     </div>
 
@@ -123,9 +123,9 @@
                     <tr class="hover:bg-surface-800/30">
                         <td class="py-3 px-4 text-sm font-medium text-white">{{ row.label }}</td>
                         <td class="py-3 px-4 text-right text-sm text-surface-300">{{ row.maintenance_hours | format_hours }}</td>
-                        <td class="py-3 px-4 text-right text-sm font-medium text-blue-400">{{ row.maintenance_revenue | format_currency }}</td>
+                        <td class="py-3 px-4 text-right text-sm font-medium text-accent-400">{{ row.maintenance_revenue | format_currency }}</td>
                         <td class="py-3 px-4 text-right text-sm text-surface-300">{{ row.feature_hours | format_hours }}</td>
-                        <td class="py-3 px-4 text-right text-sm font-medium text-purple-400">{{ row.feature_revenue | format_currency }}</td>
+                        <td class="py-3 px-4 text-right text-sm font-medium text-fuchsia-400">{{ row.feature_revenue | format_currency }}</td>
                         <td class="py-3 px-4 text-right text-sm font-bold text-emerald-400">{{ row.total_revenue | format_currency }}</td>
                     </tr>
                     {% endfor %}
@@ -134,9 +134,9 @@
                     <tr class="border-t-2 border-surface-600">
                         <td class="py-3 px-4 text-sm font-bold text-white">Totals</td>
                         <td class="py-3 px-4 text-right text-sm font-bold text-white">{{ monthly_data | sum(attribute='maintenance_hours') | format_hours }}</td>
-                        <td class="py-3 px-4 text-right text-sm font-bold text-blue-400">{{ monthly_data | sum(attribute='maintenance_revenue') | format_currency }}</td>
+                        <td class="py-3 px-4 text-right text-sm font-bold text-accent-400">{{ monthly_data | sum(attribute='maintenance_revenue') | format_currency }}</td>
                         <td class="py-3 px-4 text-right text-sm font-bold text-white">{{ monthly_data | sum(attribute='feature_hours') | format_hours }}</td>
-                        <td class="py-3 px-4 text-right text-sm font-bold text-purple-400">{{ monthly_data | sum(attribute='feature_revenue') | format_currency }}</td>
+                        <td class="py-3 px-4 text-right text-sm font-bold text-fuchsia-400">{{ monthly_data | sum(attribute='feature_revenue') | format_currency }}</td>
                         <td class="py-3 px-4 text-right text-sm font-bold text-emerald-400">{{ monthly_data | sum(attribute='total_revenue') | format_currency }}</td>
                     </tr>
                 </tfoot>

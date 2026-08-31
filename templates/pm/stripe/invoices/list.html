@@ -7,7 +7,7 @@
 
 {% block header_actions %}
 <a href="{{ url_for('stripe.invoice_create') }}"
-   class="px-4 py-2 text-sm font-medium rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+   class="px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
     + New Invoice
 </a>
 {% endblock %}
@@ -128,7 +128,7 @@
         {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
             {% if p %}
             <a href="{{ url_for('stripe.invoices_list', page=p, status=status, client_id=client_id, month=month) }}"
-               class="px-3 py-2 text-sm rounded-lg {% if p == pagination.page %}bg-brand-500 text-white{% else %}glass hover:bg-surface-800 text-surface-300{% endif %}">{{ p }}</a>
+               class="px-3 py-2 text-sm rounded-lg {% if p == pagination.page %}bg-brand-600 text-white{% else %}glass hover:bg-surface-800 text-surface-300{% endif %}">{{ p }}</a>
             {% else %}
             <span class="px-2 py-2 text-surface-400">...</span>
             {% endif %}

@@ -6,7 +6,7 @@
 
 {% block header_actions %}
 <a href="{{ url_for('pm.ticket_create') }}"
-   class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+   class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
     New ticket
 </a>
@@ -38,7 +38,7 @@
     {# Both of these sit ALONGSIDE the status, never instead of it. That is the
        whole reason they are flags and not statuses. #}
     {% if t.followup_flagged %}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-purple-500/15 text-purple-400">Circle back</span>
+    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-fuchsia-500/15 text-fuchsia-400">Circle back</span>
     {% endif %}
     {% if t.out_of_scope %}
     <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-400">Out of scope</span>
@@ -56,7 +56,7 @@
     {% if t.origin != 'local' %} · via {{ t.origin }}{% endif %}
     {% if t.reporter_name %} · {{ t.reporter_name }}{% endif %}
     {% if t.unread_for_dev() %}
-    <span class="ml-1 px-1.5 py-0.5 rounded bg-brand-500 text-white font-semibold">{{ t.unread_for_dev() }} new</span>
+    <span class="ml-1 px-1.5 py-0.5 rounded bg-brand-600 text-white font-semibold">{{ t.unread_for_dev() }} new</span>
     {% endif %}
   </p>
 
@@ -79,7 +79,7 @@
     <div class="flex gap-2">
       <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
              class="input-ring w-full min-w-0 px-2 py-2 text-xs bg-surface-800/50 text-white rounded-lg">
-      <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Save</button>
+      <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Save</button>
     </div>
   </form>
 
@@ -107,7 +107,7 @@
     {% set n = counts.get('total' if key == 'all' else key) %}
     <a href="{{ url_for('pm.tickets_list', status=key, category=category_filter, client_id=client_filter) }}"
        class="px-4 py-2 rounded-xl text-sm font-medium transition-colors
-       {% if key == status_filter %}bg-brand-500 text-white shadow-lg shadow-brand-500/25
+       {% if key == status_filter %}bg-brand-600 text-white shadow-lg shadow-brand-500/25
        {% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
       {{ label }}{% if n %} <span class="opacity-70">{{ n }}</span>{% endif %}
     </a>
@@ -132,7 +132,7 @@
   {% elif not out_of_scope %}
   <div class="text-center py-12">
     <p class="text-surface-400 mb-4">Nothing here.</p>
-    <a href="{{ url_for('pm.ticket_create') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+    <a href="{{ url_for('pm.ticket_create') }}" class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       Raise one
     </a>

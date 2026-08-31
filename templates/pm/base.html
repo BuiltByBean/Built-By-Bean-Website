@@ -17,16 +17,37 @@
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    /*
+                      The palette is builtbybeans.com's, moved across whole.
+                      `brand` is the site's --primary #c084fc at 400 and
+                      --primary-dark #a855f7 at 500, which is Tailwind's purple
+                      ramp exactly, so the rest of the scale comes for free.
+                      `surface` is the site's neutrals, which turn out to be
+                      zinc, with the three steps the admin leans on hardest
+                      pinned to the site's own values: 950 is --bg, 900 is
+                      --surface, 800 is --border. `accent` is --accent #38bdf8
+                      at 400, the sky the primary gradient runs into.
+
+                      Re-pointing these two scales is what re-skins the app.
+                      Roughly 1,250 utility classes across 40-odd templates
+                      already read from them, so the colours move without the
+                      markup being touched.
+                    */
                     colors: {
                         brand: {
-                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
-                            400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
-                            800: '#1e40af', 900: '#1e3a8a', 950: '#172554'
+                            50: '#faf5ff', 100: '#f3e8ff', 200: '#e9d5ff', 300: '#d8b4fe',
+                            400: '#c084fc', 500: '#a855f7', 600: '#9333ea', 700: '#7e22ce',
+                            800: '#6b21a8', 900: '#581c87', 950: '#3b0764'
                         },
                         surface: {
-                            50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1',
-                            400: '#94a3b8', 500: '#64748b', 600: '#475569', 700: '#334155',
-                            800: '#1e293b', 900: '#0f172a', 950: '#020617'
+                            50: '#fafafa', 100: '#f4f4f5', 200: '#e4e4e7', 300: '#d4d4d8',
+                            400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 700: '#3f3f46',
+                            800: '#2a2a32', 900: '#1a1a1f', 950: '#0a0a0b'
+                        },
+                        accent: {
+                            50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc',
+                            400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1',
+                            800: '#075985', 900: '#0c4a6e', 950: '#082f49'
                         }
                     },
                     animation: {
@@ -49,49 +70,135 @@
     <style>
         [x-cloak] { display: none !important; }
 
+        /*
+          Lifted from static/css/style.css under the same names, so the admin
+          and the public site cannot quietly drift apart. If a value changes
+          there, it changes here.
+        */
+        :root {
+            --primary: #c084fc;
+            --primary-dark: #a855f7;
+            --primary-rgb: 168, 85, 247;
+            --primary-glow: rgba(168, 85, 247, 0.15);
+            --accent: #38bdf8;
+            --accent-rgb: 56, 189, 248;
+            --bg: #0a0a0b;
+            --surface: #1a1a1f;
+            --surface-alpha: rgba(26, 26, 31, 0.78);
+            --border: #2a2a32;
+        }
+
         body { font-family: 'Inter', system-ui, sans-serif; }
 
         .mesh-bg {
-            background-color: #020617;
+            background-color: var(--bg);
             background-image:
-                radial-gradient(at 40% 20%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-                radial-gradient(at 80% 0%, rgba(96, 165, 250, 0.1) 0px, transparent 50%),
-                radial-gradient(at 0% 50%, rgba(59, 130, 246, 0.08) 0px, transparent 50%);
+                radial-gradient(at 40% 20%, rgba(var(--primary-rgb), 0.15) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(var(--accent-rgb), 0.10) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, rgba(var(--primary-rgb), 0.08) 0px, transparent 50%);
         }
 
         .sidebar-gradient {
-            background: linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%);
+            background: linear-gradient(180deg, #171021 0%, var(--bg) 100%);
         }
 
         .glass {
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(10, 10, 11, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
         }
 
         .glass-card {
-            background: rgba(15, 23, 42, 0.6);
+            background: var(--surface-alpha);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
-        .card-hover {
-            transition: all 0.2s ease;
-        }
+        /*
+          The site's signature hover: the border turns into the primary to
+          accent gradient and a purple glow comes up under the card. Two
+          stacked backgrounds do it. The first is clipped to the padding box so
+          it covers everything except the 1px border; the second to the border
+          box, so the gradient shows only there.
+
+          The inner layer repeats the card's own alpha rather than going
+          opaque. Painting a solid colour here is the obvious way to write it
+          and makes every card visibly solidify the moment a cursor touches it.
+        */
+        .card-hover { transition: all 0.3s ease; }
         .card-hover:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15), 0 4px 10px rgba(0, 0, 0, 0.2);
+            border-color: transparent;
+            background-image:
+                linear-gradient(var(--surface-alpha), var(--surface-alpha)),
+                linear-gradient(135deg, var(--primary), var(--accent));
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
+            box-shadow: 0 0 30px var(--primary-glow);
+            transform: translateY(-4px);
         }
 
         .gradient-text {
-            background: linear-gradient(135deg, #3b82f6, #60a5fa, #93c5fd);
+            background: linear-gradient(135deg, var(--primary), var(--accent));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+        }
+
+        /*
+          The primary button, matched to .btn-primary on the public site.
+          A purple to sky gradient under a layered glow, with a second gradient
+          faded in on hover rather than swapped for the first, so the colour
+          moves instead of jumping. Sizing and shape stay with the utility
+          classes on the element; this owns only the colour and the lift.
+        */
+        .btn-brand {
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, var(--accent) 140%);
+            box-shadow:
+                0 10px 30px -8px rgba(var(--primary-rgb), 0.5),
+                0 0 0 1px rgba(var(--primary-rgb), 0.35),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12);
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
+        }
+        .btn-brand::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            z-index: -1;
+        }
+        .btn-brand:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 18px 44px -8px rgba(var(--primary-rgb), 0.65),
+                0 0 60px -6px rgba(var(--accent-rgb), 0.3),
+                0 0 0 1px rgba(var(--primary-rgb), 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        }
+        .btn-brand:hover::before { opacity: 1; }
+
+        /* The logo, drawn the way the site draws it: the mark used as a mask
+           over the primary-to-accent gradient, so it is the same object in
+           both places rather than a lookalike. */
+        .logo-mark {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-mask-image: var(--logo-src);
+            mask-image: var(--logo-src);
+            -webkit-mask-size: contain;
+            mask-size: contain;
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+            -webkit-mask-position: center;
+            mask-position: center;
         }
 
         .sidebar-link {
@@ -115,21 +222,22 @@
         }
         .sidebar-link.active {
             color: #fff;
-            background: rgba(59, 130, 246, 0.25);
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+            background: rgba(var(--primary-rgb), 0.18);
+            box-shadow: 0 0 20px var(--primary-glow);
         }
+        .sidebar-link.active svg { color: var(--primary); }
 
         .input-ring {
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(15, 23, 42, 0.5);
-            color: #f1f5f9;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(10, 10, 11, 0.5);
+            color: #e4e4e7;
             transition: all 0.2s ease;
         }
         .input-ring:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+            border-color: var(--primary-dark);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25);
         }
 
         .stagger-in > * {
@@ -154,8 +262,8 @@
         /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.2); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(59, 130, 246, 0.4); }
+        ::-webkit-scrollbar-thumb { background: rgba(var(--primary-rgb), 0.25); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary-rgb), 0.45); }
     </style>
 
     <!--
@@ -309,9 +417,8 @@
         <!-- Logo -->
         <div class="p-6 pb-4">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/25">
-                    <span class="text-white font-bold text-sm">BBB</span>
-                </div>
+                <div class="logo-mark w-10 h-10 flex-shrink-0"
+                     style="--logo-src: url('{{ url_for('static', filename='images/logo.png') }}?v={{ asset_version }}')"></div>
                 <div>
                     <h1 class="text-white font-bold text-lg leading-tight">Built By Bean</h1>
                     <span class="text-brand-300/70 text-xs font-medium tracking-wide uppercase">Project Manager</span>
@@ -412,7 +519,9 @@
 
         <!-- Footer -->
         <div class="px-6 py-4 border-t border-white/10">
-            <p class="text-white/30 text-xs">&copy; 2026 Built By Bean, LLC</p>
+            {# /30 measured 2.59:1 against the sidebar. Muted is the intent,
+               illegible is not. #}
+            <p class="text-white/50 text-xs">&copy; 2026 Built By Bean, LLC</p>
         </div>
     </aside>
 

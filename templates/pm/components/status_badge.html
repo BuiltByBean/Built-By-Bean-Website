@@ -1,25 +1,25 @@
 {% macro badge(value, type="status") %}
 {% set colors = {
-    'todo': 'bg-slate-800 text-slate-300',
+    'todo': 'bg-surface-800 text-surface-300',
     'in_progress': 'bg-amber-900/30 text-amber-400',
-    'review': 'bg-blue-900/30 text-blue-400',
+    'review': 'bg-accent-900/30 text-accent-400',
     'done': 'bg-emerald-900/30 text-emerald-400',
     'active': 'bg-emerald-900/30 text-emerald-400',
     'on-hold': 'bg-amber-900/30 text-amber-400',
-    'completed': 'bg-blue-900/30 text-blue-400',
-    'archived': 'bg-gray-800 text-gray-400',
-    'discovery': 'bg-violet-900/30 text-violet-400',
+    'completed': 'bg-accent-900/30 text-accent-400',
+    'archived': 'bg-surface-800 text-surface-400',
+    'discovery': 'bg-indigo-900/30 text-indigo-400',
     'proposal': 'bg-amber-900/30 text-amber-400',
-    'contracted': 'bg-blue-900/30 text-blue-400',
+    'contracted': 'bg-accent-900/30 text-accent-400',
     'mvp': 'bg-cyan-900/30 text-cyan-400',
     'live': 'bg-emerald-900/30 text-emerald-400',
-    'low': 'bg-gray-800 text-gray-400',
-    'medium': 'bg-slate-800 text-slate-300',
+    'low': 'bg-surface-800 text-surface-400',
+    'medium': 'bg-surface-800 text-surface-300',
     'high': 'bg-amber-900/30 text-amber-400',
     'urgent': 'bg-red-900/30 text-red-400',
-    'lead': 'bg-slate-800 text-slate-300',
-    'maintenance': 'bg-blue-900/30 text-blue-400',
-    'new_feature': 'bg-purple-900/30 text-purple-400',
+    'lead': 'bg-surface-800 text-surface-300',
+    'maintenance': 'bg-accent-900/30 text-accent-400',
+    'new_feature': 'bg-fuchsia-900/30 text-fuchsia-400',
     'mvp_build': 'bg-cyan-900/30 text-cyan-400',
 } %}
 
@@ -47,7 +47,7 @@
     'mvp_build': 'MVP Build',
 } %}
 
-<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ colors.get(value, 'bg-gray-800 text-gray-400') }}">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ colors.get(value, 'bg-surface-800 text-surface-400') }}">
     {{ labels.get(value, value) }}
 </span>
 {% endmacro %}

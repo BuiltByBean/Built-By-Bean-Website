@@ -69,7 +69,7 @@
 
             <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-700">
                 <button type="submit"
-                        class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                        class="px-6 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
                     {{ 'Update Project' if editing else 'Create Project' }}
                 </button>
                 <a href="{{ url_for('pm.project_detail', id=project.id) if editing else url_for('pm.projects_list') }}"

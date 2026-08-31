@@ -26,19 +26,22 @@
 
 {% block content %}
 <style>
-    .runbook { color: #cbd5e1; font-size: 0.9375rem; line-height: 1.7; }
+    /* Colours come from the custom properties base.html defines, which came
+       from the public site's stylesheet. Nothing here restates a hex that is
+       already named somewhere else. */
+    .runbook { color: #d4d4d8; font-size: 0.9375rem; line-height: 1.7; }
     .runbook > *:first-child { margin-top: 0; }
     .runbook > *:last-child { margin-bottom: 0; }
     .runbook p { margin: 0 0 0.85rem; }
-    .runbook strong { color: #f1f5f9; font-weight: 600; }
-    .runbook em { color: #e2e8f0; }
-    .runbook a { color: #93c5fd; text-decoration: underline; text-underline-offset: 2px; }
-    .runbook a:hover { color: #bfdbfe; }
+    .runbook strong { color: #fafafa; font-weight: 600; }
+    .runbook em { color: #e4e4e7; }
+    .runbook a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+    .runbook a:hover { color: #7dd3fc; }
     .runbook ul, .runbook ol { margin: 0 0 0.85rem; padding-left: 1.25rem; }
     .runbook ul { list-style: disc; }
     .runbook ol { list-style: decimal; }
     .runbook li { margin: 0.3rem 0; }
-    .runbook li::marker { color: #64748b; }
+    .runbook li::marker { color: var(--primary-dark); }
     .runbook h1, .runbook h2, .runbook h3, .runbook h4 {
         color: #fff; font-weight: 700; margin: 1.4rem 0 0.6rem; line-height: 1.35;
     }
@@ -46,18 +49,18 @@
     .runbook h2 { font-size: 1.0625rem; }
     .runbook h3, .runbook h4 { font-size: 1rem; }
     .runbook code {
-        background: rgba(59, 130, 246, 0.12); color: #bfdbfe;
+        background: rgba(var(--primary-rgb), 0.14); color: #d8b4fe;
         padding: 0.1rem 0.35rem; border-radius: 5px;
         font-size: 0.85em; word-break: break-word;
     }
     /* Scrolls inside itself. A wide block must never take the page sideways. */
     .runbook pre {
-        background: rgba(2, 6, 23, 0.6); border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px; padding: 0.85rem 1rem; margin: 0 0 0.85rem;
+        background: rgba(10, 10, 11, 0.6); border: 1px solid var(--border);
+        border-radius: 8px; padding: 0.85rem 1rem; margin: 0 0 0.85rem;
         overflow-x: auto; -webkit-overflow-scrolling: touch;
     }
     .runbook pre code {
-        background: none; color: #e2e8f0; padding: 0;
+        background: none; color: #e4e4e7; padding: 0;
         font-size: 0.8125rem; line-height: 1.6; white-space: pre; word-break: normal;
     }
     /* display:block plus max-content is what makes a table scrollable. */
@@ -67,15 +70,15 @@
         border-collapse: collapse; margin: 0 0 0.85rem; font-size: 0.875rem;
     }
     .runbook th, .runbook td {
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--border);
         padding: 0.5rem 0.7rem; text-align: left; vertical-align: top;
     }
-    .runbook th { background: rgba(255, 255, 255, 0.04); color: #f1f5f9; font-weight: 600; }
+    .runbook th { background: rgba(255, 255, 255, 0.04); color: #fafafa; font-weight: 600; }
     .runbook blockquote {
-        border-left: 3px solid rgba(59, 130, 246, 0.5);
-        padding-left: 0.9rem; margin: 0 0 0.85rem; color: #94a3b8;
+        border-left: 3px solid rgba(var(--primary-rgb), 0.5);
+        padding-left: 0.9rem; margin: 0 0 0.85rem; color: #a1a1aa;
     }
-    .runbook hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 1.25rem 0; }
+    .runbook hr { border: 0; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 </style>
 
 {% set section_icons = {

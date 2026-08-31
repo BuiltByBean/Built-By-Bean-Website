@@ -101,7 +101,7 @@
         {% endif %}
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="px-6 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+            <button type="submit" class="px-6 py-2.5 text-sm font-semibold rounded-xl btn-brand transition-all">
                 {{ 'Update Mapping' if editing else 'Create Mapping' }}
             </button>
             <a href="{{ url_for('service_costs.mappings_list') }}" class="px-6 py-2.5 text-sm font-medium text-surface-500 hover:text-surface-300">Cancel</a>

@@ -7,7 +7,7 @@
 {% block header_actions %}
 <div class="flex items-center gap-2">
     <a href="{{ url_for('pm.project_create', client_id=client.id) }}"
-       class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-brand-500/25 transition-all">
+       class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Project
     </a>
@@ -86,8 +86,8 @@
         <!-- Financials -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div class="glass-card p-4">
-                <p class="text-xs font-medium text-blue-400 mb-1">Contract Value</p>
-                <p class="text-xl font-bold text-blue-300">{{ (client.contract_revenue or 0) | format_currency }}</p>
+                <p class="text-xs font-medium text-accent-400 mb-1">Contract Value</p>
+                <p class="text-xl font-bold text-accent-300">{{ (client.contract_revenue or 0) | format_currency }}</p>
             </div>
             <div class="glass-card p-4">
                 <p class="text-xs font-medium text-surface-400 mb-1">Total Hours</p>

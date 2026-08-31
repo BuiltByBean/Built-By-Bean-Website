@@ -18,7 +18,7 @@
             {% if page_num %}
                 <a href="{{ url_for(endpoint, page=page_num, **extra_args) }}"
                    class="px-3 py-1.5 text-sm rounded-lg transition-colors
-                          {% if page_num == pagination.page %}bg-brand-500 text-white shadow-sm
+                          {% if page_num == pagination.page %}bg-brand-600 text-white shadow-sm
                           {% else %}bg-surface-800 hover:bg-surface-700 text-surface-300{% endif %}">
                     {{ page_num }}
                 </a>
