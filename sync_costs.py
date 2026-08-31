@@ -9,12 +9,21 @@ month corrects the row the first one wrote instead of booking the cost twice.
 That property is the whole reason this can be automated at all, and it is the
 thing to protect if the sync is ever changed.
 
-The schedule lives in `railway.cron.json`, which the cron service reads instead
-of the default `railway.json` so the web service is unaffected by it. It is set
-to `0 13 * * *`, and **Railway cron is UTC**: that is 8am Central, not 1pm. A
-schedule written in local time here would drift by an hour twice a year and
-nobody would notice, because a sync running at the wrong hour still produces
-correct numbers.
+Run by the `cost-sync` service in the Built By Beans Website Railway project,
+which points at this repo with a start command of `python sync_costs.py` and a
+cron schedule of `0 13 * * *`.
+
+Both live in that service's Deploy settings rather than in a file here. Railway
+deprecated Config as Code on 2026-08-28 and refuses to let a service created
+after that date opt in, so `railway.cron.json` was tried and removed. If the
+schedule needs changing, it is in the dashboard, not in this repo.
+
+**Railway cron is UTC.** `0 13 * * *` is 8am Central, not 1pm. A schedule
+written in local time drifts an hour twice a year and nobody notices, because a
+sync running at the wrong hour still produces correct numbers.
+
+Railway forces the restart policy to Never for a cron service, which is what
+you want: a finished run is a success, not a crash to retry.
 
 Exits non-zero only when every active provider failed, which is the shape of a
 real outage or a bad deploy. One provider failing is recorded against that
