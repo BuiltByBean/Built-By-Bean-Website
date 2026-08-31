@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Railway">
+  <rect width="48" height="48" rx="10" fill="#13111C"/>
+  <g fill="#fff">
+    <rect x="10" y="14" width="28" height="3.4" rx="1.7"/>
+    <rect x="10" y="22.3" width="20" height="3.4" rx="1.7"/>
+    <rect x="10" y="30.6" width="28" height="3.4" rx="1.7"/>
+  </g>
+  <circle cx="34.5" cy="24" r="3.2" fill="#fff"/>
+</svg>

@@ -1,0 +1,95 @@
+{% extends "pm/base.html" %}
+
+{#
+  The tile grid. One column on a phone, growing from there.
+
+  The whole tile is the anchor rather than a title link with a card round it,
+  so the tap target is the card and there is no 19px strip of text to hit on a
+  phone. That also means nothing inside it may be a link or a button: a nested
+  interactive element inside an anchor is not valid and behaves differently in
+  every browser. Editing and deleting live on the runbook itself.
+#}
+
+{% block title %}Playbooks - Built By Bean{% endblock %}
+{% block page_title %}Playbooks{% endblock %}
+{# Short on purpose. The header lays the subtitle beside the actions with no
+   wrap guard, so a long one takes five lines at 375 and squeezes the buttons. #}
+{% block page_subtitle %}Nothing researched twice{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('playbooks.playbook_create') }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    New Playbook
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+
+    {% if playbooks %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% for playbook in playbooks %}
+        <a href="{{ url_for('playbooks.playbook_detail', slug=playbook.slug) }}"
+           class="glass-card card-hover p-4 sm:p-5 flex flex-col gap-3 min-w-0 {% if not playbook.is_active %}opacity-60{% endif %}">
+
+            <div class="flex items-start gap-3 min-w-0">
+                {% if playbook.logo_path %}
+                <img src="{{ url_for('static', filename=playbook.logo_path) }}?v={{ asset_version }}"
+                     alt="" aria-hidden="true"
+                     class="w-11 h-11 flex-shrink-0 rounded-xl bg-white/5 p-1.5 object-contain">
+                {% else %}
+                {# Usable before anybody finds the vendor's SVG. #}
+                <div class="w-11 h-11 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
+                    <span class="text-sm font-bold text-brand-300">{{ playbook.initials }}</span>
+                </div>
+                {% endif %}
+
+                <div class="min-w-0">
+                    <h3 class="text-base font-bold text-white break-words">{{ playbook.display_name }}</h3>
+                    {% if not playbook.is_active %}
+                    <span class="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-surface-700 text-surface-400">
+                        Inactive
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if playbook.one_liner %}
+            <p class="text-sm text-surface-300 break-words">{{ playbook.one_liner }}</p>
+            {% endif %}
+
+            {#
+              The date is the point of this row. A runbook nobody has touched
+              in a year is still confidently telling you what a console looks
+              like, and the only thing on the page that says otherwise is this.
+            #}
+            <div class="mt-auto pt-3 border-t border-white/10 flex items-center gap-2 text-xs text-surface-400">
+                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="truncate">Updated {{ playbook.updated_at|format_date if playbook.updated_at else 'never' }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+        </svg>
+        <p class="text-surface-400 mb-4">No playbooks yet</p>
+        <a href="{{ url_for('playbooks.playbook_create') }}"
+           class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Write the first one
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends "pm/base.html" %}
+
+{#
+  One runbook, five headed blocks, in the order the work happens in.
+
+  The markdown is styled here rather than with a typography plugin, because
+  Tailwind arrives from the CDN and the plugin does not come with it. Two rules
+  are load bearing at 375px: `pre` and `table` scroll inside themselves. A wide
+  code block or a rejection-history table that pushes the page sideways takes
+  the whole layout with it, and both of those are in the seeded content.
+#}
+
+{% block title %}{{ playbook.display_name }} - Playbooks{% endblock %}
+{% block page_title %}{{ playbook.display_name }}{% endblock %}
+{% block page_subtitle %}{{ playbook.one_liner }}{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('playbooks.playbook_edit', slug=playbook.slug) }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+    </svg>
+    Edit
+</a>
+{% endblock %}
+
+{% block content %}
+<style>
+    .runbook { color: #cbd5e1; font-size: 0.9375rem; line-height: 1.7; }
+    .runbook > *:first-child { margin-top: 0; }
+    .runbook > *:last-child { margin-bottom: 0; }
+    .runbook p { margin: 0 0 0.85rem; }
+    .runbook strong { color: #f1f5f9; font-weight: 600; }
+    .runbook em { color: #e2e8f0; }
+    .runbook a { color: #93c5fd; text-decoration: underline; text-underline-offset: 2px; }
+    .runbook a:hover { color: #bfdbfe; }
+    .runbook ul, .runbook ol { margin: 0 0 0.85rem; padding-left: 1.25rem; }
+    .runbook ul { list-style: disc; }
+    .runbook ol { list-style: decimal; }
+    .runbook li { margin: 0.3rem 0; }
+    .runbook li::marker { color: #64748b; }
+    .runbook h1, .runbook h2, .runbook h3, .runbook h4 {
+        color: #fff; font-weight: 700; margin: 1.4rem 0 0.6rem; line-height: 1.35;
+    }
+    .runbook h1 { font-size: 1.125rem; }
+    .runbook h2 { font-size: 1.0625rem; }
+    .runbook h3, .runbook h4 { font-size: 1rem; }
+    .runbook code {
+        background: rgba(59, 130, 246, 0.12); color: #bfdbfe;
+        padding: 0.1rem 0.35rem; border-radius: 5px;
+        font-size: 0.85em; word-break: break-word;
+    }
+    /* Scrolls inside itself. A wide block must never take the page sideways. */
+    .runbook pre {
+        background: rgba(2, 6, 23, 0.6); border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px; padding: 0.85rem 1rem; margin: 0 0 0.85rem;
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .runbook pre code {
+        background: none; color: #e2e8f0; padding: 0;
+        font-size: 0.8125rem; line-height: 1.6; white-space: pre; word-break: normal;
+    }
+    /* display:block plus max-content is what makes a table scrollable. */
+    .runbook table {
+        display: block; width: max-content; max-width: 100%;
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
+        border-collapse: collapse; margin: 0 0 0.85rem; font-size: 0.875rem;
+    }
+    .runbook th, .runbook td {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 0.5rem 0.7rem; text-align: left; vertical-align: top;
+    }
+    .runbook th { background: rgba(255, 255, 255, 0.04); color: #f1f5f9; font-weight: 600; }
+    .runbook blockquote {
+        border-left: 3px solid rgba(59, 130, 246, 0.5);
+        padding-left: 0.9rem; margin: 0 0 0.85rem; color: #94a3b8;
+    }
+    .runbook hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 1.25rem 0; }
+</style>
+
+{% set section_icons = {
+    'client_only_md': 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+    'access_grant_md': 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z',
+    'your_steps_md': 'M13 10V3L4 14h7v7l9-11h-7z',
+    'traps_md': 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+    'verify_md': 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'
+} %}
+
+<div class="space-y-4 stagger-in max-w-4xl">
+
+    {# Vendor bar. Stacked on a phone, because two things side by side inside
+       an already indented card fit neither. #}
+    <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 min-w-0">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+            {% if playbook.logo_path %}
+            <img src="{{ url_for('static', filename=playbook.logo_path) }}?v={{ asset_version }}"
+                 alt="" aria-hidden="true"
+                 class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-2 object-contain">
+            {% else %}
+            <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
+                <span class="text-base font-bold text-brand-300">{{ playbook.initials }}</span>
+            </div>
+            {% endif %}
+            <div class="min-w-0">
+                <p class="text-sm text-surface-400">
+                    Updated {{ playbook.updated_at|format_date if playbook.updated_at else 'never' }}
+                </p>
+                {% if playbook.service_provider %}
+                <p class="text-xs text-surface-500 truncate">
+                    Cost sync: {{ playbook.service_provider.display_name }}
+                </p>
+                {% endif %}
+                {% if not playbook.is_active %}
+                <span class="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-surface-700 text-surface-400">
+                    Inactive
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if playbook.vendor_url %}
+        <a href="{{ playbook.vendor_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors sm:flex-shrink-0">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+            Console
+        </a>
+        {% endif %}
+    </div>
+
+    {% for section in playbook.sections %}
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <div class="flex items-center gap-2.5 mb-4 pb-3 border-b border-white/10">
+            <svg class="w-5 h-5 flex-shrink-0 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="{{ section_icons[section.field] }}"/>
+            </svg>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-300 break-words">
+                {{ section.heading }}
+            </h2>
+        </div>
+
+        {% if section.body %}
+        <div class="runbook">{{ section.body|markdown }}</div>
+        {% else %}
+        <p class="text-sm text-surface-500 italic">Nothing written here yet.</p>
+        {% endif %}
+    </section>
+    {% endfor %}
+
+    {# Delete sits at the bottom, on the trailing edge, away from Edit in the
+       header. Two destructive-adjacent controls next to each other is how the
+       wrong one gets pressed. #}
+    <div class="flex justify-end pt-2">
+        <form method="POST" action="{{ url_for('playbooks.playbook_delete', id=playbook.id) }}"
+              x-data @submit.prevent="if (confirm('Delete the {{ playbook.display_name }} playbook? This cannot be undone.')) $el.submit()">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-red-500/30 bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Delete playbook
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  Create and edit, one template.
+
+  Everything stacks. These fields sit inside an already indented card, and two
+  of them side by side in there fit neither, which is the rule the rest of the
+  app learned the hard way. The five markdown areas are monospaced because
+  their content is half code blocks and tables, and proportional type makes a
+  pipe table impossible to line up.
+#}
+
+{% block title %}{{ 'Edit' if editing else 'New' }} Playbook - Built By Bean{% endblock %}
+{% block page_title %}{{ 'Edit ' ~ playbook.display_name if editing else 'New Playbook' }}{% endblock %}
+{% block page_subtitle %}{{ 'Change the runbook' if editing else 'A vendor runbook, in five parts' }}{% endblock %}
+
+{% block content %}
+<style>
+    /* The shared dropdown's trigger comes out at 42px, two short of a thumb.
+       Scoped to this form rather than fixed in the component, because that
+       component is on sixteen other pages and their spacing is not this
+       page's problem to change. */
+    .playbook-form [role="combobox"] { min-height: 44px; }
+</style>
+
+<div class="max-w-3xl">
+    <form method="POST" class="playbook-form space-y-4">
+
+        <div class="glass-card p-4 sm:p-6 space-y-4 min-w-0">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">The vendor</h3>
+
+            <div>
+                <label for="pb-name" class="block text-sm font-medium text-surface-300 mb-1.5">Name</label>
+                <input id="pb-name" type="text" name="display_name" required
+                       value="{{ playbook.display_name or '' }}"
+                       placeholder="Stripe"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+            </div>
+
+            <div>
+                <label for="pb-slug" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Slug <span class="text-surface-500 font-normal">(the URL; left blank it comes from the name)</span>
+                </label>
+                <input id="pb-slug" type="text" name="slug"
+                       value="{{ playbook.slug or '' }}"
+                       placeholder="stripe"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white font-mono">
+            </div>
+
+            <div>
+                <label for="pb-oneliner" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    One liner <span class="text-surface-500 font-normal">(what it is for)</span>
+                </label>
+                <input id="pb-oneliner" type="text" name="one_liner" maxlength="300"
+                       value="{{ playbook.one_liner or '' }}"
+                       placeholder="Card payments taken on the client's own account."
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+            </div>
+
+            <div>
+                <label for="pb-url" class="block text-sm font-medium text-surface-300 mb-1.5">Console URL</label>
+                <input id="pb-url" type="url" name="vendor_url"
+                       value="{{ playbook.vendor_url or '' }}"
+                       placeholder="https://dashboard.stripe.com"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+            </div>
+
+            <div>
+                <label for="pb-logo" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Logo <span class="text-surface-500 font-normal">(under static/; blank gives a monogram)</span>
+                </label>
+                <input id="pb-logo" type="text" name="logo_path"
+                       value="{{ playbook.logo_path or '' }}"
+                       placeholder="pm/logos/stripe.svg"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white font-mono">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Cost sync row <span class="text-surface-500 font-normal">(optional)</span>
+                </label>
+                {% set pf = namespace(opts=[("", "Not linked")]) %}
+                {% for p in providers %}{% set pf.opts = pf.opts + [(p.id, p.display_name)] %}{% endfor %}
+                {{ select_dropdown("service_provider_id", pf.opts,
+                                   playbook.service_provider_id or '', "Not linked", full_width=true) }}
+            </div>
+
+            <div>
+                <label for="pb-order" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Sort order <span class="text-surface-500 font-normal">(low numbers first)</span>
+                </label>
+                <input id="pb-order" type="number" name="sort_order" inputmode="numeric"
+                       value="{{ playbook.sort_order if playbook.sort_order is not none else 0 }}"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+            </div>
+
+            <label for="pb-active"
+                   class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
+                <input id="pb-active" type="checkbox" name="is_active" value="1"
+                       {% if playbook.is_active or not editing %}checked{% endif %}
+                       class="w-5 h-5 flex-shrink-0 rounded border-white/20 bg-surface-800 text-brand-500 focus:ring-brand-500/40">
+                <span class="text-sm text-surface-300">Active</span>
+            </label>
+        </div>
+
+        {% for section in playbook.sections %}
+        <div class="glass-card p-4 sm:p-6 space-y-3 min-w-0">
+            <label for="pb-{{ section.field }}"
+                   class="block text-sm font-semibold uppercase tracking-wider text-surface-400">
+                {{ section.heading }}
+            </label>
+            <textarea id="pb-{{ section.field }}" name="{{ section.field }}" rows="10"
+                      spellcheck="true"
+                      class="w-full min-w-0 input-ring px-3 py-3 text-xs sm:text-sm bg-surface-800 text-white font-mono leading-relaxed resize-y"
+                      placeholder="Markdown.">{{ section.body }}</textarea>
+        </div>
+        {% endfor %}
+
+        {# Actions on the trailing edge, and stacked on a phone so a two word
+           label never has to wrap inside a half width button. #}
+        <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <a href="{{ url_for('playbooks.playbook_detail', slug=playbook.slug) if editing else url_for('playbooks.playbooks_index') }}"
+               class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                Cancel
+            </a>
+            <button type="submit"
+                    class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                </svg>
+                {{ 'Save playbook' if editing else 'Create playbook' }}
+            </button>
+        </div>
+
+    </form>
+</div>
+{% endblock %}

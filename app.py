@@ -226,6 +226,10 @@ def create_app():
     from pm.service_costs_routes import service_costs_bp
     app.register_blueprint(service_costs_bp)
 
+    # ── Vendor Playbooks ────────────────────────────────────
+    from pm.playbooks_routes import playbooks_bp
+    app.register_blueprint(playbooks_bp)
+
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
     app.register_blueprint(pluralism_bp)

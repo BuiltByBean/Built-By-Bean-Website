@@ -688,3 +688,90 @@ class ServiceCostEntry(db.Model):
 
     def __repr__(self):
         return f"<ServiceCostEntry {self.resource_identifier} ${self.allocated_amount}>"
+
+
+class Playbook(db.Model):
+    """The operational runbook for one third party vendor.
+
+    Deliberately not columns on ServiceProvider. A ServiceProvider row exists
+    only for a vendor being cost-synced: it carries credentials_json and sync
+    state, and it cascade-deletes. Stripe is not even in that list. Editorial
+    content that outlives a sync integration does not belong on it, and losing
+    a runbook because somebody removed a cost sync would be the wrong outcome.
+
+    The five markdown fields are fixed columns rather than rows in a sections
+    table. The consistent shape across every vendor is the entire value of
+    this, and fixed columns enforce it without anybody having to build, or
+    police, a section editor.
+    """
+
+    __tablename__ = "playbooks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(60), unique=True, nullable=False)
+    display_name = db.Column(db.String(100), nullable=False)
+    logo_path = db.Column(db.String(300), default="")
+    vendor_url = db.Column(db.String(300), default="")
+    is_active = db.Column(db.Boolean, default=True)
+    sort_order = db.Column(db.Integer, default=0)
+    one_liner = db.Column(db.String(300), default="")
+
+    client_only_md = db.Column(db.Text, default="")
+    access_grant_md = db.Column(db.Text, default="")
+    your_steps_md = db.Column(db.Text, default="")
+    traps_md = db.Column(db.Text, default="")
+    verify_md = db.Column(db.Text, default="")
+
+    # Nullable, and SET NULL rather than CASCADE, so Railway and Twilio can
+    # point at their cost-sync rows while Stripe, which has none, still gets a
+    # playbook, and deleting a provider takes its costs and not its runbook.
+    service_provider_id = db.Column(
+        db.Integer,
+        db.ForeignKey("service_providers.id", ondelete="SET NULL", name="fk_playbooks_service_provider_id"),
+        nullable=True,
+    )
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    service_provider = db.relationship("ServiceProvider", backref="playbooks")
+
+    # Heading and column, in reading order. One list, so the detail page, the
+    # edit form and any future export cannot disagree about what the five
+    # sections are or which order they come in.
+    SECTIONS = (
+        ("client_only_md", "What only the client can do"),
+        ("access_grant_md", "The access grant that ends the back and forth"),
+        ("your_steps_md", "What I do once I have access"),
+        ("traps_md", "Traps"),
+        ("verify_md", "How to verify"),
+    )
+
+    @property
+    def sections(self):
+        """One entry per section, in reading order.
+
+        Carries the field name as well as the heading so a template can key an
+        icon off it. Picking one by loop position instead is a silent mismatch
+        the day somebody reorders SECTIONS.
+        """
+        return [
+            {"field": field, "heading": heading, "body": getattr(self, field) or ""}
+            for field, heading in self.SECTIONS
+        ]
+
+    @property
+    def initials(self):
+        """The monogram shown when there is no logo yet.
+
+        A vendor is usable the moment it is created, rather than waiting on
+        somebody to find an SVG for it.
+        """
+        parts = [p for p in (self.display_name or self.slug or "?").split() if p]
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return (parts[0][:2] if parts else "?").upper()
+
+    def __repr__(self):
+        return f"<Playbook {self.slug}>"
