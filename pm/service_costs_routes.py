@@ -19,6 +19,10 @@ PROVIDER_TYPES = [
     ("railway", "Railway"),
     ("twilio", "Twilio"),
     ("cloudflare", "Cloudflare"),
+    # Anything that bills a fixed amount and offers no API to ask about it.
+    # Anthropic is the first, and there will be more: a display name and a
+    # billing day are supplied on the form rather than fixed by the type.
+    ("flat", "Flat monthly (no API)"),
 ]
 
 
@@ -42,6 +46,17 @@ def _extract_credentials(name):
             "account_id": request.form.get("cf_account_id", "").strip(),
         }
     return {}
+
+
+def _billing_day():
+    """Day of the month a flat provider is charged, or None."""
+    raw = (request.form.get("billing_day") or "").strip()
+    if not raw:
+        return None
+    try:
+        return min(31, max(1, int(raw)))
+    except ValueError:
+        return None
 
 
 def _monthly_cost():
@@ -98,6 +113,10 @@ def provider_create():
     if request.method == "POST":
         name = request.form.get("name", "")
         display_name = dict(PROVIDER_TYPES).get(name, name)
+        if name == "flat":
+            # "Flat monthly (no API)" is a category, not a vendor. Several of
+            # these will exist and they need telling apart.
+            display_name = (request.form.get("display_name") or "").strip() or "Flat monthly"
 
         creds = _extract_credentials(name)
 
@@ -106,6 +125,7 @@ def provider_create():
             display_name=display_name,
             credentials_json=json.dumps(creds),
             monthly_cost=_monthly_cost(),
+            billing_day=_billing_day(),
         )
         db.session.add(provider)
         db.session.commit()
@@ -128,6 +148,11 @@ def provider_edit(id):
         creds = _extract_credentials(provider.name)
         provider.credentials_json = json.dumps(creds)
         provider.monthly_cost = _monthly_cost()
+        provider.billing_day = _billing_day()
+        if provider.name == "flat":
+            provider.display_name = (
+                (request.form.get("display_name") or "").strip() or provider.display_name
+            )
         provider.is_active = "is_active" in request.form
         db.session.commit()
         flash(f"{provider.display_name} updated.", "success")

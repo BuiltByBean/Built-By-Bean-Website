@@ -97,6 +97,37 @@
             </div>
         </div>
 
+        {# A flat provider has no credentials, because there is nothing to call.
+           It needs a name of its own instead: "Flat monthly (no API)" is a
+           category and several vendors will sit under it. #}
+        <div x-show="providerType === 'flat'" x-transition class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Vendor</h3>
+            <div>
+                <label for="flat-name" class="block text-sm font-medium text-surface-300 mb-1.5">Name</label>
+                <input id="flat-name" type="text" name="display_name"
+                       value="{{ provider.display_name if editing and provider.name == 'flat' else '' }}"
+                       placeholder="Claude"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+                <p class="text-xs text-surface-400 mt-1.5">
+                    Shown on the expense, so make it the name you would look for.
+                </p>
+            </div>
+            <div>
+                <label for="billing-day" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Billing day <span class="text-surface-500 font-normal">(day of the month)</span>
+                </label>
+                <input id="billing-day" type="number" min="1" max="31" inputmode="numeric" name="billing_day"
+                       value="{{ provider.billing_day if editing and provider.billing_day else '' }}"
+                       placeholder="17"
+                       class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+                <p class="text-xs text-surface-400 mt-1.5">
+                    The charge is booked on this day each month, and not before it
+                    has arrived. A day past the end of a short month falls back to
+                    the last day of that month.
+                </p>
+            </div>
+        </div>
+
         <div class="glass-card p-6 space-y-4">
             <div>
                 <label for="monthly-cost" class="block text-sm font-medium text-surface-300 mb-1.5">

@@ -628,6 +628,9 @@ class ServiceProvider(db.Model):
     # CPU, memory, disk and network and has no measurement denominated in
     # money, so the only way to book it is a figure set here once.
     monthly_cost = db.Column(db.Float, nullable=True)
+    # Day of the month the charge lands, for a flat provider. A vendor whose
+    # API reports real charges carries their dates already and leaves this null.
+    billing_day = db.Column(db.Integer, nullable=True)
     last_sync_at = db.Column(db.DateTime, nullable=True)
     sync_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

@@ -102,6 +102,7 @@ def sync_provider(provider_id):
         "railway": _sync_railway,
         "twilio": _sync_twilio,
         "cloudflare": _sync_cloudflare,
+        "flat": _sync_flat,
     }
 
     func = sync_funcs.get(provider.name)
@@ -119,6 +120,55 @@ def sync_provider(provider_id):
         provider.last_sync_at = datetime.now(timezone.utc)
         db.session.commit()
         return 0, str(e)
+
+
+# ── Flat monthly, for a vendor with no billing API ──────────
+
+
+def _billing_date(when, billing_day):
+    """The charge date in `when`'s month, clamped to a day that month has.
+
+    A vendor billing on the 31st still bills in February, so the day is pulled
+    back to the last of the month rather than raising or skipping.
+    """
+    _, last = _month_bounds(when)
+    return when.replace(day=min(billing_day or 1, last.day))
+
+
+def _sync_flat(provider):
+    """Book a fixed monthly charge for a vendor that has no billing API.
+
+    Anthropic is the case this was built for: there is no API to ask what a
+    Claude subscription cost this month, so the amount is set on the provider
+    and this books it on the billing day.
+
+    The period is the single day the charge lands rather than the whole month,
+    which does two things. The expense gets dated the day it was actually
+    charged, because `_sync_expense` dates from `period_end`. And the entry key
+    is unique per charge, so a vendor that bills twice in one month, as this
+    one did in March and May, records both instead of the second overwriting
+    the first.
+
+    Nothing is booked before the billing day has arrived. A subscription you
+    have not been charged for yet is not an expense, and booking it early would
+    overstate every month until its billing day passed.
+    """
+    amount = provider.monthly_cost or 0
+    if amount <= 0:
+        return 0
+
+    today = date.today()
+    charged_on = _billing_date(today, provider.billing_day)
+    if today < charged_on:
+        return 0
+
+    count = _record_cost_entry(
+        provider, f"{provider.name}:subscription", charged_on, charged_on,
+        amount, provider.display_name,
+        {"billing_day": provider.billing_day, "flat_rate": amount},
+    )
+    db.session.commit()
+    return count
 
 
 # ── AWS Cost Explorer ───────────────────────────────────────
