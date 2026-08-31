@@ -785,3 +785,45 @@ class Playbook(db.Model):
 
     def __repr__(self):
         return f"<Playbook {self.slug}>"
+
+
+class TaxSetting(db.Model):
+    """The rates the tax estimate runs on. One row, edited by hand.
+
+    Deliberately not derived from anything. What somebody owes depends on their
+    entity type, their state, their other income and a dozen things this app
+    cannot see, so it holds the numbers its owner gives it and does arithmetic
+    with them. Getting that wrong quietly would be worse than not offering it.
+    """
+
+    __tablename__ = "tax_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Applied to what actually lands from each payment, for the "put this
+    # aside as it arrives" habit. Sits on gross receipts rather than profit,
+    # so it deliberately over-collects.
+    set_aside_rate = db.Column(db.Float, nullable=False, default=30.0)
+    # These three apply to profit, which is the thing actually taxed.
+    self_employment_rate = db.Column(db.Float, nullable=False, default=15.3)
+    income_tax_rate = db.Column(db.Float, nullable=False, default=0.0)
+    state_tax_rate = db.Column(db.Float, nullable=False, default=0.0)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    @classmethod
+    def get(cls):
+        """The single row, created with defaults the first time it is asked for."""
+        row = cls.query.first()
+        if row is None:
+            row = cls()
+            db.session.add(row)
+            db.session.commit()
+        return row
+
+    @property
+    def profit_rate(self):
+        """Everything that applies to profit, as one percentage."""
+        return (self.self_employment_rate or 0) + (self.income_tax_rate or 0) + (self.state_tax_rate or 0)
+
+    def __repr__(self):
+        return f"<TaxSetting set_aside={self.set_aside_rate} profit={self.profit_rate}>"

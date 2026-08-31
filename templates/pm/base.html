@@ -515,6 +515,13 @@
                 </svg>
                 Playbooks
             </a>
+            <a href="{{ url_for('taxes.taxes_index') }}"
+               class="sidebar-link {% if request.endpoint and 'taxes' in request.endpoint %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m-6 4h6m-6 4h4M5 3h14a1 1 0 011 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 011-1z"/>
+                </svg>
+                Taxes
+            </a>
         </nav>
 
         <!-- Footer -->

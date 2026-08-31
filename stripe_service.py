@@ -520,6 +520,65 @@ def get_scheduled_subscription_revenue(customer_ids, until=None, ttl=300):
     return total, by_customer
 
 
+_income_cache = {"ts": 0, "data": None}
+
+# The balance transaction types that are money in or money back out to a
+# customer. Payouts, holds and topups are the bank moving what you already
+# earned, and counting them as income would book the same money twice.
+_INCOME_TYPES = ("charge", "payment", "refund", "payment_refund", "adjustment")
+
+
+def get_stripe_income_transactions(ttl=300):
+    """Every payment in and refund out, with what Stripe kept, newest last.
+
+    Read off balance transactions rather than charges because they carry gross,
+    fee and net on the same object already reconciled. A refund arrives as a
+    negative, which is what makes the totals here agree with the bank rather
+    than with the invoices.
+
+    Cached, and falls back to the last good list on an error, for the same
+    reason as everything else: an empty tax page is a more convincing lie than
+    a slightly stale one.
+    """
+    import time
+    from datetime import date as _date, datetime, timezone
+
+    if not stripe.api_key:
+        return []
+    now = time.time()
+    if _income_cache["data"] is not None and (now - _income_cache["ts"] < ttl):
+        return _income_cache["data"]
+
+    rows = []
+    try:
+        for txn in stripe.BalanceTransaction.list(limit=100, expand=["data.source"]).auto_paging_iter():
+            kind = getattr(txn, "type", None)
+            if kind not in _INCOME_TYPES:
+                continue
+            source = getattr(txn, "source", None)
+            customer = getattr(source, "customer", None) if (source is not None and not isinstance(source, str)) else None
+            if customer is not None and not isinstance(customer, str):
+                customer = getattr(customer, "id", None)
+            created = getattr(txn, "created", None)
+            rows.append({
+                "id": getattr(txn, "id", None),
+                "date": datetime.fromtimestamp(created, timezone.utc).date() if created else None,
+                "type": kind,
+                "gross": (getattr(txn, "amount", 0) or 0) / 100.0,
+                "fee": (getattr(txn, "fee", 0) or 0) / 100.0,
+                "net": (getattr(txn, "net", 0) or 0) / 100.0,
+                "customer_id": customer,
+                "description": getattr(txn, "description", None) or "",
+            })
+    except Exception as e:
+        current_app.logger.error(f"Stripe income transactions error: {e}")
+        return _income_cache["data"] or []
+
+    rows.sort(key=lambda r: (r["date"] or _date.min))
+    _income_cache.update({"ts": now, "data": rows})
+    return rows
+
+
 def get_stripe_revenue(ttl=300):
     """Actual paid revenue pulled live from Stripe.
 

@@ -230,6 +230,10 @@ def create_app():
     from pm.playbooks_routes import playbooks_bp
     app.register_blueprint(playbooks_bp)
 
+    # ── Tax Estimate ────────────────────────────────────────
+    from pm.tax_routes import tax_bp
+    app.register_blueprint(tax_bp)
+
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
     app.register_blueprint(pluralism_bp)

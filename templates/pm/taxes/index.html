@@ -1,0 +1,246 @@
+{% extends "pm/base.html" %}
+
+{#
+  Two answers, side by side, because "what do I owe" means two different things
+  and they differ by a lot. Set aside is a share of every payment as it lands
+  and ignores deductions; estimated is a share of profit. Showing only the
+  first would overstate; showing only the second would encourage spending money
+  that is already owed.
+
+  Everything stacks at 375. The two tables scroll inside their own box.
+#}
+
+{% block title %}Taxes - Built By Bean{% endblock %}
+{% block page_title %}Taxes{% endblock %}
+{% block page_subtitle %}Estimated from Stripe payouts{% endblock %}
+
+{% block header_actions %}
+{% if years|length > 1 %}
+<div class="flex items-center gap-2">
+    {% for y in years %}
+    <a href="{{ url_for('taxes.taxes_index', year=y) }}"
+       class="inline-flex items-center justify-center min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl transition-colors
+              {% if y == year %}btn-brand{% else %}border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700{% endif %}">
+        {{ y }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4 stagger-in">
+
+    {# Said once, plainly, at the top. A finance page that quietly implies
+       authority it does not have is worse than one that says so. #}
+    <div class="glass-card p-4 sm:p-5 border-l-4 border-l-amber-500">
+        <p class="text-sm text-surface-200">
+            <span class="font-semibold text-white">This is arithmetic, not tax advice.</span>
+            Every rate below is one you set, applied to what Stripe actually paid out
+            and to the expenses tracked in this app. It knows nothing about your
+            entity type, your other income, your deductions or your state. Treat it
+            as a running estimate and check it with whoever files your return.
+        </p>
+    </div>
+
+    <!-- The two answers -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="glass-card p-5 sm:p-6 min-w-0">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-surface-400">Set aside as it lands</span>
+                <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-accent-900/30 text-accent-400">
+                    {{ '%.1f'|format(settings.set_aside_rate or 0) }}% of every payment
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-accent-400">{{ totals.set_aside | format_currency }}</p>
+            <p class="text-xs text-surface-500 mt-1">
+                A flat share of the {{ totals.net | format_currency }} Stripe paid out in {{ year }}.
+                Ignores every deduction, so it over-collects on purpose.
+            </p>
+        </div>
+
+        <div class="glass-card p-5 sm:p-6 min-w-0">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-surface-400">Estimated on profit</span>
+                <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-brand-900/30 text-brand-300">
+                    {{ '%.1f'|format(settings.profit_rate) }}% of profit
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-white">{{ totals.estimated | format_currency }}</p>
+            <p class="text-xs text-surface-500 mt-1">
+                On {{ totals.profit | format_currency }} of profit, being payouts less
+                {{ totals.expenses | format_currency }} of tracked expenses.
+                That is {{ '%.1f'|format(totals.effective_on_gross) }}% of gross.
+            </p>
+        </div>
+    </div>
+
+    <!-- Where the money went -->
+    <div class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">
+            {{ year }} so far
+        </h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
+            {% for label, value, tone, note in [
+                ('Gross charged', totals.gross, 'text-white', totals.count ~ ' payments'),
+                ('Stripe fees', totals.fees, 'text-red-400', 'kept by Stripe'),
+                ('Paid out', totals.net, 'text-emerald-400', 'what reached the bank'),
+                ('Expenses', totals.expenses, 'text-red-400', 'tracked in this app'),
+                ('Profit', totals.profit, 'text-white', 'payouts less expenses'),
+            ] %}
+            <div class="min-w-0">
+                <p class="text-xs text-surface-400">{{ label }}</p>
+                <p class="text-lg font-bold {{ tone }} break-words">{{ value | format_currency }}</p>
+                <p class="text-xs text-surface-500">{{ note }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Quarters -->
+    <div class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">By quarter</h3>
+        {% if quarters %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-surface-700">
+                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Quarter</th>
+                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Due</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Gross</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Fees</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Paid out</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Expenses</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Profit</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Set aside</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Estimated</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in quarters %}
+                    <tr class="border-b border-surface-800 hover:bg-surface-800/40 transition-colors">
+                        <td class="py-3 px-3 text-sm font-semibold text-white">{{ q.label }}</td>
+                        <td class="py-3 px-3 text-sm {% if q.due < today %}text-surface-500{% else %}text-accent-400{% endif %}">
+                            {{ q.due | format_date }}
+                        </td>
+                        <td class="py-3 px-3 text-right text-sm text-white">{{ q.gross | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm text-red-400">{{ q.fees | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm text-emerald-400">{{ q.net | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm text-red-400">{{ q.expenses | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm font-semibold {% if q.profit >= 0 %}text-white{% else %}text-red-400{% endif %}">
+                            {{ q.profit | format_currency }}
+                        </td>
+                        <td class="py-3 px-3 text-right text-sm text-accent-400">{{ q.set_aside | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm font-bold text-white">{{ q.estimated | format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400 py-6 text-center">No Stripe payments in {{ year }}.</p>
+        {% endif %}
+    </div>
+
+    <!-- Rates -->
+    <div class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-1">Your rates</h3>
+        <p class="text-xs text-surface-500 mb-4">
+            Nothing here is derived. The defaults are a common starting point for US
+            self employment, not a recommendation. If you are taxed as an S corp, or
+            your state takes a cut, these are the numbers to change.
+        </p>
+        <form method="POST" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {% for name, label, value, hint in [
+                    ('set_aside_rate', 'Set aside per payment', settings.set_aside_rate,
+                     'Applied to what lands from each payment'),
+                    ('self_employment_rate', 'Self employment', settings.self_employment_rate,
+                     'Statutory US rate is 15.3%. Zero it if taxed as an S corp'),
+                    ('income_tax_rate', 'Federal income', settings.income_tax_rate,
+                     'Your effective rate, not your bracket'),
+                    ('state_tax_rate', 'State income', settings.state_tax_rate,
+                     'Texas has none, so this stays zero'),
+                ] %}
+                <div>
+                    <label for="rate-{{ name }}" class="block text-sm font-medium text-surface-300 mb-1.5">
+                        {{ label }}
+                    </label>
+                    <div class="relative">
+                        <input id="rate-{{ name }}" type="number" step="0.1" min="0" max="100"
+                               name="{{ name }}" value="{{ '%.1f'|format(value or 0) }}"
+                               inputmode="decimal"
+                               class="w-full min-w-0 input-ring px-4 py-3 pr-9 text-sm bg-surface-800 text-white">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
+                    </div>
+                    <p class="text-xs text-surface-500 mt-1.5">{{ hint }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
+                <p class="text-xs text-surface-500">
+                    Profit is taxed at
+                    <span class="font-semibold text-surface-300">{{ '%.1f'|format(settings.profit_rate) }}%</span>,
+                    the three profit rates added together.
+                </p>
+                <button type="submit"
+                        class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                    </svg>
+                    Save rates
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Every payment -->
+    <div class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">
+            Every Stripe payment in {{ year }}
+        </h3>
+        {% if transactions %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-surface-700">
+                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Date</th>
+                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Client</th>
+                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">What</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Gross</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Fee</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Paid out</th>
+                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Set aside</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in transactions %}
+                    <tr class="border-b border-surface-800 hover:bg-surface-800/40 transition-colors">
+                        <td class="py-3 px-3 text-sm text-surface-300 whitespace-nowrap">{{ t.date | format_date }}</td>
+                        <td class="py-3 px-3 text-sm text-white">{{ t.client_name }}</td>
+                        <td class="py-3 px-3 text-sm text-surface-400">
+                            {{ t.description or t.type }}
+                            {% if t.type in ('refund', 'payment_refund') %}
+                            <span class="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-red-900/30 text-red-400">refund</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-3 text-right text-sm {% if t.gross < 0 %}text-red-400{% else %}text-white{% endif %}">
+                            {{ t.gross | format_currency }}
+                        </td>
+                        <td class="py-3 px-3 text-right text-sm text-red-400">{{ t.fee | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm font-semibold {% if t.net < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">
+                            {{ t.net | format_currency }}
+                        </td>
+                        <td class="py-3 px-3 text-right text-sm text-accent-400">{{ t.set_aside | format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400 py-6 text-center">No Stripe payments in {{ year }}.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
