@@ -1,18 +1,18 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {#
-  Two answers, side by side, because "what do I owe" means two different things
-  and they differ by a lot. Set aside is a share of every payment as it lands
-  and ignores deductions; estimated is a share of profit. Showing only the
-  first would overstate; showing only the second would encourage spending money
-  that is already owed.
+  Facts at the top, working in the middle, evidence at the bottom.
 
-  Everything stacks at 375. The two tables scroll inside their own box.
+  The working is shown rather than summarised on purpose. A tax figure nobody
+  can check is a figure nobody should act on, and the interesting part here is
+  that profit stacked on a salary straddles a bracket, which a single
+  percentage would hide completely.
 #}
 
 {% block title %}Taxes - Built By Bean{% endblock %}
 {% block page_title %}Taxes{% endblock %}
-{% block page_subtitle %}Estimated from Stripe payouts{% endblock %}
+{% block page_subtitle %}Calculated from your Stripe payouts{% endblock %}
 
 {% block header_actions %}
 {% if years|length > 1 %}
@@ -29,107 +29,267 @@
 {% endblock %}
 
 {% block content %}
+<style>
+    /* The shared dropdown's trigger comes out at 42px, two short of a thumb.
+       Scoped here rather than fixed in the component, whose other pages are
+       not this page's business. */
+    .tax-form [role="combobox"] { min-height: 44px; }
+</style>
+
 <div class="space-y-4 stagger-in">
 
-    {# Said once, plainly, at the top. A finance page that quietly implies
-       authority it does not have is worse than one that says so. #}
     <div class="glass-card p-4 sm:p-5 border-l-4 border-l-amber-500">
         <p class="text-sm text-surface-200">
-            <span class="font-semibold text-white">This is arithmetic, not tax advice.</span>
-            Every rate below is one you set, applied to what Stripe actually paid out
-            and to the expenses tracked in this app. It knows nothing about your
-            entity type, your other income, your deductions or your state. Treat it
-            as a running estimate and check it with whoever files your return.
+            <span class="font-semibold text-white">An estimate, not a return.</span>
+            Federal only, standard deduction, no credits or dependents, and state as a
+            flat rate. It does not know about retirement contributions, capital gains
+            or anything you have not typed below. Check it against whoever files for you.
         </p>
     </div>
 
-    <!-- The two answers -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div class="glass-card p-5 sm:p-6 min-w-0">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-surface-400">Set aside as it lands</span>
-                <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-accent-900/30 text-accent-400">
-                    {{ '%.1f'|format(settings.set_aside_rate or 0) }}% of every payment
-                </span>
+    <!-- Your situation -->
+    <div class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-1">Your situation</h3>
+        <p class="text-xs text-surface-500 mb-4">
+            Business profit stacks on top of these, so they decide which bracket it lands in.
+            Everything below this box is worked out from them.
+        </p>
+        <form method="POST" class="tax-form space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Filing status</label>
+                {{ select_dropdown("filing_status", filing_statuses, settings.filing_status,
+                                   "Select...", full_width=true) }}
             </div>
-            <p class="text-3xl font-bold text-accent-400">{{ totals.set_aside | format_currency }}</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {% for name, label, value, hint in [
+                    ('your_wages', 'Your W-2 wages', settings.your_wages,
+                     'Gross salary for the year, before tax'),
+                    ('spouse_wages', "Spouse's W-2 wages", settings.spouse_wages,
+                     'Leave at zero if not filing jointly'),
+                    ('other_income', 'Other income', settings.other_income,
+                     'Interest, dividends, anything else taxable'),
+                    ('federal_withheld', 'Federal tax withheld so far', settings.federal_withheld,
+                     'From your pay stubs, year to date. Turns the estimate into what is still owed'),
+                ] %}
+                <div>
+                    <label for="f-{{ name }}" class="block text-sm font-medium text-surface-300 mb-1.5">{{ label }}</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">$</span>
+                        <input id="f-{{ name }}" type="number" step="0.01" min="0" name="{{ name }}"
+                               value="{{ '%.2f'|format(value or 0) }}" inputmode="decimal"
+                               class="w-full min-w-0 input-ring pl-7 pr-4 py-3 text-sm bg-surface-800 text-white">
+                    </div>
+                    <p class="text-xs text-surface-500 mt-1.5">{{ hint }}</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {% for name, label, value, hint in [
+                    ('state_tax_rate', 'State income tax', settings.state_tax_rate,
+                     'Texas has none, so this stays zero'),
+                    ('set_aside_rate', 'Set aside per payment', settings.set_aside_rate,
+                     'The separate habit of banking a share of every payout'),
+                ] %}
+                <div>
+                    <label for="f-{{ name }}" class="block text-sm font-medium text-surface-300 mb-1.5">{{ label }}</label>
+                    <div class="relative">
+                        <input id="f-{{ name }}" type="number" step="0.1" min="0" max="100" name="{{ name }}"
+                               value="{{ '%.1f'|format(value or 0) }}" inputmode="decimal"
+                               class="w-full min-w-0 input-ring px-4 py-3 pr-9 text-sm bg-surface-800 text-white">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
+                    </div>
+                    <p class="text-xs text-surface-500 mt-1.5">{{ hint }}</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="flex justify-end pt-1">
+                <button type="submit"
+                        class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                    </svg>
+                    Recalculate
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- The answer -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="glass-card p-5 sm:p-6 min-w-0">
+            <span class="text-sm font-medium text-surface-400">Business profit</span>
+            <p class="text-3xl font-bold {% if totals.profit >= 0 %}text-white{% else %}text-red-400{% endif %} mt-2">
+                {{ totals.profit | format_currency }}
+            </p>
             <p class="text-xs text-surface-500 mt-1">
-                A flat share of the {{ totals.net | format_currency }} Stripe paid out in {{ year }}.
-                Ignores every deduction, so it over-collects on purpose.
+                {{ totals.net | format_currency }} paid out by Stripe
+                less {{ totals.expenses | format_currency }} of expenses
             </p>
         </div>
 
         <div class="glass-card p-5 sm:p-6 min-w-0">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-surface-400">Estimated on profit</span>
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-surface-400">Tax on that profit</span>
                 <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-brand-900/30 text-brand-300">
-                    {{ '%.1f'|format(settings.profit_rate) }}% of profit
+                    {{ '%.1f'|format(calc.effective_on_profit) }}%
                 </span>
             </div>
-            <p class="text-3xl font-bold text-white">{{ totals.estimated | format_currency }}</p>
+            <p class="text-3xl font-bold text-white mt-2">{{ calc.business_tax | format_currency }}</p>
             <p class="text-xs text-surface-500 mt-1">
-                On {{ totals.profit | format_currency }} of profit, being payouts less
-                {{ totals.expenses | format_currency }} of tracked expenses.
-                That is {{ '%.1f'|format(totals.effective_on_gross) }}% of gross.
+                {{ calc.se_tax | format_currency }} self employment
+                + {{ calc.federal_on_business | format_currency }} federal
+                {%- if calc.state_tax %} + {{ calc.state_tax | format_currency }} state{% endif %}
+            </p>
+        </div>
+
+        <div class="glass-card p-5 sm:p-6 min-w-0">
+            <span class="text-sm font-medium text-surface-400">
+                {% if calc.balance_due >= 0 %}Still owed{% else %}Overpaid{% endif %}
+            </span>
+            <p class="text-3xl font-bold {% if calc.balance_due >= 0 %}text-amber-400{% else %}text-emerald-400{% endif %} mt-2">
+                {{ (calc.balance_due if calc.balance_due >= 0 else -calc.balance_due) | format_currency }}
+            </p>
+            <p class="text-xs text-surface-500 mt-1">
+                {{ (calc.federal_total + calc.se_tax) | format_currency }} federal and SE owed,
+                less {{ calc.federal_withheld | format_currency }} withheld
             </p>
         </div>
     </div>
 
-    <!-- Where the money went -->
-    <div class="glass-card p-5 sm:p-6 min-w-0">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">
-            {{ year }} so far
-        </h3>
-        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-            {% for label, value, tone, note in [
-                ('Gross charged', totals.gross, 'text-white', totals.count ~ ' payments'),
-                ('Stripe fees', totals.fees, 'text-red-400', 'kept by Stripe'),
-                ('Paid out', totals.net, 'text-emerald-400', 'what reached the bank'),
-                ('Expenses', totals.expenses, 'text-red-400', 'tracked in this app'),
-                ('Profit', totals.profit, 'text-white', 'payouts less expenses'),
-            ] %}
-            <div class="min-w-0">
-                <p class="text-xs text-surface-400">{{ label }}</p>
-                <p class="text-lg font-bold {{ tone }} break-words">{{ value | format_currency }}</p>
-                <p class="text-xs text-surface-500">{{ note }}</p>
+    <!-- The working -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="glass-card p-5 sm:p-6 min-w-0">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">
+                Self employment tax
+            </h3>
+            <dl class="space-y-2 text-sm">
+                {% for label, value, muted in [
+                    ('Profit', totals.profit, false),
+                    ('Taxed portion, 92.35% of it', calc.se_base, true),
+                    ('Social Security, 12.4%', calc.ss_tax, false),
+                    ('Medicare, 2.9%', calc.medicare_tax, false),
+                ] %}
+                <div class="flex items-baseline justify-between gap-3">
+                    <dt class="{% if muted %}text-surface-500{% else %}text-surface-300{% endif %}">{{ label }}</dt>
+                    <dd class="font-semibold {% if muted %}text-surface-400{% else %}text-white{% endif %} whitespace-nowrap">
+                        {{ value | format_currency }}
+                    </dd>
+                </div>
+                {% endfor %}
+                {% if calc.extra_medicare %}
+                <div class="flex items-baseline justify-between gap-3">
+                    <dt class="text-surface-300">Additional Medicare, 0.9%</dt>
+                    <dd class="font-semibold text-white">{{ calc.extra_medicare | format_currency }}</dd>
+                </div>
+                {% endif %}
+                <div class="flex items-baseline justify-between gap-3 pt-2 border-t border-white/10">
+                    <dt class="font-semibold text-white">Self employment tax</dt>
+                    <dd class="font-bold text-white">{{ calc.se_tax | format_currency }}</dd>
+                </div>
+            </dl>
+            <p class="text-xs text-surface-500 mt-3">
+                {% if calc.ss_capped %}
+                Your wages have already used the {{ calc.ss_wage_base | format_currency }} Social
+                Security base, so only Medicare applies to the profit.
+                {% else %}
+                Wages plus profit stay under the {{ calc.ss_wage_base | format_currency }} Social
+                Security base, so the full 12.4% applies. Half of this is deductible against
+                income tax and already is below.
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="glass-card p-5 sm:p-6 min-w-0">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">
+                Federal income tax
+            </h3>
+            <dl class="space-y-2 text-sm">
+                {% for label, value, sign in [
+                    ('Wages and other income', calc.wages + calc.other_income, ''),
+                    ('Business profit', totals.profit, '+'),
+                    ('Half of self employment tax', calc.half_se, '-'),
+                    ('Standard deduction, ' ~ calc.status_label, calc.standard_deduction, '-'),
+                    ('Qualified business income, 20%', calc.qbi, '-'),
+                ] %}
+                <div class="flex items-baseline justify-between gap-3">
+                    <dt class="text-surface-300">{{ sign }} {{ label }}</dt>
+                    <dd class="font-semibold text-white whitespace-nowrap">{{ value | format_currency }}</dd>
+                </div>
+                {% endfor %}
+                <div class="flex items-baseline justify-between gap-3 pt-2 border-t border-white/10">
+                    <dt class="font-semibold text-white">Taxable income</dt>
+                    <dd class="font-bold text-white">{{ calc.taxable | format_currency }}</dd>
+                </div>
+            </dl>
+
+            {% if calc.bands %}
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mt-5 mb-2">Through the brackets</p>
+            <div class="space-y-1.5 text-sm">
+                {% for b in calc.bands %}
+                <div class="flex items-baseline justify-between gap-3">
+                    <span class="text-surface-400">
+                        {{ '%.0f'|format(b.rate * 100) }}% on {{ b.amount | format_currency }}
+                    </span>
+                    <span class="text-white whitespace-nowrap">{{ b.tax | format_currency }}</span>
+                </div>
+                {% endfor %}
+                <div class="flex items-baseline justify-between gap-3 pt-2 border-t border-white/10">
+                    <span class="font-semibold text-white">Federal income tax</span>
+                    <span class="font-bold text-white">{{ calc.federal_total | format_currency }}</span>
+                </div>
+                <div class="flex items-baseline justify-between gap-3">
+                    <span class="text-surface-400">of which the business causes</span>
+                    <span class="font-semibold text-brand-300">{{ calc.federal_on_business | format_currency }}</span>
+                </div>
             </div>
-            {% endfor %}
+            {# The business share is the difference the business makes, not a
+               slice of the total. That is the only honest way to answer it when
+               profit stacks on a salary and can cross a bracket. #}
+            <p class="text-xs text-surface-500 mt-3">
+                Measured as the difference the business makes: {{ calc.federal_total | format_currency }}
+                with it, {{ calc.federal_wages_only | format_currency }} on the wages alone.
+                Your next dollar of profit is taxed at {{ '%.0f'|format(calc.marginal_rate) }}%.
+            </p>
+            {% endif %}
         </div>
     </div>
 
     <!-- Quarters -->
     <div class="glass-card p-5 sm:p-6 min-w-0">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">By quarter</h3>
+        <div class="flex items-baseline justify-between gap-3 mb-1">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">By quarter</h3>
+            <span class="text-xs text-surface-500">
+                set aside {{ totals.set_aside | format_currency }} at {{ '%.0f'|format(settings.set_aside_rate or 0) }}%
+            </span>
+        </div>
+        <p class="text-xs text-surface-500 mb-4">
+            Each quarter carries the year's effective rate of
+            {{ '%.1f'|format(calc.effective_on_profit) }}%. A quarter is not a tax year, so running
+            each through the brackets on its own would put every one in the lowest band.
+        </p>
         {% if quarters %}
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-surface-700">
-                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Quarter</th>
-                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Due</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Gross</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Fees</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Paid out</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Expenses</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Profit</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Set aside</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Estimated</th>
+                        {% for h in ['Quarter','Due','Gross','Fees','Paid out','Expenses','Profit','Set aside','Estimated'] %}
+                        <th class="{% if loop.index <= 2 %}text-left{% else %}text-right{% endif %} py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">{{ h }}</th>
+                        {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for q in quarters %}
                     <tr class="border-b border-surface-800 hover:bg-surface-800/40 transition-colors">
                         <td class="py-3 px-3 text-sm font-semibold text-white">{{ q.label }}</td>
-                        <td class="py-3 px-3 text-sm {% if q.due < today %}text-surface-500{% else %}text-accent-400{% endif %}">
-                            {{ q.due | format_date }}
-                        </td>
+                        <td class="py-3 px-3 text-sm whitespace-nowrap {% if q.due < today %}text-surface-500{% else %}text-accent-400{% endif %}">{{ q.due | format_date }}</td>
                         <td class="py-3 px-3 text-right text-sm text-white">{{ q.gross | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-red-400">{{ q.fees | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-emerald-400">{{ q.net | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-red-400">{{ q.expenses | format_currency }}</td>
-                        <td class="py-3 px-3 text-right text-sm font-semibold {% if q.profit >= 0 %}text-white{% else %}text-red-400{% endif %}">
-                            {{ q.profit | format_currency }}
-                        </td>
+                        <td class="py-3 px-3 text-right text-sm font-semibold {% if q.profit >= 0 %}text-white{% else %}text-red-400{% endif %}">{{ q.profit | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-accent-400">{{ q.set_aside | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm font-bold text-white">{{ q.estimated | format_currency }}</td>
                     </tr>
@@ -142,59 +302,7 @@
         {% endif %}
     </div>
 
-    <!-- Rates -->
-    <div class="glass-card p-5 sm:p-6 min-w-0">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-1">Your rates</h3>
-        <p class="text-xs text-surface-500 mb-4">
-            Nothing here is derived. The defaults are a common starting point for US
-            self employment, not a recommendation. If you are taxed as an S corp, or
-            your state takes a cut, these are the numbers to change.
-        </p>
-        <form method="POST" class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {% for name, label, value, hint in [
-                    ('set_aside_rate', 'Set aside per payment', settings.set_aside_rate,
-                     'Applied to what lands from each payment'),
-                    ('self_employment_rate', 'Self employment', settings.self_employment_rate,
-                     'Statutory US rate is 15.3%. Zero it if taxed as an S corp'),
-                    ('income_tax_rate', 'Federal income', settings.income_tax_rate,
-                     'Your effective rate, not your bracket'),
-                    ('state_tax_rate', 'State income', settings.state_tax_rate,
-                     'Texas has none, so this stays zero'),
-                ] %}
-                <div>
-                    <label for="rate-{{ name }}" class="block text-sm font-medium text-surface-300 mb-1.5">
-                        {{ label }}
-                    </label>
-                    <div class="relative">
-                        <input id="rate-{{ name }}" type="number" step="0.1" min="0" max="100"
-                               name="{{ name }}" value="{{ '%.1f'|format(value or 0) }}"
-                               inputmode="decimal"
-                               class="w-full min-w-0 input-ring px-4 py-3 pr-9 text-sm bg-surface-800 text-white">
-                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
-                    </div>
-                    <p class="text-xs text-surface-500 mt-1.5">{{ hint }}</p>
-                </div>
-                {% endfor %}
-            </div>
-            <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
-                <p class="text-xs text-surface-500">
-                    Profit is taxed at
-                    <span class="font-semibold text-surface-300">{{ '%.1f'|format(settings.profit_rate) }}%</span>,
-                    the three profit rates added together.
-                </p>
-                <button type="submit"
-                        class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-                    </svg>
-                    Save rates
-                </button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Every payment -->
+    <!-- Payments -->
     <div class="glass-card p-5 sm:p-6 min-w-0">
         <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">
             Every Stripe payment in {{ year }}
@@ -204,13 +312,9 @@
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-surface-700">
-                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Date</th>
-                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Client</th>
-                        <th class="text-left py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">What</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Gross</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Fee</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Paid out</th>
-                        <th class="text-right py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">Set aside</th>
+                        {% for h in ['Date','Client','What','Gross','Fee','Paid out','Set aside'] %}
+                        <th class="{% if loop.index <= 3 %}text-left{% else %}text-right{% endif %} py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">{{ h }}</th>
+                        {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
@@ -224,13 +328,9 @@
                             <span class="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-red-900/30 text-red-400">refund</span>
                             {% endif %}
                         </td>
-                        <td class="py-3 px-3 text-right text-sm {% if t.gross < 0 %}text-red-400{% else %}text-white{% endif %}">
-                            {{ t.gross | format_currency }}
-                        </td>
+                        <td class="py-3 px-3 text-right text-sm {% if t.gross < 0 %}text-red-400{% else %}text-white{% endif %}">{{ t.gross | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-red-400">{{ t.fee | format_currency }}</td>
-                        <td class="py-3 px-3 text-right text-sm font-semibold {% if t.net < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">
-                            {{ t.net | format_currency }}
-                        </td>
+                        <td class="py-3 px-3 text-right text-sm font-semibold {% if t.net < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">{{ t.net | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-accent-400">{{ t.set_aside | format_currency }}</td>
                     </tr>
                     {% endfor %}
@@ -241,6 +341,15 @@
         <p class="text-sm text-surface-400 py-6 text-center">No Stripe payments in {{ year }}.</p>
         {% endif %}
     </div>
+
+    {# The constants are on the page because they are the part most likely to be
+       wrong, and the easiest for the reader to spot. #}
+    <p class="text-xs text-surface-500 px-1">
+        Using {{ calc.year_used }} figures: {{ calc.status_label }} standard deduction
+        {{ calc.standard_deduction | format_currency }}, Social Security wage base
+        {{ calc.ss_wage_base | format_currency }}. Verify against the IRS Revenue Procedure
+        for the year before filing.
+    </p>
 
 </div>
 {% endblock %}

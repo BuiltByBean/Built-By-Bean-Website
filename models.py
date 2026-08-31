@@ -788,25 +788,36 @@ class Playbook(db.Model):
 
 
 class TaxSetting(db.Model):
-    """The rates the tax estimate runs on. One row, edited by hand.
+    """What the tax estimate needs to know, as facts rather than as rates.
 
-    Deliberately not derived from anything. What somebody owes depends on their
-    entity type, their state, their other income and a dozen things this app
-    cannot see, so it holds the numbers its owner gives it and does arithmetic
-    with them. Getting that wrong quietly would be worse than not offering it.
+    Asking for an effective tax rate asks somebody to do the hard part
+    themselves. It also goes stale: profit stacked on a salary can straddle a
+    bracket, so the rate moves whenever either number does. These are the
+    things a person actually knows, and tax_engine derives the rest.
     """
 
     __tablename__ = "tax_settings"
 
     id = db.Column(db.Integer, primary_key=True)
-    # Applied to what actually lands from each payment, for the "put this
-    # aside as it arrives" habit. Sits on gross receipts rather than profit,
-    # so it deliberately over-collects.
-    set_aside_rate = db.Column(db.Float, nullable=False, default=30.0)
-    # These three apply to profit, which is the thing actually taxed.
-    self_employment_rate = db.Column(db.Float, nullable=False, default=15.3)
-    income_tax_rate = db.Column(db.Float, nullable=False, default=0.0)
+
+    # How the return is filed, which sets the brackets and the deduction.
+    filing_status = db.Column(db.String(10), nullable=False, default="single")
+    # Salaries already earning elsewhere. Business profit stacks on top of
+    # these, so they decide which bracket it lands in.
+    your_wages = db.Column(db.Float, nullable=False, default=0.0)
+    spouse_wages = db.Column(db.Float, nullable=False, default=0.0)
+    other_income = db.Column(db.Float, nullable=False, default=0.0)
+    # Federal tax already taken from those salaries. Turns a liability into
+    # the thing people actually want to know, which is what is still owed.
+    federal_withheld = db.Column(db.Float, nullable=False, default=0.0)
+
+    # A flat rate, correct for Texas at zero and a simplification anywhere
+    # with brackets of its own.
     state_tax_rate = db.Column(db.Float, nullable=False, default=0.0)
+    # The separate "put this much of every payment away" habit. Sits on gross
+    # receipts, so it deliberately over-collects against the real estimate.
+    set_aside_rate = db.Column(db.Float, nullable=False, default=30.0)
+
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
@@ -821,9 +832,8 @@ class TaxSetting(db.Model):
         return row
 
     @property
-    def profit_rate(self):
-        """Everything that applies to profit, as one percentage."""
-        return (self.self_employment_rate or 0) + (self.income_tax_rate or 0) + (self.state_tax_rate or 0)
+    def household_income(self):
+        return (self.your_wages or 0) + (self.spouse_wages or 0) + (self.other_income or 0)
 
     def __repr__(self):
-        return f"<TaxSetting set_aside={self.set_aside_rate} profit={self.profit_rate}>"
+        return f"<TaxSetting {self.filing_status} wages={self.household_income}>"
