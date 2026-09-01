@@ -100,15 +100,22 @@ def compute(profit, *, filing_status, your_wages, spouse_wages, other_income,
     """
     year_used, table = table_for(year)
     status = filing_status if filing_status in table["brackets"] else "single"
-    wages = max(0.0, your_wages) + max(0.0, spouse_wages)
+    # Two different totals, and mixing them up is the classic joint-return
+    # error. Brackets, the deduction and the additional medicare threshold are
+    # all household figures. The social security wage base is not: it is a
+    # per-person cap, and a spouse's salary does not use up yours.
+    own_wages = max(0.0, your_wages)
+    wages = own_wages + max(0.0, spouse_wages)
     other = max(0.0, other_income)
     profit = profit or 0.0
 
     # ── Self employment tax ──────────────────────────────────
     se_base = max(0.0, profit) * SE_BASE_FRACTION
-    # Social security stops at the wage base, and a salary has already used
-    # part of it. Skipping this overstates the bill for anybody with a job.
-    ss_room = max(0.0, table["ss_wage_base"] - wages)
+    # Social security stops at the wage base, and this earner's own salary has
+    # already used part of it. Counting a spouse's salary here too would close
+    # the gap early and understate the bill — their wages are capped against
+    # their own base, on their own return line.
+    ss_room = max(0.0, table["ss_wage_base"] - own_wages)
     ss_taxable = min(se_base, ss_room)
     ss_tax = ss_taxable * SE_SOCIAL_SECURITY
     medicare_tax = se_base * SE_MEDICARE
@@ -145,6 +152,7 @@ def compute(profit, *, filing_status, your_wages, spouse_wages, other_income,
         "status": status,
         "status_label": FILING_LABELS.get(status, status),
         "wages": wages,
+        "own_wages": own_wages,
         "other_income": other,
         "profit": profit,
 
