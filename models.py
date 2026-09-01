@@ -953,6 +953,32 @@ class SignatureRequest(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     synced_at = db.Column(db.DateTime, nullable=True)
 
+    # What the client said when they would not sign it. The portal collects a
+    # reason on decline; without this it lived only in an email, which is the
+    # one place a negotiation cannot be picked up from later.
+    decline_reason = db.Column(db.Text, nullable=True)
+    declined_at = db.Column(db.DateTime, nullable=True)
+
+    # The form that produced the document, so a revision starts from what was
+    # actually sent rather than from a blank page and somebody's memory.
+    form_json = db.Column(db.Text, nullable=True)
+
+    # Set when this document replaces one the client asked to change, so the
+    # back-and-forth reads as a thread instead of four unrelated envelopes.
+    revision_of_id = db.Column(
+        db.Integer,
+        db.ForeignKey("signature_requests.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    revision_of = db.relationship(
+        "SignatureRequest", remote_side="SignatureRequest.id",
+        backref=db.backref("revisions", lazy="select"))
+
+    @property
+    def needs_attention(self):
+        """Waiting on Michael rather than on the client."""
+        return self.status == "declined"
+
     client = db.relationship("Client", backref=db.backref("signature_requests", lazy="dynamic"))
     project = db.relationship("Project", backref=db.backref("signature_requests", lazy="dynamic"))
     source_document = db.relationship("Document", foreign_keys=[source_document_id])

@@ -1,0 +1,96 @@
+{#
+  Fill a contract form in from a request the client asked to change.
+
+  Included by all four forms. Does nothing at all unless ?revision_of=<id> is
+  on the URL, so a normal "new contract" is untouched.
+
+  Values are fetched rather than rendered into the page because the four forms
+  hold different fields and none of them should have to know about revisions.
+  Setting a value by input name covers text, textarea, date, number and
+  checkbox; the custom dropdown keeps its state in Alpine, so it is told
+  through the same `dropdown-change` event the component already listens for
+  rather than by writing to its hidden input, which would leave the visible
+  label saying something else.
+#}
+<div x-data="revisionPrefill()" x-init="load()" class="contents">
+    <template x-if="loaded">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-5">
+            <p class="text-sm font-semibold text-amber-300">
+                Revising a contract <span x-text="signer"></span> asked to change
+            </p>
+            <p x-show="reason" class="text-sm text-surface-200 mt-2 whitespace-pre-line"
+               x-text="reason"></p>
+            <p x-show="!reason" class="text-sm text-surface-400 mt-2">
+                No reason was given with the request.
+            </p>
+            <p class="text-xs text-surface-400 mt-3">
+                Everything below is filled in as it was sent. Change what needs
+                changing; the new document is linked to the one it replaces.
+            </p>
+        </div>
+    </template>
+</div>
+
+<script>
+function revisionPrefill() {
+    return {
+        loaded: false, reason: "", signer: "the client",
+        async load() {
+            const id = new URLSearchParams(location.search).get("revision_of");
+            if (!id) return;
+            let data;
+            try {
+                const res = await fetch(`/admin/pm/contracts/${id}/prefill.json`,
+                                        { credentials: "same-origin" });
+                if (!res.ok) return;
+                data = await res.json();
+            } catch (e) { return; }
+
+            this.reason = data.reason || "";
+            this.signer = data.signer || "the client";
+            this.loaded = true;
+
+            const form = this.$el.closest("form") || document.querySelector("form");
+            if (!form) return;
+
+            for (const [name, values] of Object.entries(data.values || {})) {
+                const value = Array.isArray(values) ? values[0] : values;
+                const nodes = form.querySelectorAll(`[name="${CSS.escape(name)}"]`);
+                if (!nodes.length) continue;
+
+                // A repeated field - features, payment rows - keeps all of its
+                // values, in order, rather than only the first.
+                if (Array.isArray(values) && values.length > 1 && nodes.length > 1) {
+                    nodes.forEach((n, i) => { if (values[i] !== undefined) n.value = values[i]; });
+                    continue;
+                }
+                const node = nodes[0];
+                if (node.type === "checkbox") {
+                    node.checked = !!value;
+                    node.dispatchEvent(new Event("change", { bubbles: true }));
+                    continue;
+                }
+                if (node.type === "hidden") {
+                    // The custom dropdown. Telling it through its own event
+                    // keeps the visible label and the submitted value together.
+                    node.value = value;
+                    node.dispatchEvent(new CustomEvent("dropdown-change", {
+                        bubbles: true, detail: { name, value } }));
+                    continue;
+                }
+                node.value = value;
+                node.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+
+            // Carried so the new request records what it replaces.
+            if (!form.querySelector('[name="revision_of"]')) {
+                const hidden = document.createElement("input");
+                hidden.type = "hidden";
+                hidden.name = "revision_of";
+                hidden.value = id;
+                form.appendChild(hidden);
+            }
+        },
+    };
+}
+</script>

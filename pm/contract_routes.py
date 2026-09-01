@@ -12,6 +12,7 @@ other document, because a signed contract that lives only in another system is
 a signed contract nobody here can find.
 """
 
+import json as _json
 import os
 import uuid
 from datetime import datetime, timezone
@@ -125,7 +126,8 @@ def _parsed(stamp):
 
 def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_email,
                    message="", fields=None, client=None, project=None,
-                   source_document=None, countersigner=False):
+                   source_document=None, countersigner=False, form=None,
+                   revision_of=None):
     """Send a PDF out for signature and record where it went.
 
     Raises SignaDocError if the portal will not take it, having written
@@ -175,6 +177,8 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
         signer_email=signer_email[:200],
         signer_ref=link.get("signerId"),
         signing_url=link.get("url"),
+        form_json=_json.dumps(form) if form else None,
+        revision_of_id=revision_of.id if revision_of else None,
         status=reply.get("status", "sent"),
         mail_mode=reply.get("mailMode"),
         sent_at=_parsed(reply.get("sentAt")) or _now(),
@@ -205,6 +209,17 @@ def _apply(row, envelope):
     if status == "completed":
         row.completed_at = _parsed(envelope.get("completedAt")) or _now()
         _file_signed_copy(row)
+    elif status == "declined":
+        # The portal records the reason against whichever signer gave it, so
+        # it is read off the signers rather than the envelope. Falling back to
+        # the void reason covers a document pulled rather than refused.
+        reason = ""
+        for signer in envelope.get("signers") or []:
+            if isinstance(signer, dict) and signer.get("declineReason"):
+                reason = signer["declineReason"]
+                break
+        row.decline_reason = (reason or envelope.get("voidReason") or "").strip() or None
+        row.declined_at = _now()
     return True
 
 
@@ -303,6 +318,13 @@ def contract_detail(id):
             envelope = signadoc.get_envelope(row.envelope_id)
         except SignaDocError as exc:
             error = str(exc)
+        except Exception as exc:
+            # The portal being unreachable must not hide the row. Everything
+            # that matters when a client has asked for a change - the reason,
+            # what it replaces, the revise button - is stored here, so the
+            # page is still worth rendering without it.
+            current_app.logger.exception("SignaDoc envelope fetch failed")
+            error = f"Could not reach SignaDoc: {exc}"
     else:
         error = "SignaDoc is not configured — set SIGNADOC_URL and SIGNADOC_API_KEY."
 
@@ -446,6 +468,8 @@ def sent_message(row):
 def send_generated(pdf_bytes, *, filename, title, kind, fields,
                    client=None, project=None, document=None,
                    countersigner=False):
+    """See create_request. The form is read from the request so every caller
+    gets revision support without having to remember to pass it."""
     """Send a document this board just generated, if the form asked for it.
 
     Returns the SignatureRequest when it went out, and None when it was not
@@ -471,6 +495,11 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
             message=(request.form.get("signer_message") or "").strip(),
             fields=fields, client=client, project=project,
             source_document=document, countersigner=countersigner,
+            form={k: request.form.getlist(k) for k in request.form.keys()
+                  if k not in ("previewed", "preview_token")},
+            revision_of=SignatureRequest.query.get(
+                request.form.get("revision_of", type=int))
+            if request.form.get("revision_of", type=int) else None,
         )
     except SignaDocError as exc:
         flash(f"Could not send it for signature: {exc} The PDF downloaded instead.", "error")
@@ -667,7 +696,6 @@ def _fmt(raw):
 # Held on the volume rather than in memory: there are two gunicorn workers and
 # the request that reads a preview back is not the one that wrote it.
 
-import json as _json
 
 
 def _preview_folder():
@@ -767,3 +795,62 @@ def preview_discard(token):
     drop_preview(token)
     flash("Preview discarded. Nothing was sent.", "info")
     return redirect(url_for("contracts.contracts_index"))
+
+
+# ── When a client asks for a change ──────────────────────
+#
+# The portal already collects a reason on decline. This is what happens next:
+# the reason lands on the request, and Michael revises from the form that
+# produced the document rather than from a blank page.
+
+FORM_ENDPOINTS = {
+    "engagement_letter": "pm.engagement_letter_form",
+    "sow": "pm.sow_form",
+    "addon": "contracts.addon_form",
+    "addendum": "contracts.addendum_form",
+}
+
+
+@contracts_bp.route("/<int:id>/revise")
+@login_required
+def revise(id):
+    """Reopen the form that made a document, filled in as it was sent.
+
+    Only the values are carried, not the document: the point of a revision is
+    that something in it changes, and starting from the finished PDF would
+    mean starting from the thing the client objected to.
+    """
+    row = db.session.get(SignatureRequest, id) or abort(404)
+    endpoint = FORM_ENDPOINTS.get(row.kind)
+    if not endpoint:
+        flash("There is no form behind that document to revise.", "warning")
+        return redirect(url_for("contracts.contract_detail", id=row.id))
+
+    prefill = {}
+    if row.form_json:
+        try:
+            raw = _json.loads(row.form_json)
+            prefill = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v)
+                       for k, v in raw.items()}
+        except ValueError:
+            prefill = {}
+    if not prefill:
+        flash("The original form was not kept for this one, so it starts blank.", "info")
+
+    return redirect(url_for(endpoint, revision_of=row.id))
+
+
+@contracts_bp.route("/<int:id>/prefill.json")
+@login_required
+def revise_values(id):
+    """The values behind a request, for a form to fill itself in with."""
+    row = db.session.get(SignatureRequest, id) or abort(404)
+    if not row.form_json:
+        return {"values": {}, "title": row.title}
+    try:
+        raw = _json.loads(row.form_json)
+    except ValueError:
+        raw = {}
+    return {"values": raw, "title": row.title,
+            "reason": row.decline_reason or "",
+            "signer": row.signer_name}

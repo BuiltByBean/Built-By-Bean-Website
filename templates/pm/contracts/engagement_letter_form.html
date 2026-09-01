@@ -21,6 +21,8 @@
         <form method="POST" action="{{ url_for('pm.generate_engagement_letter') }}"
               x-data='{ clientId: "", chosen: null, clients: {{ client_lookup|tojson }} }'
               x-effect="chosen = clients[clientId] || null">
+
+    {% include "pm/contracts/_prefill.html" %}
             <div class="space-y-5">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
