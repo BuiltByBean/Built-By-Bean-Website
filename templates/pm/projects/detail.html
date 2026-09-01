@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/brand_icons.html" import launch, railway, github %}
 {% from "pm/components/status_badge.html" import badge %}
 
 {% block page_title %}{{ project.name }}{% endblock %}
@@ -104,6 +105,60 @@
     <p class="mt-4 text-sm text-surface-300">{{ project.description }}</p>
     {% endif %}
 </div>
+
+<!-- The running app, where this project has one -->
+{% if project.apps %}
+<div class="glass-card p-4 sm:p-5 mb-6">
+    <h3 class="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-3">
+        {{ 'Live app' if project.apps | length == 1 else 'Live apps' }}
+    </h3>
+    <div class="space-y-3">
+        {% for app in project.apps %}
+        <div class="flex flex-wrap items-center gap-3 min-w-0">
+            {% if app.icon_file %}
+            <img src="{{ url_for('apps.icon', id=app.id) }}" alt=""
+                 class="w-10 h-10 flex-shrink-0 rounded-xl bg-white/5 p-1 object-contain">
+            {% else %}
+            <div class="w-10 h-10 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
+                <span class="text-xs font-bold text-brand-300">{{ app.initials }}</span>
+            </div>
+            {% endif %}
+
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-white truncate">{{ app.name }}</p>
+                <p class="text-xs text-surface-400 truncate">{{ app.host }}</p>
+            </div>
+
+            {# The same three destinations the board offers, so the project
+               page is not a dead end when what you want is the running app. #}
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <a href="{{ app.url }}"
+                   {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
+                   title="Open {{ app.name }}"
+                   class="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                    {{ launch("w-3.5 h-3.5 flex-shrink-0") }}
+                    Open
+                </a>
+                {% if app.railway_url %}
+                <a href="{{ app.railway_url }}" target="_blank" rel="noopener"
+                   title="{{ app.name }} on Railway"
+                   class="inline-flex items-center justify-center min-h-[38px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+                    {{ railway("w-4 h-4") }}<span class="sr-only">Railway</span>
+                </a>
+                {% endif %}
+                {% if app.github_url %}
+                <a href="{{ app.github_url }}" target="_blank" rel="noopener"
+                   title="{{ app.name }} on GitHub"
+                   class="inline-flex items-center justify-center min-h-[38px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+                    {{ github("w-4 h-4") }}<span class="sr-only">GitHub</span>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Financial Summary -->
 <div class="grid grid-cols-2 {% if time_tracking %}sm:grid-cols-3{% endif %} gap-4 mb-6">

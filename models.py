@@ -980,6 +980,21 @@ class AppLink(db.Model):
     railway_url = db.Column(db.String(500), nullable=True)
     github_url = db.Column(db.String(500), nullable=True)
 
+    # The engagement this app belongs to, where there is one. Nullable because
+    # half the board is mine — Bible Study, Pluralism, Data Dungeon — and those
+    # have no client and no project behind them.
+    #
+    # SET NULL rather than CASCADE: closing out a project does not take the app
+    # off the board, because the app is still running and still somewhere I go.
+    # The tile outlives the engagement.
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL", name="fk_app_links_project_id"),
+        nullable=True, index=True,
+    )
+    project = db.relationship("Project", backref=db.backref(
+        "apps", lazy="select", order_by="AppLink.name"))
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     @property

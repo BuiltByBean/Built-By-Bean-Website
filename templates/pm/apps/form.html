@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}{{ 'Edit' if link else 'Add an app' }} - Built By Bean{% endblock %}
 {% block page_title %}{{ link.name if link else 'Add an app' }}{% endblock %}
@@ -66,6 +67,19 @@
                     Both optional. Leave one blank and its button simply does not
                     appear on the tile.
                 </p>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
+                    {#- Pairs are built in the route: Jinja has no zip. -#}
+                    {{ select_dropdown("project_id", project_options,
+                                       link.project_id if link else '',
+                                       "Not a client project", full_width=true) }}
+                    <p class="mt-1.5 text-xs text-surface-400">
+                        Ties this tile to the engagement it belongs to, so the project
+                        page can reach the running app, its Railway service and its repo.
+                        Leave it unset for anything of mine.
+                    </p>
+                </div>
 
                 <div class="rounded-xl border border-white/10 bg-surface-800/40 p-4">
                     <div class="flex items-start gap-4">

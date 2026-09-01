@@ -20,7 +20,7 @@ from flask import (
 from flask_login import login_required
 
 import app_icon_service
-from models import db, AppLink
+from models import db, AppLink, Project
 
 apps_bp = Blueprint("apps", __name__, url_prefix="/admin/pm/apps")
 
@@ -145,6 +145,10 @@ def edit(id=None):
         link.description = (request.form.get("description") or "").strip()
         link.railway_url = _normalise(request.form.get("railway_url"))[:500] or None
         link.github_url = _normalise(request.form.get("github_url"))[:500] or None
+        # Blank means unattached, which is the normal state for the half of
+        # the board that is mine rather than a client's.
+        chosen = request.form.get("project_id", type=int)
+        link.project_id = chosen if chosen and db.session.get(Project, chosen) else None
         db.session.flush()
 
         upload = request.files.get("icon_upload")
@@ -165,7 +169,14 @@ def edit(id=None):
         flash(f"{name} saved.", "success")
         return redirect(url_for("apps.index"))
 
-    return render_template("pm/apps/form.html", link=link)
+    # Pairs rather than objects, because the dropdown macro wants
+    # (value, label) and Jinja has no zip to build them at render time.
+    project_options = [("", "Not a client project")] + [
+        (p.id, f"{p.name} — {p.client.name}")
+        for p in Project.query.order_by(Project.name).all()
+    ]
+    return render_template("pm/apps/form.html", link=link,
+                           project_options=project_options)
 
 
 @apps_bp.route("/<int:id>/refresh-icon", methods=["POST"])
