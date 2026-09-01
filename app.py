@@ -1988,18 +1988,19 @@ def create_app():
         section_heading("3. Maintenance & Support")
         body_text("Once the MVP is delivered and accepted, Built by Bean LLC has no obligation to perform further work unless separately contracted. Ongoing maintenance - including bug fixes, performance updates, security patches, and general upkeep of existing functionality - is available at the following rate:")
         add_table([
-            ("Maintenance Hourly Rate", "$100/hour"),
+            ("Maintenance Hourly Rate", "$75/hour"),
             ("Scope", "Bug fixes, updates, and support for existing functionality only"),
             ("Billing Increment", "Work is billed in one-hour minimum increments"),
             ("Invoicing", "Net 30 days from invoice date"),
         ])
         body_text("Maintenance covers what has already been built. Requests for new functionality are treated as new feature development and billed at the rate in Section 4.")
+        body_text("Alternatively, ongoing work can be covered by a fixed monthly fee instead of hourly billing. That fee covers unlimited development work within the scope of the project and is agreed in a separate signed agreement. The hourly rates apply unless such an agreement is in effect.")
 
         # Section 4
         section_heading("4. New Feature Development")
         body_text("Any feature, functionality, or integration not included in the original agreed MVP scope is considered new feature development. This work requires additional scoping, design, development, testing, and deployment and is billed at a higher rate to reflect that investment.")
         add_table([
-            ("New Feature Hourly Rate", "$200/hour"),
+            ("New Feature Hourly Rate", "$100/hour"),
             ("Billing Increment", "Work is billed in one-hour minimum increments"),
             ("Authorization", "All feature work requires written approval before work begins"),
             ("Invoicing", "Net 30 days from invoice date"),
@@ -2154,6 +2155,10 @@ def create_app():
         # its first page, which is what makes a re-signature meaningful rather
         # than two live contracts covering the same project.
         raw_supersedes = request.form.get("supersedes_date", "").strip()
+        # Configurable because they were lowered in Sept 2026 and an existing
+        # client's replacement SOW has to be able to carry its original rates.
+        maintenance_rate = request.form.get("maintenance_rate", "75").strip() or "75"
+        feature_rate = request.form.get("feature_rate", "100").strip() or "100"
 
         if not client or not project_name or not project_description or not features:
             flash("Choose a client, and give a project name, description and at least one feature.", "warning")
@@ -2181,7 +2186,8 @@ def create_app():
             return _build_sow_pdf(client, project_name, project_description,
                                   mvp_price, sow_date, delivery_date, maint_days, features,
                                   payment_description, payment_milestones,
-                                  hosting_fee, hosting_cycle, supersedes_date)
+                                  hosting_fee, hosting_cycle, supersedes_date,
+                                  maintenance_rate, feature_rate)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2191,7 +2197,8 @@ def create_app():
     def _build_sow_pdf(client, project_name, project_description,
                         mvp_price, sow_date, delivery_date, maint_days, features,
                         payment_description, payment_milestones,
-                        hosting_fee, hosting_cycle, supersedes_date=""):
+                        hosting_fee, hosting_cycle, supersedes_date="",
+                        maintenance_rate="75", feature_rate="100"):
         # The chosen client, passed in rather than looked up again by name.
         client_name = client.name
         from fpdf import FPDF
@@ -2392,9 +2399,15 @@ def create_app():
 
         # Section 5 - Maintenance (no examples list)
         section_heading("5. Maintenance & Support (Post-Window)")
-        body_text(f"After the {maint_days}-day free maintenance window expires, ongoing maintenance is available at the following rate. Maintenance covers preserving and supporting functionality that has already been built and delivered.")
+        body_text(sanitize(
+            f"After the {maint_days}-day free maintenance window expires, there are two ways "
+            "to continue. Work can be billed by the hour at the rates in this section and "
+            "Section 6, or the parties can agree a fixed monthly fee covering unlimited "
+            "development work within the scope of this project, set out in a separate signed "
+            "agreement. The hourly rates below apply unless such an agreement is in effect."))
+        body_text("Maintenance covers preserving and supporting functionality that has already been built and delivered.")
         add_table([
-            ("Maintenance Hourly Rate", "$100/hour"),
+            ("Maintenance Hourly Rate", f"${maintenance_rate}/hour"),
             ("Billing Increment", "Billed in one-hour minimum increments"),
             ("Invoicing", "Net 30 days from invoice date"),
         ])
@@ -2403,12 +2416,29 @@ def create_app():
         section_heading("6. New Feature Development")
         body_text("Any feature, functionality, page, or integration that did not exist in the delivered MVP is considered new feature development. This work requires separate scoping, design, development, testing, and deployment.")
         add_table([
-            ("New Feature Hourly Rate", "$200/hour"),
+            ("New Feature Hourly Rate", f"${feature_rate}/hour"),
             ("Billing Increment", "Billed in one-hour minimum increments"),
             ("Authorization", "Written approval required before work begins"),
             ("Invoicing", "Net 30 days from invoice date"),
         ])
-        body_text("The simple test: if it existed in the MVP and needs to be fixed or tweaked, it's maintenance ($100/hr). If it didn't exist and needs to be built, it's a new feature ($200/hr).")
+        body_text(sanitize(
+            "The simple test: if it existed in the MVP and needs to be fixed or tweaked, "
+            f"it is maintenance (${maintenance_rate}/hr). If it did not exist and needs to "
+            f"be built, it is a new feature (${feature_rate}/hr)."))
+
+        # The alternative to billing by the hour. "Within the scope of this
+        # project" is the whole clause: an unlimited-work fee with no scope
+        # bound is an unlimited obligation, which is what "No Limit Dev Work"
+        # on an invoice turned out to mean in practice.
+        body_text(sanitize(
+            "Alternative - fixed monthly rate. Instead of hourly billing, the parties may "
+            "agree a fixed monthly fee covering unlimited development work that falls within "
+            "the scope of this project, including both maintenance under Section 5 and new "
+            "feature work under this section. Any such arrangement takes effect only when set "
+            "out in a separate written agreement signed by both parties, stating the monthly "
+            "fee, what it covers, and the notice required to end it. Work outside the scope "
+            "of this project is not covered by any monthly fee and is billed under this "
+            "section."))
 
         # Section 7 - Ongoing Hosting & Infrastructure
         section_heading("7. Ongoing Hosting & Infrastructure")
