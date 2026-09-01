@@ -30,8 +30,23 @@
 <div class="space-y-6 stagger-in">
 
     {% if playbooks %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {% for playbook in playbooks %}
+    {# Grouped by what kind of thing it is, in CATEGORIES order, so the page
+       reads slowest-first: the ones with a person and an approval in front of
+       them, then the ones that are only mine, then the ones that are a key. #}
+    {% for group in groups %}
+    <section class="space-y-4">
+        <div class="border-b border-white/10 pb-3">
+            <h2 class="text-sm font-semibold text-white uppercase tracking-wider">
+                {{ group.label }}
+                <span class="ml-1.5 text-surface-500 normal-case tracking-normal font-normal">{{ group.playbooks | length }}</span>
+            </h2>
+            {% if group.blurb %}
+            <p class="text-xs text-surface-400 mt-1.5 max-w-2xl">{{ group.blurb }}</p>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% for playbook in group.playbooks %}
         <a href="{{ url_for('playbooks.playbook_detail', slug=playbook.slug) }}"
            class="glass-card card-hover p-4 sm:p-5 flex flex-col gap-3 min-w-0 {% if not playbook.is_active %}opacity-60{% endif %}">
 
@@ -74,7 +89,9 @@
             </div>
         </a>
         {% endfor %}
-    </div>
+        </div>
+    </section>
+    {% endfor %}
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center">
         <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

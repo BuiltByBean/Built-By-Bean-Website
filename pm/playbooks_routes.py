@@ -95,6 +95,9 @@ def _apply_form(playbook):
     playbook.vendor_url = request.form.get("vendor_url", "").strip()
     playbook.logo_path = request.form.get("logo_path", "").strip()
     playbook.is_active = bool(request.form.get("is_active"))
+    chosen = request.form.get("category", "").strip()
+    if chosen in {value for value, _, _ in Playbook.CATEGORIES}:
+        playbook.category = chosen
 
     try:
         playbook.sort_order = int(request.form.get("sort_order") or 0)
@@ -123,7 +126,26 @@ def playbooks_index():
     playbooks = Playbook.query.order_by(
         Playbook.sort_order, Playbook.display_name
     ).all()
-    return render_template("pm/playbooks/index.html", playbooks=playbooks)
+
+    # Grouped in CATEGORIES order rather than sorted by the column, so the
+    # page reads slowest-first: the ones with a person and an approval in
+    # front of them, then the ones that are only mine, then the ones that are
+    # a key. An empty group is dropped rather than shown as a bare heading.
+    groups = []
+    for value, label, blurb in Playbook.CATEGORIES:
+        rows = [p for p in playbooks if p.category == value]
+        if rows:
+            groups.append({"label": label, "blurb": blurb, "playbooks": rows})
+
+    # Anything carrying a category that is no longer in CATEGORIES still has to
+    # appear, or editing the list silently hides a runbook.
+    known = {value for value, _, _ in Playbook.CATEGORIES}
+    orphans = [p for p in playbooks if p.category not in known]
+    if orphans:
+        groups.append({"label": "Uncategorised", "blurb": "", "playbooks": orphans})
+
+    return render_template("pm/playbooks/index.html",
+                           playbooks=playbooks, groups=groups)
 
 
 # Declared before the slug rule. Werkzeug would sort a static rule ahead of a
@@ -138,14 +160,14 @@ def playbook_create():
         if error:
             flash(error, "error")
             return render_template("pm/playbooks/form.html", playbook=playbook,
-                                   providers=_providers(), editing=False)
+                                   providers=_providers(), categories=Playbook.CATEGORIES, editing=False)
         db.session.add(playbook)
         db.session.commit()
         flash(f"{playbook.display_name} playbook created.", "success")
         return redirect(url_for("playbooks.playbook_detail", slug=playbook.slug))
 
     return render_template("pm/playbooks/form.html", playbook=playbook,
-                           providers=_providers(), editing=False)
+                           providers=_providers(), categories=Playbook.CATEGORIES, editing=False)
 
 
 @playbooks_bp.route("/<slug>")
@@ -169,13 +191,13 @@ def playbook_edit(slug):
         if error:
             flash(error, "error")
             return render_template("pm/playbooks/form.html", playbook=playbook,
-                                   providers=_providers(), editing=True)
+                                   providers=_providers(), categories=Playbook.CATEGORIES, editing=True)
         db.session.commit()
         flash(f"{playbook.display_name} playbook saved.", "success")
         return redirect(url_for("playbooks.playbook_detail", slug=playbook.slug))
 
     return render_template("pm/playbooks/form.html", playbook=playbook,
-                           providers=_providers(), editing=True)
+                           providers=_providers(), categories=Playbook.CATEGORIES, editing=True)
 
 
 @playbooks_bp.route("/<int:id>/delete", methods=["POST"])

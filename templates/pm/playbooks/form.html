@@ -87,6 +87,22 @@
             </div>
 
             <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Category</label>
+                {# Options come from Playbook.CATEGORIES so the form cannot
+                   offer a value the index does not know how to group. #}
+                {% set category_options = [] %}
+                {% for value, label, blurb in categories %}{% set _ = category_options.append((value, label)) %}{% endfor %}
+                {{ select_dropdown("category", category_options,
+                                   playbook.category or 'service',
+                                   "Pick one", full_width=true) }}
+                <p class="mt-1.5 text-xs text-surface-400">
+                    How much of it is somebody else's to do. A service has an
+                    account and usually an approval in front of it; an API is a
+                    key and a quota.
+                </p>
+            </div>
+
+            <div>
                 <label for="pb-order" class="block text-sm font-medium text-surface-300 mb-1.5">
                     Sort order <span class="text-surface-500 font-normal">(low numbers first)</span>
                 </label>

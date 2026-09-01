@@ -728,6 +728,9 @@ class Playbook(db.Model):
     # are on every build, so making somebody tick them each time is a step
     # that only ever has one answer.
     is_default = db.Column(db.Boolean, nullable=False, default=False)
+    # What kind of thing this is, which decides how much of it is somebody
+    # else's problem. See CATEGORIES.
+    category = db.Column(db.String(20), nullable=False, default="service", index=True)
     sort_order = db.Column(db.Integer, default=0)
     one_liner = db.Column(db.String(300), default="")
 
@@ -751,6 +754,41 @@ class Playbook(db.Model):
                            onupdate=lambda: datetime.now(timezone.utc))
 
     service_provider = db.relationship("ServiceProvider", backref="playbooks")
+
+    # The three shapes a third party comes in, in the order you meet them on a
+    # build. One list, so the index, the edit form and the sort cannot disagree
+    # about what the categories are or which comes first.
+    #
+    # The axis is how much of it is somebody else's to do. Twilio is an account
+    # in the client's name with a carrier approving it; the YouTube API is a
+    # key and a quota. Sorting those together buried the fact that one of them
+    # takes a fortnight.
+    CATEGORIES = (
+        ("service", "Services",
+         "An account in someone else's name, usually the client's, with money "
+         "or a legal identity attached. The slow ones: there is a person, and "
+         "often an approval, between you and working software."),
+        ("infrastructure", "Infrastructure",
+         "Where the code lives, runs and gets watched. Yours to drive, and "
+         "largely invisible to the client until it breaks."),
+        ("api", "APIs",
+         "A key and a quota. Bounded, quick, and no relationship to manage."),
+    )
+
+    @property
+    def category_label(self):
+        for value, label, _ in self.CATEGORIES:
+            if value == self.category:
+                return label
+        return self.CATEGORIES[0][1]
+
+    @property
+    def category_rank(self):
+        """Position in CATEGORIES, for sorting. Unknown values sort last."""
+        for i, (value, _, _) in enumerate(self.CATEGORIES):
+            if value == self.category:
+                return i
+        return len(self.CATEGORIES)
 
     # Heading and column, in reading order. One list, so the detail page, the
     # edit form and any future export cannot disagree about what the five
