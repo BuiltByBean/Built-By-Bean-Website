@@ -25,7 +25,7 @@ import signadoc_service as signadoc
 from signadoc_service import SignaDocError
 from models import db, Document, SignatureRequest
 
-signatures_bp = Blueprint("signatures", __name__, url_prefix="/admin/pm/signatures")
+contracts_bp = Blueprint("contracts", __name__, url_prefix="/admin/pm/contracts")
 
 # Where a signature block goes on a document this board did not draw. Fractions
 # of the page, top-left origin; page -1 is the last one. Bottom third, left of
@@ -233,27 +233,26 @@ def refresh_open_requests():
 # ── Pages ────────────────────────────────────────────────
 
 
-@signatures_bp.route("/")
+@contracts_bp.route("/")
 @login_required
-def signatures_index():
+def contracts_index():
     stale = refresh_open_requests() is None
     rows = SignatureRequest.query.order_by(SignatureRequest.created_at.desc()).all()
     counts = {}
     for row in rows:
         counts[row.status] = counts.get(row.status, 0) + 1
     return render_template(
-        "pm/signatures/index.html",
+        "pm/contracts/index.html",
         requests=rows,
         counts=counts,
         stale=stale,
         configured=signadoc.configured(),
-        portal_url=signadoc.base_url(),
     )
 
 
-@signatures_bp.route("/<int:id>")
+@contracts_bp.route("/<int:id>")
 @login_required
-def signature_detail(id):
+def contract_detail(id):
     row = db.session.get(SignatureRequest, id) or abort(404)
     refresh_open_requests()
 
@@ -267,27 +266,25 @@ def signature_detail(id):
         error = "SignaDoc is not configured — set SIGNADOC_URL and SIGNADOC_API_KEY."
 
     return render_template(
-        "pm/signatures/detail.html",
+        "pm/contracts/detail.html",
         req=row,
         envelope=envelope,
         error=error,
-        portal_url=signadoc.base_url(),
-        envelope_url=signadoc.envelope_url(row.envelope_id),
     )
 
 
-@signatures_bp.route("/<int:id>/resend", methods=["POST"])
+@contracts_bp.route("/<int:id>/resend", methods=["POST"])
 @login_required
-def signature_resend(id):
+def contract_resend(id):
     row = db.session.get(SignatureRequest, id) or abort(404)
     if not row.signer_ref:
         flash("No signer reference on this request — open it in SignaDoc instead.", "warning")
-        return redirect(url_for("signatures.signature_detail", id=id))
+        return redirect(url_for("contracts.contract_detail", id=id))
     try:
         reply = signadoc.resend(row.envelope_id, row.signer_ref, email=True)
     except SignaDocError as exc:
         flash(f"Could not send a new link: {exc}", "error")
-        return redirect(url_for("signatures.signature_detail", id=id))
+        return redirect(url_for("contracts.contract_detail", id=id))
 
     row.signing_url = reply.get("url") or row.signing_url
     row.mail_mode = reply.get("mailMode") or row.mail_mode
@@ -297,29 +294,29 @@ def signature_resend(id):
     else:
         flash("A fresh signing link is ready below — SignaDoc has no mail server, "
               "so send it to them yourself.", "warning")
-    return redirect(url_for("signatures.signature_detail", id=id))
+    return redirect(url_for("contracts.contract_detail", id=id))
 
 
-@signatures_bp.route("/<int:id>/void", methods=["POST"])
+@contracts_bp.route("/<int:id>/void", methods=["POST"])
 @login_required
-def signature_void(id):
+def contract_void(id):
     row = db.session.get(SignatureRequest, id) or abort(404)
     reason = (request.form.get("reason") or "").strip()
     try:
         signadoc.void_envelope(row.envelope_id, reason)
     except SignaDocError as exc:
         flash(f"Could not void it: {exc}", "error")
-        return redirect(url_for("signatures.signature_detail", id=id))
+        return redirect(url_for("contracts.contract_detail", id=id))
     row.status = "voided"
     row.synced_at = _now()
     db.session.commit()
     flash("Voided. The signing link no longer works.", "success")
-    return redirect(url_for("signatures.signature_detail", id=id))
+    return redirect(url_for("contracts.contract_detail", id=id))
 
 
-@signatures_bp.route("/<int:id>/signed.pdf")
+@contracts_bp.route("/<int:id>/signed.pdf")
 @login_required
-def signature_signed_pdf(id):
+def contract_signed_pdf(id):
     """The sealed file, straight from the portal.
 
     Served through here rather than linked to, because the portal will not hand
@@ -332,7 +329,7 @@ def signature_signed_pdf(id):
         data = signadoc.sealed_pdf(row.envelope_id)
     except SignaDocError as exc:
         flash(f"Could not fetch the signed PDF: {exc}", "error")
-        return redirect(url_for("signatures.signature_detail", id=id))
+        return redirect(url_for("contracts.contract_detail", id=id))
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in row.title)
     return Response(data, content_type="application/pdf", headers={
         "Content-Disposition": f'attachment; filename="{safe}_SIGNED.pdf"',
@@ -342,7 +339,7 @@ def signature_signed_pdf(id):
 # ── Sending a document that already exists here ──────────
 
 
-@signatures_bp.route("/send/<int:document_id>", methods=["GET", "POST"])
+@contracts_bp.route("/send/<int:document_id>", methods=["GET", "POST"])
 @login_required
 def send_document(document_id):
     doc = db.session.get(Document, document_id) or abort(404)
@@ -359,12 +356,12 @@ def send_document(document_id):
         message = (request.form.get("message") or "").strip()
         if not name or not email:
             flash("The signer needs a name and an email address.", "warning")
-            return redirect(url_for("signatures.send_document", document_id=document_id))
+            return redirect(url_for("contracts.send_document", document_id=document_id))
         try:
             data = read_pdf(doc.filename)
         except Exception as exc:  # boto3 raises its own error types, not OSError
             flash(f"Could not read that document: {exc}", "error")
-            return redirect(url_for("signatures.send_document", document_id=document_id))
+            return redirect(url_for("contracts.send_document", document_id=document_id))
         try:
             row = create_request(
                 pdf_bytes=data, filename=doc.original_name, title=title,
@@ -374,12 +371,12 @@ def send_document(document_id):
             )
         except SignaDocError as exc:
             flash(f"SignaDoc would not take it: {exc}", "error")
-            return redirect(url_for("signatures.send_document", document_id=document_id))
+            return redirect(url_for("contracts.send_document", document_id=document_id))
         flash(sent_message(row), "success")
-        return redirect(url_for("signatures.signature_detail", id=row.id))
+        return redirect(url_for("contracts.contract_detail", id=row.id))
 
     return render_template(
-        "pm/signatures/send.html",
+        "pm/contracts/send.html",
         document=doc, client=client, configured=signadoc.configured(),
     )
 

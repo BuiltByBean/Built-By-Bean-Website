@@ -9,20 +9,25 @@
   number that admits it is stale is useful and one that pretends is not.
 #}
 
-{% block title %}Signatures - Built By Bean{% endblock %}
-{% block page_title %}Signatures{% endblock %}
-{% block page_subtitle %}Contracts out for signing{% endblock %}
+{% block title %}Contracts - Built By Bean{% endblock %}
+{% block page_title %}Contracts{% endblock %}
+{% block page_subtitle %}Written, sent, signed, filed{% endblock %}
 
 {% block header_actions %}
-{% if portal_url %}
-<a href="{{ portal_url }}" target="_blank" rel="noopener"
+<a href="{{ url_for('pm.engagement_letter_form') }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    Engagement letter
+</a>
+<a href="{{ url_for('pm.sow_form') }}"
    class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
-    Open SignaDoc
+    Statement of work
 </a>
-{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -33,13 +38,13 @@
         <h3 class="text-sm font-bold text-amber-300 mb-1">Signing is not switched on</h3>
         <p class="text-sm text-surface-300">
             Set <code class="text-brand-300">SIGNADOC_URL</code> and
-            <code class="text-brand-300">SIGNADOC_API_KEY</code> so contracts generated here
-            can be sent for signature.
+            <code class="text-brand-300">SIGNADOC_API_KEY</code> so contracts written here
+            can be sent for signing. They still generate and download without it.
         </p>
     </div>
     {% elif stale %}
     <div class="glass-card p-5 border border-amber-500/30">
-        <h3 class="text-sm font-bold text-amber-300 mb-1">SignaDoc did not answer</h3>
+        <h3 class="text-sm font-bold text-amber-300 mb-1">The signing service did not answer</h3>
         <p class="text-sm text-surface-300">
             These statuses are the last ones seen and may have moved on since.
         </p>
@@ -63,7 +68,7 @@
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-xs uppercase tracking-wide text-surface-400">
-                        <th class="px-4 py-3 font-medium">Document</th>
+                        <th class="px-4 py-3 font-medium">Contract</th>
                         <th class="px-4 py-3 font-medium">Signer</th>
                         <th class="px-4 py-3 font-medium">Client</th>
                         <th class="px-4 py-3 font-medium">Sent</th>
@@ -74,7 +79,7 @@
                     {% for req in requests %}
                     <tr class="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors">
                         <td class="px-4 py-3">
-                            <a href="{{ url_for('signatures.signature_detail', id=req.id) }}"
+                            <a href="{{ url_for('contracts.contract_detail', id=req.id) }}"
                                class="font-medium text-white hover:text-brand-300 transition-colors">
                                 {{ req.title }}
                             </a>
@@ -111,15 +116,19 @@
         <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
         </svg>
-        <p class="text-surface-400 mb-4">Nothing has been sent for signature yet</p>
+        <p class="text-surface-400 mb-1">No contracts yet</p>
+        <p class="text-sm text-surface-500 mb-5 max-w-md mx-auto">
+            Write one here and send it straight to the client. They sign it in their
+            browser, and the signed copy files itself back against them.
+        </p>
         <div class="flex flex-wrap items-center justify-center gap-3">
             <a href="{{ url_for('pm.engagement_letter_form') }}"
                class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-                New engagement letter
+                Engagement letter
             </a>
             <a href="{{ url_for('pm.sow_form') }}"
                class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-                New statement of work
+                Statement of work
             </a>
         </div>
     </div>

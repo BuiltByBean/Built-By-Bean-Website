@@ -14,12 +14,12 @@
 {% block page_subtitle %}{{ req.kind_label }} &middot; {{ req.signer_name }}{% endblock %}
 
 {% block header_actions %}
-<a href="{{ url_for('signatures.signatures_index') }}"
+<a href="{{ url_for('contracts.contracts_index') }}"
    class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:bg-white/5 transition-colors">
     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
     </svg>
-    All signatures
+    All contracts
 </a>
 {% endblock %}
 
@@ -28,7 +28,7 @@
 
     {% if error %}
     <div class="glass-card p-5 border border-amber-500/30">
-        <h3 class="text-sm font-bold text-amber-300 mb-1">SignaDoc did not answer</h3>
+        <h3 class="text-sm font-bold text-amber-300 mb-1">The signing service did not answer</h3>
         <p class="text-sm text-surface-300">{{ error }} What follows is the last state seen here.</p>
     </div>
     {% endif %}
@@ -44,7 +44,7 @@
                         {{ req.status_label }}
                     </span>
                     {% if req.mail_mode and req.mail_mode != 'smtp' and req.status == 'sent' %}
-                    <span class="text-xs text-amber-400">SignaDoc has no mail server — send the link yourself</span>
+                    <span class="text-xs text-amber-400">No mail server configured — send the link yourself</span>
                     {% endif %}
                 </div>
 
@@ -70,13 +70,14 @@
                         </button>
                     </div>
                     <p class="text-xs text-surface-400 mt-2">
-                        One click signs them in as {{ req.signer_email }} and opens the document.
-                        Links last 14 days; use "Send a fresh link" below after that.
+                        Already emailed to them. One click signs them in as {{ req.signer_email }}
+                        and opens the document — no password, nothing to install. The link lasts
+                        14 days; after that use "Send a fresh link".
                     </p>
                 </div>
                 {% elif req.status == 'completed' %}
                 <div class="flex flex-wrap gap-3">
-                    <a href="{{ url_for('signatures.signature_signed_pdf', id=req.id) }}"
+                    <a href="{{ url_for('contracts.contract_signed_pdf', id=req.id) }}"
                        class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
                         <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
@@ -192,22 +193,27 @@
                     </div>
                     {% endif %}
                     <div>
-                        <dt class="text-xs text-surface-400 uppercase tracking-wide">Envelope</dt>
-                        <dd class="mt-0.5">
-                            <a href="{{ envelope_url }}" target="_blank" rel="noopener"
-                               class="text-brand-300 hover:text-brand-200 transition-colors font-mono text-xs break-all">
-                                {{ req.envelope_id }}
-                            </a>
-                        </dd>
+                        <dt class="text-xs text-surface-400 uppercase tracking-wide">Reference</dt>
+                        <dd class="mt-0.5 font-mono text-xs text-surface-400 break-all">{{ req.envelope_id }}</dd>
                     </div>
                 </dl>
+            </div>
+
+            <div class="glass-card p-5">
+                <h3 class="text-sm font-bold text-white mb-2">{{ req.signer_name }}'s copies</h3>
+                <p class="text-xs text-surface-400 leading-relaxed">
+                    Sending this gave {{ req.signer_email }} an account. They can sign back in
+                    with that address any time — no password, just a link emailed to them — and
+                    see every contract you have ever sent them, signed ones included, with the
+                    sealed PDF to download.
+                </p>
             </div>
 
             {% if req.status in ('sent', 'draft') %}
             <div class="glass-card p-5 space-y-4">
                 <h3 class="text-sm font-bold text-white">Actions</h3>
 
-                <form method="POST" action="{{ url_for('signatures.signature_resend', id=req.id) }}">
+                <form method="POST" action="{{ url_for('contracts.contract_resend', id=req.id) }}">
                     <button type="submit"
                             class="w-full min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
                         Send a fresh link
@@ -219,7 +225,7 @@
                   A confirm() is not much of a guard, but the alternative here
                   is a button that silently ends a contract on a mis-tap.
                 #}
-                <form method="POST" action="{{ url_for('signatures.signature_void', id=req.id) }}"
+                <form method="POST" action="{{ url_for('contracts.contract_void', id=req.id) }}"
                       onsubmit="return confirm('Void this envelope? The signing link stops working and it cannot be undone.')">
                     <label class="block text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">
                         Void it

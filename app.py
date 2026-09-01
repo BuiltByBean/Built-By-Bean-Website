@@ -243,8 +243,8 @@ def create_app():
     app.register_blueprint(tax_bp)
 
     # ── Signatures (SignaDoc) ───────────────────────────────
-    from pm.signature_routes import signatures_bp, send_generated
-    app.register_blueprint(signatures_bp)
+    from pm.contract_routes import contracts_bp, send_generated
+    app.register_blueprint(contracts_bp)
 
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
@@ -1615,14 +1615,28 @@ def create_app():
             return redirect(url_for("pm.client_detail", id=client_id))
         return redirect(url_for("pm.dashboard"))
 
-    # ── Document Templates ──────────────────────────────────
+    # ── Contract Templates ──────────────────────────────────
+    #
+    # These live under /contracts because that is the only place they are
+    # reached from: a letter or an SOW is a contract at the start of its life,
+    # and having them as their own destinations meant three sidebar entries
+    # for one job. The old /documents paths redirect rather than 404, since
+    # they have been bookmarked and linked to.
 
-    @pm_bp.route("/documents/engagement-letter", methods=["GET"])
+    @pm_bp.route("/documents/engagement-letter")
+    def engagement_letter_moved():
+        return redirect(url_for("pm.engagement_letter_form"), code=301)
+
+    @pm_bp.route("/documents/sow")
+    def sow_moved():
+        return redirect(url_for("pm.sow_form"), code=301)
+
+    @pm_bp.route("/contracts/new/engagement-letter", methods=["GET"])
     @login_required
     def engagement_letter_form():
-        return render_template("pm/documents/engagement_letter_form.html", today=date.today().isoformat())
+        return render_template("pm/contracts/engagement_letter_form.html", today=date.today().isoformat())
 
-    @pm_bp.route("/documents/engagement-letter", methods=["POST"])
+    @pm_bp.route("/contracts/new/engagement-letter", methods=["POST"])
     @login_required
     def generate_engagement_letter():
         from io import BytesIO
@@ -1860,7 +1874,7 @@ def create_app():
             client=client, document=doc,
         )
         if sent:
-            return redirect(url_for("signatures.signature_detail", id=sent.id))
+            return redirect(url_for("contracts.contract_detail", id=sent.id))
 
         from flask import make_response as _make_response
         response = _make_response(pdf_bytes)
@@ -1868,12 +1882,12 @@ def create_app():
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
 
-    @pm_bp.route("/documents/sow", methods=["GET"])
+    @pm_bp.route("/contracts/new/statement-of-work", methods=["GET"])
     @login_required
     def sow_form():
-        return render_template("pm/documents/sow_form.html", today=date.today().isoformat())
+        return render_template("pm/contracts/sow_form.html", today=date.today().isoformat())
 
-    @pm_bp.route("/documents/sow", methods=["POST"])
+    @pm_bp.route("/contracts/new/statement-of-work", methods=["POST"])
     @login_required
     def generate_sow():
         from io import BytesIO
@@ -2303,7 +2317,7 @@ def create_app():
             client=client, project=project, document=doc,
         )
         if sent:
-            return redirect(url_for("signatures.signature_detail", id=sent.id))
+            return redirect(url_for("contracts.contract_detail", id=sent.id))
 
         from flask import make_response
         response = make_response(pdf_bytes)

@@ -285,7 +285,7 @@
                     <a href="{{ url_for('pm.document_download', id=doc.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Download</a>
                     {# Only PDFs can carry a signature field. #}
                     {% if doc.original_name.lower().endswith('.pdf') %}
-                    <a href="{{ url_for('signatures.send_document', document_id=doc.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Sign</a>
+                    <a href="{{ url_for('contracts.send_document', document_id=doc.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Sign</a>
                     {% endif %}
                     <button type="button" @click="confirm = true" x-show="!confirm" class="text-xs text-red-500 hover:text-red-600 font-medium">Del</button>
                     <form x-show="confirm" method="POST" action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline-flex items-center gap-1">

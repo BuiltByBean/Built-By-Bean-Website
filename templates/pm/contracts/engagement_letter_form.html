@@ -1,7 +1,18 @@
 {% extends "pm/base.html" %}
 
-{% block page_title %}Generate Engagement Letter{% endblock %}
-{% block page_subtitle %}Create a new client engagement letter from template{% endblock %}
+{% block title %}New engagement letter - Built By Bean{% endblock %}
+{% block page_title %}New engagement letter{% endblock %}
+{% block page_subtitle %}Generate it, and send it straight to the client to sign{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('contracts.contracts_index') }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:bg-white/5 transition-colors">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    All contracts
+</a>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl">
@@ -30,7 +41,7 @@
                     <p class="mt-1 text-xs text-surface-400">This follows "Built by Bean LLC will..." in the letter</p>
                 </div>
 
-                {% include "pm/signatures/_send_panel.html" %}
+                {% include "pm/contracts/_send_panel.html" %}
 
             </div>
 
@@ -42,7 +53,7 @@
                     </svg>
                     Generate PDF
                 </button>
-                <a href="{{ url_for('pm.dashboard') }}"
+                <a href="{{ url_for('contracts.contracts_index') }}"
                    class="px-6 py-2.5 text-sm text-surface-300 hover:text-white transition-colors">
                     Cancel
                 </a>
