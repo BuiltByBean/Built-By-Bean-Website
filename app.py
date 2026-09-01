@@ -997,10 +997,9 @@ def create_app():
     @login_required
     def project_detail(id):
         project = db.session.get(Project, id) or abort(404)
-        tickets = project.tickets.order_by(Ticket.created_at.desc()).all()
-        time_entries = project.time_entries.order_by(TimeEntry.date.desc()).all()
-        expenses = Expense.query.filter(Expense.project_id == project.id).order_by(Expense.date.desc()).all()
-        documents = project.documents.order_by(Document.uploaded_at.desc()).all()
+
+        # No tickets, time, expenses, documents or invoices are loaded: this
+        # page shows playbooks, and each of the others has a page of its own.
 
         # The two that run on every build lead, then whatever was added for
         # this one. Ordering by sort_order alone buried GitHub and Railway
@@ -1026,9 +1025,8 @@ def create_app():
         }
 
         return render_template("pm/projects/detail.html",
-            project=project, tickets=tickets, time_entries=time_entries, expenses=expenses,
-            documents=documents, applied_playbooks=applied, available_playbooks=available,
-            playbook_state=playbook_state)
+            project=project, applied_playbooks=applied, available_playbooks=available,
+            playbook_state=playbook_state, playbook_categories=Playbook.CATEGORIES)
 
     @pm_bp.route("/projects/<int:id>/playbooks/add", methods=["POST"])
     @login_required

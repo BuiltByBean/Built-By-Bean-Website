@@ -1,0 +1,418 @@
+{#
+  The checklists this project is working through.
+
+  A playbook's prose explains a vendor once. This is the doing: an ordered
+  list, ticked as you go, with the awkward step already written for you.
+
+  The client messages are the point. The slow steps are always the ones
+  waiting on somebody else, and they are slow because composing the ask is a
+  small unpleasant job at the end of a day. Written on the step, it is a copy
+  button instead.
+
+  Laid out as a rail and a panel rather than one column. Stacked, six
+  playbooks of a dozen steps was six hundred lines of scroll, and collapsing
+  them only traded that for hunting the one you wanted among six identical
+  headers. The rail shows every playbook and how far along it is; the panel
+  shows the steps of the one you picked, and nothing else. Scroll length is
+  one playbook now, whatever the project.
+
+  Which one is selected lives in the hash, because adding or removing a
+  playbook is a POST and a redirect. It opens on the first unfinished
+  playbook, that being the one you came here to work on.
+
+  Ticking happens in the background. It used to be a form post and a redirect,
+  which reloaded the page and threw you back to the top — halfway down a
+  twelve-step checklist that is the whole list to find again, for every single
+  tick. The form is still a real form; it is just intercepted.
+
+  Every state-dependent class lives in :class and none of them in the static
+  class attribute. The panel is x-cloak'd so nothing here is visible until
+  Alpine has bound, which means there is no flash to protect against and no
+  argument between the two over who owns a colour.
+#}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.store('pb', {
+        books: {{ playbook_state | tojson }},
+        busy: {},
+
+        isDone(book, step) {
+            const b = this.books[book];
+            return !!(b && b.steps[step]);
+        },
+        isBusy(book, step) {
+            return !!this.busy[book + ':' + step];
+        },
+        get totalDone() {
+            return Object.values(this.books).reduce((n, b) => n + b.done, 0);
+        },
+
+        async toggle(book, step, url) {
+            const key = book + ':' + step;
+            if (this.busy[key]) return;          // a double click is one tick
+            this.busy[key] = true;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error(res.status);
+                const data = await res.json();
+                const b = this.books[book];
+                b.steps[step] = data.done;
+                b.done = data.book.done;
+                b.total = data.book.total;
+                b.percent = data.book.percent;
+                b.complete = data.book.complete;
+            } catch (err) {
+                /* Never leave a tick that did not save looking like it did.
+                   Reloading costs the scroll position, which is the thing this
+                   file exists to preserve — but a checkbox lying about what the
+                   server knows is the worse of the two. */
+                console.error('playbook tick failed', err);
+                window.location.reload();
+            } finally {
+                delete this.busy[key];
+            }
+        },
+    });
+});
+
+function playbookPanel(ids, preferred) {
+    return {
+        sel: '',
+        init() {
+            // A playbook removed since the link was made must not leave the
+            // panel showing nothing, so the hash is checked against what is
+            // actually here.
+            const m = location.hash.match(/^#pb-(\d+)$/);
+            this.sel = (m && ids.includes(m[1])) ? m[1] : preferred;
+        },
+        pick(id) {
+            this.sel = id;
+            // replaceState, not a hash assignment: setting location.hash
+            // scrolls the matching element into view, which on a phone jumps
+            // the panel out from under your thumb.
+            history.replaceState(null, '', '#pb-' + id);
+        },
+    };
+}
+</script>
+
+{% if applied_playbooks %}
+{# The one to open on: the first that still has work in it. #}
+{% set ns = namespace(first=none) %}
+{% for a in applied_playbooks %}
+  {% if ns.first is none and not a.is_complete %}{% set ns.first = a.id %}{% endif %}
+{% endfor %}
+{% set preferred = (ns.first or applied_playbooks[0].id) | string %}
+{% set ids = applied_playbooks | map(attribute='id') | map('string') | list %}
+
+<div class="flex flex-col lg:flex-row gap-4 items-start"
+     {# Single-quoted, because tojson escapes ' but not " — a double-quoted
+        attribute is closed by the first key in the array. #}
+     x-data='playbookPanel({{ ids | tojson }}, "{{ preferred }}")' x-cloak>
+
+    {# ── the rail ─────────────────────────────────────────────
+       A row that scrolls sideways on a phone, a sticky column from
+       lg up so it stays put while the steps scroll past it. #}
+    <div class="w-full lg:w-72 flex-shrink-0 lg:sticky lg:top-4">
+        <div class="glass-card p-2 flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
+            {% for applied in applied_playbooks %}
+            {% set pb = applied.playbook %}
+            {% set book = applied.id | string %}
+            <button type="button" @click="pick('{{ book }}')"
+                    :class="sel === '{{ book }}' ? 'bg-brand-600/20 ring-1 ring-brand-500/40' : 'hover:bg-white/5'"
+                    class="w-56 lg:w-full flex-shrink-0 text-left rounded-xl p-2.5 transition-colors">
+                <div class="flex items-center gap-2.5">
+                    {% if pb.logo_path %}
+                    <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
+                         class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                    {% else %}
+                    <div class="w-7 h-7 flex-shrink-0 rounded-lg bg-brand-500/15 flex items-center justify-center">
+                        <span class="text-[10px] font-bold text-brand-300">{{ pb.initials }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium truncate"
+                           :class="sel === '{{ book }}' ? 'text-white' : 'text-surface-200'">{{ pb.display_name }}</p>
+                        <p class="text-[11px] tabular-nums text-surface-500"
+                           x-text="$store.pb.books['{{ book }}'].done + '/' + $store.pb.books['{{ book }}'].total"></p>
+                    </div>
+                    <svg x-show="$store.pb.books['{{ book }}'].complete"
+                         class="w-4 h-4 flex-shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+                <div class="mt-2 h-1 rounded-full bg-surface-800 overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-300"
+                         :class="$store.pb.books['{{ book }}'].complete ? 'bg-emerald-500' : 'bg-brand-500'"
+                         :style="'width: ' + $store.pb.books['{{ book }}'].percent + '%'"></div>
+                </div>
+            </button>
+            {% endfor %}
+
+            {% if available_playbooks %}
+            <button type="button" @click="$dispatch('open-playbook-picker')"
+                    class="w-56 lg:w-full flex-shrink-0 flex items-center justify-center gap-1.5 rounded-xl p-2.5 text-sm font-medium text-surface-400 border border-dashed border-white/10 hover:text-brand-300 hover:border-brand-500/40 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Add playbook
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── the panel ────────────────────────────────────────────
+       Every playbook is rendered; only the picked one is shown. The
+       steps carry their own Alpine state, so keeping them in the page
+       means a message you had open is still open when you come back. #}
+    <div class="flex-1 min-w-0 w-full">
+        {% for applied in applied_playbooks %}
+        {% set pb = applied.playbook %}
+        {% set book = applied.id | string %}
+        <div x-show="sel === '{{ book }}'" class="glass-card p-5">
+
+            <div class="flex items-start gap-4 pb-4 border-b border-white/10">
+                {% if pb.logo_path %}
+                <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
+                     class="w-10 h-10 flex-shrink-0 rounded-xl bg-white/5 p-1 object-contain">
+                {% else %}
+                <div class="w-10 h-10 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
+                    <span class="text-xs font-bold text-brand-300">{{ pb.initials }}</span>
+                </div>
+                {% endif %}
+
+                <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="text-base font-bold text-white">{{ pb.display_name }}</h3>
+                        {% if pb.is_default %}
+                        <span class="px-2 py-0.5 text-[10px] uppercase tracking-wide rounded-full bg-surface-800 text-surface-400">Always</span>
+                        {% endif %}
+                        <span x-show="$store.pb.books['{{ book }}'].complete"
+                              class="px-2 py-0.5 text-[10px] uppercase tracking-wide rounded-full bg-emerald-900/30 text-emerald-400">Done</span>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                        <div class="flex-1 h-1.5 rounded-full bg-surface-800 overflow-hidden max-w-xs">
+                            <div class="h-full rounded-full transition-all duration-300"
+                                 :class="$store.pb.books['{{ book }}'].complete ? 'bg-emerald-500' : 'bg-brand-500'"
+                                 :style="'width: ' + $store.pb.books['{{ book }}'].percent + '%'"></div>
+                        </div>
+                        <span class="text-xs text-surface-400 whitespace-nowrap tabular-nums"
+                              x-text="$store.pb.books['{{ book }}'].done + ' of ' + $store.pb.books['{{ book }}'].total"></span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <a href="{{ url_for('playbooks.playbook_detail', slug=pb.slug) }}"
+                       title="Read the {{ pb.display_name }} playbook"
+                       class="p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                        </svg>
+                    </a>
+                    <form method="POST" action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}"
+                          onsubmit="return confirm('Remove {{ pb.display_name }} from this project? What you have ticked goes with it.')">
+                        <button type="submit" title="Remove from this project"
+                                class="p-2 rounded-lg text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-2">
+                {% for step in applied.steps %}
+                {% set sid = step.id | string %}
+                <div class="rounded-xl p-3 transition-colors"
+                     :class="$store.pb.isDone('{{ book }}', '{{ sid }}') ? 'bg-surface-900/40' : 'bg-surface-800/40'"
+                     x-data="{ showMsg: false, copied: false }">
+
+                    <div class="flex items-start gap-3">
+                        {# Still a real form. If the fetch throws, this is exactly
+                           what the browser would have done on its own. #}
+                        <form method="POST"
+                              action="{{ url_for('pm.project_playbook_step', applied_id=applied.id, step_id=step.id) }}"
+                              @submit.prevent="$store.pb.toggle('{{ book }}', '{{ sid }}', $el.action)"
+                              class="flex-shrink-0 pt-0.5">
+                            <button type="submit"
+                                    aria-label="Toggle: {{ step.title }}"
+                                    :aria-pressed="$store.pb.isDone('{{ book }}', '{{ sid }}')"
+                                    :disabled="$store.pb.isBusy('{{ book }}', '{{ sid }}')"
+                                    class="w-5 h-5 rounded-md border flex items-center justify-center transition-colors"
+                                    :class="$store.pb.isDone('{{ book }}', '{{ sid }}')
+                                            ? 'bg-emerald-500 border-emerald-500'
+                                            : 'border-white/25 hover:border-brand-400'">
+                                <svg x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
+                                     class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                        </form>
+
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-white transition-colors"
+                               :class="$store.pb.isDone('{{ book }}', '{{ sid }}') ? 'line-through opacity-40' : ''">
+                                {{ loop.index }}. {{ step.title }}
+                            </p>
+                            {% if step.detail_md %}
+                            <div class="prose-playbook text-xs text-surface-400 mt-1">{{ step.detail_md | markdown }}</div>
+                            {% endif %}
+
+                            {# Why it is ticked. A checkbox on its own goes stale:
+                               six months on, "done" is a claim with nothing behind
+                               it, and the honest answer is usually "I think so". #}
+                            {% set note = applied.note_for(step.id) %}
+                            {% if note %}
+                            <p x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
+                               class="flex items-start gap-1.5 mt-1.5 text-xs text-emerald-500/90">
+                                <svg class="w-3.5 h-3.5 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <span>{{ note }}</span>
+                            </p>
+                            {% endif %}
+
+                            {% if step.waits_on_client %}
+                            <button type="button" @click="showMsg = !showMsg"
+                                    class="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-brand-400 hover:text-brand-300">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                <span x-text="showMsg ? 'Hide the message' : 'Message to send'"></span>
+                                <span class="text-surface-500">&middot; {{ step.client_channel or 'email' }}</span>
+                            </button>
+
+                            <div x-show="showMsg" x-cloak class="mt-2 rounded-lg border border-white/10 bg-surface-900/70 p-3">
+                                {% set subject = step.subject_for(project) %}
+                                {% if subject %}
+                                <p class="text-xs text-surface-400 mb-1">
+                                    Subject: <span class="text-surface-200">{{ subject }}</span>
+                                </p>
+                                {% endif %}
+                                {# {client}, {project} and {domain} are filled from
+                                   this project. Anything it cannot know stays
+                                   visible as a placeholder rather than a gap. #}
+                                <pre class="text-xs text-surface-300 whitespace-pre-wrap font-sans leading-relaxed"
+                                     x-ref="msg{{ step.id }}">{{ step.message_for(project) }}</pre>
+                                <button type="button"
+                                        @click="navigator.clipboard.writeText($refs.msg{{ step.id }}.innerText); copied = true; setTimeout(() => copied = false, 2000)"
+                                        class="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                                    <span x-show="!copied">Copy</span>
+                                    <span x-show="copied" x-cloak>Copied</span>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-surface-500 py-4 text-center">
+                    No steps written for {{ pb.display_name }} yet.
+                </p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% else %}
+<div class="glass-card p-8 text-center">
+    <p class="text-surface-400 mb-1">No playbooks on this project</p>
+    <p class="text-sm text-surface-500 mb-4">Add one and its checklist appears here.</p>
+    {% if available_playbooks %}
+    <button type="button" @click="$dispatch('open-playbook-picker')"
+            class="inline-flex items-center gap-1.5 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add playbook
+    </button>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if available_playbooks %}
+{# ── the picker ───────────────────────────────────────────────
+   Seventeen playbooks in a wrap of buttons was its own scroll, and
+   the reason for coming here is usually one named vendor. A search
+   box and three groups, in a dialog, so the page underneath keeps
+   its length. #}
+<div x-data="{ open: false, q: '' }"
+     @open-playbook-picker.window="open = true; $nextTick(() => $refs.q && $refs.q.focus())"
+     @keydown.escape.window="open = false">
+    <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 lg:pl-[260px]"
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="open = false"></div>
+        <div class="relative w-full max-w-lg glass-card shadow-2xl flex flex-col max-h-[70vh]"
+             x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+
+            <div class="p-4 border-b border-white/10 flex items-center gap-3">
+                <input type="text" x-model="q" x-ref="q" placeholder="Search playbooks..."
+                       class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
+                <button @click="open = false" class="text-surface-400 hover:text-surface-200 p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto p-3 space-y-4">
+                {% for key, label, _blurb in playbook_categories %}
+                {% set group = available_playbooks | selectattr('category', 'equalto', key) | list %}
+                {% if group %}
+                {# Hide the whole group when the search matches none of it,
+                   so the headings do not outlive their contents. #}
+                <div x-show='{{ group | map(attribute="display_name") | map("lower") | list | tojson }}.some(n => n.includes(q.toLowerCase()))'>
+                    <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">{{ label }}</p>
+                    <div class="space-y-1">
+                        {% for pb in group %}
+                        <form method="POST" action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
+                              x-show="'{{ pb.display_name | lower }}'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="{{ pb.id }}">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                {% if pb.logo_path %}
+                                <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                {% else %}
+                                <div class="w-7 h-7 flex-shrink-0 rounded-lg bg-brand-500/15 flex items-center justify-center">
+                                    <span class="text-[10px] font-bold text-brand-300">{{ pb.initials }}</span>
+                                </div>
+                                {% endif %}
+                                <span class="flex-1 text-sm font-medium text-surface-200">{{ pb.display_name }}</span>
+                                <span class="text-xs text-surface-500 tabular-nums">{{ pb.steps.count() }} steps</span>
+                            </button>
+                        </form>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+
+                {% set uncategorised = available_playbooks | rejectattr('category', 'in', playbook_categories | map(attribute=0) | list) | list %}
+                {% if uncategorised %}
+                <div>
+                    <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">Other</p>
+                    <div class="space-y-1">
+                        {% for pb in uncategorised %}
+                        <form method="POST" action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
+                              x-show="'{{ pb.display_name | lower }}'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="{{ pb.id }}">
+                            <button type="submit" class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                <div class="w-7 h-7 flex-shrink-0 rounded-lg bg-brand-500/15 flex items-center justify-center">
+                                    <span class="text-[10px] font-bold text-brand-300">{{ pb.initials }}</span>
+                                </div>
+                                <span class="flex-1 text-sm font-medium text-surface-200">{{ pb.display_name }}</span>
+                                <span class="text-xs text-surface-500 tabular-nums">{{ pb.steps.count() }} steps</span>
+                            </button>
+                        </form>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
