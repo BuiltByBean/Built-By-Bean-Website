@@ -136,7 +136,9 @@
         </button>
         <button @click="tab = 'playbooks'" :class="tab === 'playbooks' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
-            Playbooks{% if pb_total %} ({{ pb_done }}/{{ pb_total }}){% endif %}
+            {# The count moves as steps are ticked without a reload, so it
+               reads from the same store the checkboxes write to. #}
+            Playbooks{% if pb_total %} (<span x-text="$store.pb.totalDone">{{ pb_done }}</span>/{{ pb_total }}){% endif %}
         </button>
         {% if time_tracking %}
         <button @click="tab = 'time'" :class="tab === 'time' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"

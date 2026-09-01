@@ -979,9 +979,24 @@ def create_app():
         available = [pb for pb in Playbook.query.filter_by(is_active=True)
                      .order_by(Playbook.sort_order).all() if pb.id not in taken]
 
+        # Ticking a step happens without leaving the page, so the browser needs
+        # the same counts the server just worked out. Built here rather than in
+        # the template because a dict of dicts in Jinja is all punctuation.
+        playbook_state = {
+            str(a.id): {
+                "done": a.done_count,
+                "total": a.total_steps,
+                "percent": a.percent,
+                "complete": a.is_complete,
+                "steps": {str(s.id): (s.id in a.done_ids) for s in a.steps},
+            }
+            for a in applied
+        }
+
         return render_template("pm/projects/detail.html",
             project=project, tickets=tickets, time_entries=time_entries, expenses=expenses,
-            documents=documents, applied_playbooks=applied, available_playbooks=available)
+            documents=documents, applied_playbooks=applied, available_playbooks=available,
+            playbook_state=playbook_state)
 
     @pm_bp.route("/projects/<int:id>/playbooks/add", methods=["POST"])
     @login_required
@@ -1032,6 +1047,24 @@ def create_app():
         row.done = not row.done
         row.done_at = datetime.now(timezone.utc) if row.done else None
         db.session.commit()
+
+        # The page ticks in place and asks for JSON. The redirect is still here
+        # for a plain form post, which is what happens if the fetch fails.
+        if request.accept_mimetypes.best == "application/json":
+            project = applied.project
+            return jsonify({
+                "done": row.done,
+                "book": {
+                    "done": applied.done_count,
+                    "total": applied.total_steps,
+                    "percent": applied.percent,
+                    "complete": applied.is_complete,
+                },
+                "project": {
+                    "done": sum(a.done_count for a in project.playbooks),
+                    "total": sum(a.total_steps for a in project.playbooks),
+                },
+            })
         return redirect(url_for("pm.project_detail", id=applied.project_id) + "#playbooks")
 
     @pm_bp.route("/projects/<int:id>/edit", methods=["GET", "POST"])
