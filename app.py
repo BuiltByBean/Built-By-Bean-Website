@@ -1797,7 +1797,7 @@ def create_app():
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(0, 6, "Phone: 903-491-2095", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 6, "Email: MichaelBean21@gmail.com", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, "Email: mbean@builtbybeans.com", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(6)
 
         # Client Acknowledgment
@@ -2259,7 +2259,7 @@ def create_app():
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(0, 6, "Phone: 903-491-2095", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 6, "Email: MichaelBean21@gmail.com", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, "Email: mbean@builtbybeans.com", new_x="LMARGIN", new_y="NEXT")
 
         pdf_bytes = bytes(pdf.output())
         safe_name = client_name.replace(" ", "_").replace("&", "and")
