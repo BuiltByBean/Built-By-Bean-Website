@@ -1114,6 +1114,17 @@ class ProjectPlaybook(db.Model):
     def done_ids(self):
         return {p.playbook_step_id for p in self.progress if p.done}
 
+    def note_for(self, step_id):
+        """What was written down when the step was ticked, if anything.
+
+        Reads from `progress`, which the template has already loaded for
+        done_ids, so this costs nothing extra per step.
+        """
+        for row in self.progress:
+            if row.playbook_step_id == step_id and row.done:
+                return row.note or ""
+        return ""
+
     @property
     def total_steps(self):
         return self.playbook.steps.count()

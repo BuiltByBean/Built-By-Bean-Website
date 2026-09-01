@@ -99,6 +99,19 @@
                         <div class="prose-playbook text-xs text-surface-400 mt-1">{{ step.detail_md | markdown }}</div>
                         {% endif %}
 
+                        {# Why it is ticked. A checkbox on its own goes stale:
+                           six months on, "done" is a claim with nothing behind
+                           it, and the honest answer is usually "I think so". #}
+                        {% set note = applied.note_for(step.id) %}
+                        {% if note %}
+                        <p class="flex items-start gap-1.5 mt-1.5 text-xs text-emerald-500/90">
+                            <svg class="w-3.5 h-3.5 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>{{ note }}</span>
+                        </p>
+                        {% endif %}
+
                         {% if step.waits_on_client %}
                         <button type="button" @click="showMsg = !showMsg"
                                 class="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-brand-400 hover:text-brand-300">
