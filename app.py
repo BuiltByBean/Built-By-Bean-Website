@@ -1631,10 +1631,28 @@ def create_app():
     def sow_moved():
         return redirect(url_for("pm.sow_form"), code=301)
 
+    def _client_picker():
+        """Everyone a contract can be written for, and the email on file.
+
+        Returned as both a list for the dropdown and a lookup keyed by id, so
+        the form can fill the signer in the moment a client is chosen rather
+        than asking for an address the board already knows.
+        """
+        clients = Client.query.order_by(Client.name).all()
+        options = [(c.id, c.name) for c in clients]
+        lookup = {
+            str(c.id): {"name": c.name, "email": (c.email or "").strip()}
+            for c in clients
+        }
+        return options, lookup
+
     @pm_bp.route("/contracts/new/engagement-letter", methods=["GET"])
     @login_required
     def engagement_letter_form():
-        return render_template("pm/contracts/engagement_letter_form.html", today=date.today().isoformat())
+        options, lookup = _client_picker()
+        return render_template("pm/contracts/engagement_letter_form.html",
+                               today=date.today().isoformat(),
+                               client_options=options, client_lookup=lookup)
 
     @pm_bp.route("/contracts/new/engagement-letter", methods=["POST"])
     @login_required
@@ -1642,14 +1660,15 @@ def create_app():
         from io import BytesIO
         from fpdf import FPDF
 
-        client_name = request.form.get("client_name", "").strip()
+        client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
         raw_date = request.form.get("date", "")
         project_description = request.form.get("project_description", "").strip()
         mvp_price = "2,500"
 
-        if not client_name or not project_description:
-            flash("Client name and project description are required.", "warning")
+        if not client or not project_description:
+            flash("Choose a client and describe the project.", "warning")
             return redirect(url_for("pm.engagement_letter_form"))
+        client_name = client.name
 
         try:
             formatted_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%B %d, %Y")
@@ -1839,9 +1858,10 @@ def create_app():
         safe_name = client_name.replace(" ", "_").replace("&", "and")
         filename = f"{safe_name}_Engagement_Letter.pdf"
 
-        # Auto-save PDF to client
+        # Auto-save PDF to client. The client came from the picker, so it is
+        # always there; this used to re-find it by ilike on a typed name and
+        # filed nothing at all when the spelling drifted.
         doc = None
-        client = Client.query.filter(Client.name.ilike(client_name)).first()
         if client:
             stored_name = f"{uuid.uuid4().hex}.pdf"
             pdf_data = bytes(pdf_bytes)
@@ -1885,7 +1905,10 @@ def create_app():
     @pm_bp.route("/contracts/new/statement-of-work", methods=["GET"])
     @login_required
     def sow_form():
-        return render_template("pm/contracts/sow_form.html", today=date.today().isoformat())
+        options, lookup = _client_picker()
+        return render_template("pm/contracts/sow_form.html",
+                               today=date.today().isoformat(),
+                               client_options=options, client_lookup=lookup)
 
     @pm_bp.route("/contracts/new/statement-of-work", methods=["POST"])
     @login_required
@@ -1893,7 +1916,8 @@ def create_app():
         from io import BytesIO
         from fpdf import FPDF
 
-        client_name = request.form.get("client_name", "").strip()
+        client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+        client_name = client.name if client else ""
         project_name = request.form.get("project_name", "").strip()
         project_description = request.form.get("project_description", "").strip()
         mvp_price = request.form.get("mvp_price", "2,500").strip()
@@ -1916,8 +1940,8 @@ def create_app():
             payment_description = "50% due at project kickoff; 50% due upon delivery and acceptance"
         features = [f.strip() for f in request.form.getlist("features") if f.strip()]
 
-        if not client_name or not project_name or not project_description or not features:
-            flash("Client name, project name, description, and at least one feature are required.", "warning")
+        if not client or not project_name or not project_description or not features:
+            flash("Choose a client, and give a project name, description and at least one feature.", "warning")
             return redirect(url_for("pm.sow_form"))
 
         try:
@@ -1933,7 +1957,7 @@ def create_app():
 
         # --- Build PDF ---
         try:
-            return _build_sow_pdf(client_name, project_name, project_description,
+            return _build_sow_pdf(client, project_name, project_description,
                                   mvp_price, sow_date, delivery_date, maint_days, features,
                                   payment_description, payment_milestones,
                                   hosting_fee, hosting_cycle)
@@ -1943,10 +1967,12 @@ def create_app():
             flash(f"PDF generation error: {e}", "error")
             return redirect(url_for("pm.sow_form"))
 
-    def _build_sow_pdf(client_name, project_name, project_description,
+    def _build_sow_pdf(client, project_name, project_description,
                         mvp_price, sow_date, delivery_date, maint_days, features,
                         payment_description, payment_milestones,
                         hosting_fee, hosting_cycle):
+        # The chosen client, passed in rather than looked up again by name.
+        client_name = client.name
         from fpdf import FPDF
 
         def sanitize(text):
@@ -2266,9 +2292,10 @@ def create_app():
         filename = f"{safe_name}_SOW_{project_name.replace(' ', '_')}.pdf"
 
         # Auto-save PDF to client and update stage/revenue
+        # Chosen from the picker above, so always found. This was an ilike on
+        # a typed name, which filed nothing when the spelling drifted.
         doc = None
         project = None
-        client = Client.query.filter(Client.name.ilike(client_name)).first()
         if client:
             stored_name = f"{uuid.uuid4().hex}.pdf"
             if _s3_client:

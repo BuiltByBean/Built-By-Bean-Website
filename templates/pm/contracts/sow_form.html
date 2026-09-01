@@ -18,15 +18,24 @@
 {% block content %}
 <div class="max-w-2xl">
     <div class="glass-card p-6">
-        <form method="POST" action="{{ url_for('pm.generate_sow') }}" x-data="sowForm()">
+        <form method="POST" action="{{ url_for('pm.generate_sow') }}"
+              x-data='Object.assign(sowForm(), { clientId: "", chosen: null, clients: {{ client_lookup|tojson }} })'
+              x-effect="chosen = clients[clientId] || null">
             <div class="space-y-5">
                 <!-- Client & Project -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Client Name *</label>
-                        <input type="text" name="client_name" required
-                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
-                               placeholder="e.g. J&D Entertainment">
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
+                        {#- Chosen, never typed. The signed copy has to file itself
+                            against a real client, and the email comes with it. -#}
+                        {{ select_dropdown("client_id", client_options,
+                                           placeholder="Choose a client", full_width=true, model="clientId") }}
+                        {% if not client_options %}
+                        <p class="mt-1.5 text-xs text-amber-400">
+                            No clients yet —
+                            <a href="{{ url_for('pm.client_create') }}" class="underline hover:text-amber-300">add one first</a>.
+                        </p>
+                        {% endif %}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Project Name *</label>

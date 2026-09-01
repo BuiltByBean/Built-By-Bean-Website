@@ -1,40 +1,78 @@
 {#
-  Offered on every document this board generates. Tick it and the PDF goes
+  Offered on every contract this board writes. Tick it and the PDF goes
   straight to the client with a one-click signing link instead of landing in a
   downloads folder for somebody to attach to an email by hand.
+
+  Who it goes to is not asked for. The client was chosen from the list above
+  and their address is already on their record, so this reads it from the
+  `chosen` client in the surrounding scope and shows it plainly. It stays
+  editable, because the person who signs is not always the address on file,
+  and a client with no email on record has to be given one here.
 
   `:required` is bound rather than written, because a hidden required input
   blocks submission with a validation message nobody can see — the browser
   refuses to submit and cannot show you why.
 #}
-<div x-data="{ send: false }" class="rounded-xl border border-white/10 bg-surface-800/40 p-4 space-y-4">
+<div x-data="{ send: false }"
+     class="rounded-xl border border-white/10 bg-surface-800/40 p-4 space-y-4">
     <label class="flex items-start gap-3 cursor-pointer">
         <input type="checkbox" name="send_for_signature" value="1" x-model="send"
                class="mt-0.5 w-4 h-4 rounded border-white/20 bg-surface-900 text-brand-500 focus:ring-brand-500">
         <span>
             <span class="block text-sm font-medium text-white">Send it for signature</span>
             <span class="block text-xs text-surface-400 mt-0.5">
-                Opens in SignaDoc for the client to sign, with the signature and date
-                fields already sitting on the signature line.
+                Emails the client a one-click link that signs them in and opens the
+                document, with the signature and date fields already on the
+                signature line.
             </span>
         </span>
     </label>
 
     <div x-show="send" x-cloak class="space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Signer name</label>
-                <input type="text" name="signer_name" :required="send"
-                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
-                       placeholder="Who signs it">
+
+        {# Nothing picked yet, so there is nobody to send to. #}
+        <p x-show="!chosen" class="text-xs text-amber-400">
+            Choose a client above and their details will fill in here.
+        </p>
+
+        <template x-if="chosen">
+            <div class="space-y-4">
+                <div class="rounded-lg bg-surface-900/60 border border-white/10 px-3 py-2.5">
+                    <p class="text-xs text-surface-400">Goes to</p>
+                    <p class="text-sm text-white mt-0.5">
+                        <span x-text="chosen.name"></span>
+                        <span class="text-surface-400" x-show="chosen.email">
+                            &lt;<span x-text="chosen.email"></span>&gt;
+                        </span>
+                    </p>
+                </div>
+
+                {# The one case that still needs typing: no address on record. #}
+                <p x-show="!chosen.email" class="text-xs text-amber-400">
+                    No email on file for this client. Add one below and it will be
+                    used for this contract.
+                </p>
+
+                <details class="group" :open="!chosen.email">
+                    <summary class="text-xs text-surface-400 hover:text-surface-300 cursor-pointer select-none"
+                             x-text="chosen.email ? 'Someone else signs this one' : 'Enter their email'"></summary>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                        <div>
+                            <label class="block text-sm font-medium text-surface-300 mb-1.5">Signer name</label>
+                            <input type="text" name="signer_name" :value="chosen.name" :required="send"
+                                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-surface-300 mb-1.5">Signer email</label>
+                            <input type="email" name="signer_email" :value="chosen.email" :required="send"
+                                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                                   placeholder="name@example.com">
+                        </div>
+                    </div>
+                </details>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Signer email</label>
-                <input type="email" name="signer_email" :required="send"
-                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
-                       placeholder="name@example.com">
-            </div>
-        </div>
+        </template>
+
         <div>
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Message</label>
             <input type="text" name="signer_message"
