@@ -2015,6 +2015,16 @@ def create_app():
             "Built by Bean LLC has no obligation to perform any work beyond a delivered and accepted MVP unless separately contracted in writing.",
             "Built by Bean LLC reserves the right to display completed work in its portfolio unless the client requests otherwise in writing.",
             "This engagement letter does not constitute a binding contract for services. A formal SOW governs each individual project or work request.",
+            # Everything below is the protection that used to live only in the
+            # SOW. A letter that sets pricing expectations and is signed by a
+            # client is a document that can be argued about, so it carries the
+            # same terms rather than relying on a SOW that may not exist yet.
+            "Built by Bean LLC retains ownership of the software it writes. On full payment the client receives a perpetual, non-exclusive, non-transferable license to use the delivered application for its own business, with no renewal and no recurring license fee. The client's own data remains the client's at all times.",
+            "Built by Bean LLC provides services on a best-effort basis and is not liable for indirect, incidental, consequential or punitive damages, including loss of revenue, data or business opportunity. Total liability will not exceed the total fees paid by the client.",
+            "Built by Bean LLC is not responsible for outages, data loss or service interruptions caused by third-party providers - hosting platforms, cloud storage, domain registrars, DNS providers, email delivery services, payment processors or mobile carriers - which operate under their own terms, and does not guarantee 100% uptime of any deployed application.",
+            "The client is responsible for maintaining its own backups of any content, data or credentials it provides, and Built by Bean LLC is not responsible for loss of client-provided materials.",
+            "The client is responsible for ensuring that content, images, trademarks or materials it provides do not infringe third-party rights, and indemnifies Built by Bean LLC against any claim arising from them.",
+            "This letter and any agreement arising from it are governed by the laws of the State of Texas, and any dispute will be resolved in the courts of the State of Texas.",
             "All fees are in USD. Late payments are subject to a 1.5% monthly late fee after the invoice due date.",
         ]
         style.bullets(terms)

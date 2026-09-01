@@ -256,24 +256,86 @@ def _signatures(style, client_name, date_str, countersign, script_font=None):
     return own_anchors, client_anchors
 
 
+# The protections, in one place, so no document can be missing them.
+#
+# Written to stand on their own. A document that only inherited these from a
+# Statement of Work would inherit nothing on the day there is no SOW - an
+# add-on sold to somebody who never had one, or an addendum to a contract
+# papered years ago on somebody else's template - and that is exactly the
+# document you would want them on.
+STANDALONE_PROTECTIONS = [
+    "Built by Bean LLC provides services on a best-effort basis. To the maximum extent "
+    "permitted by law, Built by Bean LLC is not liable for any indirect, incidental, "
+    "consequential or punitive damages, including loss of revenue, data, or business "
+    "opportunity, arising from or related to the services provided.",
+
+    "Built by Bean LLC's total aggregate liability arising out of or relating to this "
+    "agreement will not exceed the total fees paid by the Client under this agreement in "
+    "the twelve (12) months preceding the event giving rise to the claim.",
+
+    "Built by Bean LLC is not responsible for outages, data loss, or service interruptions "
+    "caused by third-party providers, including hosting platforms, cloud storage, domain "
+    "registrars, DNS providers, email delivery services, payment processors, and mobile "
+    "carriers. Those services operate under their own terms and service levels.",
+
+    "Built by Bean LLC does not guarantee 100% uptime or availability of any deployed "
+    "application. Reasonable efforts will be made, and factors outside Built by Bean LLC's "
+    "control - including provider failures, network outages, cyberattacks and force "
+    "majeure events - may affect availability.",
+
+    "The Client is responsible for maintaining its own backups of any content, data or "
+    "credentials it provides. Built by Bean LLC is not responsible for loss of "
+    "Client-provided materials.",
+
+    "The Client is responsible for ensuring that any content, images, trademarks or "
+    "materials it provides do not infringe third-party rights, and indemnifies Built by "
+    "Bean LLC against any claim arising from Client-provided materials.",
+
+    "All software, source code and designs created by Built by Bean LLC remain the "
+    "exclusive property of Built by Bean LLC. On full payment the Client holds a "
+    "perpetual, non-exclusive, non-transferable license to use them for its own business. "
+    "The Client's own data remains the Client's at all times.",
+
+    "Built by Bean LLC has no obligation to perform work beyond what is described in this "
+    "agreement unless separately contracted in writing.",
+
+    "All fees are in USD. Late payments are subject to a $50 per day late fee for each day "
+    "payment remains outstanding past the invoice due date.",
+
+    "This agreement is governed by the laws of the State of Texas, and any dispute arising "
+    "under it will be resolved in the courts of the State of Texas.",
+
+    "This agreement, once signed by both parties, is binding for the scope and terms "
+    "described in it.",
+]
+
+
 def _incorporated_terms(style, reference):
-    """One clause instead of three copies of the SOW's back pages."""
+    """The terms this document carries, whether or not a SOW sits behind it.
+
+    Two halves. The first inherits the Statement of Work, so its clauses are
+    not restated in full and cannot drift from it. The second states the
+    protections outright, "whether or not" that agreement is in force, because
+    a document that only inherits them protects nobody on the day the thing it
+    inherits from is missing, unclear, or somebody else's template.
+    """
     style.section_heading("Terms")
     style.body(
         f"This agreement is entered into under, and forms part of, {reference}. All terms "
         "of that agreement - including intellectual property and licensing, limitation of "
-        "liability, confidentiality, and governing law - apply to the work described here "
-        "and are not repeated. Where this agreement and that one conflict, this one governs "
-        "for the work described here only.")
+        "liability, confidentiality, and governing law - apply to the work described here. "
+        "Where this agreement and that one conflict, this one governs for the work "
+        "described here only.")
+    style.body(
+        "In addition, and whether or not any agreement referred to above is in force, the "
+        "following apply to the work described here:")
+    style.bullets(STANDALONE_PROTECTIONS, size=8.5)
     style.bullets([
-        "All fees are in USD and are due on the terms set out in the Statement of Work.",
-        "Work described here is in addition to the delivered MVP scope and does not extend "
-        "any free maintenance window.",
+        "Work described here is in addition to any delivered scope and does not extend any "
+        "free maintenance window.",
         "Third-party service fees, where noted, are charged to the Client directly by the "
         "provider and are not collected by Built by Bean LLC.",
-        "This agreement, once signed by both parties, is binding for the scope and terms "
-        "described in it.",
-    ])
+    ], size=8.5)
 
 
 # ── Add-on agreement ─────────────────────────────────────
@@ -375,6 +437,15 @@ def build_addendum(*, client_name, original_title, original_date, description,
     style.body(
         "Where this Addendum and the Original Agreement conflict, this Addendum governs, "
         "and only on the point it changes.")
+
+    # Stated rather than inherited. An addendum to an agreement papered years
+    # ago on somebody else's template inherits whatever that template said,
+    # which may be nothing at all.
+    style.section_heading("4. Terms")
+    style.body(
+        "The following apply to this Addendum whether or not the Original Agreement "
+        "provides for them:")
+    style.bullets(STANDALONE_PROTECTIONS, size=8.5)
 
     own, client = _signatures(style, client_name, date_str, countersign, script_font)
     return bytes(pdf.output()), own, client, pdf.w, pdf.h
