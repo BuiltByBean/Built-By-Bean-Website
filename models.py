@@ -937,3 +937,60 @@ class SignatureRequest(db.Model):
 
     def __repr__(self):
         return f"<SignatureRequest {self.envelope_id} {self.status}>"
+
+
+
+class AppLink(db.Model):
+    """A tile on the My Apps board.
+
+    The board used to be hardcoded, so adding something meant editing a
+    template. These are rows now, added and edited from the page itself.
+
+    The icon is the app's own: its PWA manifest icon, apple-touch-icon or
+    favicon, fetched once and kept here. Anything you build already ships a
+    logo, so picking one off a stock list would be choosing a worse picture
+    than the one already sitting at the other end of the URL. Where a site
+    offers none, the tile falls back to initials.
+
+    `url` holds either a full address for something deployed elsewhere, or a
+    path beginning with / for a page inside this app, and is rendered as
+    given — which is why it is normalised on the way in.
+    """
+
+    __tablename__ = "app_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    url = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text, default="")
+
+    # The stored icon file, and where it came from. Null means none was found
+    # or none has been fetched yet, and the tile shows initials instead.
+    icon_file = db.Column(db.String(120), nullable=True)
+    icon_source = db.Column(db.String(500), nullable=True)
+    icon_fetched_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_external(self):
+        """Whether following this leaves the app, and so wants a new tab."""
+        return self.url.startswith("http://") or self.url.startswith("https://")
+
+    @property
+    def host(self):
+        """The bit worth showing under the name: the domain, or the path."""
+        if not self.is_external:
+            return self.url
+        return self.url.split("//", 1)[-1].split("/", 1)[0]
+
+    @property
+    def initials(self):
+        """Two letters for a tile whose site offered no icon."""
+        parts = [p for p in (self.name or "?").split() if p]
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return (parts[0][:2] if parts else "?").upper()
+
+    def __repr__(self):
+        return f"<AppLink {self.name}>"

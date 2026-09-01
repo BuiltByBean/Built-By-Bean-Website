@@ -246,6 +246,10 @@ def create_app():
     from pm.contract_routes import contracts_bp, send_generated
     app.register_blueprint(contracts_bp)
 
+    # ── My Apps board ───────────────────────────────────────
+    from pm.apps_routes import apps_bp
+    app.register_blueprint(apps_bp)
+
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
     app.register_blueprint(pluralism_bp)
@@ -585,7 +589,7 @@ def create_app():
     @app.route("/admin")
     @login_required
     def admin_hub():
-        return redirect(url_for("pm.apps_board"), code=301)
+        return redirect(url_for("apps.index"), code=301)
 
     # ── Dashboard ────────────────────────────────────────────
 
@@ -1614,12 +1618,6 @@ def create_app():
         elif client_id:
             return redirect(url_for("pm.client_detail", id=client_id))
         return redirect(url_for("pm.dashboard"))
-
-    @pm_bp.route("/apps")
-    @login_required
-    def apps_board():
-        """The old /admin hub, now a page in here rather than a front door."""
-        return render_template("pm/apps/index.html")
 
     # ── Contract Templates ──────────────────────────────────
     #

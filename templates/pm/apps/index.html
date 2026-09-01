@@ -1,68 +1,94 @@
 {% extends "pm/base.html" %}
 
 {#
-  What used to be the standalone hub at /admin, now a page in here.
+  The board. Tiles are rows, and each wears its own app's icon.
 
-  Signing in drops you on the board rather than on this, because the board is
-  what the day is spent in and this is what gets visited occasionally. The old
-  /admin URL still lands here.
-
-  The Project Manager tile that used to sit on this page is gone: it pointed
-  at the app you are already inside.
+  The whole tile is the anchor rather than a title link inside a card, so the
+  tap target is the card. That means nothing inside it may be a link or a
+  button — a nested interactive element inside an anchor is invalid and
+  behaves differently in every browser. Edit and delete therefore live on the
+  edit page, reached from a pencil that sits outside the anchor.
 #}
 
 {% block title %}My Apps - Built By Bean{% endblock %}
 {% block page_title %}My Apps{% endblock %}
-{% block page_subtitle %}The other things running{% endblock %}
+{% block page_subtitle %}Everything running{% endblock %}
 
 {% block content %}
 <div class="space-y-6 stagger-in">
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
 
-        <a href="{{ url_for('pluralism.index') }}"
-           class="glass-card card-hover p-5 flex flex-col gap-3 min-w-0">
-            <div class="w-11 h-11 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
-                <svg class="w-5 h-5 text-brand-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                </svg>
-            </div>
-            <div class="min-w-0">
-                <h3 class="text-base font-bold text-white">The Pluralism Within</h3>
-                <p class="text-sm text-surface-300 mt-1">
-                    Interactive D3.js visualisation tracing the fractures of Christendom.
-                </p>
-            </div>
+    <div class="flex flex-col sm:flex-row gap-3">
+        <a href="{{ url_for('apps.edit') }}"
+           class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add an app
         </a>
-
-        <a href="{{ url_for('bible_study.login') }}"
-           class="glass-card card-hover p-5 flex flex-col gap-3 min-w-0">
-            <div class="w-11 h-11 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
-                <svg class="w-5 h-5 text-brand-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+        {% if apps | selectattr('icon_file', 'none') | list %}
+        <form method="POST" action="{{ url_for('apps.refresh_all') }}">
+            <button type="submit"
+                    class="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                 </svg>
-            </div>
-            <div class="min-w-0">
-                <h3 class="text-base font-bold text-white">Bible Study</h3>
-                <p class="text-sm text-surface-300 mt-1">
-                    Scripture reader with notes, tags, questions, journal and topics.
-                </p>
-            </div>
-        </a>
-
-        <div class="glass-card p-5 flex flex-col gap-3 min-w-0 opacity-60">
-            <div class="w-11 h-11 flex-shrink-0 rounded-xl bg-surface-800 flex items-center justify-center">
-                <svg class="w-5 h-5 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4"/>
-                </svg>
-            </div>
-            <div class="min-w-0">
-                <h3 class="text-base font-bold text-surface-300">More tools coming</h3>
-                <p class="text-sm text-surface-400 mt-1">
-                    Future admin tools will appear here as they get built.
-                </p>
-            </div>
-        </div>
-
+                Fetch missing icons
+            </button>
+        </form>
+        {% endif %}
     </div>
+
+    {% if apps %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% for app in apps %}
+        <div class="relative group">
+            <a href="{{ app.url }}"
+               {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
+               class="glass-card card-hover p-4 sm:p-5 flex items-start gap-4 min-w-0 h-full">
+
+                {% if app.icon_file %}
+                {# object-contain, not cover: these are logos, and cropping a
+                   logo to fill a square is how you cut somebody's name off. #}
+                <img src="{{ url_for('apps.icon', id=app.id) }}" alt=""
+                     class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-1.5 object-contain">
+                {% else %}
+                <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
+                    <span class="text-sm font-bold text-brand-300">{{ app.initials }}</span>
+                </div>
+                {% endif %}
+
+                <div class="min-w-0 pr-7">
+                    <h3 class="text-base font-bold text-white break-words">{{ app.name }}</h3>
+                    {# Truncated, not wrapped: a long railway.app host takes
+                       three lines and pushes the description off the tile. #}
+                    <p class="text-xs text-surface-400 mt-0.5 truncate" title="{{ app.url }}">{{ app.host }}</p>
+                    {% if app.description %}
+                    <p class="text-sm text-surface-300 mt-2 break-words">{{ app.description }}</p>
+                    {% endif %}
+                </div>
+            </a>
+
+            {# Outside the anchor above, so it is a real link and not a link
+               inside a link. #}
+            <a href="{{ url_for('apps.edit', id=app.id) }}"
+               aria-label="Edit {{ app.name }}"
+               class="absolute top-3 right-3 p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <p class="text-surface-400 mb-1">Nothing on the board yet</p>
+        <p class="text-sm text-surface-500 max-w-md mx-auto">
+            Add anything you have deployed. Give it a name and its address and it
+            will wear its own logo.
+        </p>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}
