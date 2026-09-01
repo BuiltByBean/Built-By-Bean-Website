@@ -466,6 +466,11 @@ def create_app():
         }
 
     @app.context_processor
+    def inject_features():
+        """Which optional parts of the app are switched on right now."""
+        return {"time_tracking": app.config.get("FEATURE_TIME_TRACKING", False)}
+
+    @app.context_processor
     def inject_globals():
         active_timer = None
         timer_projects = []

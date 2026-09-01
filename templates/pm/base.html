@@ -466,6 +466,7 @@
                 </svg>
                 Tickets
             </a>
+            {% if time_tracking %}
             <a href="{{ url_for('pm.time_list') }}"
                class="sidebar-link {% if request.endpoint and 'time' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -473,6 +474,7 @@
                 </svg>
                 Time Tracking
             </a>
+            {% endif %}
             <a href="{{ url_for('pm.expenses_list') }}"
                class="sidebar-link {% if request.endpoint and 'expense' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -560,7 +562,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-3 flex-shrink-0">
-                    {% include "pm/components/timer_widget.html" %}
+                    {% if time_tracking %}{% include "pm/components/timer_widget.html" %}{% endif %}
                     {% block header_actions %}{% endblock %}
                 </div>
             </div>

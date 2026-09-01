@@ -8,10 +8,12 @@
 
 {% block header_actions %}
 <div class="flex items-center gap-2">
+    {% if time_tracking %}
     <a href="{{ url_for('pm.time_create', project_id=ticket.project_id, ticket_id=ticket.id) }}"
        class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
         Log Time
     </a>
+    {% endif %}
     <a href="{{ url_for('pm.expense_create', ticket_id=ticket.id) }}"
        class="px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Add Expense
@@ -121,10 +123,12 @@
         <p class="text-xs font-medium text-surface-400 mb-1">Documents</p>
         <p class="text-lg font-bold text-white">{{ documents | length }}</p>
     </div>
+    {% if time_tracking %}
     <div class="glass-card p-4">
         <p class="text-xs font-medium text-surface-400 mb-1">Hours Logged</p>
         <p class="text-lg font-bold text-white">{{ ticket.total_hours | format_hours }}</p>
     </div>
+    {% endif %}
     <div class="glass-card p-4">
         <p class="text-xs font-medium text-red-400 mb-1">Expenses</p>
         <p class="text-lg font-bold text-red-300">{{ ticket.total_expenses | format_currency }}</p>
@@ -183,6 +187,7 @@
     {% endif %}
 </div>
 
+{% if time_tracking %}
 <!-- Time Entries -->
 <div class="glass-card p-6 mb-6">
     <div class="flex items-center justify-between mb-4">
@@ -218,6 +223,7 @@
     <p class="text-sm text-surface-500 text-center py-4">No time logged yet</p>
     {% endif %}
 </div>
+{% endif %}
 
 <!-- Expenses -->
 <div class="glass-card p-6 mb-6">

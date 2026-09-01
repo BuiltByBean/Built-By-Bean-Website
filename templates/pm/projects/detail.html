@@ -11,10 +11,12 @@
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Ticket
     </button>
+    {% if time_tracking %}
     <a href="{{ url_for('pm.time_create', project_id=project.id) }}"
        class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
         Log Time
     </a>
+    {% endif %}
     <a href="{{ url_for('pm.project_edit', id=project.id) }}"
        class="px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Edit
@@ -103,11 +105,13 @@
 </div>
 
 <!-- Financial Summary -->
-<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-2 {% if time_tracking %}sm:grid-cols-3{% endif %} gap-4 mb-6">
+    {% if time_tracking %}
     <div class="glass-card p-4">
         <p class="text-xs font-medium text-surface-400 mb-1">Total Hours</p>
         <p class="text-lg font-bold text-white">{{ project.total_hours | format_hours }}</p>
     </div>
+    {% endif %}
     <div class="glass-card p-4">
         <p class="text-xs font-medium text-emerald-400 mb-1">Revenue</p>
         <p class="text-lg font-bold text-emerald-300">{{ project.total_revenue | format_currency }}</p>
@@ -125,10 +129,12 @@
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Tickets ({{ tickets | length }})
         </button>
+        {% if time_tracking %}
         <button @click="tab = 'time'" :class="tab === 'time' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Time ({{ time_entries | length }})
         </button>
+        {% endif %}
         <button @click="tab = 'expenses'" :class="tab === 'expenses' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Expenses ({{ expenses | length }})
@@ -157,7 +163,7 @@
                         {{ badge(task.priority) }}
                     </div>
                     <p class="text-xs text-surface-400">
-                        {{ task.documents.count() }} docs &middot; {{ task.expenses.count() }} expenses &middot; {{ task.total_hours | format_hours }}
+                        {{ task.documents.count() }} docs &middot; {{ task.expenses.count() }} expenses{% if time_tracking %} &middot; {{ task.total_hours | format_hours }}{% endif %}
                         {% if task.due_date %} &middot; Due {{ task.due_date | format_date }}{% endif %}
                     </p>
                 </div>

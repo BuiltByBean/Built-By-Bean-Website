@@ -84,15 +84,17 @@
     <!-- Financial Summary + Projects -->
     <div class="lg:col-span-2 space-y-6">
         <!-- Financials -->
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 {% if time_tracking %}sm:grid-cols-4{% else %}sm:grid-cols-3{% endif %} gap-4">
             <div class="glass-card p-4">
                 <p class="text-xs font-medium text-accent-400 mb-1">Contract Value</p>
                 <p class="text-xl font-bold text-accent-300">{{ (client.contract_revenue or 0) | format_currency }}</p>
             </div>
+            {% if time_tracking %}
             <div class="glass-card p-4">
                 <p class="text-xs font-medium text-surface-400 mb-1">Total Hours</p>
                 <p class="text-xl font-bold text-white">{{ total_hours | format_hours }}</p>
             </div>
+            {% endif %}
             <div class="glass-card p-4">
                 <p class="text-xs font-medium text-emerald-400 mb-1">Total Revenue</p>
                 <p class="text-xl font-bold text-emerald-300">{{ total_revenue | format_currency }}</p>
@@ -122,7 +124,7 @@
                     </div>
                     <div class="flex items-center gap-4 text-xs text-surface-400">
                         <span>{{ project.tickets.count() }} tasks</span>
-                        <span>{{ project.total_hours | format_hours }}</span>
+                        {% if time_tracking %}<span>{{ project.total_hours | format_hours }}</span>{% endif %}
                         <span>{{ project.total_revenue | format_currency }}</span>
                     </div>
                 </a>

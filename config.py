@@ -59,6 +59,13 @@ class Config:
     CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mbean@builtbybeans.com")
     MAIL_USE_TLS = True
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USERNAME", "")
+    # Time tracking is built and kept — routes, models, data all intact — but
+    # not shown. Set FEATURE_TIME_TRACKING=1 to bring back the nav entry, the
+    # header timer, the hours figures and the time tab on projects, tickets
+    # and clients.
+    FEATURE_TIME_TRACKING = os.environ.get("FEATURE_TIME_TRACKING", "").strip().lower() in (
+        "1", "true", "yes", "on")
+
     # Bible Study
     ESV_API_KEY = os.environ.get("ESV_API_KEY", "")
     APP_URL = os.environ.get("APP_URL", "https://builtbybeans.com")

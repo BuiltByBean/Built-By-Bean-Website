@@ -115,7 +115,7 @@
                     <td class="py-3 px-4 text-right">
                         <div class="flex items-center justify-end gap-2">
                             {% if expense.is_auto_generated %}
-                            <a href="{{ url_for('pm.time_edit', id=expense.time_entry_id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Edit Time</a>
+                            {% if time_tracking %}<a href="{{ url_for('pm.time_edit', id=expense.time_entry_id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Edit Time</a>{% endif %}
                             {% else %}
                             <a href="{{ url_for('pm.expense_edit', id=expense.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Edit</a>
                             <form method="POST" action="{{ url_for('pm.expense_delete', id=expense.id) }}" class="inline" x-data="{ confirm: false }">
