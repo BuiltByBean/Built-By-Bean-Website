@@ -1890,84 +1890,81 @@ def create_app():
         except (ValueError, TypeError):
             formatted_date = raw_date
 
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=25)
+        import contract_style
+        NAVY = contract_style.INK
+        GOLD = contract_style.ACCENT
+        GRAY = contract_style.BODY
+        BLACK = contract_style.INK
+
+        class LetterPDF(FPDF):
+            # Drawn from FPDF's own hooks, like the SOW. The old version called
+            # add_header() by hand, so it only ever appeared on page one, and
+            # it set new_x without new_y - which returns to the left margin on
+            # the SAME line, printing the tagline on top of the company name.
+            def header(self):
+                if self.page_no() == 1:
+                    return
+                self.set_font(self.contract_family, "B", 7)
+                self.set_text_color(*contract_style.MUTED)
+                self.cell(75, 4, "BUILT BY BEAN LLC")
+                self.set_font(self.contract_family, "", 7)
+                self.set_text_color(*contract_style.ACCENT)
+                self.cell(0, 4, "Engagement Letter", align="R", new_x="LMARGIN", new_y="NEXT")
+                self.set_draw_color(*contract_style.PAPER_EDGE)
+                self.set_line_width(0.3)
+                self.line(30, self.get_y() + 1, 180, self.get_y() + 1)
+                self.ln(5)
+
+            def footer(self):
+                self.set_y(-15)
+                self.set_font(self.contract_family, "", 7)
+                self.set_text_color(*contract_style.MUTED)
+                self.cell(0, 5, f"Confidential - Built by Bean LLC    Page {self.page_no()}",
+                          align="C")
+
+        pdf = LetterPDF()
+        pdf.set_auto_page_break(auto=True, margin=20)
         pdf.set_margins(30, 25, 30)
 
-        NAVY = (26, 26, 46)
-        GOLD = (184, 134, 11)
-        GRAY = (100, 100, 100)
-        BLACK = (0, 0, 0)
+        style = contract_style.ContractPDF(pdf)
+        pdf.contract_family = style.family
 
         def add_header():
-            pdf.set_font("Helvetica", "B", 8)
-            pdf.set_text_color(*NAVY)
-            pdf.cell(0, 5, "B U I L T   B Y   B E A N   L L C", new_x="LMARGIN")
-            pdf.set_font("Helvetica", "I", 9)
-            pdf.set_text_color(*GOLD)
-            pdf.cell(0, 5, "  Web Development & Digital Solutions", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_draw_color(*GOLD)
-            pdf.set_line_width(0.5)
-            pdf.line(30, pdf.get_y() + 1, 180, pdf.get_y() + 1)
+            """Page one only: the masthead above the title."""
+            style.eyebrow("Built by Bean LLC")
+            style.rule(colour=contract_style.ACCENT, width=0.5, gap=1)
             pdf.ln(6)
 
         def add_footer():
-            pdf.set_y(-20)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(160, 160, 160)
-            pdf.cell(0, 5, f"Confidential - Built by Bean LLC    Page {pdf.page_no()}", align="C")
+            pass  # FPDF draws it now
 
-        def section_heading(text):
-            pdf.ln(6)
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.set_text_color(*NAVY)
-            pdf.cell(0, 7, text.upper(), new_x="LMARGIN", new_y="NEXT")
-            pdf.set_draw_color(*GOLD)
-            pdf.set_line_width(0.5)
-            pdf.line(30, pdf.get_y(), 180, pdf.get_y())
-            pdf.ln(5)
+        section_heading = style.section_heading
+        body_text = style.body
 
-        def body_text(text):
-            pdf.set_font("Helvetica", "", 10)
-            pdf.set_text_color(*GRAY)
-            pdf.multi_cell(0, 5.5, text)
-            pdf.ln(3)
-
-        def add_table(rows):
-            pdf.set_font("Helvetica", "", 9)
-            col_w = [55, 95]
-            for label, value in rows:
-                y_start = pdf.get_y()
-                pdf.set_text_color(*BLACK)
-                pdf.set_font("Helvetica", "B", 9)
-                pdf.cell(col_w[0], 12, label, border="B")
-                pdf.set_font("Helvetica", "", 9)
-                pdf.set_text_color(*GRAY)
-                pdf.cell(col_w[1], 12, value, border="B", new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(4)
+        add_table = style.table
 
         # --- Page 1 ---
         pdf.add_page()
         add_header()
 
         # Title
-        pdf.set_font("Helvetica", "B", 20)
+        pdf.set_font(style.family, "B", 20)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 12, "Client Engagement Letter", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "I", 11)
+        pdf.set_font(style.family, "", 11)
         pdf.set_text_color(*GRAY)
         pdf.cell(0, 7, "Service Agreement & Pricing Terms", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(10)
 
         # Prepared for
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(25, 6, "Prepared for: ")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.cell(60, 6, client_name)
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.cell(12, 6, "Date: ")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.cell(0, 6, formatted_date, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(8)
 
@@ -2020,16 +2017,11 @@ def create_app():
             "This engagement letter does not constitute a binding contract for services. A formal SOW governs each individual project or work request.",
             "All fees are in USD. Late payments are subject to a 1.5% monthly late fee after the invoice due date.",
         ]
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(*GRAY)
-        for term in terms:
-            pdf.cell(6, 5.5, "-")
-            pdf.multi_cell(0, 5.5, f" {term}")
-            pdf.ln(2)
+        style.bullets(terms)
         pdf.ln(4)
 
         body_text("Please sign and return this letter to confirm your agreement to these terms.")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(0, 6, "Phone: 903-491-2095", new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 6, "Email: mbean@builtbybeans.com", new_x="LMARGIN", new_y="NEXT")
@@ -2040,7 +2032,7 @@ def create_app():
         pdf.set_line_width(0.5)
         pdf.line(30, pdf.get_y(), 180, pdf.get_y())
         pdf.ln(6)
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, "CLIENT ACKNOWLEDGMENT", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
@@ -2053,7 +2045,7 @@ def create_app():
         # heuristic looking for something signature-shaped would not.
         sign_anchors = []
         for label in ["Signature", "Printed Name", "Title", "Date"]:
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(style.family, "", 10)
             pdf.set_text_color(*BLACK)
             sign_anchors.append({"label": label, "page": pdf.page_no(), "y": pdf.get_y(),
                                  "x": SIGN_FIELD_X, "w": SIGN_FIELD_W, "h": SIGN_FIELD_H})
@@ -2217,87 +2209,65 @@ def create_app():
         features = [sanitize(f) for f in features]
         payment_milestones = [(p, sanitize(l)) for p, l in payment_milestones]
 
-        NAVY = (26, 26, 46)
-        GOLD = (184, 134, 11)
-        GRAY = (100, 100, 100)
-        BLACK = (0, 0, 0)
+        import contract_style
+        NAVY = contract_style.INK
+        GOLD = contract_style.ACCENT
+        GRAY = contract_style.BODY
+        BLACK = contract_style.INK
 
         class SOWPDF(FPDF):
+            # A running head from page two, drawn by FPDF's own hook so it
+            # cannot be forgotten on a page somebody adds later.
             def header(self):
                 if self.page_no() == 1:
                     return
-                self.set_font("Helvetica", "B", 7)
-                self.set_text_color(*NAVY)
-                self.cell(75, 4, "B U I L T   B Y   B E A N   L L C")
-                self.set_font("Helvetica", "I", 7)
-                self.set_text_color(*GOLD)
+                self.set_font(self.contract_family, "B", 7)
+                self.set_text_color(*contract_style.MUTED)
+                self.cell(75, 4, "BUILT BY BEAN LLC")
+                self.set_font(self.contract_family, "", 7)
+                self.set_text_color(*contract_style.ACCENT)
                 self.cell(0, 4, "Statement of Work", align="R", new_x="LMARGIN", new_y="NEXT")
-                self.set_draw_color(*GOLD)
+                self.set_draw_color(*contract_style.PAPER_EDGE)
                 self.set_line_width(0.3)
                 self.line(30, self.get_y() + 1, 180, self.get_y() + 1)
-                self.ln(4)
+                self.ln(5)
 
             def footer(self):
                 self.set_y(-15)
-                self.set_font("Helvetica", "", 7)
-                self.set_text_color(160, 160, 160)
-                self.cell(0, 5, f"Confidential - Built by Bean LLC    Page {self.page_no()}", align="C")
+                self.set_font(self.contract_family, "", 7)
+                self.set_text_color(*contract_style.MUTED)
+                self.cell(0, 5, f"Confidential - Built by Bean LLC    Page {self.page_no()}",
+                          align="C")
 
         pdf = SOWPDF()
         pdf.set_auto_page_break(auto=True, margin=20)
         pdf.set_margins(30, 25, 30)
 
+        style = contract_style.ContractPDF(pdf)
+        # The header hook runs before anything else can set a family, so it
+        # needs its own handle on which one loaded.
+        pdf.contract_family = style.family
+
         import os
         font_path = os.path.join(os.path.dirname(__file__), "static", "fonts", "DancingScript.ttf")
+        script_font = None
         if os.path.exists(font_path):
             pdf.add_font("DancingScript", "", font_path)
+            script_font = "DancingScript"
 
-        def section_heading(text):
-            if pdf.get_y() > pdf.h - 40:
-                pdf.add_page()
-            pdf.ln(6)
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.set_text_color(*NAVY)
-            pdf.cell(0, 7, text.upper(), new_x="LMARGIN", new_y="NEXT")
-            pdf.set_draw_color(*GOLD)
-            pdf.set_line_width(0.5)
-            pdf.line(30, pdf.get_y(), 180, pdf.get_y())
-            pdf.ln(5)
-
-        def body_text(text):
-            pdf.set_font("Helvetica", "", 10)
-            pdf.set_text_color(*GRAY)
-            pdf.multi_cell(0, 5.5, text)
-            pdf.ln(3)
-
-        def add_table(rows):
-            pdf.set_font("Helvetica", "", 9)
-            col_w = [55, 95]
-            for label, value in rows:
-                pdf.set_text_color(*BLACK)
-                pdf.set_font("Helvetica", "B", 9)
-                pdf.cell(col_w[0], 12, label, border="B")
-                pdf.set_font("Helvetica", "", 9)
-                pdf.set_text_color(*GRAY)
-                pdf.cell(col_w[1], 12, value, border="B", new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(4)
-
-        def bullet_list(items):
-            for item in items:
-                pdf.set_font("Helvetica", "", 10)
-                pdf.set_text_color(*GRAY)
-                pdf.multi_cell(0, 5.5, f"  -  {item}")
-                pdf.ln(1.5)
-            pdf.ln(2)
+        section_heading = style.section_heading
+        body_text = style.body
+        add_table = style.table
+        bullet_list = style.bullets
 
         # --- Page 1 ---
         pdf.add_page()
 
         # Header (only on first page)
-        pdf.set_font("Helvetica", "B", 8)
+        pdf.set_font(style.family, "B", 8)
         pdf.set_text_color(*NAVY)
         pdf.cell(75, 5, "B U I L T   B Y   B E A N   L L C")
-        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_font(style.family, "", 8)
         pdf.set_text_color(*GOLD)
         pdf.cell(0, 5, "Statement of Work", align="R", new_x="LMARGIN", new_y="NEXT")
         pdf.set_draw_color(*GOLD)
@@ -2306,28 +2276,28 @@ def create_app():
         pdf.ln(8)
 
         # Title
-        pdf.set_font("Helvetica", "B", 20)
+        pdf.set_font(style.family, "B", 20)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 12, "Statement of Work", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "I", 11)
+        pdf.set_font(style.family, "", 11)
         pdf.set_text_color(*GRAY)
         pdf.cell(0, 7, f"{project_name} - {client_name}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(10)
 
         # Project info block
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(25, 6, "Client: ")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.cell(60, 6, client_name)
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.cell(12, 6, "Date: ")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.cell(0, 6, sow_date, new_x="LMARGIN", new_y="NEXT")
 
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.cell(25, 6, "Project: ")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.cell(0, 6, project_name, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(8)
 
@@ -2335,24 +2305,24 @@ def create_app():
         # already signed needs to know what changed before they read the parts
         # that did not, or they skim it as a duplicate and sign nothing.
         if supersedes_date:
-            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_font(style.family, "B", 10)
             pdf.set_text_color(*NAVY)
-            pdf.multi_cell(0, 5.5, sanitize(
+            pdf.multi_cell(0, 5.5, align="L", txt=sanitize(
                 "This Statement of Work replaces the Statement of Work dated "
                 f"{supersedes_date} between the same parties for the same project. "
                 "That agreement is void and of no further effect as of the signature "
                 "date below."))
             pdf.ln(2)
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(style.family, "", 10)
             pdf.set_text_color(*GRAY)
-            pdf.multi_cell(0, 5.5, sanitize(
+            pdf.multi_cell(0, 5.5, align="L", txt=sanitize(
                 "Scope, pricing, payment schedule, rates and every other term are "
                 "carried forward unchanged. The only substantive change is to the "
                 "intellectual property terms in Section 9, which now state that Built "
                 "by Bean LLC retains ownership of the software and grants the Client a "
                 "perpetual license to use it, rather than transferring ownership."))
             pdf.ln(2)
-            pdf.multi_cell(0, 5.5, sanitize(
+            pdf.multi_cell(0, 5.5, align="L", txt=sanitize(
                 "Any payments already made under the superseded Statement of Work are "
                 "credited in full against the fees below. Nothing in this replacement "
                 "restarts or duplicates the payment schedule."))
@@ -2377,14 +2347,14 @@ def create_app():
         ])
         if payment_milestones:
             pdf.ln(2)
-            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_font(style.family, "B", 10)
             pdf.set_text_color(*NAVY)
             pdf.cell(0, 7, "Payment Schedule:", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(1)
             for pct, label in payment_milestones:
-                pdf.set_font("Helvetica", "", 10)
+                pdf.set_font(style.family, "", 10)
                 pdf.set_text_color(*GRAY)
-                pdf.multi_cell(0, 5.5, f"  -  {pct}% due {label}")
+                pdf.multi_cell(0, 5.5, f"  -  {pct}% due {label}", align="L")
                 pdf.ln(1.5)
             pdf.ln(2)
         else:
@@ -2452,12 +2422,12 @@ def create_app():
             ("Hosting & Infrastructure Fee", f"${hosting_fee}/{cycle_label}"),
             ("Billing Cycle", hosting_cycle.title()),
         ])
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font(style.family, "B", 9)
         pdf.set_text_color(*BLACK)
         pdf.cell(0, 6, "Includes:", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "", 9)
+        pdf.set_font(style.family, "", 9)
         pdf.set_text_color(*GRAY)
-        pdf.multi_cell(0, 5, "Server hosting, data storage, SSL certificates, domain management, and routine infrastructure upkeep.")
+        pdf.multi_cell(0, 5, "Server hosting, data storage, SSL certificates, domain management, and routine infrastructure upkeep.", align="L")
         pdf.ln(3)
         body_text("This fee covers the cost of keeping the application live and accessible. It does not include development work, which is billed under Sections 5 and 6. The hosting fee may be adjusted with 30 days written notice to reflect changes in infrastructure requirements or third-party provider pricing.")
 
@@ -2471,12 +2441,7 @@ def create_app():
             "All fees are in USD. Late payments are subject to a $50 per day late fee for each day payment remains outstanding past the invoice due date.",
             "This SOW, once signed by both parties, constitutes a binding agreement for the scope and terms described herein.",
         ]
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(*GRAY)
-        for term in terms:
-            pdf.cell(6, 5.5, "-")
-            pdf.multi_cell(0, 5.5, f" {term}")
-            pdf.ln(2)
+        bullet_list(terms)
 
         # Section 9 - Limitation of Liability (generic service references)
         section_heading("9. Limitation of Liability & Disclaimers")
@@ -2497,20 +2462,19 @@ def create_app():
             "Client is responsible for ensuring that any content, images, trademarks, or materials provided for use in the project do not infringe on third-party intellectual property rights. Client agrees to indemnify Built by Bean LLC against any claims arising from client-provided materials.",
             "This agreement shall be governed by the laws of the State of Texas. Any disputes arising under this agreement shall be resolved in the courts of the State of Texas.",
         ]
-        pdf.set_font("Helvetica", "", 9.5)
-        pdf.set_text_color(*GRAY)
-        for d in disclaimers:
-            pdf.cell(6, 5.5, "-")
-            pdf.multi_cell(0, 5, f" {d}")
-            pdf.ln(2)
+        bullet_list(disclaimers, size=9)
 
-        # Signatures
+        # Signatures. Reserved as one block, because two parties signing the
+        # same agreement on different pages is how a page goes missing from a
+        # scan and nobody notices which one.
+        if pdf.get_y() + 135 > pdf.h - pdf.b_margin:
+            pdf.add_page()
         pdf.ln(4)
         pdf.set_draw_color(*GOLD)
         pdf.set_line_width(0.5)
         pdf.line(30, pdf.get_y(), 180, pdf.get_y())
         pdf.ln(6)
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, "SIGNATURES", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
@@ -2519,12 +2483,12 @@ def create_app():
         # Built by Bean signature (pre-filled) - keep block together
         if pdf.get_y() > pdf.h - 80:
             pdf.add_page()
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, "Built by Bean LLC", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
         # Signature line with cursive font
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(30, 8, "Signature:")
         try:
@@ -2532,13 +2496,13 @@ def create_app():
             pdf.set_text_color(*NAVY)
             pdf.cell(100, 8, "Michael Bean", new_x="LMARGIN", new_y="NEXT")
         except Exception:
-            pdf.set_font("Helvetica", "I", 14)
+            pdf.set_font(style.family, "", 14)
             pdf.set_text_color(*NAVY)
             pdf.cell(100, 8, "Michael Bean", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
         for label, value in [("Printed Name", "Michael Bean"), ("Title", "Owner, Built by Bean LLC"), ("Date", sow_date)]:
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(style.family, "", 10)
             pdf.set_text_color(*BLACK)
             pdf.cell(30, 8, f"{label}:")
             pdf.set_text_color(*GRAY)
@@ -2550,7 +2514,7 @@ def create_app():
         # Client signature - keep block together
         if pdf.get_y() > pdf.h - 80:
             pdf.add_page()
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, client_name, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
@@ -2559,7 +2523,7 @@ def create_app():
         # would be asking somebody to sign their own document.
         sign_anchors = []
         for label in ["Signature", "Printed Name", "Title", "Date"]:
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(style.family, "", 10)
             pdf.set_text_color(*BLACK)
             sign_anchors.append({"label": label, "page": pdf.page_no(), "y": pdf.get_y(),
                                  "x": SIGN_FIELD_X, "w": SIGN_FIELD_W, "h": SIGN_FIELD_H})
@@ -2571,7 +2535,7 @@ def create_app():
         if pdf.get_y() > pdf.h - 30:
             pdf.add_page()
         pdf.ln(6)
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(style.family, "", 10)
         pdf.set_text_color(*BLACK)
         pdf.cell(0, 6, "Phone: 903-491-2095", new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 6, "Email: mbean@builtbybeans.com", new_x="LMARGIN", new_y="NEXT")
