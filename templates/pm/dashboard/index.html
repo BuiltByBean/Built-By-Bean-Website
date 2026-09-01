@@ -5,6 +5,63 @@
 {% block page_subtitle %}Where the money is{% endblock %}
 
 {% block content %}
+{#
+  Money already asked for that has not arrived, and plans that have stopped
+  collecting. Above the totals on purpose: this is the only thing on the page
+  that is a task rather than a fact, and it was previously invisible — folded
+  into "Invoiced", where an invoice fifty days late looks exactly like one
+  raised this morning.
+
+  Absent entirely when there is nothing to chase, so its presence means
+  something. A panel that is always there is a panel nobody reads.
+#}
+{% if overdue_invoices or stalled_subscriptions %}
+<div class="glass-card p-5 sm:p-6 mb-8 border border-amber-500/25">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Needs chasing</h3>
+        {% if overdue_total %}
+        <span class="text-lg font-bold text-amber-300">{{ overdue_total | format_currency }} outstanding</span>
+        {% endif %}
+    </div>
+
+    <div class="space-y-2">
+        {% for inv in overdue_invoices %}
+        <a href="{{ inv.admin_url }}" target="_blank" rel="noopener"
+           class="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 rounded-xl bg-surface-800/50 hover:bg-surface-700/50 transition-colors">
+            <span class="text-sm font-semibold text-white">{{ inv.customer_name or 'Unknown customer' }}</span>
+            <span class="text-sm font-bold text-amber-300">{{ inv.amount_due | format_currency }}</span>
+            <span class="px-2 py-0.5 text-xs font-medium rounded-full
+                {% if inv.days_overdue >= 30 %}bg-red-900/30 text-red-400
+                {% elif inv.days_overdue >= 7 %}bg-amber-900/30 text-amber-400
+                {% else %}bg-surface-700 text-surface-300{% endif %}">
+                {{ inv.days_overdue }} day{{ '' if inv.days_overdue == 1 else 's' }} late
+            </span>
+            <span class="text-xs text-surface-400 ml-auto">{{ inv.number or inv.id }}</span>
+        </a>
+        {% endfor %}
+
+        {% for sub in stalled_subscriptions %}
+        <a href="{{ sub.admin_url }}" target="_blank" rel="noopener"
+           class="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 rounded-xl bg-surface-800/50 hover:bg-surface-700/50 transition-colors">
+            <span class="text-sm font-semibold text-white">{{ sub.customer_name or 'Unknown customer' }}</span>
+            <span class="text-sm font-bold text-red-300">
+                {{ sub.amount | format_currency }}{% if sub.interval %} / {{ sub.interval }}{% endif %}
+            </span>
+            <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-900/30 text-red-400">
+                {{ sub.status | replace('_', ' ') }}
+            </span>
+            {# Why it stalled is usually this: Stripe is trying to charge a card
+               for somebody who pays by invoice. #}
+            {% if sub.collection_method == 'charge_automatically' %}
+            <span class="text-xs text-surface-400">set to auto-charge a card</span>
+            {% endif %}
+            <span class="text-xs text-surface-400 ml-auto">subscription</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <!--
   All-Time Financials. Three across rather than four, because there are six
   cards now and 4+2 leaves a ragged second row.

@@ -408,6 +408,97 @@ def get_stripe_invoice_totals(ttl=300):
     return out
 
 
+def get_overdue_invoices(ttl=300):
+    """Invoices that were sent, are still owed, and are past their due date.
+
+    Read off the same cached list everything else uses, so this costs no extra
+    Stripe call and can never disagree with the totals above it.
+
+    An open invoice with no due date is not overdue. Stripe leaves the field
+    empty on a subscription charge and on anything created without one, and
+    calling those late would mean the panel cried wolf on the day it was
+    raised — which is how a panel stops being read.
+
+    Oldest first, because that is the order they should be chased in.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    out = []
+    for inv in get_stripe_invoices(ttl=ttl):
+        if inv["status"] != "open" or inv["amount_due"] <= 0 or not inv["due_date"]:
+            continue
+        days = (now - inv["due_date"]).days
+        if days > 0:
+            out.append(dict(inv, days_overdue=days))
+    out.sort(key=lambda r: r["days_overdue"], reverse=True)
+    return out
+
+
+_stalled_cache = {"ts": 0, "data": None}
+
+# Stripe tried to collect and could not. `incomplete` is the first charge
+# failing, `past_due` a renewal failing, `unpaid` the end of the retry
+# schedule. All three mean the same thing here: a plan that has stopped
+# turning into money and needs a person.
+STALLED_STATUSES = ("past_due", "unpaid", "incomplete")
+
+
+def get_stalled_subscriptions(ttl=300):
+    """Recurring plans Stripe has stopped being able to collect on.
+
+    Its own call rather than a flag on `_recurring_plan`, which exists to
+    project revenue forward and treats a past_due subscription as still
+    billing — correct for a forecast, wrong for a list of things to go and fix.
+    """
+    import time
+    from datetime import datetime, timezone
+
+    if not stripe.api_key:
+        return []
+    now = time.time()
+    if _stalled_cache["data"] is not None and (now - _stalled_cache["ts"] < ttl):
+        return _stalled_cache["data"]
+
+    rows = []
+    try:
+        for status in STALLED_STATUSES:
+            for sub in stripe.Subscription.list(
+                status=status, limit=100, expand=["data.customer"]
+            ).auto_paging_iter():
+                customer = getattr(sub, "customer", None)
+                name = None
+                if customer is not None and not isinstance(customer, str):
+                    name = None if getattr(customer, "deleted", False) else (
+                        getattr(customer, "name", None) or getattr(customer, "email", None)
+                    )
+                amount = 0.0
+                interval = None
+                for item in sub["items"].data:
+                    price = getattr(item, "price", None)
+                    amount += ((getattr(price, "unit_amount", 0) or 0) / 100.0) * (
+                        getattr(item, "quantity", 1) or 1)
+                    recurring = getattr(price, "recurring", None) if price else None
+                    interval = getattr(recurring, "interval", None) if recurring else interval
+                sub_id = getattr(sub, "id", None)
+                rows.append({
+                    "id": sub_id,
+                    "customer_name": name,
+                    "customer_id": getattr(customer, "id", None) if not isinstance(customer, str) else customer,
+                    "status": status,
+                    "amount": amount,
+                    "interval": interval,
+                    "collection_method": getattr(sub, "collection_method", None),
+                    "admin_url": f"https://dashboard.stripe.com/subscriptions/{sub_id}" if sub_id else None,
+                })
+    except Exception as e:
+        current_app.logger.error(f"Stripe stalled subscription error: {e}")
+        return _stalled_cache["data"] or []
+
+    _stalled_cache.update({"ts": now, "data": rows})
+    return rows
+
+
 _recurring_cache = {"ts": 0, "data": None}
 
 # A recurring price can be billed on any of these; only the two that convert

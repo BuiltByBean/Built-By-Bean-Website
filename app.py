@@ -624,6 +624,7 @@ def create_app():
         # Revenue; adding it here would make one number mean two things.
         from stripe_service import (
             get_stripe_invoice_totals, get_scheduled_subscription_revenue,
+            get_overdue_invoices, get_stalled_subscriptions,
         )
         stripe_totals = get_stripe_invoice_totals()
         stripe_by_customer = stripe_totals["paid_by_customer"]
@@ -768,7 +769,17 @@ def create_app():
         if round(remainder, 2) > 0:
             service_expenses.append({"name": "Everything else", "amount": remainder})
 
+        # Money that has already been asked for and has not arrived, and plans
+        # that have stopped collecting. Both were being folded into "Invoiced",
+        # where a fifty-day-old invoice looks exactly like one raised this
+        # morning.
+        overdue = get_overdue_invoices()
+        stalled = get_stalled_subscriptions()
+
         return render_template("pm/dashboard/index.html",
+            overdue_invoices=overdue,
+            overdue_total=sum(i["amount_due"] for i in overdue),
+            stalled_subscriptions=stalled,
             total_revenue=total_revenue,
             total_invoiced=total_invoiced,
             total_awaiting=total_awaiting,
