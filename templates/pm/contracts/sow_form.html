@@ -70,6 +70,20 @@
                         <input type="date" name="delivery_date" required
                                class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
                     </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                            Replaces a SOW dated
+                            <span class="text-surface-500 font-normal">(leave blank for a new project)</span>
+                        </label>
+                        <input type="date" name="supersedes_date"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                        <p class="mt-1.5 text-xs text-surface-400">
+                            Set this and the document opens by saying it replaces the earlier
+                            SOW, that the earlier one is void, exactly what changed, and that
+                            payments already made carry over. Use it when re-papering a
+                            signed agreement rather than starting a new one.
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Payment Structure -->

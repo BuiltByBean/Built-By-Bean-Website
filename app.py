@@ -2150,6 +2150,10 @@ def create_app():
         else:
             payment_description = "50% due at project kickoff; 50% due upon delivery and acceptance"
         features = [f.strip() for f in request.form.getlist("features") if f.strip()]
+        # Optional. When set, this SOW replaces an earlier one and says so on
+        # its first page, which is what makes a re-signature meaningful rather
+        # than two live contracts covering the same project.
+        raw_supersedes = request.form.get("supersedes_date", "").strip()
 
         if not client or not project_name or not project_description or not features:
             flash("Choose a client, and give a project name, description and at least one feature.", "warning")
@@ -2164,6 +2168,12 @@ def create_app():
         except (ValueError, TypeError):
             delivery_date = raw_delivery_date
 
+        try:
+            supersedes_date = (datetime.strptime(raw_supersedes, "%Y-%m-%d").strftime("%B %d, %Y")
+                               if raw_supersedes else "")
+        except (ValueError, TypeError):
+            supersedes_date = raw_supersedes
+
         maint_days = int(maintenance_days) if maintenance_days.isdigit() else 30
 
         # --- Build PDF ---
@@ -2171,7 +2181,7 @@ def create_app():
             return _build_sow_pdf(client, project_name, project_description,
                                   mvp_price, sow_date, delivery_date, maint_days, features,
                                   payment_description, payment_milestones,
-                                  hosting_fee, hosting_cycle)
+                                  hosting_fee, hosting_cycle, supersedes_date)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2181,7 +2191,7 @@ def create_app():
     def _build_sow_pdf(client, project_name, project_description,
                         mvp_price, sow_date, delivery_date, maint_days, features,
                         payment_description, payment_milestones,
-                        hosting_fee, hosting_cycle):
+                        hosting_fee, hosting_cycle, supersedes_date=""):
         # The chosen client, passed in rather than looked up again by name.
         client_name = client.name
         from fpdf import FPDF
@@ -2309,6 +2319,33 @@ def create_app():
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(0, 6, project_name, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(8)
+
+        # Ahead of Section 1 on purpose. Somebody re-signing an agreement they
+        # already signed needs to know what changed before they read the parts
+        # that did not, or they skim it as a duplicate and sign nothing.
+        if supersedes_date:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*NAVY)
+            pdf.multi_cell(0, 5.5, sanitize(
+                "This Statement of Work replaces the Statement of Work dated "
+                f"{supersedes_date} between the same parties for the same project. "
+                "That agreement is void and of no further effect as of the signature "
+                "date below."))
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.set_text_color(*GRAY)
+            pdf.multi_cell(0, 5.5, sanitize(
+                "Scope, pricing, payment schedule, rates and every other term are "
+                "carried forward unchanged. The only substantive change is to the "
+                "intellectual property terms in Section 9, which now state that Built "
+                "by Bean LLC retains ownership of the software and grants the Client a "
+                "perpetual license to use it, rather than transferring ownership."))
+            pdf.ln(2)
+            pdf.multi_cell(0, 5.5, sanitize(
+                "Any payments already made under the superseded Statement of Work are "
+                "credited in full against the fees below. Nothing in this replacement "
+                "restarts or duplicates the payment schedule."))
+            pdf.ln(4)
 
         # Section 1 - Project Summary
         section_heading("1. Project Summary")
