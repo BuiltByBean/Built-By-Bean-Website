@@ -1,0 +1,161 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  Amending a contract that is already signed.
+
+  Which contract it amends is picked from what this board already knows about
+  the client rather than typed: everything sent for signature from here, plus
+  anything uploaded against them after being signed somewhere else. Typing a
+  contract's title from memory is how an addendum ends up naming a document
+  that does not exist.
+
+  There is still a manual option, because the first addendum written for a
+  client whose original was signed on paper before any of this existed has
+  nothing to pick from.
+#}
+
+{% block title %}New addendum - Built By Bean{% endblock %}
+{% block page_title %}New addendum{% endblock %}
+{% block page_subtitle %}Change something in a contract that is already signed{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('contracts.contracts_index') }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:bg-white/5 transition-colors">
+    All contracts
+</a>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('contracts.generate_addendum') }}"
+      x-data='{
+        clientId: "",
+        clients: {{ client_lookup | tojson }},
+        prior: {{ prior | tojson }},
+        chosen: null,
+        manual: false,
+        get mine() {
+          if (!this.clientId) return [];
+          return this.prior.filter(p => String(p.client_id) === String(this.clientId));
+        },
+        pick(p) {
+          document.querySelector("[name=original_title]").value = p.title;
+          document.querySelector("[name=original_date]").value = p.date || "";
+          this.manual = true;
+        }
+      }'
+      x-effect="chosen = clients[clientId] || null">
+
+    <div class="glass-card p-5 sm:p-6 space-y-5 max-w-3xl">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
+                {{ select_dropdown("client_id", client_options, "", "Choose a client",
+                                   full_width=true, model="clientId") }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
+                <input type="date" name="date" required value="{{ today }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        {# What this amends, chosen from what the board already holds. #}
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                Which contract does this amend? *
+            </label>
+
+            <p x-show="!clientId" class="text-xs text-amber-400">
+                Choose a client and their contracts will be listed here.
+            </p>
+
+            <template x-if="clientId">
+                <div class="space-y-2">
+                    <template x-if="mine.length">
+                        <div class="space-y-2">
+                            <template x-for="p in mine" :key="p.title + p.date">
+                                <button type="button" @click="pick(p)"
+                                        class="w-full text-left p-3 rounded-xl bg-surface-800/50 hover:bg-surface-700/50 border border-white/10 hover:border-brand-500/40 transition-colors">
+                                    <span class="block text-sm text-white" x-text="p.title"></span>
+                                    <span class="block text-xs text-surface-400 mt-0.5"
+                                          x-text="p.date || 'no date on record'"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+                    <p x-show="!mine.length" class="text-xs text-surface-400">
+                        Nothing on record for this client. Enter it below.
+                    </p>
+                </div>
+            </template>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Contract title *
+                </label>
+                <input type="text" name="original_title" required
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="Statement of Work - Talent Booker">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Originally dated <span class="text-surface-500 font-normal">optional</span>
+                </label>
+                <input type="date" name="original_date"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+        <p class="-mt-2 text-xs text-surface-400">
+            Filled in by picking above, or typed if the original was signed before any of
+            this existed.
+        </p>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">What changes *</label>
+            <textarea name="description" required rows="6"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                      placeholder="Describe exactly what is being changed, added or removed. Be specific about which section or term it affects."></textarea>
+            <p class="mt-1 text-xs text-surface-400">
+                Everything not described here explicitly survives unchanged — the document
+                says so.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Fee change <span class="text-surface-500 font-normal">optional</span>
+                </label>
+                <textarea name="fee_change" rows="3"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                          placeholder="e.g. The monthly hosting fee increases from $50 to $200, effective 1 January 2027."></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Effective <span class="text-surface-500 font-normal">optional</span>
+                </label>
+                <input type="date" name="effective"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                <p class="mt-1 text-xs text-surface-400">
+                    Blank means it takes effect on the last signature.
+                </p>
+            </div>
+        </div>
+
+        {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                Generate PDF
+            </button>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="text-sm text-surface-400 hover:text-surface-200">Cancel</a>
+        </div>
+    </div>
+</form>
+{% endblock %}

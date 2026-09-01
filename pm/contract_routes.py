@@ -478,3 +478,170 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
 
     flash(sent_message(row), "success")
     return row
+
+
+# ── Add-ons and addendums ────────────────────────────────
+#
+# Two short documents that attach to a Statement of Work rather than replacing
+# it: one sells a product on top of an existing build, one amends what is
+# already signed. Both live here rather than in app.py because everything they
+# need - the client picker, sending, the signature-request record - is here.
+
+import contract_docs
+from models import Client
+
+
+def _clients_for_picker():
+    """Everyone a contract can be written for, and the email on file."""
+    clients = Client.query.order_by(Client.name).all()
+    return ([(c.id, c.name) for c in clients],
+            {str(c.id): {"name": c.name, "email": (c.email or "").strip()}
+             for c in clients})
+
+
+def _prior_contracts(client_id=None):
+    """What an addendum could be amending, newest first.
+
+    Both sources, because a contract is either something this board sent for
+    signature or a PDF that was uploaded against the client after being signed
+    somewhere else, and an addendum has to be able to name either.
+    """
+    out = []
+    reqs = SignatureRequest.query.order_by(SignatureRequest.created_at.desc())
+    if client_id:
+        reqs = reqs.filter(SignatureRequest.client_id == client_id)
+    for r in reqs.all():
+        when = r.created_at.date().isoformat() if r.created_at else ""
+        out.append({"client_id": r.client_id, "title": r.title, "date": when,
+                    "label": f"{r.title}{' - ' + when if when else ''}"})
+    docs = Document.query.order_by(Document.uploaded_at.desc())
+    for d in docs.all():
+        cid = getattr(d, "client_id", None)
+        if client_id and cid != client_id:
+            continue
+        name = (getattr(d, "original_name", None) or "").rsplit(".", 1)[0]
+        if not name:
+            continue
+        when = d.uploaded_at.date().isoformat() if d.uploaded_at else ""
+        out.append({"client_id": cid, "title": name, "date": when,
+                    "label": f"{name}{' - ' + when if when else ''}"})
+    return out
+
+
+def _script_font(pdf_family_owner):
+    """The signature face, if it was ever added to this document."""
+    return None
+
+
+def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page_h,
+             client, project=None):
+    """Send it if asked, otherwise hand back the download."""
+    fields = signadoc.fields_for(client_anchors, page_w, page_h)
+    if own:
+        fields = signadoc.fields_for(own, page_w, page_h, signer_id="bbb") + fields
+    sent = send_generated(
+        pdf_bytes, filename=filename, title=title, kind=kind, fields=fields,
+        countersigner=bool(own), client=client, project=project,
+    )
+    if sent:
+        return redirect(url_for("contracts.contract_detail", id=sent.id))
+    resp = Response(pdf_bytes, mimetype="application/pdf")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+
+
+def _safe(name):
+    return "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in name)[:60]
+
+
+@contracts_bp.route("/new/add-on", methods=["GET"])
+@login_required
+def addon_form():
+    options, lookup = _clients_for_picker()
+    return render_template("pm/contracts/addon_form.html",
+                           today=datetime.now(timezone.utc).date().isoformat(),
+                           client_options=options, client_lookup=lookup,
+                           products=contract_docs.PRODUCTS,
+                           product_choices=contract_docs.PRODUCT_CHOICES)
+
+
+@contracts_bp.route("/new/add-on", methods=["POST"])
+@login_required
+def generate_addon():
+    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    key = (request.form.get("product") or "other").strip()
+    base = contract_docs.PRODUCTS.get(key, contract_docs.PRODUCTS["other"])
+
+    def lines(field, fallback):
+        raw = (request.form.get(field) or "").strip()
+        return [l.strip(" -\t") for l in raw.splitlines() if l.strip()] if raw else fallback
+
+    name = (request.form.get("product_name") or base["name"]).strip()
+    summary = (request.form.get("summary") or base["summary"]).strip()
+    if not client or not name or not summary:
+        flash("Choose a client, and give the add-on a name and a description.", "warning")
+        return redirect(url_for("contracts.addon_form"))
+
+    date_str = _fmt(request.form.get("date"))
+    pdf_bytes, own, cli, w, h = contract_docs.build_addon(
+        client_name=client.name, product_key=key, product_name=name, summary=summary,
+        includes=lines("includes", base["includes"]),
+        client_provides=lines("client_provides", base["client_provides"]),
+        lead_time=(request.form.get("lead_time") or base["lead_time"]).strip(),
+        third_party=(request.form.get("third_party") or base["third_party"]).strip(),
+        one_time_fee=(request.form.get("one_time_fee") or "").strip(),
+        monthly_fee=(request.form.get("monthly_fee") or "").strip(),
+        date_str=date_str,
+        reference=(request.form.get("reference") or
+                   "the Statement of Work between the same parties").strip(),
+        notes=(request.form.get("notes") or "").strip(),
+        countersign=bool(request.form.get("send_for_signature")),
+    )
+    return _deliver(pdf_bytes, f"{_safe(client.name)}_AddOn_{_safe(name)}.pdf",
+                    f"Add-On Agreement - {name}", "addon", own, cli, w, h, client)
+
+
+@contracts_bp.route("/new/addendum", methods=["GET"])
+@login_required
+def addendum_form():
+    options, lookup = _clients_for_picker()
+    return render_template("pm/contracts/addendum_form.html",
+                           today=datetime.now(timezone.utc).date().isoformat(),
+                           client_options=options, client_lookup=lookup,
+                           prior=_prior_contracts())
+
+
+@contracts_bp.route("/new/addendum", methods=["POST"])
+@login_required
+def generate_addendum():
+    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    title = (request.form.get("original_title") or "").strip()
+    description = (request.form.get("description") or "").strip()
+    if not client or not title or not description:
+        flash("Choose a client, say which contract this amends, and describe the change.",
+              "warning")
+        return redirect(url_for("contracts.addendum_form"))
+
+    date_str = _fmt(request.form.get("date"))
+    pdf_bytes, own, cli, w, h = contract_docs.build_addendum(
+        client_name=client.name, original_title=title,
+        original_date=_fmt(request.form.get("original_date")),
+        description=description,
+        fee_change=(request.form.get("fee_change") or "").strip(),
+        date_str=date_str,
+        effective=_fmt(request.form.get("effective")),
+        countersign=bool(request.form.get("send_for_signature")),
+    )
+    return _deliver(pdf_bytes, f"{_safe(client.name)}_Addendum.pdf",
+                    f"Addendum - {title}", "addendum", own, cli, w, h, client)
+
+
+def _fmt(raw):
+    """A form date as "September 01, 2026", or whatever was typed."""
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").strftime("%B %d, %Y")
+    except ValueError:
+        return raw

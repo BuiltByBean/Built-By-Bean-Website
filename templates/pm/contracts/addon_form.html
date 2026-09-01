@@ -1,0 +1,174 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  Selling one product on top of a build that already exists.
+
+  Picking a product fills every field from a written description rather than
+  leaving a blank page: the client-facing summary, what is included, and the
+  part that decides the timeline — what the client has to go and get. All of
+  it stays editable, because no two of these are quite the same, and "Something
+  else" starts empty on purpose.
+#}
+
+{% block title %}New add-on agreement - Built By Bean{% endblock %}
+{% block page_title %}New add-on agreement{% endblock %}
+{% block page_subtitle %}Sell a product on top of an existing build{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('contracts.contracts_index') }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:bg-white/5 transition-colors">
+    All contracts
+</a>
+{% endblock %}
+
+{% block content %}
+{# `products` keyed by slug, so choosing one can fill the form without a fetch. #}
+<form method="POST" action="{{ url_for('contracts.generate_addon') }}"
+      x-data='{
+        clientId: "",
+        clients: {{ client_lookup | tojson }},
+        products: {{ products | tojson }},
+        product: "texting",
+        chosen: null,
+        p: null,
+        fill() {
+          this.p = this.products[this.product] || null;
+          if (!this.p) return;
+          this.name = this.p.name;
+          this.summary = this.p.summary;
+          this.includes = (this.p.includes || []).join("\n");
+          this.provides = (this.p.client_provides || []).join("\n");
+          this.lead = this.p.lead_time || "";
+          this.third = this.p.third_party || "";
+        },
+        name: "", summary: "", includes: "", provides: "", lead: "", third: ""
+      }'
+      x-init="fill()"
+      x-effect="chosen = clients[clientId] || null">
+
+    <div class="glass-card p-5 sm:p-6 space-y-5 max-w-3xl">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
+                {{ select_dropdown("client_id", client_options, "", "Choose a client",
+                                   full_width=true, model="clientId") }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
+                <input type="date" name="date" required value="{{ today }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">What are you selling? *</label>
+            {{ select_dropdown("product", product_choices, "texting", "Pick a product",
+                               full_width=true, model="product", on_change="fill()") }}
+            <p class="mt-1.5 text-xs text-surface-400">
+                Picking one fills everything below from a written description. Edit
+                anything that is not quite right for this client.
+            </p>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Name on the contract *</label>
+            <input type="text" name="product_name" required x-model="name"
+                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                   placeholder="e.g. Text messaging">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">What it is *</label>
+            <textarea name="summary" required rows="4" x-model="summary"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+            <p class="mt-1 text-xs text-surface-400">Written for the client, not for you.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Included</label>
+                <textarea name="includes" rows="6" x-model="includes"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+                <p class="mt-1 text-xs text-surface-400">One per line.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">What the client provides</label>
+                <textarea name="client_provides" rows="6" x-model="provides"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+                <p class="mt-1 text-xs text-surface-400">
+                    One per line. This is usually what decides the timeline.
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    One-time fee <span class="text-surface-500 font-normal">$, optional</span>
+                </label>
+                <input type="text" name="one_time_fee"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="1,500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Ongoing <span class="text-surface-500 font-normal">$/month, optional</span>
+                </label>
+                <input type="text" name="monthly_fee"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="25">
+            </div>
+        </div>
+        <p class="-mt-2 text-xs text-surface-400">
+            Leave both blank and the contract says it is included at no additional charge.
+        </p>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Timeline</label>
+            <textarea name="lead_time" rows="3" x-model="lead"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Third-party fees</label>
+            <textarea name="third_party" rows="2" x-model="third"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+            <p class="mt-1 text-xs text-surface-400">
+                Anything a provider bills them for directly. Leave blank if there is none.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Attaches to</label>
+                <input type="text" name="reference"
+                       value="the Statement of Work between the same parties"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                <p class="mt-1 text-xs text-surface-400">
+                    Named in the terms clause, which carries the IP and liability terms
+                    across rather than restating them.
+                </p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
+                <textarea name="notes" rows="3"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                          placeholder="Anything specific to this one"></textarea>
+            </div>
+        </div>
+
+        {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                Generate PDF
+            </button>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="text-sm text-surface-400 hover:text-surface-200">Cancel</a>
+        </div>
+    </div>
+</form>
+{% endblock %}
