@@ -33,7 +33,7 @@
             {% if client.phone %}
             <div>
                 <p class="text-xs text-surface-400">Phone</p>
-                <p class="text-sm text-white">{{ client.phone }}</p>
+                <p class="text-sm text-white tabular-nums">{{ client.phone | format_phone }}</p>
             </div>
             {% endif %}
             {% if client.address %}

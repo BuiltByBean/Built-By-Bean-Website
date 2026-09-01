@@ -439,6 +439,27 @@ def create_app():
             return value.strftime("%b %d, %Y")
         return str(value)
 
+    @app.template_filter("format_phone")
+    def format_phone(value):
+        """A US number as (903) 491-2095, and anything else left alone.
+
+        Numbers arrive typed however somebody had them: 8172355055, with
+        dashes, with a country code, from a form nobody validated. Formatting
+        at render rather than on save means the stored value stays whatever
+        was entered - which matters the day one of them turns out to be an
+        extension or an international number that this must not mangle.
+        """
+        if not value:
+            return ""
+        raw = str(value).strip()
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        # A leading 1 is the country code, not part of the number.
+        if len(digits) == 11 and digits.startswith("1"):
+            digits = digits[1:]
+        if len(digits) != 10:
+            return raw
+        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+
     @app.template_filter("format_hours")
     def format_hours(value):
         if value is None:
@@ -2033,7 +2054,7 @@ def create_app():
         body_text("Please sign and return this letter to confirm your agreement to these terms.")
         pdf.set_font(style.family, "", 10)
         pdf.set_text_color(*BLACK)
-        pdf.cell(0, 6, "Phone: 903-491-2095", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, "Phone: (903) 491-2095", new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 6, "Email: mbean@builtbybeans.com", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(6)
 
@@ -2586,7 +2607,7 @@ def create_app():
         pdf.ln(6)
         pdf.set_font(style.family, "", 10)
         pdf.set_text_color(*BLACK)
-        pdf.cell(0, 6, "Phone: 903-491-2095", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, "Phone: (903) 491-2095", new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 6, "Email: mbean@builtbybeans.com", new_x="LMARGIN", new_y="NEXT")
 
         pdf_bytes = bytes(pdf.output())

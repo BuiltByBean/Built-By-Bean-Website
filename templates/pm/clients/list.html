@@ -33,38 +33,48 @@
         <table class="w-full">
             <thead>
                 <tr class="border-b border-surface-700">
-                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Name</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Company</th>
-                    <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Stage</th>
-                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Email</th>
+                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Name</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Phone</th>
+                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Email</th>
+                    <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Stage</th>
                     <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Projects</th>
-                    <th class="text-right py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Actions</th>
+                    {# No header. The edit pencil at the end of each row says what
+                       it is, and "Actions" over a single icon is a column title
+                       describing the furniture rather than the data. #}
+                    <th class="w-10"><span class="sr-only">Edit</span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-surface-800">
                 {% for client in clients %}
                 <tr class="hover:bg-surface-800/30 transition-colors cursor-pointer" onclick="window.location='{{ url_for('pm.client_detail', id=client.id) }}'">
                     <td class="py-3 px-4">
-                        <p class="text-sm font-medium text-white">{{ client.name }}</p>
+                        <p class="text-sm font-medium text-white">{{ client.company or '—' }}</p>
                     </td>
                     <td class="py-3 px-4">
-                        <p class="text-sm text-surface-300">{{ client.company or '—' }}</p>
+                        <p class="text-sm text-surface-300">{{ client.name }}</p>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                        {{ badge(client.stage or 'lead') }}
+                    <td class="py-3 px-4 hidden md:table-cell">
+                        <p class="text-sm text-surface-400 tabular-nums whitespace-nowrap">{{ client.phone | format_phone or '—' }}</p>
                     </td>
                     <td class="py-3 px-4 hidden md:table-cell">
                         <p class="text-sm text-surface-400">{{ client.email or '—' }}</p>
                     </td>
-                    <td class="py-3 px-4 hidden md:table-cell">
-                        <p class="text-sm text-surface-400">{{ client.phone or '—' }}</p>
+                    <td class="py-3 px-4 text-center">
+                        {{ badge(client.stage or 'lead') }}
                     </td>
                     <td class="py-3 px-4 text-center">
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-900/30 text-brand-400">{{ client.projects.count() }}</span>
                     </td>
-                    <td class="py-3 px-4 text-right" onclick="event.stopPropagation()">
-                        <a href="{{ url_for('pm.client_edit', id=client.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Edit</a>
+                    <td class="py-3 pr-4 pl-1 text-right" onclick="event.stopPropagation()">
+                        <a href="{{ url_for('pm.client_edit', id=client.id) }}"
+                           aria-label="Edit {{ client.company or client.name }}"
+                           class="inline-flex items-center justify-center p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                        </a>
                     </td>
                 </tr>
                 {% endfor %}

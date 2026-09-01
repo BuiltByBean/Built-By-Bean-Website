@@ -24,7 +24,11 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Phone</label>
-                        {{ form.phone(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="(555) 123-4567") }}
+                        {# Shown formatted, so the field agrees with every other place the
+                           number appears. The filter hands anything it cannot read - an
+                           extension, an international number - straight back. #}
+                        {{ form.phone(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="(555) 123-4567",
+                                     value=form.phone.data | format_phone) }}
                     </div>
                 </div>
 
