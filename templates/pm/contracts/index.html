@@ -11,24 +11,7 @@
 
 {% block title %}Contracts - Built By Bean{% endblock %}
 {% block page_title %}Contracts{% endblock %}
-{% block page_subtitle %}Written, sent, signed, filed{% endblock %}
-
-{% block header_actions %}
-<a href="{{ url_for('pm.engagement_letter_form') }}"
-   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-    </svg>
-    Engagement letter
-</a>
-<a href="{{ url_for('pm.sow_form') }}"
-   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-    </svg>
-    Statement of work
-</a>
-{% endblock %}
+{% block page_subtitle %}Written, sent, signed{% endblock %}
 
 {% block content %}
 <div class="space-y-6 stagger-in">
@@ -51,6 +34,25 @@
     </div>
     {% endif %}
 
+    {# The only place these live. Full width on a phone so they are thumb
+       sized, side by side once there is room. #}
+    <div class="flex flex-col sm:flex-row gap-3">
+        <a href="{{ url_for('pm.engagement_letter_form') }}"
+           class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Engagement letter
+        </a>
+        <a href="{{ url_for('pm.sow_form') }}"
+           class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Statement of work
+        </a>
+    </div>
+
     {% if requests %}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {% for key, label in [('sent', 'Out for signature'), ('completed', 'Signed'),
@@ -68,10 +70,13 @@
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-xs uppercase tracking-wide text-surface-400">
+                        {# Signer, client and date drop away on a phone; five
+                           columns in 375px turns email addresses into confetti.
+                           What they held reappears under the title below. #}
                         <th class="px-4 py-3 font-medium">Contract</th>
-                        <th class="px-4 py-3 font-medium">Signer</th>
-                        <th class="px-4 py-3 font-medium">Client</th>
-                        <th class="px-4 py-3 font-medium">Sent</th>
+                        <th class="px-4 py-3 font-medium hidden md:table-cell">Signer</th>
+                        <th class="px-4 py-3 font-medium hidden md:table-cell">Client</th>
+                        <th class="px-4 py-3 font-medium hidden md:table-cell">Sent</th>
                         <th class="px-4 py-3 font-medium">Status</th>
                     </tr>
                 </thead>
@@ -84,12 +89,17 @@
                                 {{ req.title }}
                             </a>
                             <p class="text-xs text-surface-400 mt-0.5">{{ req.kind_label }}</p>
+                            {# Everything the hidden columns were carrying, on one
+                               line, only while they are hidden. #}
+                            <p class="md:hidden text-xs text-surface-400 mt-1">
+                                {{ req.signer_name }}{% if req.sent_at %} &middot; {{ req.sent_at|format_date }}{% endif %}
+                            </p>
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 hidden md:table-cell">
                             <p class="text-surface-200">{{ req.signer_name }}</p>
                             <p class="text-xs text-surface-400 break-all">{{ req.signer_email }}</p>
                         </td>
-                        <td class="px-4 py-3 text-surface-300">
+                        <td class="px-4 py-3 text-surface-300 hidden md:table-cell">
                             {% if req.client %}
                             <a href="{{ url_for('pm.client_detail', id=req.client.id) }}"
                                class="hover:text-brand-300 transition-colors">{{ req.client.name }}</a>
@@ -97,7 +107,7 @@
                             <span class="text-surface-500">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-surface-300 whitespace-nowrap">
+                        <td class="px-4 py-3 text-surface-300 whitespace-nowrap hidden md:table-cell">
                             {{ req.sent_at|format_date or '-' }}
                         </td>
                         <td class="px-4 py-3">
@@ -117,20 +127,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
         </svg>
         <p class="text-surface-400 mb-1">No contracts yet</p>
-        <p class="text-sm text-surface-500 mb-5 max-w-md mx-auto">
-            Write one here and send it straight to the client. They sign it in their
+        <p class="text-sm text-surface-500 max-w-md mx-auto">
+            Write one above and send it straight to the client. They sign it in their
             browser, and the signed copy files itself back against them.
         </p>
-        <div class="flex flex-wrap items-center justify-center gap-3">
-            <a href="{{ url_for('pm.engagement_letter_form') }}"
-               class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-                Engagement letter
-            </a>
-            <a href="{{ url_for('pm.sow_form') }}"
-               class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-                Statement of work
-            </a>
-        </div>
     </div>
     {% endif %}
 

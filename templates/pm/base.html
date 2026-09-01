@@ -531,20 +531,24 @@
     <div class="lg:ml-[260px] min-h-screen relative z-10">
         <!-- Top header -->
         <header class="glass sticky top-0 z-30 px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-4">
+            {# flex-wrap, because this row has no other guard: on a phone the
+               title, the timer and any page actions all compete for one line,
+               and without it the actions simply leave the screen. min-w-0 lets
+               the title shrink honestly rather than shoving them off. #}
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <div class="flex items-center gap-4 min-w-0">
                     <!-- Mobile menu button -->
                     <button @click="sidebarOpen = !sidebarOpen" class="lg:hidden p-2 rounded-lg hover:bg-surface-700">
                         <svg class="w-5 h-5 text-surface-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
                     </button>
-                    <div>
+                    <div class="min-w-0">
                         <h2 class="text-lg font-bold text-white">{% block page_title %}Dashboard{% endblock %}</h2>
                         <p class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 flex-shrink-0">
                     {% include "pm/components/timer_widget.html" %}
                     {% block header_actions %}{% endblock %}
                 </div>
