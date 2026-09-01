@@ -1874,7 +1874,11 @@ def create_app():
         client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
         raw_date = request.form.get("date", "")
         project_description = request.form.get("project_description", "").strip()
-        mvp_price = "2,500"
+        # All three were fixed in the source, so every engagement letter quoted
+        # the same starting price and the same rates no matter who it went to.
+        mvp_price = request.form.get("mvp_price", "2,500").strip() or "2,500"
+        maintenance_rate = request.form.get("maintenance_rate", "75").strip() or "75"
+        feature_rate = request.form.get("feature_rate", "100").strip() or "100"
 
         if not client or not project_description:
             flash("Choose a client and describe the project.", "warning")
@@ -1988,7 +1992,7 @@ def create_app():
         section_heading("3. Maintenance & Support")
         body_text("Once the MVP is delivered and accepted, Built by Bean LLC has no obligation to perform further work unless separately contracted. Ongoing maintenance - including bug fixes, performance updates, security patches, and general upkeep of existing functionality - is available at the following rate:")
         add_table([
-            ("Maintenance Hourly Rate", "$75/hour"),
+            ("Maintenance Hourly Rate", f"${maintenance_rate}/hour"),
             ("Scope", "Bug fixes, updates, and support for existing functionality only"),
             ("Billing Increment", "Work is billed in one-hour minimum increments"),
             ("Invoicing", "Net 30 days from invoice date"),
@@ -2000,7 +2004,7 @@ def create_app():
         section_heading("4. New Feature Development")
         body_text("Any feature, functionality, or integration not included in the original agreed MVP scope is considered new feature development. This work requires additional scoping, design, development, testing, and deployment and is billed at a higher rate to reflect that investment.")
         add_table([
-            ("New Feature Hourly Rate", "$100/hour"),
+            ("New Feature Hourly Rate", f"${feature_rate}/hour"),
             ("Billing Increment", "Work is billed in one-hour minimum increments"),
             ("Authorization", "All feature work requires written approval before work begins"),
             ("Invoicing", "Net 30 days from invoice date"),

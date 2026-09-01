@@ -51,6 +51,36 @@
                     <p class="mt-1 text-xs text-surface-400">This follows "Built by Bean LLC will..." in the letter</p>
                 </div>
 
+                {# Fixed in the source until Sept 2026, so every letter quoted the
+                   same price and the same rates whoever it went to. #}
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                            Starting price <span class="text-surface-500 font-normal">$</span>
+                        </label>
+                        <input type="text" name="mvp_price" value="2,500"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                            Maintenance <span class="text-surface-500 font-normal">$/hour</span>
+                        </label>
+                        <input type="text" name="maintenance_rate" value="75"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                            New features <span class="text-surface-500 font-normal">$/hour</span>
+                        </label>
+                        <input type="text" name="feature_rate" value="100"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    </div>
+                </div>
+                <p class="-mt-2 text-xs text-surface-400">
+                    Shown as the minimum starting price and the two hourly rates in
+                    Sections 2, 3 and 4. Change them per client before generating.
+                </p>
+
                 {% include "pm/contracts/_send_panel.html" %}
 
             </div>
