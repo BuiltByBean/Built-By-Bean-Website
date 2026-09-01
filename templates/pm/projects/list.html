@@ -37,9 +37,20 @@
                         <p class="text-sm text-surface-300">{{ project.client.name }}</p>
                     </td>
                     <td class="py-3 px-4">
-                        {% set phase_keys = ['discovery', 'proposal', 'contracted', 'mvp', 'live', 'maintenance'] %}
-                        {% set phase_labels = ['Discovery', 'Proposal', 'Contracted', 'MVP', 'Live', 'Maintenance'] %}
+                        {#
+                          Straight from PHASE_CHOICES, which is what the form
+                          offers and what the record can hold. This used to be
+                          a hardcoded list of six with a "maintenance" phase on
+                          the end that does not exist, so every project trailed
+                          a dot it could never reach and Live never looked
+                          finished.
+                        #}
+                        {% set phase_keys = phase_choices | map(attribute='0') | list %}
+                        {% set phase_labels = phase_choices | map(attribute='1') | list %}
                         {% set cidx = phase_keys.index(project.phase) if project.phase in phase_keys else 0 %}
+                        {# Green once building has started, whatever that phase
+                           is called and wherever it sits in the list. #}
+                        {% set build_idx = phase_keys.index('mvp') if 'mvp' in phase_keys else phase_keys|length %}
                         <div class="flex items-center gap-1" title="{{ phase_labels[cidx] }}">
                             {% for pk in phase_keys %}
                             {% set i = loop.index0 %}
@@ -49,7 +60,7 @@
                             {% endif %}
                             {% endfor %}
                         </div>
-                        <p class="text-[10px] mt-1 font-medium {% if cidx <= 2 %}text-brand-500{% else %}text-emerald-500{% endif %}">{{ phase_labels[cidx] }}</p>
+                        <p class="text-[10px] mt-1 font-medium {% if cidx < build_idx %}text-brand-500{% else %}text-emerald-500{% endif %}">{{ phase_labels[cidx] }}</p>
                     </td>
                     <td class="py-3 px-4 text-right">
                         <span class="text-sm text-surface-300">{{ project.tickets.count() }}</span>

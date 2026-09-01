@@ -37,7 +37,8 @@
 
 {% block content %}
 <!-- Phase Progress Bar -->
-{% set phases = [('discovery', 'Discovery'), ('proposal', 'Proposal'), ('contracted', 'Contracted'), ('mvp', 'MVP'), ('live', 'Live')] %}
+{# From PHASE_CHOICES, so this page and the project list cannot drift. #}
+{% set phases = phase_choices %}
 {% set phase_keys = phases | map(attribute='0') | list %}
 {% set current_idx = phase_keys.index(project.phase) if project.phase in phase_keys else 0 %}
 <div class="glass-card p-6 mb-6">
