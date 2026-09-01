@@ -9,6 +9,14 @@
   The tile is no longer one big anchor. It holds three separate links now, and
   a link inside a link is invalid and behaves differently in every browser —
   so the card is a plain div and every destination is its own button.
+
+  There is deliberately no "Add an app" or "Fetch missing icons" button.
+  Michael adds apps by asking Claude, so a form he will never fill in was two
+  controls of permanent clutter above the thing he actually came for. The
+  routes behind them still exist and still work — `apps.edit` is what the
+  per-tile pencil uses, and /new and the refresh endpoints stay reachable by
+  URL — so this is an unlinked path, not an orphaned one. Do not "fix" it by
+  putting the buttons back.
 #}
 
 {% block title %}My Apps - Built By Bean{% endblock %}
@@ -17,27 +25,6 @@
 
 {% block content %}
 <div class="space-y-6 stagger-in">
-
-    <div class="flex flex-col sm:flex-row gap-3">
-        <a href="{{ url_for('apps.edit') }}"
-           class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Add an app
-        </a>
-        {% if apps | selectattr('icon_file', 'none') | list %}
-        <form method="POST" action="{{ url_for('apps.refresh_all') }}">
-            <button type="submit"
-                    class="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                Fetch missing icons
-            </button>
-        </form>
-        {% endif %}
-    </div>
 
     {% if apps %}
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -120,8 +107,7 @@
     <div class="glass-card p-8 sm:p-12 text-center">
         <p class="text-surface-400 mb-1">Nothing on the board yet</p>
         <p class="text-sm text-surface-500 max-w-md mx-auto">
-            Add anything you have deployed. Give it a name and its address and it
-            will wear its own logo.
+            Ask Claude to put something on it.
         </p>
     </div>
     {% endif %}
