@@ -28,8 +28,18 @@
             Delete
         </button>
     </div>
+    {# Deleting used to fail outright on a project with logged time, so the
+       confirmation never had to say what it destroys. It does now. #}
+    {% set n_time = project.time_entries.count() %}
+    {% set n_books = project.playbooks.count() %}
     <form x-show="confirmDelete" x-cloak method="POST" action="{{ url_for('pm.project_delete', id=project.id) }}" class="inline-flex items-center gap-2">
-        <span class="text-xs text-red-500">Delete project?</span>
+        <span class="text-xs text-red-500">
+            Delete project?{% if n_time or n_books %} Its
+            {%- if n_time %} {{ n_time }} time {{ 'entry' if n_time == 1 else 'entries' }}{% endif %}
+            {%- if n_time and n_books %} and{% endif %}
+            {%- if n_books %} {{ n_books }} playbook{{ '' if n_books == 1 else 's' }}{% endif %}
+            go too.{% endif %}
+        </span>
         <button type="submit" class="px-3 py-2 text-xs bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium">Yes</button>
         <button type="button" @click="confirmDelete = false" class="px-3 py-2 text-xs text-surface-500 hover:text-surface-300 font-medium">No</button>
     </form>

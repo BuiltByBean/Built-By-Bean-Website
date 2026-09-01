@@ -115,7 +115,14 @@ class Project(db.Model):
 
     client = db.relationship("Client", back_populates="projects")
     tickets = db.relationship("Ticket", back_populates="project", lazy="dynamic")
-    time_entries = db.relationship("TimeEntry", backref="project", lazy="dynamic")
+    # Deleted with the project rather than disowned by it. time_entries
+    # .project_id is NOT NULL, so the default of nulling the key on delete
+    # cannot succeed - deleting a project that had any logged time failed
+    # outright. No passive_deletes: SQLite runs with foreign_keys off, so
+    # leaving it to the database would cascade in Postgres and quietly
+    # orphan rows here.
+    time_entries = db.relationship("TimeEntry", backref="project", lazy="dynamic",
+                                   cascade="all, delete-orphan")
 
     @property
     def free_maintenance_end(self):
@@ -420,7 +427,8 @@ class Expense(db.Model):
     client = db.relationship("Client", backref="expenses")
     project = db.relationship("Project", backref="expenses")
     ticket = db.relationship("Ticket", back_populates="expenses")
-    time_entry = db.relationship("TimeEntry", backref=db.backref("expense", uselist=False))
+    time_entry = db.relationship("TimeEntry", backref=db.backref(
+        "expense", uselist=False, cascade="all, delete-orphan"))
     children = db.relationship("Expense", backref=db.backref("parent_expense", remote_side="Expense.id"), lazy="dynamic")
 
     @property
@@ -499,8 +507,10 @@ class TimerSession(db.Model):
     last_resumed_at = db.Column(db.DateTime, nullable=True)  # UTC; set while running
     started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    user = db.relationship("User", backref=db.backref("timer_session", uselist=False))
-    project = db.relationship("Project")
+    user = db.relationship("User", backref=db.backref(
+        "timer_session", uselist=False, cascade="all, delete-orphan"))
+    project = db.relationship("Project", backref=db.backref(
+        "timer_sessions", cascade="all, delete-orphan"))
 
     @property
     def elapsed_seconds(self):
@@ -571,7 +581,10 @@ class Invoice(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
-    client = db.relationship("Client", backref="invoices")
+    # Deleting a client takes its invoices, because invoices.client_id is
+    # NOT NULL and there is nowhere for an invoice with no client to sit.
+    client = db.relationship("Client", backref=db.backref(
+        "invoices", cascade="all, delete-orphan"))
     project = db.relationship("Project", backref="invoices")
     line_items = db.relationship("InvoiceLineItem", back_populates="invoice",
                                  cascade="all, delete-orphan", lazy="dynamic")
