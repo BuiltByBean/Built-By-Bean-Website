@@ -505,13 +505,13 @@ def create_app():
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if current_user.is_authenticated:
-            return redirect(url_for("admin_hub"))
+            return redirect(url_for("pm.dashboard"))
         form = LoginForm()
         if form.validate_on_submit():
             user = User.query.filter(User.username.ilike(form.username.data)).first()
             if user and user.check_password(form.password.data):
                 login_user(user)
-                return redirect(request.args.get("next") or url_for("admin_hub"))
+                return redirect(request.args.get("next") or url_for("pm.dashboard"))
             flash("Invalid username or password.", "error")
         return render_template("login.html", form=form)
 
@@ -536,7 +536,7 @@ def create_app():
                 current_user.must_change_password = False
                 db.session.commit()
                 flash("Password updated successfully.", "success")
-                return redirect(url_for("admin_hub"))
+                return redirect(url_for("pm.dashboard"))
         return render_template("pm/auth/change_password.html")
 
     # ── Routes ───────────────────────────────────────────────
@@ -585,7 +585,7 @@ def create_app():
     @app.route("/admin")
     @login_required
     def admin_hub():
-        return render_template("admin_hub.html")
+        return redirect(url_for("pm.apps_board"), code=301)
 
     # ── Dashboard ────────────────────────────────────────────
 
@@ -1614,6 +1614,12 @@ def create_app():
         elif client_id:
             return redirect(url_for("pm.client_detail", id=client_id))
         return redirect(url_for("pm.dashboard"))
+
+    @pm_bp.route("/apps")
+    @login_required
+    def apps_board():
+        """The old /admin hub, now a page in here rather than a front door."""
+        return render_template("pm/apps/index.html")
 
     # ── Contract Templates ──────────────────────────────────
     #
