@@ -21,10 +21,19 @@
         <span>
             <span class="block text-sm font-medium text-white">Send it for signature</span>
             <span class="block text-xs text-surface-400 mt-0.5">
-                Emails the client a one-click link that signs them in and opens the
+                Emails a one-click link that signs the recipient in and opens the
                 document, with the signature and date fields already on the
                 signature line.
             </span>
+            {# Said here rather than discovered after pressing it. A statement of
+               work carries a Built by Bean signature line, so it goes to Michael
+               before it goes anywhere. #}
+            {% if countersigned %}
+            <span class="block text-xs text-brand-300 mt-1.5">
+                This one has your signature line on it, so it comes to you first.
+                The client is invited automatically the moment you have signed.
+            </span>
+            {% endif %}
         </span>
     </label>
 

@@ -2183,7 +2183,10 @@ def create_app():
                                   mvp_price, sow_date, delivery_date, maint_days, features,
                                   payment_description, payment_milestones,
                                   hosting_fee, hosting_cycle, supersedes_date,
-                                  maintenance_rate, feature_rate)
+                                  maintenance_rate, feature_rate,
+                                  # An electronically-sent SOW is signed by
+                                  # both parties, Michael first.
+                                  countersign=bool(request.form.get("send_for_signature")))
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2194,7 +2197,8 @@ def create_app():
                         mvp_price, sow_date, delivery_date, maint_days, features,
                         payment_description, payment_milestones,
                         hosting_fee, hosting_cycle, supersedes_date="",
-                        maintenance_rate="75", feature_rate="100"):
+                        maintenance_rate="75", feature_rate="100",
+                        countersign=False):
         # The chosen client, passed in rather than looked up again by name.
         client_name = client.name
         from fpdf import FPDF
@@ -2487,27 +2491,49 @@ def create_app():
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, "Built by Bean LLC", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
-        # Signature line with cursive font
-        pdf.set_font(style.family, "", 10)
-        pdf.set_text_color(*BLACK)
-        pdf.cell(30, 8, "Signature:")
-        try:
-            pdf.set_font("DancingScript", "", 20)
-            pdf.set_text_color(*NAVY)
-            pdf.cell(100, 8, "Michael Bean", new_x="LMARGIN", new_y="NEXT")
-        except Exception:
-            pdf.set_font(style.family, "", 14)
-            pdf.set_text_color(*NAVY)
-            pdf.cell(100, 8, "Michael Bean", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(2)
 
-        for label, value in [("Printed Name", "Michael Bean"), ("Title", "Owner, Built by Bean LLC"), ("Date", sow_date)]:
+        # Two ways to sign this block, and the difference matters.
+        #
+        # Printed, the name is typeset here so a paper copy is ready to sign by
+        # hand. Sent electronically, it has to be EMPTY with fields on it: a
+        # signature already printed on a document nobody signed is a signature
+        # that was never given, and the audit trail would show one party
+        # signing an agreement the other had only asserted.
+        own_anchors = []
+        if countersign:
+            for label in ["Signature", "Printed Name", "Title", "Date"]:
+                pdf.set_font(style.family, "", 10)
+                pdf.set_text_color(*BLACK)
+                own_anchors.append({"label": label, "page": pdf.page_no(),
+                                    "y": pdf.get_y(), "x": SIGN_FIELD_X,
+                                    "w": SIGN_FIELD_W, "h": SIGN_FIELD_H})
+                pdf.cell(30, 8, f"{label}:")
+                pdf.cell(100, 8, "_" * 50, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(2)
+        else:
+            # Signature line with cursive font
             pdf.set_font(style.family, "", 10)
             pdf.set_text_color(*BLACK)
-            pdf.cell(30, 8, f"{label}:")
-            pdf.set_text_color(*GRAY)
-            pdf.cell(100, 8, value, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(30, 8, "Signature:")
+            try:
+                pdf.set_font("DancingScript", "", 20)
+                pdf.set_text_color(*NAVY)
+                pdf.cell(100, 8, "Michael Bean", new_x="LMARGIN", new_y="NEXT")
+            except Exception:
+                pdf.set_font(style.family, "", 14)
+                pdf.set_text_color(*NAVY)
+                pdf.cell(100, 8, "Michael Bean", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
+
+            for label, value in [("Printed Name", "Michael Bean"),
+                                 ("Title", "Owner, Built by Bean LLC"),
+                                 ("Date", sow_date)]:
+                pdf.set_font(style.family, "", 10)
+                pdf.set_text_color(*BLACK)
+                pdf.cell(30, 8, f"{label}:")
+                pdf.set_text_color(*GRAY)
+                pdf.cell(100, 8, value, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(2)
 
         pdf.ln(6)
 
@@ -2518,9 +2544,9 @@ def create_app():
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 7, client_name, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
-        # Only the client's block is captured. The Built by Bean signature
-        # above it is already on the page, and offering to collect it again
-        # would be asking somebody to sign their own document.
+        # The client's fields. When the document is being countersigned these
+        # join Michael's above, each tagged to its own signer so the portal
+        # shows each party only their own lines.
         sign_anchors = []
         for label in ["Signature", "Printed Name", "Title", "Date"]:
             pdf.set_font(style.family, "", 10)
@@ -2593,7 +2619,13 @@ def create_app():
             bytes(pdf_bytes), filename=filename,
             title=f"Statement of Work - {project_name}",
             kind="sow",
-            fields=signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h),
+            fields=(signadoc_service.fields_for(own_anchors, pdf.w, pdf.h, signer_id="bbb")
+                    + signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h))
+                   if own_anchors else
+                   signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h),
+            # Michael's own lines are on this one, so he signs before it goes
+            # anywhere near the client.
+            countersigner=bool(own_anchors),
             client=client, project=project, document=doc,
         )
         if sent:

@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timezone
 
 from flask import (
+    current_app,
     Blueprint, render_template, redirect, url_for, flash, request, abort, Response,
 )
 from flask_login import login_required
@@ -102,6 +103,12 @@ def file_document(data, original_name, *, client_id=None, project_id=None):
 # ── Sending ──────────────────────────────────────────────
 
 
+# Who signs on behalf of Built by Bean. Here rather than inline so the name on
+# a contract and the address the signing request goes to cannot drift apart.
+COUNTERSIGNER_NAME = "Michael Bean"
+COUNTERSIGNER_EMAIL = os.environ.get("COUNTERSIGNER_EMAIL", "michaelbean21@gmail.com")
+
+
 def _now():
     return datetime.now(timezone.utc)
 
@@ -118,13 +125,28 @@ def _parsed(stamp):
 
 def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_email,
                    message="", fields=None, client=None, project=None,
-                   source_document=None):
+                   source_document=None, countersigner=False):
     """Send a PDF out for signature and record where it went.
 
     Raises SignaDocError if the portal will not take it, having written
     nothing: an envelope that was never sent should not leave a row here
     claiming it was.
+
+    `countersigner` is for a document Michael signs too. The envelope then
+    carries both parties in sequence with him first, so the portal emails only
+    him and invites the client the moment he is done. The row still records
+    the client as the signer, because the client is who the document is
+    waiting on for all but the first few minutes of its life.
     """
+    signers = None
+    order = "parallel"
+    if countersigner:
+        signers = [
+            {"id": "bbb", "name": COUNTERSIGNER_NAME, "email": COUNTERSIGNER_EMAIL},
+            {"id": "client", "name": signer_name, "email": signer_email},
+        ]
+        order = "sequential"
+
     reply = signadoc.send_for_signature(
         pdf_bytes,
         title=title,
@@ -133,8 +155,15 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
         signer_email=signer_email,
         message=message,
         fields=fields or DEFAULT_FIELDS,
+        signers=signers,
+        signing_order=order,
     )
-    link = (reply.get("links") or [{}])[0]
+    links = reply.get("links") or [{}]
+    # The client's link is the one worth keeping: it is what gets resent when
+    # somebody says they never got it. Michael's own link is surfaced
+    # separately by the caller so he can sign immediately.
+    link = next((l for l in links if l.get("signerId") == "client"), links[0])
+    own_link = next((l for l in links if l.get("signerId") == "bbb"), None)
     row = SignatureRequest(
         envelope_id=reply["id"],
         title=title[:200],
@@ -153,6 +182,11 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
     )
     db.session.add(row)
     db.session.commit()
+    # Michael's own signing link, carried on the object rather than stored.
+    # It is useful for about five minutes and a signing URL that outlives its
+    # use is a signing URL sitting in a database.
+    if own_link:
+        row.own_signing_url = own_link.get("url")
     return row
 
 
@@ -218,6 +252,13 @@ def refresh_open_requests():
     try:
         envelopes = signadoc.list_envelopes()
     except SignaDocError:
+        return None
+    except Exception:
+        # A best-effort status refresh must never take the page down with it.
+        # SignaDocError covers the portal saying no; this covers the portal
+        # address being wrong, which raises ValueError long before any request
+        # is made and would otherwise 500 the contracts list.
+        current_app.logger.exception("SignaDoc refresh failed")
         return None
 
     by_id = {e.get("id"): e for e in envelopes if isinstance(e, dict)}
@@ -387,7 +428,15 @@ def sent_message(row):
     Without SMTP the portal writes the email to its outbox instead of sending
     it, and saying "sent" then would be a lie the client discovers a week later
     when they ask where the contract is.
+
+    A countersigned document has not gone to the client at all yet — it is
+    waiting on Michael — and saying "sent to them" would be the same lie one
+    step earlier.
     """
+    own = getattr(row, "own_signing_url", None)
+    if own:
+        return (f"Ready for your signature. Sign it here and it goes to "
+                f"{row.signer_name} the moment you are done: {own}")
     if row.mail_mode == "smtp":
         return f"Sent to {row.signer_email} — they have a one-click link to sign."
     return (f"Envelope created for {row.signer_name}. SignaDoc has no mail server "
@@ -395,7 +444,8 @@ def sent_message(row):
 
 
 def send_generated(pdf_bytes, *, filename, title, kind, fields,
-                   client=None, project=None, document=None):
+                   client=None, project=None, document=None,
+                   countersigner=False):
     """Send a document this board just generated, if the form asked for it.
 
     Returns the SignatureRequest when it went out, and None when it was not
@@ -420,7 +470,7 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
             signer_name=name, signer_email=email,
             message=(request.form.get("signer_message") or "").strip(),
             fields=fields, client=client, project=project,
-            source_document=document,
+            source_document=document, countersigner=countersigner,
         )
     except SignaDocError as exc:
         flash(f"Could not send it for signature: {exc} The PDF downloaded instead.", "error")

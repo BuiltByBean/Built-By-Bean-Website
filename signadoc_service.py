@@ -125,27 +125,36 @@ def fields_for(anchors, page_w, page_h, signer_id="client"):
 # ── Sending ──────────────────────────────────────────────
 
 
-def send_for_signature(pdf_bytes, *, title, filename, signer_name, signer_email,
-                       fields, message="", sender_name="Built by Bean LLC",
-                       sender_email=None, send=True):
+def send_for_signature(pdf_bytes, *, title, filename, signer_name=None,
+                       signer_email=None, fields, message="",
+                       sender_name="Built by Bean LLC", sender_email=None,
+                       send=True, signers=None, signing_order="parallel"):
     """Raise an envelope in the portal and send it. Returns the portal's reply.
 
     One call rather than upload-place-send, because a partial envelope after a
     failed second call is worse than no envelope at all, and the portal knows
     to discard a draft it could not send.
+
+    `signers` is a list of {id, name, email} when a document needs more than
+    one. With `signing_order="sequential"` the portal emails only the first
+    and invites each of the rest as the one before them finishes, which is how
+    a document Michael has to countersign reaches him before it reaches the
+    client. A single signer can still be passed as signer_name/signer_email.
     """
     if not configured():
         raise SignaDocError(
             "SignaDoc is not configured — set SIGNADOC_URL and SIGNADOC_API_KEY."
         )
+    if not signers:
+        signers = [{"id": "client", "name": signer_name, "email": signer_email}]
     payload = {
         "title": title[:140],
         "message": message[:2000],
         "filename": filename,
         "senderName": sender_name,
         "pdfBase64": base64.b64encode(pdf_bytes).decode("ascii"),
-        "signingOrder": "parallel",
-        "signers": [{"id": "client", "name": signer_name, "email": signer_email}],
+        "signingOrder": "sequential" if signing_order == "sequential" else "parallel",
+        "signers": signers,
         "fields": fields,
         "send": bool(send),
     }
