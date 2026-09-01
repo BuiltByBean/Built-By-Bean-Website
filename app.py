@@ -24,6 +24,7 @@ from models import (
     db, Client, Project, Ticket, TicketNote, Expense, TimeEntry, Document, User,
     Invoice, InvoiceLineItem, TimerSession, TaxSetting,
     ServiceProvider, ServiceCostEntry,
+    Playbook, PlaybookStep, ProjectPlaybook, ProjectPlaybookStep,
     TICKET_CATEGORIES, TICKET_CATEGORY_LABELS,
     TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_CLOSED_STATUSES,
     TICKET_PRIORITIES, TICKET_PRIORITY_LABELS,
@@ -937,9 +938,28 @@ def create_app():
             )
             db.session.add(project)
             db.session.commit()
-            flash(f"Project '{project.name}' created.", "success")
+            applied = _apply_default_playbooks(project)
+            db.session.commit()
+            note = f" {applied} playbook checklists are ready." if applied else ""
+            flash(f"Project '{project.name}' created.{note}", "success")
             return redirect(url_for("pm.project_detail", id=project.id))
         return render_template("pm/projects/form.html", form=form, editing=False)
+
+    def _apply_default_playbooks(project):
+        """Attach every playbook marked default. Returns how many were added.
+
+        Run on creation rather than offered as a choice, because GitHub and
+        Railway are on every build and a question with one answer is not a
+        question.
+        """
+        added = 0
+        for pb in Playbook.query.filter_by(is_default=True, is_active=True).all():
+            exists = ProjectPlaybook.query.filter_by(
+                project_id=project.id, playbook_id=pb.id).first()
+            if not exists:
+                db.session.add(ProjectPlaybook(project_id=project.id, playbook_id=pb.id))
+                added += 1
+        return added
 
     @pm_bp.route("/projects/<int:id>")
     @login_required
@@ -949,8 +969,70 @@ def create_app():
         time_entries = project.time_entries.order_by(TimeEntry.date.desc()).all()
         expenses = Expense.query.filter(Expense.project_id == project.id).order_by(Expense.date.desc()).all()
         documents = project.documents.order_by(Document.uploaded_at.desc()).all()
+
+        # The two that run on every build lead, then whatever was added for
+        # this one. Ordering by sort_order alone buried GitHub and Railway
+        # under an optional playbook somebody added last week.
+        applied = ProjectPlaybook.query.filter_by(project_id=project.id).join(
+            Playbook).order_by(Playbook.is_default.desc(), Playbook.sort_order).all()
+        taken = {a.playbook_id for a in applied}
+        available = [pb for pb in Playbook.query.filter_by(is_active=True)
+                     .order_by(Playbook.sort_order).all() if pb.id not in taken]
+
         return render_template("pm/projects/detail.html",
-            project=project, tickets=tickets, time_entries=time_entries, expenses=expenses, documents=documents)
+            project=project, tickets=tickets, time_entries=time_entries, expenses=expenses,
+            documents=documents, applied_playbooks=applied, available_playbooks=available)
+
+    @pm_bp.route("/projects/<int:id>/playbooks/add", methods=["POST"])
+    @login_required
+    def project_playbook_add(id):
+        project = db.session.get(Project, id) or abort(404)
+        pb = db.session.get(Playbook, request.form.get("playbook_id", type=int) or 0)
+        if not pb:
+            flash("Pick a playbook to add.", "warning")
+            return redirect(url_for("pm.project_detail", id=id))
+        if ProjectPlaybook.query.filter_by(project_id=project.id, playbook_id=pb.id).first():
+            flash(f"{pb.display_name} is already on this project.", "info")
+        else:
+            db.session.add(ProjectPlaybook(project_id=project.id, playbook_id=pb.id))
+            db.session.commit()
+            flash(f"{pb.display_name} added, {pb.steps.count()} steps to work through.", "success")
+        return redirect(url_for("pm.project_detail", id=id))
+
+    @pm_bp.route("/projects/playbooks/<int:applied_id>/remove", methods=["POST"])
+    @login_required
+    def project_playbook_remove(applied_id):
+        applied = db.session.get(ProjectPlaybook, applied_id) or abort(404)
+        pid, name = applied.project_id, applied.playbook.display_name
+        db.session.delete(applied)
+        db.session.commit()
+        flash(f"{name} removed from this project, along with what was ticked.", "success")
+        return redirect(url_for("pm.project_detail", id=pid))
+
+    @pm_bp.route("/projects/playbooks/<int:applied_id>/step/<int:step_id>", methods=["POST"])
+    @login_required
+    def project_playbook_step(applied_id, step_id):
+        """Tick or untick one step.
+
+        The row is made on first touch rather than written out for every step
+        when a playbook is applied, so editing a playbook's steps later changes
+        what every project sees next instead of leaving old ones working from a
+        frozen copy.
+        """
+        applied = db.session.get(ProjectPlaybook, applied_id) or abort(404)
+        step = db.session.get(PlaybookStep, step_id) or abort(404)
+        if step.playbook_id != applied.playbook_id:
+            abort(404)
+
+        row = ProjectPlaybookStep.query.filter_by(
+            project_playbook_id=applied.id, playbook_step_id=step.id).first()
+        if not row:
+            row = ProjectPlaybookStep(project_playbook_id=applied.id, playbook_step_id=step.id)
+            db.session.add(row)
+        row.done = not row.done
+        row.done_at = datetime.now(timezone.utc) if row.done else None
+        db.session.commit()
+        return redirect(url_for("pm.project_detail", id=applied.project_id) + "#playbooks")
 
     @pm_bp.route("/projects/<int:id>/edit", methods=["GET", "POST"])
     @login_required

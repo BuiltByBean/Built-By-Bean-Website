@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone, date, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
@@ -723,6 +724,10 @@ class Playbook(db.Model):
     logo_path = db.Column(db.String(300), default="")
     vendor_url = db.Column(db.String(300), default="")
     is_active = db.Column(db.Boolean, default=True)
+    # Applied to every new project without being asked for. GitHub and Railway
+    # are on every build, so making somebody tick them each time is a step
+    # that only ever has one answer.
+    is_default = db.Column(db.Boolean, nullable=False, default=False)
     sort_order = db.Column(db.Integer, default=0)
     one_liner = db.Column(db.String(300), default="")
 
@@ -999,3 +1004,168 @@ class AppLink(db.Model):
 
     def __repr__(self):
         return f"<AppLink {self.name}>"
+
+
+class PlaybookStep(db.Model):
+    """One tickable step of a playbook, and what to send the client at it.
+
+    The playbook's five prose sections explain a vendor. These are the doing:
+    an ordered list you work down on a real project, where a step is either
+    something you do or something you have to ask somebody else for.
+
+    That second kind is why `client_message_md` exists. The slow steps are
+    always the ones waiting on a client, and they are slow because writing the
+    ask is a small act of composition nobody wants to do at 9pm. Written once,
+    on the step, it becomes a copy button.
+    """
+
+    __tablename__ = "playbook_steps"
+
+    id = db.Column(db.Integer, primary_key=True)
+    playbook_id = db.Column(db.Integer, db.ForeignKey("playbooks.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    title = db.Column(db.String(200), nullable=False)
+    detail_md = db.Column(db.Text, default="")
+
+    # Blank when the step is yours alone. 'email' or 'text' when it is not.
+    client_channel = db.Column(db.String(10), nullable=True)
+    client_message_subject = db.Column(db.String(200), default="")
+    client_message_md = db.Column(db.Text, default="")
+
+    playbook = db.relationship("Playbook", backref=db.backref(
+        "steps", lazy="dynamic", cascade="all, delete-orphan",
+        order_by="PlaybookStep.position"))
+
+    # {client}, {project} and friends, filled from the project the checklist is
+    # running on. Only lowercase words, so a brace in a code sample is left
+    # alone rather than being read as a placeholder and blanked.
+    _PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
+
+    @property
+    def waits_on_client(self):
+        return bool(self.client_message_md)
+
+    def _fill(self, text, project):
+        """Substitute what this project knows and leave the rest visible.
+
+        An unknown placeholder stays as `{from_address}` rather than becoming
+        an empty gap, because a gap in a message about to be sent to a client
+        is not something you notice on the way past.
+        """
+        if not text:
+            return ""
+        values = {}
+        if project is not None:
+            values["project"] = project.name or ""
+            client = getattr(project, "client", None)
+            if client is not None:
+                # First name only. "Hi Michael Bean," is a letter from a bank.
+                parts = (client.name or "").split()
+                values["client"] = parts[0] if parts else ""
+                values["company"] = client.company or client.name or ""
+                host = (client.origin_base_url or "").split("//", 1)[-1].strip("/")
+                if host:
+                    values["domain"] = host.split("/", 1)[0]
+        return self._PLACEHOLDER.sub(
+            lambda m: values.get(m.group(1)) or m.group(0), text)
+
+    def message_for(self, project=None):
+        return self._fill(self.client_message_md, project)
+
+    def subject_for(self, project=None):
+        return self._fill(self.client_message_subject, project)
+
+    def __repr__(self):
+        return f"<PlaybookStep {self.position} {self.title[:30]}>"
+
+
+class ProjectPlaybook(db.Model):
+    """A playbook applied to a project: this vendor, on this build.
+
+    The playbook stays the template. This is the copy of it that a particular
+    project is working through, and the only thing it adds is which steps are
+    done.
+    """
+
+    __tablename__ = "project_playbooks"
+    __table_args__ = (
+        # One project runs a given playbook once. Applying it twice would give
+        # two checklists that disagree about what is finished.
+        db.UniqueConstraint("project_id", "playbook_id", name="uq_project_playbook"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    playbook_id = db.Column(db.Integer, db.ForeignKey("playbooks.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    added_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    project = db.relationship("Project", backref=db.backref(
+        "playbooks", lazy="dynamic", cascade="all, delete-orphan"))
+    playbook = db.relationship("Playbook")
+
+    @property
+    def steps(self):
+        return self.playbook.steps.all()
+
+    @property
+    def done_ids(self):
+        return {p.playbook_step_id for p in self.progress if p.done}
+
+    @property
+    def total_steps(self):
+        return self.playbook.steps.count()
+
+    @property
+    def done_count(self):
+        return len(self.done_ids)
+
+    @property
+    def percent(self):
+        total = self.total_steps
+        return int(round(self.done_count / total * 100)) if total else 0
+
+    @property
+    def is_complete(self):
+        total = self.total_steps
+        return total > 0 and self.done_count == total
+
+    def __repr__(self):
+        return f"<ProjectPlaybook p{self.project_id} b{self.playbook_id}>"
+
+
+class ProjectPlaybookStep(db.Model):
+    """Whether one step of one applied playbook is done, and any note on it.
+
+    A row appears the first time a step is touched rather than being written
+    out for every step when a playbook is applied. Editing a playbook's steps
+    afterwards then changes what everybody sees next, instead of leaving old
+    projects working from a frozen copy nobody can find to fix.
+    """
+
+    __tablename__ = "project_playbook_steps"
+    __table_args__ = (
+        db.UniqueConstraint("project_playbook_id", "playbook_step_id",
+                            name="uq_project_playbook_step"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_playbook_id = db.Column(
+        db.Integer, db.ForeignKey("project_playbooks.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    playbook_step_id = db.Column(
+        db.Integer, db.ForeignKey("playbook_steps.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+
+    done = db.Column(db.Boolean, nullable=False, default=False)
+    done_at = db.Column(db.DateTime, nullable=True)
+    note = db.Column(db.Text, default="")
+
+    applied = db.relationship("ProjectPlaybook", backref=db.backref(
+        "progress", lazy="select", cascade="all, delete-orphan"))
+    step = db.relationship("PlaybookStep")
+
+    def __repr__(self):
+        return f"<ProjectPlaybookStep {self.playbook_step_id} done={self.done}>"

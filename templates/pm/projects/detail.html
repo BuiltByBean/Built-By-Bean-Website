@@ -124,11 +124,19 @@
 </div>
 
 <!-- Tabs -->
-<div x-data="{ tab: 'tickets' }">
-    <div class="flex gap-1 mb-4 p-1 glass-card w-fit">
+{% set pb_done = applied_playbooks | sum(attribute='done_count') %}
+{% set pb_total = applied_playbooks | sum(attribute='total_steps') %}
+{# Ticking a step is a POST and a redirect, so the tab has to survive the
+   round trip. The hash carries it; anything unrecognised falls back. #}
+<div x-data="{ tab: ['playbooks', 'tickets', 'expenses', 'docs', 'invoices', 'time'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'tickets' }">
+    <div id="playbooks" class="flex flex-wrap gap-1 mb-4 p-1 glass-card w-full sm:w-fit">
         <button @click="tab = 'tickets'" :class="tab === 'tickets' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
             Tickets ({{ tickets | length }})
+        </button>
+        <button @click="tab = 'playbooks'" :class="tab === 'playbooks' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors">
+            Playbooks{% if pb_total %} ({{ pb_done }}/{{ pb_total }}){% endif %}
         </button>
         {% if time_tracking %}
         <button @click="tab = 'time'" :class="tab === 'time' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
@@ -183,6 +191,11 @@
             </button>
         </div>
         {% endif %}
+    </div>
+
+    <!-- Playbooks Tab -->
+    <div x-show="tab === 'playbooks'" x-cloak>
+        {% include "pm/projects/_playbooks_tab.html" %}
     </div>
 
     <!-- Time Tab -->
