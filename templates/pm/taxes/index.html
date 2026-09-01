@@ -64,7 +64,8 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {% for name, label, value, hint in [
                     ('your_wages', 'Your W-2 wages', settings.your_wages,
-                     'Gross salary for the year, before tax'),
+                     'The WHOLE year, not year-to-date. Crossing the social '
+                     'security wage base roughly halves the tax on profit.'),
                     ('spouse_wages', "Spouse's W-2 wages", settings.spouse_wages,
                      'Leave at zero if not filing jointly'),
                     ('other_income', 'Other income', settings.other_income,

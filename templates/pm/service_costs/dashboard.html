@@ -131,14 +131,26 @@
     {% if summary.by_month %}
     <div class="glass-card p-6">
         <h3 class="text-lg font-bold text-white mb-4">Monthly Trend</h3>
-        <div class="flex items-end gap-2 h-40">
-            {% set max_val = summary.by_month.values()|max if summary.by_month.values()|list else 1 %}
+        {#
+          Bars are sized in pixels, not percentages.
+
+          A percentage height resolves against the parent's height, and this
+          column has none of its own — it is sized by its contents. So every
+          bar was asking for a share of nothing and rendering as a hairline,
+          leaving a chart of floating labels. h-full plus justify-end gives
+          the column a real height and stands the bars on the floor of it.
+        #}
+        <div class="flex items-end gap-2 h-48">
+            {% set max_val = summary.by_month.values()|max if summary.by_month.values()|list else 0 %}
             {% for month, amount in summary.by_month.items() %}
-            <div class="flex-1 flex flex-col items-center gap-1">
-                <span class="text-xs font-medium text-white">{{ amount|format_currency }}</span>
+            <div class="flex-1 flex flex-col items-center justify-end gap-1 h-full min-w-0">
+                <span class="text-xs font-medium text-white whitespace-nowrap">{{ amount|format_currency }}</span>
+                {# A floor of 2px so a small month is still a visible mark
+                   rather than disappearing into the axis. #}
                 <div class="w-full bg-gradient-to-t from-brand-500 to-brand-400 rounded-t-lg transition-all"
-                     style="height: {{ (amount / max_val * 100) if max_val > 0 else 0 }}%"></div>
-                <span class="text-xs text-surface-400">{{ month }}</span>
+                     style="height: {{ [2, (amount / max_val * 130)|round(1)]|max if max_val > 0 else 2 }}px"
+                     title="{{ month }}: {{ amount|format_currency }}"></div>
+                <span class="text-xs text-surface-400 whitespace-nowrap">{{ month }}</span>
             </div>
             {% endfor %}
         </div>
