@@ -19,9 +19,11 @@ from config import Config
 import hub
 import signadoc_service
 import time
+from tax_engine import compute as tax_compute
 from models import (
     db, Client, Project, Ticket, TicketNote, Expense, TimeEntry, Document, User,
-    Invoice, InvoiceLineItem, TimerSession,
+    Invoice, InvoiceLineItem, TimerSession, TaxSetting,
+    ServiceProvider, ServiceCostEntry,
     TICKET_CATEGORIES, TICKET_CATEGORY_LABELS,
     TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_CLOSED_STATUSES,
     TICKET_PRIORITIES, TICKET_PRIORITY_LABELS,
@@ -691,10 +693,79 @@ def create_app():
                 "expenses": c_expenses,
             })
 
-        # Upcoming deadlines
-        upcoming_tickets = Ticket.query.filter(
-            Ticket.due_date >= today, Ticket.status != "done"
-        ).order_by(Ticket.due_date.asc()).limit(10).all()
+        # Upcoming deadlines, from both places a date can live.
+        #
+        # This only ever read tickets, and no ticket has ever carried a due
+        # date, so the panel was permanently empty while a project delivery
+        # date sat right there in the record. A project's mvp_date is the
+        # deadline that actually matters.
+        #
+        # "done" was never a ticket status either — the closed ones are
+        # resolved and dismissed — so the filter excluded nothing.
+        deadlines = []
+        for tk in Ticket.query.filter(
+            Ticket.due_date >= today,
+            ~Ticket.status.in_(TICKET_CLOSED_STATUSES),
+        ).order_by(Ticket.due_date.asc()).all():
+            deadlines.append({
+                "kind": "ticket", "when": tk.due_date, "title": tk.display_title,
+                "where": tk.client.name + (f" · {tk.project.name}" if tk.project else ""),
+                "url": url_for("pm.ticket_detail", id=tk.id),
+            })
+        for pr in Project.query.filter(
+            Project.mvp_date >= today, Project.status == "active",
+        ).order_by(Project.mvp_date.asc()).all():
+            deadlines.append({
+                "kind": "project", "when": pr.mvp_date, "title": pr.name + " — delivery",
+                "where": pr.client.name,
+                "url": url_for("pm.project_detail", id=pr.id),
+            })
+        deadlines.sort(key=lambda d: d["when"])
+        deadlines = deadlines[:10]
+
+        # ── What is owed on this, roughly ────────────────────
+        #
+        # Only the tax attributable to this business, not the household bill:
+        # tax_engine works out the difference the profit makes on top of the
+        # wages already entered on the Taxes page, which is the only honest
+        # way to answer "what does this cost me" when profit stacks on a
+        # salary and can straddle a bracket.
+        pre_tax_profit = total_revenue - total_expenses
+        settings = TaxSetting.get()
+        tax = tax_compute(
+            pre_tax_profit,
+            filing_status=settings.filing_status,
+            your_wages=settings.your_wages,
+            spouse_wages=settings.spouse_wages,
+            other_income=settings.other_income,
+            federal_withheld=settings.federal_withheld,
+            state_rate=settings.state_tax_rate,
+            year=today.year,
+        )
+        estimated_tax = tax["business_tax"]
+        post_tax_profit = pre_tax_profit - estimated_tax
+
+        # ── Where the money went, by service ─────────────────
+        #
+        # Grouped from the cost entries rather than from expense categories,
+        # because that is the only place a row knows which vendor it came
+        # from. Anything with no service behind it is gathered at the bottom
+        # so the table still adds up to Total Expenses.
+        by_service = db.session.query(
+            ServiceProvider.display_name,
+            db.func.sum(ServiceCostEntry.allocated_amount),
+        ).join(
+            ServiceCostEntry, ServiceCostEntry.provider_id == ServiceProvider.id
+        ).group_by(ServiceProvider.display_name).all()
+        service_expenses = [
+            {"name": name, "amount": float(amount or 0)}
+            for name, amount in by_service if (amount or 0) > 0
+        ]
+        service_expenses.sort(key=lambda r: -r["amount"])
+        tracked = sum(r["amount"] for r in service_expenses)
+        remainder = total_expenses - tracked
+        if round(remainder, 2) > 0:
+            service_expenses.append({"name": "Everything else", "amount": remainder})
 
         return render_template("pm/dashboard/index.html",
             total_revenue=total_revenue,
@@ -703,7 +774,12 @@ def create_app():
             total_unbilled=total_unbilled,
             total_expenses=total_expenses,
             client_financials=client_financials,
-            upcoming_tickets=upcoming_tickets,
+            deadlines=deadlines,
+            pre_tax_profit=pre_tax_profit,
+            estimated_tax=estimated_tax,
+            post_tax_profit=post_tax_profit,
+            tax=tax,
+            service_expenses=service_expenses,
         )
 
     # ── Clients ──────────────────────────────────────────────
