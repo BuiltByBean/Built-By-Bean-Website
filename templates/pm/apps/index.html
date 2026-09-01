@@ -58,10 +58,10 @@
 
                 <div class="min-w-0 pr-7">
                     <h3 class="text-base font-bold text-white break-words">{{ app.name }}</h3>
-                    <p class="text-xs text-surface-400 mt-0.5 truncate" title="{{ app.url }}">{{ app.host }}</p>
-                    {% if app.description %}
-                    <p class="text-sm text-surface-300 mt-2 break-words">{{ app.description }}</p>
-                    {% endif %}
+                    {# No description here on purpose: the tile is an icon, a
+                       name and three ways in. It is still stored and still
+                       editable, it just does not belong on the board. #}
+                    <p class="text-xs text-surface-400 mt-0.5 truncate" title="{{ app.description or app.url }}">{{ app.host }}</p>
                 </div>
 
                 <a href="{{ url_for('apps.edit', id=app.id) }}"
