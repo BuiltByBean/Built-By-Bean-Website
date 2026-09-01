@@ -2415,7 +2415,14 @@ def create_app():
             "Built by Bean LLC does not guarantee 100% uptime or availability of any deployed application. While reasonable efforts will be made to ensure reliability, factors outside of Built by Bean LLC's control - including server failures, network outages, cyberattacks, and force majeure events - may impact availability.",
             "Client is solely responsible for maintaining backups of any content, data, or credentials provided to Built by Bean LLC during the project. Built by Bean LLC is not responsible for loss of client-provided materials.",
             "Built by Bean LLC's total liability under this SOW shall not exceed the total fees paid by the client under this agreement.",
-            "Any intellectual property, code, or design work created by Built by Bean LLC becomes the property of the client only upon receipt of full payment. Until full payment is received, all work product remains the property of Built by Bean LLC.",
+            # Built by Bean keeps the code and licenses its use. This replaced an
+            # assignment-on-payment clause that said the opposite of how the
+            # business actually runs, and which would have handed away the right
+            # to reuse anything across clients.
+            "All software, source code, designs, and other work product created by Built by Bean LLC remain the exclusive property of Built by Bean LLC. Upon receipt of full payment, Client is granted a perpetual, worldwide, non-exclusive, non-transferable license to use the delivered application for Client's own internal business purposes, with no renewal and no recurring license fee.",
+            "This license does not permit Client to resell, sublicense, distribute, or provide the software to any third party as a service. Built by Bean LLC retains the right to reuse the underlying code, components, methods, and techniques in other work for other clients.",
+            "Until full payment is received, Client is granted no license and has no right to use the work product.",
+            "Client data - including customer records, content, files, and any material Client provides or generates through the application - is and remains the sole property of Client at all times. Built by Bean LLC claims no ownership of it, will not sell or license it to any third party, and will provide Client a complete export in a machine-readable format on written request.",
             "Client is responsible for ensuring that any content, images, trademarks, or materials provided for use in the project do not infringe on third-party intellectual property rights. Client agrees to indemnify Built by Bean LLC against any claims arising from client-provided materials.",
             "This agreement shall be governed by the laws of the State of Texas. Any disputes arising under this agreement shall be resolved in the courts of the State of Texas.",
         ]
