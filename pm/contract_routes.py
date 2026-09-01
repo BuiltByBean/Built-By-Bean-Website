@@ -17,8 +17,8 @@ import uuid
 from datetime import datetime, timezone
 
 from flask import (
-    current_app,
     Blueprint, render_template, redirect, url_for, flash, request, abort, Response,
+    current_app,
 )
 from flask_login import login_required
 
@@ -535,7 +535,20 @@ def _script_font(pdf_family_owner):
 
 def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page_h,
              client, project=None):
-    """Send it if asked, otherwise hand back the download."""
+    """Show it first, then send it if asked, otherwise hand back the download.
+
+    Unless the form says the document has already been read, this stops here
+    and puts it on screen. Nothing about the document changes between the
+    preview and the send - pressing Send replays the same form through the same
+    route, with `previewed` set.
+    """
+    if not request.form.get("previewed"):
+        token = stash_preview(
+            pdf_bytes, form=request.form, endpoint=request.endpoint, kind=kind,
+            filename=filename, title=title,
+            client_name=client.name if client else "")
+        return redirect(url_for("contracts.preview", token=token))
+
     fields = signadoc.fields_for(client_anchors, page_w, page_h)
     if own:
         fields = signadoc.fields_for(own, page_w, page_h, signer_id="bbb") + fields
@@ -543,6 +556,8 @@ def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page
         pdf_bytes, filename=filename, title=title, kind=kind, fields=fields,
         countersigner=bool(own), client=client, project=project,
     )
+    if token := request.form.get("preview_token"):
+        drop_preview(token)
     if sent:
         return redirect(url_for("contracts.contract_detail", id=sent.id))
     resp = Response(pdf_bytes, mimetype="application/pdf")
@@ -645,3 +660,110 @@ def _fmt(raw):
         return datetime.strptime(raw, "%Y-%m-%d").strftime("%B %d, %Y")
     except ValueError:
         return raw
+
+
+# ── Preview before sending ───────────────────────────────
+#
+# Held on the volume rather than in memory: there are two gunicorn workers and
+# the request that reads a preview back is not the one that wrote it.
+
+import json as _json
+
+
+def _preview_folder():
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], "previews")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _sweep_previews(max_age_hours=6):
+    """Drop anything left behind by somebody who closed the tab."""
+    folder = _preview_folder()
+    cutoff = datetime.now(timezone.utc).timestamp() - max_age_hours * 3600
+    for name in os.listdir(folder):
+        path = os.path.join(folder, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def stash_preview(pdf_bytes, *, form, endpoint, kind, filename, title, client_name,
+                  page_count=None):
+    """Hold a built document and the form that made it. Returns the token."""
+    _sweep_previews()
+    token = uuid.uuid4().hex
+    folder = _preview_folder()
+    with open(os.path.join(folder, token + ".pdf"), "wb") as fh:
+        fh.write(pdf_bytes)
+    meta = {
+        "endpoint": endpoint, "kind": kind, "filename": filename, "title": title,
+        "client_name": client_name, "size": len(pdf_bytes), "pages": page_count,
+        # Every field, so pressing Send replays exactly what was previewed
+        # rather than rebuilding from something that has since been edited.
+        "form": {k: form.getlist(k) for k in form.keys()},
+        "created": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(os.path.join(folder, token + ".json"), "w", encoding="utf-8") as fh:
+        _json.dump(meta, fh)
+    return token
+
+
+def load_preview(token):
+    """The stashed metadata, or None if it has been sent or swept."""
+    if not token or not token.isalnum() or len(token) != 32:
+        return None
+    path = os.path.join(_preview_folder(), token + ".json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        return _json.load(fh)
+
+
+def drop_preview(token):
+    folder = _preview_folder()
+    for ext in (".pdf", ".json"):
+        try:
+            os.remove(os.path.join(folder, token + ext))
+        except OSError:
+            pass
+
+
+@contracts_bp.route("/preview/<token>")
+@login_required
+def preview(token):
+    meta = load_preview(token)
+    if not meta:
+        flash("That preview has expired. Fill the form in again.", "warning")
+        return redirect(url_for("contracts.contracts_index"))
+    form = {k: (v[0] if len(v) == 1 else v) for k, v in meta["form"].items()}
+    return render_template("pm/contracts/preview.html", token=token, meta=meta,
+                           form=form, sending=bool(form.get("send_for_signature")))
+
+
+@contracts_bp.route("/preview/<token>/file.pdf")
+@login_required
+def preview_file(token):
+    """The document itself, inline so the browser renders it in the page."""
+    if not load_preview(token):
+        abort(404)
+    path = os.path.join(_preview_folder(), token + ".pdf")
+    if not os.path.exists(path):
+        abort(404)
+    with open(path, "rb") as fh:
+        data = fh.read()
+    resp = Response(data, mimetype="application/pdf")
+    # inline, not attachment: an attachment opens a save dialog instead of
+    # showing anybody the document they asked to read.
+    resp.headers["Content-Disposition"] = "inline; filename=preview.pdf"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@contracts_bp.route("/preview/<token>/discard", methods=["POST"])
+@login_required
+def preview_discard(token):
+    drop_preview(token)
+    flash("Preview discarded. Nothing was sent.", "info")
+    return redirect(url_for("contracts.contracts_index"))

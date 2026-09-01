@@ -9,3 +9,6 @@ instance/
 *.db
 .claude/
 static/images/*.bak
+
+# Contract previews live on the volume, not in the repo.
+data/uploads/previews/

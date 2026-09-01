@@ -2101,6 +2101,16 @@ def create_app():
             db.session.add(doc)
             db.session.commit()
 
+        # Read it before it goes. Unless the form says it has already been
+        # previewed, this stops here and puts the document on screen.
+        if not request.form.get("previewed"):
+            from pm.contract_routes import stash_preview
+            token = stash_preview(
+                bytes(pdf_bytes), form=request.form, endpoint=request.endpoint,
+                kind="engagement_letter", filename=filename,
+                title=f"Engagement Letter - {client_name}", client_name=client_name)
+            return redirect(url_for("contracts.preview", token=token))
+
         # Straight out for signature, if that was asked for. The fields go on
         # the lines just drawn, so the client signs where the letter says to
         # sign rather than wherever a guess put a box.
@@ -2111,6 +2121,9 @@ def create_app():
             fields=signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h),
             client=client, document=doc,
         )
+        if token := request.form.get("preview_token"):
+            from pm.contract_routes import drop_preview
+            drop_preview(token)
         if sent:
             return redirect(url_for("contracts.contract_detail", id=sent.id))
 
@@ -2625,6 +2638,14 @@ def create_app():
                 project.budget = price_val
             db.session.commit()
 
+        if not request.form.get("previewed"):
+            from pm.contract_routes import stash_preview
+            token = stash_preview(
+                bytes(pdf_bytes), form=request.form, endpoint=request.endpoint,
+                kind="sow", filename=filename,
+                title=f"Statement of Work - {project_name}", client_name=client.name)
+            return redirect(url_for("contracts.preview", token=token))
+
         sent = send_generated(
             bytes(pdf_bytes), filename=filename,
             title=f"Statement of Work - {project_name}",
@@ -2638,6 +2659,9 @@ def create_app():
             countersigner=bool(own_anchors),
             client=client, project=project, document=doc,
         )
+        if token := request.form.get("preview_token"):
+            from pm.contract_routes import drop_preview
+            drop_preview(token)
         if sent:
             return redirect(url_for("contracts.contract_detail", id=sent.id))
 
