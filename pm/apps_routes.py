@@ -26,6 +26,12 @@ apps_bp = Blueprint("apps", __name__, url_prefix="/admin/pm/apps")
 
 ICON_DIR = "app_icons"
 
+# What may be uploaded by hand, for the apps that expose nothing to fetch:
+# anything behind a login, or a page inside this app.
+UPLOAD_TYPES = {"png": "png", "jpg": "jpg", "jpeg": "jpg", "webp": "webp",
+                "svg": "svg", "gif": "gif", "ico": "ico"}
+MAX_UPLOAD = 2 * 1024 * 1024
+
 
 def _icon_folder():
     path = os.path.join(current_app.config["UPLOAD_FOLDER"], ICON_DIR)
@@ -72,13 +78,44 @@ def index():
                            apps=AppLink.query.order_by(AppLink.id).all())
 
 
+def _store_upload(link, upload):
+    """Take an icon straight from the user. Returns why not, or None."""
+    ext = os.path.splitext(upload.filename or "")[1].lstrip(".").lower()
+    ext = UPLOAD_TYPES.get(ext)
+    if not ext:
+        return "That file type cannot be used as an icon."
+    data = upload.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        return "That image is larger than 2MB."
+    if len(data) < 64:
+        return "That file is empty."
+    old = link.icon_file
+    link.icon_file = app_icon_service.store(data, ext, _icon_folder())
+    # No source means it was given rather than found, which is what stops a
+    # later URL change from fetching over the top of it.
+    link.icon_source = None
+    link.icon_fetched_at = datetime.now(timezone.utc)
+    if old:
+        try:
+            os.remove(os.path.join(_icon_folder(), old))
+        except OSError:
+            pass
+    return None
+
+
 @apps_bp.route("/icon/<int:id>")
 @login_required
 def icon(id):
     link = db.session.get(AppLink, id) or abort(404)
     if not link.icon_file:
         abort(404)
-    return send_from_directory(_icon_folder(), link.icon_file, max_age=86400)
+    resp = send_from_directory(_icon_folder(), link.icon_file, max_age=86400)
+    # These files come from other people's servers and from uploads, and an
+    # SVG is a document that can carry script. Nothing here needs to load
+    # anything or run anything, so say so.
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 @apps_bp.route("/new", methods=["GET", "POST"])
@@ -98,19 +135,32 @@ def edit(id=None):
         if creating:
             link = AppLink()
             db.session.add(link)
+        # An icon that was uploaded by hand is not replaced just because the
+        # address changed; it was chosen, not found.
+        given = bool(link.icon_file) and link.icon_source is None
         moved = creating or link.url != url
 
         link.name = name[:120]
         link.url = url[:500]
         link.description = (request.form.get("description") or "").strip()
+        link.railway_url = _normalise(request.form.get("railway_url"))[:500] or None
+        link.github_url = _normalise(request.form.get("github_url"))[:500] or None
         db.session.flush()
 
+        upload = request.files.get("icon_upload")
+        if upload and upload.filename:
+            problem = _store_upload(link, upload)
+            if problem:
+                db.session.rollback()
+                flash(problem, "warning")
+                return redirect(request.url)
         # Only go looking when the address is new or has changed, or when
         # asked to. Refetching an unchanged URL on every edit is somebody
         # else's server paying for our save button.
-        if moved or request.form.get("refresh_icon"):
+        elif (moved and not given) or request.form.get("refresh_icon"):
             if not _refresh_icon(link) and moved:
-                flash(f"Saved. {name} offers no icon, so it shows its initials.", "info")
+                flash(f"Saved. {name} offers no icon to fetch — "
+                      f"upload one on this page, or it shows its initials.", "info")
         db.session.commit()
         flash(f"{name} saved.", "success")
         return redirect(url_for("apps.index"))

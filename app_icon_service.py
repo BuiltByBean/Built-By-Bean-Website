@@ -5,10 +5,19 @@ manifest icon, an apple-touch-icon, a favicon. Picking one off a stock list
 would be choosing a worse image than the one sitting at the other end of the
 URL, so this goes and gets it.
 
-Preference order is by usable size, not by tag. A manifest's 512px icon beats
-a 180px apple-touch-icon beats a 32px favicon, and an SVG beats all of them
-because it is the only one that stays sharp on a retina tile. The last resort
-is /favicon.ico, which nearly everything has and nearly nothing declares.
+Preference is by tier first, size second. The manifest wins outright: it is
+where an app declares its actual app icon, the full-bleed one designed to be
+looked at. A favicon is often a simplified glyph on a tight viewBox — the same
+mark with its edges cropped — so letting a small SVG outrank a 512px manifest
+icon on sharpness alone picks the worse picture, which is exactly what it did
+until this was tiered.
+
+Maskable manifest icons sit near the bottom despite being large: they carry
+deliberate padding so a phone can crop them to whatever shape it likes, and
+shown uncropped they float small in the middle of a tile.
+
+Within a tier, bigger is better, and an SVG counts as big because it is the
+one format that stays sharp at any size.
 
 Everything here is best effort. A site that is down, slow, or offers nothing
 returns None and the tile falls back to initials — a board that renders
@@ -73,8 +82,12 @@ def _get(url, **kw):
                         allow_redirects=True, **kw)
 
 
+# Lower tier wins. Size only breaks ties inside a tier.
+T_MANIFEST, T_APPLE, T_LINK, T_MASKABLE, T_GUESS = 0, 1, 2, 3, 4
+
+
 def _candidates(page_url, html):
-    """Every icon the page declares, scored so the best sorts first."""
+    """Every icon the page declares, tiered so the best sorts first."""
     parser = _Links()
     try:
         parser.feed(html)
@@ -90,14 +103,13 @@ def _candidates(page_url, html):
         if "manifest" in rels:
             found += _from_manifest(urljoin(page_url, href))
         elif "apple-touch-icon" in rels or "apple-touch-icon-precomposed" in rels:
-            # Apple's is a real square logo, never a 16px glyph, so it beats a
-            # favicon of the same declared size.
-            found.append((_largest(link.get("sizes")) or 180, urljoin(page_url, href)))
+            # A real square logo, never a 16px glyph.
+            found.append((T_APPLE, _largest(link.get("sizes")) or 180, urljoin(page_url, href)))
         elif "icon" in rels or "shortcut" in rels:
             size = _largest(link.get("sizes"))
             if href.lower().endswith(".svg") or link.get("type") == "image/svg+xml":
                 size = max(size, 1024)  # scales to any tile
-            found.append((size or 32, urljoin(page_url, href)))
+            found.append((T_LINK, size or 32, urljoin(page_url, href)))
     return found
 
 
@@ -112,8 +124,16 @@ def _from_manifest(manifest_url):
     out = []
     for icon in (data.get("icons") or []):
         src = (icon.get("src") or "").strip()
-        if src:
-            out.append((_largest(icon.get("sizes")) or 128, urljoin(manifest_url, src)))
+        if not src:
+            continue
+        purpose = (icon.get("purpose") or "any").lower().split()
+        # "maskable" means padded for the OS to crop. Usable, but only if
+        # there is nothing better.
+        tier = T_MASKABLE if ("maskable" in purpose and "any" not in purpose) else T_MANIFEST
+        size = _largest(icon.get("sizes"))
+        if src.lower().endswith(".svg") or icon.get("type") == "image/svg+xml":
+            size = max(size, 1024)
+        out.append((tier, size or 128, urljoin(manifest_url, src)))
     return out
 
 
@@ -179,12 +199,12 @@ def fetch(page_url):
     except Exception:
         html, base = "", page_url
 
-    tries = sorted(_candidates(base, html), key=lambda c: -c[0])
+    tries = sorted(_candidates(base, html), key=lambda c: (c[0], -c[1]))
     # Declared or not, nearly every site answers this one.
-    tries.append((0, urljoin(base, "/favicon.ico")))
+    tries.append((T_GUESS, 0, urljoin(base, "/favicon.ico")))
 
     seen = set()
-    for _score, url in tries:
+    for _tier, _size, url in tries:
         if url in seen:
             continue
         seen.add(url)

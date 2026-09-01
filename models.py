@@ -970,6 +970,11 @@ class AppLink(db.Model):
     icon_source = db.Column(db.String(500), nullable=True)
     icon_fetched_at = db.Column(db.DateTime, nullable=True)
 
+    # The other two places you go for an app: the deploy that serves it and
+    # the code behind it. Both optional — a page inside this app has neither.
+    railway_url = db.Column(db.String(500), nullable=True)
+    github_url = db.Column(db.String(500), nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     @property
