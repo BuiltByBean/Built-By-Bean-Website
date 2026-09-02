@@ -805,6 +805,13 @@ def generate_hosting():
             db.session.commit()
         except (ValueError, TypeError):
             db.session.rollback()
+    elif project is None and request.form.get("previewed"):
+        # The project picker is optional, so a fee can be agreed in a document
+        # and never reach the row the hosting page reads. Saying so is the
+        # difference between a number that is merely unset and one nobody
+        # knows is unset.
+        flash("Fee saved to the PDF only - pick a project to record it against.",
+              "warning")
 
     return _deliver(pdf_bytes, f"{_safe(client.name)}_Hosting_{_safe(application)}.pdf",
                     f"Hosting & Infrastructure Agreement - {application}",

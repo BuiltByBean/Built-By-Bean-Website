@@ -2326,7 +2326,7 @@ def create_app():
         raw_sow_date = request.form.get("sow_date", "")
         raw_delivery_date = request.form.get("delivery_date", "")
         maintenance_days = request.form.get("maintenance_days", "30").strip()
-        hosting_fee = request.form.get("hosting_fee", "25").strip()
+        hosting_fee = request.form.get("hosting_fee", "50").strip()
         hosting_cycle = request.form.get("hosting_cycle", "monthly").strip()
         payment_pcts = request.form.getlist("payment_pct")
         payment_labels = request.form.getlist("payment_label")
@@ -2805,6 +2805,21 @@ def create_app():
                 Project.client_id == client.id,
                 Project.name.ilike(project_name),
             ).first()
+            # No match used to mean no record: the fee, budget, delivery date,
+            # maintenance window and phase all went into the PDF and stopped
+            # there, without a word, and the hosting page had no fee to hold
+            # the infrastructure cost against. An SOW is the thing that brings
+            # a project into being, so a name that matches nothing makes the
+            # project rather than skipping the block.
+            #
+            # Only on the way out. The preview step reaches this code as well,
+            # and a document that was looked at and abandoned should not leave
+            # a project behind - the rule the hosting agreement already keeps.
+            created_project = False
+            if project is None and request.form.get("previewed"):
+                project = Project(client_id=client.id, name=project_name)
+                db.session.add(project)
+                created_project = True
             if project:
                 try:
                     project.mvp_date = datetime.strptime(delivery_date, "%B %d, %Y").date()
@@ -2823,6 +2838,9 @@ def create_app():
                     pass
                 project.hosting_cycle = hosting_cycle or "monthly"
             db.session.commit()
+            if created_project:
+                flash(f"Created project \"{project.name}\" and recorded the "
+                      f"fee, budget and dates from this SOW against it.", "success")
 
         if not request.form.get("previewed"):
             from pm.contract_routes import stash_preview
