@@ -113,11 +113,17 @@ COUNTERSIGNER_EMAIL = os.environ.get("COUNTERSIGNER_EMAIL", "michaelbean21@gmail
 
 # Who the portal says a document came from. This is display and audit only —
 # the actual From header on the email is the portal's own MAIL_FROM, set on
-# the SignaDoc service. Sending it means the portal stops falling back to
+# the SignaDoc service, and the two are kept the same on purpose: a document
+# that says it came from one address and arrives from another reads as a
+# forgery to anyone who looks.
+#
+# contracts@ rather than a personal address, and it is a real inbox:
+# Cloudflare routes it to the same place, so a client who hits reply on a
+# signing request reaches somebody. Sending it means the portal stops falling back to
 # whichever account the API key belongs to, and the audit trail names a
 # person rather than the string "sender".
 SENDER_NAME = os.environ.get("CONTRACT_SENDER_NAME", "Built by Bean LLC")
-SENDER_EMAIL = os.environ.get("CONTRACT_SENDER_EMAIL", "mbean@builtbybeans.com")
+SENDER_EMAIL = os.environ.get("CONTRACT_SENDER_EMAIL", "contracts@builtbybeans.com")
 
 
 def _now():
