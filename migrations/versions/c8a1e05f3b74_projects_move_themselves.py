@@ -76,8 +76,11 @@ def upgrade():
                 batch_op.add_column(sa.Column(name, kind, nullable=True))
 
     if "phase_locked" not in have:
+        # FALSE, not 0. SQLite takes either; Postgres refuses to compare an
+        # integer to a boolean column and the whole migration aborts, which
+        # is a failed deploy and a container that will not start.
         conn.execute(sa.text(
-            "UPDATE projects SET phase_locked = 0 WHERE phase_locked IS NULL"))
+            "UPDATE projects SET phase_locked = FALSE WHERE phase_locked IS NULL"))
 
     for old, new in PHASE_MAP.items():
         conn.execute(sa.text("UPDATE projects SET phase = :new WHERE phase = :old"),
