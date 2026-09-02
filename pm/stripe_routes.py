@@ -125,9 +125,13 @@ class _Page:
                 last = num
 
 
-@stripe_bp.route("/")
-@login_required
-def stripe_dashboard():
+def _account_overview():
+    """Balance, payments and payouts - the half of the Invoices page
+    that only Stripe can answer for.
+
+    Every network read here is inside the try: a Stripe outage must
+    cost the account panel, not the invoice list beside it.
+    """
     available = 0
     pending = 0
     payments = []
@@ -171,27 +175,39 @@ def stripe_dashboard():
         import traceback
         traceback.print_exc()
 
-    # Everything on this page now comes from Stripe. A local Invoice record
-    # only exists for an invoice raised through this app's own New Invoice
-    # flow, and production has none: the billing is all done in Stripe
-    # directly. Reading the local rows showed nothing owed and no invoices at
-    # all while real money sat open, which is the most misleading thing a
-    # finance page can do.
-    all_invoices = _decorate(get_stripe_invoices(), _client_name_map())
-    open_invoices = [i for i in all_invoices if i["status"] in ("draft", "open")][:8]
-    paid_invoices = [i for i in all_invoices if i["status"] == "paid"][:10]
-    invoice_totals = get_stripe_invoice_totals()
+    # Outstanding is read from Stripe, not from local Invoice rows: a
+    # local record only exists for an invoice raised through this app's
+    # own New Invoice flow, and production has none. Reading the local
+    # rows showed nothing owed while real money sat open, which is the
+    # most misleading thing a finance page can do.
+    try:
+        invoice_totals = get_stripe_invoice_totals()
+    except Exception:
+        invoice_totals = {"open": 0, "open_count": 0}
 
-    return render_template("pm/stripe/dashboard.html",
-        available_balance=available,
-        pending_balance=pending,
-        payments=payments,
-        payouts=payouts,
-        open_invoices=open_invoices,
-        paid_invoices=paid_invoices,
-        total_outstanding=invoice_totals["open"],
-        open_invoice_count=invoice_totals["open_count"],
-    )
+    return {
+        "available_balance": available,
+        "pending_balance": pending,
+        "payments": payments,
+        "payouts": payouts,
+        # Named apart from the invoice list's own total_outstanding,
+        # which is scoped to whatever the filters show. Same word, two
+        # numbers, and they share a template context now.
+        "account_outstanding": invoice_totals["open"],
+        "open_invoice_count": invoice_totals["open_count"],
+    }
+
+
+@stripe_bp.route("/")
+@login_required
+def stripe_dashboard():
+    """Kept as a redirect.
+
+    Stripe is how the invoices go out and how the money comes back, so
+    it is half of the Invoices page rather than a page of its own. This
+    route stays because bookmarks and old links point at it.
+    """
+    return redirect(url_for("stripe.invoices_list") + "#stripe")
 
 
 # ── Invoice List ────────────────────────────────────────────
@@ -262,6 +278,7 @@ def invoices_list():
     last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
     return render_template("pm/stripe/invoices/list.html",
+        **_account_overview(),
         invoices=pagination.items,
         pagination=pagination,
         status=status,

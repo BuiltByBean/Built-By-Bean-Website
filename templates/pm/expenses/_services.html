@@ -1,28 +1,17 @@
-{% extends "pm/base.html" %}
-
-{% block title %}Service Costs - Built By Bean{% endblock %}
-{% block page_title %}Service Costs{% endblock %}
-{% block page_subtitle %}Track infrastructure costs across providers{% endblock %}
-
-{% block header_actions %}
-<div class="flex items-center gap-2">
+{#
+  What the vendors charge, and which client it belongs to. The other half
+  of the Expenses page.
+#}
+<div class="flex items-center justify-end gap-2">
     <a href="{{ url_for('service_costs.mappings_list') }}"
-       class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
-        Mappings
-    </a>
+       class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-800 text-surface-200 hover:bg-surface-700 transition-colors">Mappings</a>
     <a href="{{ url_for('service_costs.providers_list') }}"
-       class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
-        Providers
-    </a>
+       class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-800 text-surface-200 hover:bg-surface-700 transition-colors">Providers</a>
     <form method="POST" action="{{ url_for('service_costs.sync_all') }}">
-        <button type="submit" class="px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-            Sync All
-        </button>
+        <button type="submit" class="px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">Sync All</button>
     </form>
 </div>
-{% endblock %}
 
-{% block content %}
 <div class="space-y-6 stagger-in">
 
     <!-- Summary Cards -->
@@ -197,4 +186,3 @@
     </div>
 
 </div>
-{% endblock %}

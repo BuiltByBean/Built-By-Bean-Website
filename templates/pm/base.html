@@ -498,35 +498,25 @@
                 </svg>
                 Taxes
             </a>
+            {# One entry for everything going out: what I paid on the first
+               half, what the vendors charged on the second. It used to be
+               two, which is two places to look for one answer. #}
             <a href="{{ url_for('pm.expenses_list') }}"
-               class="sidebar-link {% if request.endpoint and 'expense' in request.endpoint %}active{% endif %}">
+               class="sidebar-link {% if request.endpoint and ('expense' in request.endpoint or 'service_costs' in request.endpoint) %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 Expenses
             </a>
-            {# One entry for the whole life of a contract: written here, sent
-               from here, signed, and filed back here. It used to be three. #}
+            {# Invoicing, whole: the invoices on one half and the Stripe
+               account behind them on the other. Stripe is how they go out
+               and how the money comes back, so it was never a second thing. #}
             <a href="{{ url_for('stripe.invoices_list') }}"
-               class="sidebar-link {% if request.endpoint and 'invoice' in request.endpoint %}active{% endif %}">
+               class="sidebar-link {% if request.endpoint and ('invoice' in request.endpoint or request.endpoint.startswith('stripe.')) %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 Invoices
-            </a>
-            <a href="{{ url_for('service_costs.service_costs_dashboard') }}"
-               class="sidebar-link {% if request.endpoint and 'service_costs' in request.endpoint %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"/>
-                </svg>
-                Service Costs
-            </a>
-            <a href="{{ url_for('stripe.stripe_dashboard') }}"
-               class="sidebar-link {% if request.endpoint == 'stripe.stripe_dashboard' %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
-                </svg>
-                Stripe
             </a>
         </nav>
 

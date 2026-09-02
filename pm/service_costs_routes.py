@@ -84,17 +84,14 @@ def _monthly_cost():
 @service_costs_bp.route("/")
 @login_required
 def service_costs_dashboard():
-    summary = get_cost_summary(months=6)
-    providers = ServiceProvider.query.filter_by(is_active=True).all()
-    recent_entries = ServiceCostEntry.query.order_by(
-        ServiceCostEntry.created_at.desc()
-    ).limit(20).all()
+    """Kept as a redirect.
 
-    return render_template("pm/service_costs/dashboard.html",
-        summary=summary,
-        providers=providers,
-        recent_entries=recent_entries,
-    )
+    Service costs are half of the Expenses page now. This route still
+    exists because bookmarks, the Sync All redirect and the provider and
+    mapping pages all point at it, and a dead link is a worse answer than
+    a hop.
+    """
+    return redirect(url_for("pm.expenses_list") + "#services")
 
 
 # ── Providers ───────────────────────────────────────────────

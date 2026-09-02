@@ -3101,9 +3101,20 @@ def create_app():
         total_expenses = sum(e.amount for e in all_filtered.all())
 
         projects = Project.query.order_by(Project.name).all()
+
+        # The other half of the page: what the vendors charged. Read here
+        # rather than on its own route, because Expenses and Service Costs
+        # were two sidebar entries answering one question.
+        from service_costs_service import get_cost_summary
+        cost_summary = get_cost_summary(months=6)
+        providers = ServiceProvider.query.filter_by(is_active=True).all()
+        recent_entries = ServiceCostEntry.query.order_by(
+            ServiceCostEntry.created_at.desc()).limit(20).all()
+
         return render_template("pm/expenses/list.html",
             expenses=pagination.items, pagination=pagination, projects=projects,
-            category=category, project_id=project_id, total_expenses=total_expenses)
+            category=category, project_id=project_id, total_expenses=total_expenses,
+            summary=cost_summary, providers=providers, recent_entries=recent_entries)
 
     @pm_bp.route("/expenses/new", methods=["GET", "POST"])
     @login_required
