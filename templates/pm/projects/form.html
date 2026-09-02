@@ -85,6 +85,22 @@
                     </div>
                 </div>
 
+                {# Normally set by the contract that agreed it. Editable here
+                   for the builds that were agreed before this board could
+                   record one, and it is what the Hosting page holds against
+                   what the infrastructure actually costs. #}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Hosting Fee ($)</label>
+                        {{ form.hosting_fee(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="25.00") }}
+                        <p class="text-xs text-surface-500 mt-1">Blank means no fee has been agreed.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Billing Cycle</label>
+                        {{ select_dropdown(form.hosting_cycle.name, form.hosting_cycle.choices, form.hosting_cycle.data or 'monthly', "Monthly", full_width=true) }}
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
                     {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="Additional notes...") }}

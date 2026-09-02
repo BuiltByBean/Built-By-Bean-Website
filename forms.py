@@ -78,6 +78,15 @@ FREQUENCY_CHOICES = [
     ("yearly", "Yearly"),
 ]
 
+# How often the hosting fee is charged. The same three the statement of work
+# and the hosting agreement offer, so a project cannot hold a cycle no contract
+# can express.
+HOSTING_CYCLE_CHOICES = [
+    ("monthly", "Monthly"),
+    ("quarterly", "Quarterly"),
+    ("annually", "Annually"),
+]
+
 EXPENSE_CATEGORY_CHOICES = [
     ("software", "Software"),
     ("hosting", "Hosting"),
@@ -144,6 +153,12 @@ class ProjectForm(FlaskForm):
     budget = FloatField("Budget ($)", validators=[Optional(), NumberRange(min=0)])
     mvp_date = DateField("MVP Delivery Date", validators=[Optional()])
     go_live_date = DateField("Go-Live Date", validators=[Optional()])
+    # Set by the contract that agreed it, editable here for the ones agreed
+    # before this board could record them. Optional and not defaulted: blank
+    # means nobody has set a fee, which is a different thing from a fee of nil.
+    hosting_fee = FloatField("Hosting Fee ($)", validators=[Optional(), NumberRange(min=0)])
+    hosting_cycle = SelectField("Billing Cycle", choices=HOSTING_CYCLE_CHOICES,
+                                default="monthly", validators=[Optional()])
     status = SelectField("Status", choices=PROJECT_STATUS_CHOICES, default="active")
     notes = TextAreaField("Notes", validators=[Optional()])
 
