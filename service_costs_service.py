@@ -470,8 +470,6 @@ def _sync_railway(provider):
         error_msg = data["errors"][0].get("message", "Unknown error") if data["errors"] else "Unknown error"
         raise ValueError(f"Railway API error: {error_msg}")
 
-    projects = data.get("data", {}).get("projects", {}).get("edges", [])
-
     # Railway's API will not tell you what you are spending. Its
     # MetricMeasurement enum is CPU_USAGE, MEMORY_USAGE_GB, DISK_USAGE_GB,
     # NETWORK_TX_GB and friends, and not one value in it is denominated in
@@ -479,35 +477,13 @@ def _sync_railway(provider):
     # workspace queries are Not Authorized for a project token, so the
     # workspace level billing is out of reach as well.
     #
-    # So the account's monthly figure is the one on the provider, set by hand
-    # once, and this books it for the calendar month. Per project splitting is
-    # still available through mappings with their own monthly_cost, for anyone
-    # who wants it later.
-    p_start, p_end = _month_bounds()
-    count = 0
-
-    flat = provider.monthly_cost or 0
-    if flat > 0:
-        count += _record_cost_entry(
-            provider, "railway:account", p_start, p_end, flat,
-            "Railway", {"projects": len(projects)},
-        )
-
-    for edge in projects:
-        node = edge.get("node", {})
-        resource_id = f"railway:{node.get('id', '')}"
-        project_name = node.get("name", "Unknown")
-
-        for mapping in _find_mapping(provider.id, resource_id):
-            cost = mapping.monthly_cost or 0
-            if cost <= 0:
-                continue
-            count += _record_cost_entry(provider, resource_id, p_start, p_end,
-                                        cost, f"Railway - {project_name}", node)
-            break  # _record_cost_entry already writes a row per mapping
-
-    db.session.commit()
-    return count
+    # Costs come in through the Monthly Costs page instead: once a month, per
+    # Railway project, the amount off the Railway usage screen. The request
+    # above still runs, because it is what proves the token works and it is
+    # what the mapping picker reads its project list from, but nothing here
+    # books money. A flat provider figure and a per mapping monthly_cost would
+    # both charge the same amount every month, which is not how Railway bills.
+    return 0
 
 
 # ── Twilio ──────────────────────────────────────────────────

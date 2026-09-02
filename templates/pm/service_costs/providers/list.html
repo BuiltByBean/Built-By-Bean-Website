@@ -66,10 +66,19 @@
                 {% endif %}
             </div>
 
-            <div class="flex items-center gap-2 pt-3 border-t border-surface-700">
+            <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-surface-700">
+                {% if provider.name == 'railway' %}
+                {# Railway's API reports no money, so the sync only lists projects and
+                   the actual amounts get typed in monthly. This is the primary action
+                   for it. #}
+                <a href="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
+                   class="px-3 min-h-[44px] inline-flex items-center text-xs font-semibold rounded-lg btn-brand transition-all">
+                    Monthly costs
+                </a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('service_costs.provider_sync', id=provider.id) }}">
                     <button type="submit" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-900/30 text-brand-400 hover:bg-brand-900/50 transition-colors">
-                        Sync Now
+                        {% if provider.name == 'railway' %}Refresh projects{% else %}Sync Now{% endif %}
                     </button>
                 </form>
                 <a href="{{ url_for('service_costs.provider_edit', id=provider.id) }}" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-700 text-surface-300 hover:bg-surface-600 transition-colors">

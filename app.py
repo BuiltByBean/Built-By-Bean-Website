@@ -3126,15 +3126,21 @@ def create_app():
         # rather than on its own route, because Expenses and Service Costs
         # were two sidebar entries answering one question.
         from service_costs_service import get_cost_summary
+        from pm.service_costs_routes import months_missing_manual_costs
         cost_summary = get_cost_summary(months=6)
         providers = ServiceProvider.query.filter_by(is_active=True).all()
         recent_entries = ServiceCostEntry.query.order_by(
             ServiceCostEntry.created_at.desc()).limit(20).all()
+        # Nudge: manual-entry vendors whose last calendar month has no entries.
+        # The point is that a month with no numbers looks the same as a month
+        # of zero spend, and Railway is never a zero spend month.
+        pending_manual = months_missing_manual_costs(providers, lookback=1)
 
         return render_template("pm/expenses/list.html",
             expenses=pagination.items, pagination=pagination, projects=projects,
             category=category, project_id=project_id, total_expenses=total_expenses,
-            summary=cost_summary, providers=providers, recent_entries=recent_entries)
+            summary=cost_summary, providers=providers, recent_entries=recent_entries,
+            pending_manual=pending_manual)
 
     @pm_bp.route("/expenses/new", methods=["GET", "POST"])
     @login_required

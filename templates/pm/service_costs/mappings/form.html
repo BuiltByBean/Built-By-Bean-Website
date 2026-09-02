@@ -8,6 +8,9 @@
 {% block content %}
 <div x-data="mappingForm()" class="max-w-2xl mx-auto">
     <form method="POST" class="space-y-6">
+        {% if request.args.get('next') %}
+        <input type="hidden" name="next" value="{{ request.args.get('next') }}">
+        {% endif %}
 
         <!-- Provider & Resource -->
         <div class="glass-card p-6 space-y-4">
@@ -19,7 +22,7 @@
                 {% for p in providers %}{% set mf.prov = mf.prov + [(p.id, p.display_name)] %}{% endfor %}
                 {% for c in clients %}{% set mf.cli = mf.cli + [(c.id, c.name)] %}{% endfor %}
                 {% for p in projects %}{% set mf.proj = mf.proj + [(p.id, p.name ~ " (" ~ p.client.name ~ ")")] %}{% endfor %}
-                {{ select_dropdown("provider_id", mf.prov, mapping.provider_id if editing else '', "Select provider...",
+                {{ select_dropdown("provider_id", mf.prov, mapping.provider_id if mapping else '', "Select provider...",
                                    full_width=true, model="providerId", on_change="loadResources()", disabled=editing) }}
             </div>
 
@@ -27,7 +30,7 @@
                 <label class="block text-sm font-medium text-surface-300 mb-1">Resource</label>
                 <div class="relative">
                     <input type="text" name="resource_identifier" x-model="resourceId"
-                           value="{{ mapping.resource_identifier if editing else '' }}"
+                           value="{{ mapping.resource_identifier if mapping else '' }}"
                            class="w-full input-ring px-4 py-2.5 text-sm bg-surface-800 text-white"
                            placeholder="e.g. aws:Amazon Simple Storage Service, railway:project-id" required
                            list="resource-suggestions">
@@ -44,7 +47,7 @@
 
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1">Label (optional)</label>
-                <input type="text" name="resource_label" value="{{ mapping.resource_label if editing else '' }}"
+                <input type="text" name="resource_label" value="{{ mapping.resource_label if mapping else '' }}"
                        class="w-full input-ring px-4 py-2.5 text-sm bg-surface-800 text-white"
                        placeholder="Human-friendly name">
             </div>
@@ -57,11 +60,11 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1">Client</label>
-                    {{ select_dropdown("client_id", mf.cli, mapping.client_id if editing else '', "No client", full_width=true) }}
+                    {{ select_dropdown("client_id", mf.cli, mapping.client_id if mapping else '', "No client", full_width=true) }}
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1">Project (optional)</label>
-                    {{ select_dropdown("project_id", mf.proj, mapping.project_id if editing else '', "No project", full_width=true) }}
+                    {{ select_dropdown("project_id", mf.proj, mapping.project_id if mapping else '', "No project", full_width=true) }}
                 </div>
             </div>
 
@@ -70,7 +73,7 @@
                     <label class="block text-sm font-medium text-surface-300 mb-1">Split Percentage</label>
                     <div class="flex items-center gap-2">
                         <input type="number" name="split_percentage" min="0" max="100" step="0.1"
-                               value="{{ mapping.split_percentage if editing else 100 }}"
+                               value="{{ mapping.split_percentage if mapping else 100 }}"
                                class="w-32 input-ring px-4 py-2.5 text-sm bg-surface-800 text-white">
                         <span class="text-sm text-surface-400">%</span>
                     </div>
@@ -81,7 +84,7 @@
                     <div class="flex items-center gap-2">
                         <span class="text-sm text-surface-400">$</span>
                         <input type="number" name="monthly_cost" min="0" step="0.01"
-                               value="{{ mapping.monthly_cost if editing and mapping.monthly_cost else '' }}"
+                               value="{{ mapping.monthly_cost if mapping and mapping.monthly_cost else '' }}"
                                class="w-32 input-ring px-4 py-2.5 text-sm bg-surface-800 text-white"
                                placeholder="0.00">
                     </div>
@@ -113,8 +116,8 @@
 <script>
 function mappingForm() {
     return {
-        providerId: '{{ mapping.provider_id if editing else '' }}',
-        resourceId: '{{ mapping.resource_identifier if editing else '' }}',
+        providerId: '{{ mapping.provider_id if mapping else '' }}',
+        resourceId: '{{ mapping.resource_identifier if mapping else '' }}',
         resources: [],
         loadingResources: false,
 

@@ -1,0 +1,182 @@
+{% extends "pm/base.html" %}
+
+{#
+  Monthly cost entry for a vendor that has no billing API.
+
+  Railway is the case: its GraphQL exposes CPU, memory, disk and network,
+  none of which is money. Once a month the numbers come off the Railway
+  usage screen into this form. Each project row upserts a ServiceCostEntry
+  keyed on (provider, resource, month), so saving twice corrects rather
+  than doubles.
+
+  Blank or 0 removes an entry for the month, which is the only way to walk
+  a mistaken save back.
+#}
+
+{% block title %}{{ provider.display_name }} Monthly Costs - Built By Bean{% endblock %}
+{% block page_title %}{{ provider.display_name }} monthly costs{% endblock %}
+{% block page_subtitle %}One row per resource, one number per month{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('service_costs.providers_list') }}"
+   class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-800 text-surface-200 hover:bg-surface-700 transition-colors">
+    Providers
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in max-w-3xl">
+
+    <!-- Month picker -->
+    <div class="glass-card p-4">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400 mr-2">Month</span>
+            {% for m in recent_months %}
+            <a href="{{ url_for('service_costs.provider_monthly', id=provider.id, month=m.strftime('%Y-%m')) }}"
+               class="px-3 min-h-[44px] inline-flex items-center text-xs font-medium rounded-lg transition-colors
+                      {% if m == month %}bg-brand-600 text-white{% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
+                {{ m.strftime('%b %Y') }}
+            </a>
+            {% endfor %}
+
+            <form method="GET" action="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
+                  class="flex items-center gap-2 ml-auto">
+                <label class="text-xs text-surface-400">Other</label>
+                <input type="month" name="month" value="{{ month.strftime('%Y-%m') }}"
+                       onchange="this.form.submit()"
+                       class="input-ring px-2 py-1 text-xs bg-surface-800 text-white rounded-lg">
+            </form>
+        </div>
+    </div>
+
+    {#
+      Name matching is offered, never silently applied. The vendor's project
+      names were renamed to line up with the project names here, so an exact
+      match is nearly always right, but "nearly always" is the reason this is
+      a button rather than something that happens on page load.
+    #}
+    {% if suggested %}
+    <form method="POST" action="{{ url_for('service_costs.provider_automap', id=provider.id) }}"
+          class="glass-card p-4 flex flex-wrap items-center gap-3 border-l-4 border-brand-500">
+        <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+        {% for row in suggested %}
+        <input type="hidden" name="map:{{ row.id }}" value="{{ row.suggestion.id }}">
+        {% endfor %}
+        <div class="w-full sm:flex-1 sm:min-w-0">
+            <p class="text-sm font-semibold text-white">
+                {{ suggested|length }} unmapped resource{{ '' if suggested|length == 1 else 's' }}
+                match a project by name
+            </p>
+            <p class="text-xs text-surface-400 mt-0.5">
+                {{ suggested[:4]|map(attribute='label')|join(', ') }}{% if suggested|length > 4 %}, and {{ suggested|length - 4 }} more{% endif %}
+            </p>
+        </div>
+        <button type="submit"
+                class="w-full sm:w-auto px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all shrink-0">
+            Map {{ suggested|length }} by name
+        </button>
+    </form>
+    {% endif %}
+
+    <!-- Entry table -->
+    <form method="POST" action="{{ url_for('service_costs.provider_monthly', id=provider.id) }}">
+        <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+
+        <div class="glass-card">
+            <div class="p-4 border-b border-surface-700 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-white">{{ month.strftime('%B %Y') }}</h3>
+                <span class="text-xs text-surface-400">
+                    {{ rows|length }} resource{{ '' if rows|length == 1 else 's' }}
+                </span>
+            </div>
+
+            {% if rows %}
+            <div class="divide-y divide-surface-800">
+                {% for row in rows %}
+                <div class="p-4 flex flex-wrap items-center gap-3">
+                    <input type="hidden" name="lbl:{{ row.id }}" value="{{ row.label }}">
+
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-white truncate">{{ row.label }}</div>
+                        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            {% if row.historical %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400"
+                                  title="Not in the vendor's current project list">
+                                Historical
+                            </span>
+                            {% endif %}
+                            {% if row.mappings %}
+                                {% for m in row.mappings %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400">
+                                    {% if m.client %}{{ m.client.name }}{% else %}Unassigned{% endif %}
+                                    {% if m.project %} · {{ m.project.name }}{% endif %}
+                                    {% if m.split_percentage and m.split_percentage < 100 %} · {{ m.split_percentage }}%{% endif %}
+                                </span>
+                                {% endfor %}
+                            {% elif row.suggestion %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-brand-900/30 text-brand-300">
+                                    Matches {{ row.suggestion.name }}
+                                    {% if row.suggestion.client %} · {{ row.suggestion.client.name }}{% endif %}
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400">
+                                    Unmapped
+                                </span>
+                                <a href="{{ url_for('service_costs.mapping_create',
+                                        provider_id=provider.id,
+                                        resource_identifier=row.id,
+                                        resource_label=row.label,
+                                        next=url_for('service_costs.provider_monthly',
+                                                     id=provider.id,
+                                                     month=month.strftime('%Y-%m'))) }}"
+                                   class="min-h-[44px] inline-flex items-center px-2 text-brand-400 hover:text-brand-300 font-medium">Map →</a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-sm text-surface-400">$</span>
+                        <input type="number" name="amt:{{ row.id }}" step="0.0001" min="0"
+                               inputmode="decimal"
+                               value="{{ row.amount_str }}"
+                               placeholder="0.00"
+                               class="w-28 min-h-[44px] input-ring px-3 py-2 text-sm text-right bg-surface-800 text-white rounded-lg">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-8 text-center">
+                <p class="text-sm text-surface-400">
+                    No resources found for this provider.
+                </p>
+                <p class="text-xs text-surface-500 mt-1">
+                    Check the provider's credentials, or wait for the first sync to list its projects.
+                </p>
+            </div>
+            {% endif %}
+
+            {% if rows %}
+            <div class="p-4 border-t border-surface-700 flex items-center justify-between">
+                <div class="text-xs text-surface-400">
+                    Blank or 0 removes an entry for this month.
+                </div>
+                <div class="text-sm text-surface-300">
+                    Current total <span class="font-bold text-white">${{ "%.2f"|format(total) }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if rows %}
+        <div class="mt-4 flex items-center gap-3">
+            <button type="submit" class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+                Save {{ month.strftime('%b %Y') }}
+            </button>
+            <a href="{{ url_for('pm.expenses_list') }}#services"
+               class="px-6 min-h-[44px] inline-flex items-center text-sm font-medium text-surface-500 hover:text-surface-300">Cancel</a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
