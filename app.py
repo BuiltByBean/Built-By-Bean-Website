@@ -802,11 +802,15 @@ def create_app():
         # morning.
         overdue = get_overdue_invoices()
         stalled = get_stalled_subscriptions()
+        # The date that quietly turns free work into billable work.
+        from project_phases import maintenance_ending
+        ending = maintenance_ending()
 
         return render_template("pm/dashboard/index.html",
             overdue_invoices=overdue,
             overdue_total=sum(i["amount_due"] for i in overdue),
             stalled_subscriptions=stalled,
+            maintenance_ending=ending,
             total_revenue=total_revenue,
             total_invoiced=total_invoiced,
             total_awaiting=total_awaiting,

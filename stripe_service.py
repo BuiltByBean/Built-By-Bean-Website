@@ -203,11 +203,29 @@ def sync_invoice_from_stripe(local_invoice):
         local_invoice.amount_due = (si.amount_due or 0) / 100.0
         if si.status == "paid" and not local_invoice.paid_at:
             local_invoice.paid_at = datetime.now(timezone.utc)
+            # Somebody paying is the least ambiguous signal there is that
+            # they are a client, and it is the one stage change nobody
+            # remembers to make because the money arriving feels like the
+            # end of the admin rather than the start of it.
+            _mark_client_active(local_invoice)
         return True
     except Exception as e:
         current_app.logger.error(f"Stripe sync invoice error: {e}")
         return False
 
+
+def _mark_client_active(invoice):
+    """Move a client to Active client the first time they pay something.
+
+    Only ever forward, and never off Active client, so this cannot undo a
+    stage set by hand. A payment from somebody marked Not interested is
+    unusual rather than wrong - a returning client, most likely - and the
+    payment is the better evidence of the two.
+    """
+    client = getattr(invoice, "client", None)
+    if client is None or client.stage == "active_client":
+        return
+    client.stage = "active_client"
 
 # ── Dashboard Data ──────────────────────────────────────────
 

@@ -132,3 +132,38 @@ def explain(project, today=None):
     if project.phase == "in_production":
         return "Live, and maintenance is billable."
     return ""
+
+
+def maintenance_ending(within_days=14, grace_days=30, today=None):
+    """Projects whose free maintenance window is about to end, or just has.
+
+    The one transition that costs money to miss. While the window is open
+    every hour on that project is free by contract; the day after, it is
+    billable at the maintenance rate — and nothing announces that, because it
+    is a date passing rather than anything anybody does.
+
+    Returns dicts rather than models so the template does no arithmetic:
+    `days` is negative once the window has closed, and `ended` says which side
+    of it you are on.
+    """
+    today = today or date.today()
+    rows = []
+    for project in Project.query.filter(Project.status.notin_(SKIP_STATUSES)).all():
+        end = project.free_maintenance_end
+        if not end:
+            continue
+        days = (end - today).days
+        # Ahead of it, or recently behind it. A window that closed in March is
+        # not news in September.
+        if days > within_days or days < -grace_days:
+            continue
+        rows.append({
+            "project": project,
+            "client": project.client,
+            "ends_on": end,
+            "days": days,
+            "ended": days < 0,
+        })
+    # Whatever is closest to the line first, ended ones ahead of upcoming.
+    rows.sort(key=lambda r: r["days"])
+    return rows
