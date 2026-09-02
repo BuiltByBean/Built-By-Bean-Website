@@ -3,55 +3,33 @@
 {#
   Everything going out, on one page.
 
-  These were two sidebar entries — Expenses and Service Costs — which is two
-  places to look for the answer to one question. They are halves of the same
-  thing: what I paid, and what the vendors charged. The switch picks which
-  half; the page is the same page.
-
-  Which half is open lives in the hash, because both halves have filters and
-  actions that reload, and coming back to the wrong one every time is how a
-  merged page ends up feeling like two pages again.
+  These were two sidebar entries, then one page with two tabs, which is still
+  two places to look for the answer to one question. They are not two things.
+  A vendor charge already writes an expense, so there is one ledger, and what
+  used to be the Service Costs half is a way of reading it: which vendor, which
+  client, which month. One filter set drives all of it, so the totals at the top
+  and the rows underneath are always the same money.
 #}
 
+{% block title %}Expenses - Built By Bean{% endblock %}
 {% block page_title %}Expenses{% endblock %}
 {% block page_subtitle %}What I paid, and what the vendors charged{% endblock %}
 
 {% block header_actions %}
 <a href="{{ url_for('pm.expense_create') }}"
-   class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+   class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
     Add Expense
 </a>
 {% endblock %}
 
 {% block content %}
-<div x-data="{
-        view: window.location.hash === '#services' ? 'services' : 'expenses',
-        pick(v) {
-            this.view = v;
-            history.replaceState(null, '', v === 'services' ? '#services' : '#expenses');
-        },
-     }" x-cloak>
+<div class="space-y-6 stagger-in">
 
-    <div class="flex gap-1 mb-6 p-1 glass-card w-full sm:w-fit">
-        <button type="button" @click="pick('expenses')"
-                :class="view === 'expenses' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
-                class="flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg transition-colors">
-            What I paid
-        </button>
-        <button type="button" @click="pick('services')"
-                :class="view === 'services' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
-                class="flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg transition-colors">
-            Service costs
-        </button>
-    </div>
+    {% include "pm/expenses/_vendors.html" %}
+    {% include "pm/expenses/_totals.html" %}
+    {% include "pm/expenses/_ledger.html" %}
+    {% include "pm/expenses/_breakdown.html" %}
 
-    <div x-show="view === 'expenses'">
-        {% include "pm/expenses/_manual.html" %}
-    </div>
-
-    <div x-show="view === 'services'">
-        {% include "pm/expenses/_services.html" %}
-    </div>
 </div>
 {% endblock %}

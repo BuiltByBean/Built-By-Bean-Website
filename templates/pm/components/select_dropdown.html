@@ -64,7 +64,11 @@
                  focus:outline-none focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/25
                  disabled:opacity-50 disabled:cursor-not-allowed
                  transition-all duration-150 cursor-pointer
-                 {% if sm %}text-xs rounded-lg pl-2.5 pr-1.5 py-2{% else %}text-sm rounded-full pl-4 pr-3 py-2.5{% endif %}"
+                 {# The full-size variant is a thumb target, so it is pinned to
+                    44px rather than left at whatever the padding happens to
+                    produce. Padding alone gave 42, which is close enough to
+                    look right and not close enough to hit. #}
+                 {% if sm %}text-xs rounded-lg pl-2.5 pr-1.5 py-2{% else %}text-sm rounded-full pl-4 pr-3 py-2.5 min-h-[44px]{% endif %}"
           :class="{ 'border-brand-500/70 ring-[3px] ring-brand-500/25': open }">
     <span class="truncate" :class="{ 'text-surface-500': !chosen }" x-text="label">{{ placeholder }}</span>
     <svg class="{% if sm %}w-3.5 h-3.5{% else %}w-4 h-4{% endif %} shrink-0 text-surface-500 transition-transform duration-200"

@@ -9,7 +9,7 @@
     <div class="flex items-center gap-1">
         {% if pagination.has_prev %}
         <a href="{{ url_for(endpoint, page=pagination.prev_num, **extra_args) }}"
-           class="px-3 py-1.5 text-sm rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors">
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 text-sm rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors">
             Prev
         </a>
         {% endif %}
@@ -17,7 +17,7 @@
         {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
             {% if page_num %}
                 <a href="{{ url_for(endpoint, page=page_num, **extra_args) }}"
-                   class="px-3 py-1.5 text-sm rounded-lg transition-colors
+                   class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 text-sm rounded-lg transition-colors
                           {% if page_num == pagination.page %}bg-brand-600 text-white shadow-sm
                           {% else %}bg-surface-800 hover:bg-surface-700 text-surface-300{% endif %}">
                     {{ page_num }}
@@ -29,7 +29,7 @@
 
         {% if pagination.has_next %}
         <a href="{{ url_for(endpoint, page=pagination.next_num, **extra_args) }}"
-           class="px-3 py-1.5 text-sm rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors">
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 text-sm rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors">
             Next
         </a>
         {% endif %}

@@ -168,7 +168,7 @@
             <button type="submit" class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
                 Save {{ month.strftime('%b %Y') }}
             </button>
-            <a href="{{ url_for('pm.expenses_list') }}#services"
+            <a href="{{ url_for('pm.expenses_list') }}"
                class="px-6 min-h-[44px] inline-flex items-center text-sm font-medium text-surface-500 hover:text-surface-300">Cancel</a>
         </div>
         {% endif %}

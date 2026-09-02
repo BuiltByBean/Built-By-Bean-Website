@@ -1,0 +1,80 @@
+{#
+  The same money, cut three ways: who charged it, who it was for, and when.
+
+  All three read the filtered ledger above rather than a query of their own, so
+  narrowing to one client narrows these too and the bars always add up to the
+  total on the card.
+#}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+
+    <div class="glass-card p-4 sm:p-6">
+        <h3 class="text-base font-bold text-white mb-4">By vendor</h3>
+        {% if summary.by_vendor %}
+        <div class="space-y-3">
+            {% for name, amount in summary.by_vendor.items() %}
+            <div class="flex items-center justify-between gap-3">
+                <span class="text-sm text-surface-300 truncate min-w-0">{{ name }}</span>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    <div class="w-20 sm:w-32 h-2 rounded-full bg-surface-700 overflow-hidden">
+                        <div class="h-full rounded-full bg-brand-500" style="width: {{ (amount / summary.total * 100)|round(1) if summary.total > 0 else 0 }}%"></div>
+                    </div>
+                    <span class="text-sm font-bold text-white w-20 text-right">{{ amount|format_currency }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400 py-8 text-center">Nothing to break down yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="glass-card p-4 sm:p-6">
+        <h3 class="text-base font-bold text-white mb-4">By client</h3>
+        {% if summary.by_client %}
+        <div class="space-y-3">
+            {% for name, amount in summary.by_client.items() %}
+            <div class="flex items-center justify-between gap-3">
+                <span class="text-sm truncate min-w-0 {{ 'text-amber-500' if name == 'Unallocated' else 'text-surface-300' }}">{{ name }}</span>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    <div class="w-20 sm:w-32 h-2 rounded-full bg-surface-700 overflow-hidden">
+                        <div class="h-full rounded-full {{ 'bg-amber-500' if name == 'Unallocated' else 'bg-emerald-500' }}" style="width: {{ (amount / summary.total * 100)|round(1) if summary.total > 0 else 0 }}%"></div>
+                    </div>
+                    <span class="text-sm font-bold text-white w-20 text-right">{{ amount|format_currency }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400 py-8 text-center">Nothing allocated to a client yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if summary.by_month %}
+<div class="glass-card p-4 sm:p-6">
+    <h3 class="text-base font-bold text-white mb-4">Last six months</h3>
+    {#
+      Bars are sized in pixels, not percentages.
+
+      A percentage height resolves against the parent's height, and this column
+      has none of its own - it is sized by its contents. So every bar was asking
+      for a share of nothing and rendering as a hairline, leaving a chart of
+      floating labels. h-full plus justify-end gives the column a real height
+      and stands the bars on the floor of it.
+    #}
+    <div class="flex items-end gap-2 h-48">
+        {% set max_val = summary.by_month.values()|max if summary.by_month.values()|list else 0 %}
+        {% for month, amount in summary.by_month.items() %}
+        <div class="flex-1 flex flex-col items-center justify-end gap-1 h-full min-w-0">
+            <span class="text-xs font-medium text-white whitespace-nowrap">{{ amount|format_currency }}</span>
+            {# A floor of 2px so a small month is still a visible mark rather
+               than disappearing into the axis. #}
+            <div class="w-full bg-gradient-to-t from-brand-500 to-brand-400 rounded-t-lg transition-all"
+                 style="height: {{ [2, (amount / max_val * 130)|round(1)]|max if max_val > 0 else 2 }}px"
+                 title="{{ month }}: {{ amount|format_currency }}"></div>
+            <span class="text-xs text-surface-400 whitespace-nowrap">{{ month }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

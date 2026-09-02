@@ -4,7 +4,7 @@
 {% from "pm/components/back_link.html" import back_link %}
 
 {% block title %}Resource Mappings - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('pm.expenses_list') ~ '#services', 'Expenses') }}{% endblock %}
+{% block back %}{{ back_link(url_for('pm.expenses_list'), 'Expenses') }}{% endblock %}
 {% block page_title %}Resource Mappings{% endblock %}
 {% block page_subtitle %}Map service resources to clients and projects{% endblock %}
 

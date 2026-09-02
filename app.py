@@ -242,6 +242,10 @@ def create_app():
     from pm.service_costs_routes import service_costs_bp
     app.register_blueprint(service_costs_bp)
 
+    # ── Hosting margin ──────────────────────────────────────
+    from pm.hosting_routes import hosting_bp
+    app.register_blueprint(hosting_bp)
+
     # ── Vendor Playbooks ────────────────────────────────────
     from pm.playbooks_routes import playbooks_bp
     app.register_blueprint(playbooks_bp)
@@ -1094,6 +1098,8 @@ def create_app():
                 budget=form.budget.data,
                 mvp_date=form.mvp_date.data,
                 go_live_date=form.go_live_date.data,
+                hosting_fee=form.hosting_fee.data,
+                hosting_cycle=form.hosting_cycle.data or "monthly",
                 notes=form.notes.data or "",
             )
             db.session.add(project)
@@ -2621,7 +2627,13 @@ def create_app():
         pdf.set_text_color(*GRAY)
         pdf.multi_cell(0, 5, "Server hosting, data storage, SSL certificates, domain management, and routine infrastructure upkeep.", align="L")
         pdf.ln(3)
-        body_text("This fee covers the cost of keeping the application live and accessible. It does not include development work, which is billed under Sections 5 and 6. The hosting fee may be adjusted with 30 days written notice to reflect changes in infrastructure requirements or third-party provider pricing.")
+        body_text("This fee covers the cost of keeping the application live and accessible. It does not include development work, which is billed under Sections 5 and 6.")
+        # The same words as the standalone Hosting & Infrastructure Agreement,
+        # read from the one place they are written. A SOW signed today and a
+        # hosting agreement signed next year must not describe the same right
+        # two different ways.
+        import contract_docs
+        body_text(sanitize(contract_docs.HOSTING_PRICE_CHANGE))
 
         # Section 8 - General Terms (no termination clause, $50/day late fee)
         section_heading("8. General Terms")
@@ -2801,6 +2813,15 @@ def create_app():
                 project.maintenance_days = maint_days
                 project.phase = "contracted"
                 project.budget = price_val
+                # What Section 7 just committed them to. Kept on the project so
+                # the hosting page can hold it against what the infrastructure
+                # for this project actually costs; typed into a PDF and nowhere
+                # else, it was a number nobody could ever check.
+                try:
+                    project.hosting_fee = float(str(hosting_fee).replace(",", "").replace("$", ""))
+                except (ValueError, TypeError):
+                    pass
+                project.hosting_cycle = hosting_cycle or "monthly"
             db.session.commit()
 
         if not request.form.get("previewed"):
@@ -3136,36 +3157,85 @@ def create_app():
         page = request.args.get("page", 1, type=int)
         category = request.args.get("category", "")
         project_id = request.args.get("project_id", "", type=str)
+        client_id = request.args.get("client_id", "", type=str)
 
         # Only real (material) expenses — time-entry-linked "billable time" rows are
         # pipeline revenue, not expenses, and are shown on the Time Tracking side.
-        query = Expense.query.filter(Expense.time_entry_id.is_(None)).outerjoin(Client, Expense.client_id == Client.id).outerjoin(Project, Expense.project_id == Project.id).outerjoin(Ticket, Expense.ticket_id == Ticket.id)
-        if category:
-            query = query.filter(Expense.category == category)
-        if project_id:
-            query = query.filter(Expense.project_id == int(project_id))
+        def _filtered(q):
+            if category:
+                q = q.filter(Expense.category == category)
+            if project_id:
+                q = q.filter(Expense.project_id == int(project_id))
+            if client_id:
+                q = q.filter(Expense.client_id == int(client_id))
+            return q
 
-        query = query.order_by(Expense.date.desc())
-        pagination = query.paginate(page=page, per_page=20, error_out=False)
+        query = _filtered(Expense.query.filter(Expense.time_entry_id.is_(None))
+                          .outerjoin(Client, Expense.client_id == Client.id)
+                          .outerjoin(Project, Expense.project_id == Project.id)
+                          .outerjoin(Ticket, Expense.ticket_id == Ticket.id))
+        pagination = query.order_by(Expense.date.desc()).paginate(
+            page=page, per_page=20, error_out=False)
 
-        all_filtered = Expense.query.filter(Expense.time_entry_id.is_(None))
-        if category:
-            all_filtered = all_filtered.filter(Expense.category == category)
-        if project_id:
-            all_filtered = all_filtered.filter(Expense.project_id == int(project_id))
-        total_expenses = sum(e.amount for e in all_filtered.all())
+        # Every figure on this page comes off this one list.
+        #
+        # It used to come off two. What I paid was the filtered expense total;
+        # what the vendors charged was every cost entry of the last six months,
+        # filtered by nothing. So the two halves shared a page and disagreed
+        # with each other, and neither was the answer to "what went out". A
+        # vendor charge already writes an Expense, so the ledger is the whole
+        # truth and the vendor breakdown is a way of reading it.
+        rows = _filtered(Expense.query.filter(Expense.time_entry_id.is_(None))).all()
+        total_expenses = sum(e.amount for e in rows)
+
+        # expense id -> the vendor that charged it, in one query rather than
+        # one per row. Absent means I spent it directly. The provider and the
+        # period ride along so a row's action can go to the page that actually
+        # governs the number, which is never the expense form.
+        vendor_by_expense = {
+            eid: {"provider_id": pid, "label": label, "name": name,
+                  "month": start.strftime("%Y-%m") if start else ""}
+            for eid, pid, label, name, start in
+            db.session.query(ServiceCostEntry.expense_id, ServiceProvider.id,
+                             ServiceProvider.display_name, ServiceProvider.name,
+                             ServiceCostEntry.period_start)
+            .join(ServiceProvider, ServiceCostEntry.provider_id == ServiceProvider.id)
+            .filter(ServiceCostEntry.expense_id.isnot(None)).all()
+        }
+
+        vendor_total = sum(e.amount for e in rows if e.id in vendor_by_expense)
+        unallocated = sum(e.amount for e in rows if e.client_id is None)
+
+        by_vendor, by_client, by_month = {}, {}, {}
+        for e in rows:
+            who = vendor_by_expense.get(e.id, {}).get("label", "Direct spending")
+            by_vendor[who] = by_vendor.get(who, 0.0) + e.amount
+            name = e.client.name if e.client else "Unallocated"
+            by_client[name] = by_client.get(name, 0.0) + e.amount
+            if e.date:
+                key = e.date.strftime("%Y-%m")
+                by_month[key] = by_month.get(key, 0.0) + e.amount
+
+        # Newest last, so the trend reads left to right, and only the recent
+        # stretch: a chart of every month there has ever been is unreadable
+        # by the second year.
+        recent_months = sorted(by_month)[-6:]
+        summary = {
+            "total": total_expenses,
+            "vendor_total": vendor_total,
+            "allocated": total_expenses - unallocated,
+            "unallocated": unallocated,
+            "by_vendor": dict(sorted(by_vendor.items(), key=lambda kv: -kv[1])),
+            "by_client": dict(sorted(by_client.items(), key=lambda kv: -kv[1])),
+            "by_month": {m: by_month[m] for m in recent_months},
+        }
 
         projects = Project.query.order_by(Project.name).all()
+        clients = Client.query.order_by(Client.name).all()
 
-        # The other half of the page: what the vendors charged. Read here
-        # rather than on its own route, because Expenses and Service Costs
-        # were two sidebar entries answering one question.
-        from service_costs_service import get_cost_summary
-        from pm.service_costs_routes import months_missing_manual_costs
-        cost_summary = get_cost_summary(months=6)
-        providers = ServiceProvider.query.filter_by(is_active=True).all()
-        recent_entries = ServiceCostEntry.query.order_by(
-            ServiceCostEntry.created_at.desc()).limit(20).all()
+        from pm.service_costs_routes import months_missing_manual_costs, MANUAL_MONTHLY_PROVIDERS
+        providers = ServiceProvider.query.filter_by(is_active=True).order_by(
+            ServiceProvider.display_name).all()
         # Nudge: manual-entry vendors whose last calendar month has no entries.
         # The point is that a month with no numbers looks the same as a month
         # of zero spend, and Railway is never a zero spend month.
@@ -3173,9 +3243,10 @@ def create_app():
 
         return render_template("pm/expenses/list.html",
             expenses=pagination.items, pagination=pagination, projects=projects,
-            category=category, project_id=project_id, total_expenses=total_expenses,
-            summary=cost_summary, providers=providers, recent_entries=recent_entries,
-            pending_manual=pending_manual)
+            clients=clients, category=category, project_id=project_id,
+            client_id=client_id, total_expenses=total_expenses, summary=summary,
+            providers=providers, vendor_by_expense=vendor_by_expense,
+            manual_monthly=MANUAL_MONTHLY_PROVIDERS, pending_manual=pending_manual)
 
     @pm_bp.route("/expenses/new", methods=["GET", "POST"])
     @login_required
