@@ -107,7 +107,16 @@
                             <p class="sm:hidden text-xs text-surface-500 mt-0.5">costs {{ r.last|format_currency }}</p>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-right text-surface-200 whitespace-nowrap hidden sm:table-cell">{{ r.last|format_currency }}</td>
+                        {# Saying how much of the cost is a yearly charge being
+                           spread, because otherwise this number disagrees with
+                           the vendor's own monthly figure and there is nothing
+                           on the page to explain the gap. #}
+                        <td class="px-4 py-3 text-right text-surface-200 whitespace-nowrap hidden sm:table-cell">
+                            {{ r.last|format_currency }}
+                            {% if r.annual_share %}
+                            <p class="text-xs text-surface-500">incl. {{ r.annual_share|format_currency }} domain</p>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3 text-right text-surface-300 whitespace-nowrap hidden md:table-cell">
                             {{ r.average|format_currency }}
                             {% if r.months_recorded and r.months_recorded < months|length %}
@@ -142,7 +151,10 @@
     <p class="text-xs text-surface-500">
         Costs come from the service mappings, over the last {{ months|length }} complete
         months. The month in progress is left out, because a month three days old
-        makes everything look cheap. Status is judged on whichever is worse, last
+        makes everything look cheap. A charge that buys a year, like a domain
+        registration, is spread across the twelve months it covers rather than
+        landing on the month it was invoiced; the expense ledger still keeps it
+        whole, on its real date. Status is judged on whichever is worse, last
         month or the average: at {{ watch_at }}% of the fee it is worth watching, at
         {{ raise_at }}% it is worth raising, and the fee still has to cover the time
         spent keeping the thing alive on top of the infrastructure.

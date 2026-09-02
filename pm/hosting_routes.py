@@ -33,6 +33,30 @@ hosting_bp = Blueprint("hosting", __name__, url_prefix="/admin/hosting")
 WATCH_AT = 0.60
 RAISE_AT = 0.80
 
+# Charges that buy a year in one payment. A domain registration is the case:
+# it arrives as a single invoice in the month it renews, and bucketing the
+# whole thing into that month compares a year of cost against a month of fee.
+# kuperplumbing.com renewed at $10.46 in August against a $50 monthly fee and
+# read as $11.39 of cost; datadungeon.io renews at $50.00, which against a $50
+# fee would have read as losing money for one month and recovering by itself
+# the next. That spike-and-recover is the exact false alarm this page exists
+# not to raise, so an annual charge is spread across the twelve months it
+# actually buys.
+#
+# Only this comparison is annualised. The ledger keeps the real charge in the
+# real month, so the books still agree with the card statement.
+ANNUAL_PREFIXES = ("cloudflare-domain:",)
+ANNUAL_MONTHS = 12
+
+
+def _is_annual(resource_identifier):
+    return (resource_identifier or "").startswith(ANNUAL_PREFIXES)
+
+
+def _add_months(when, count):
+    month = when.month - 1 + count
+    return date(when.year + month // 12, month % 12 + 1, 1)
+
 
 def _complete_months(count):
     """The last `count` complete calendar months, oldest first.
@@ -51,7 +75,11 @@ def _complete_months(count):
 
 
 def _costs_by_project(months):
-    """{project_id: {month_start: cost}} over the given months.
+    """Cost per project per month, as (total, the annualised part of it).
+
+    Both are {project_id: {month_start: amount}}. The second is a subset of the
+    first, kept apart only so a row can say how much of its cost is a yearly
+    charge being spread rather than money that actually moved that month.
 
     Bucketed on period_end rather than period_start because providers do not
     agree on what a period is: a monthly entry spans the calendar month, a flat
@@ -60,28 +88,50 @@ def _costs_by_project(months):
     belongs to, and it is what the mirrored expense is dated by.
     """
     if not months:
-        return {}
+        return {}, {}
     window_start = months[0]
     wanted = set(months)
 
+    # A year bought eleven months before the window is still paying for months
+    # inside it, so annual charges have to be fetched from further back than
+    # the window itself. Monthly entries from those extra months are filtered
+    # out below by `wanted`.
+    fetch_start = _add_months(window_start, -(ANNUAL_MONTHS - 1))
+
     rows = (db.session.query(ServiceMapping.project_id,
+                             ServiceCostEntry.resource_identifier,
                              ServiceCostEntry.period_end,
                              ServiceCostEntry.allocated_amount)
             .join(ServiceCostEntry, ServiceCostEntry.mapping_id == ServiceMapping.id)
             .filter(ServiceMapping.project_id.isnot(None))
-            .filter(ServiceCostEntry.period_end >= window_start)
+            .filter(ServiceCostEntry.period_end >= fetch_start)
             .all())
 
     out = {}
-    for project_id, period_end, amount in rows:
+    annual = {}
+    for project_id, resource_id, period_end, amount in rows:
         if period_end is None:
             continue
         month = period_end.replace(day=1)
-        if month not in wanted:
-            continue
-        out.setdefault(project_id, {})[month] = (
-            out.setdefault(project_id, {}).get(month, 0.0) + (amount or 0.0))
-    return out
+        amount = amount or 0.0
+
+        if _is_annual(resource_id):
+            share = amount / ANNUAL_MONTHS
+            covered = [_add_months(month, i) for i in range(ANNUAL_MONTHS)]
+            spread = [(m, share) for m in covered if m in wanted]
+            target = annual
+        else:
+            spread = [(month, amount)] if month in wanted else []
+            target = None
+
+        for m, value in spread:
+            bucket = out.setdefault(project_id, {})
+            bucket[m] = bucket.get(m, 0.0) + value
+            if target is not None:
+                bucket = target.setdefault(project_id, {})
+                bucket[m] = bucket.get(m, 0.0) + value
+
+    return out, annual
 
 
 def _status(fee, cost):
@@ -118,7 +168,7 @@ STATUS_ORDER = {"loss": 0, "raise": 1, "watch": 2, "unpriced": 3, "fine": 4}
 @login_required
 def hosting_index():
     months = _complete_months(request.args.get("months", 3, type=int) or 3)
-    costs = _costs_by_project(months)
+    costs, annualised = _costs_by_project(months)
 
     projects = (Project.query.join(Client, Project.client_id == Client.id)
                 .order_by(Client.name, Project.name).all())
@@ -137,6 +187,10 @@ def hosting_index():
         average = sum(recorded) / len(recorded) if recorded else 0.0
         fee = p.monthly_hosting_fee
         key, label = _status(fee, max(last, average))
+        # The spread portion of the most recent month, which is the one the
+        # row shows. It is the same figure in every month a year covers, so
+        # taking it from the last is not a choice about which month to report.
+        annual_share = annualised.get(p.id, {}).get(months[-1], 0.0) if months else 0.0
         rows.append({
             "project": p,
             "fee": fee,
@@ -144,6 +198,7 @@ def hosting_index():
             "cycle": p.hosting_cycle or "monthly",
             "last": last,
             "average": average,
+            "annual_share": annual_share,
             "months_recorded": len(recorded),
             "series": [by_month.get(m, 0.0) for m in months],
             "margin": (fee - max(last, average)) if fee is not None else None,
