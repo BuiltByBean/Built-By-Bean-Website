@@ -102,7 +102,11 @@
                         </p>
                     </td>
 
-                    <td class="py-3 px-4 text-sm hidden lg:table-cell">
+                    {# nowrap on both: the What cell is w-full and takes every
+                       pixel these two do not claim, so without it a client name
+                       and a category label each wrap to two lines to give space
+                       to a column that was going to truncate anyway. #}
+                    <td class="py-3 px-4 text-sm whitespace-nowrap hidden lg:table-cell">
                         {% if expense.client %}
                         <a href="{{ url_for('pm.client_detail', id=expense.client.id) }}" class="text-surface-300 hover:text-brand-300 transition-colors">{{ expense.client.name }}</a>
                         {% elif vendor %}
@@ -112,7 +116,7 @@
                         {% endif %}
                     </td>
 
-                    <td class="py-3 px-4 text-center hidden md:table-cell">
+                    <td class="py-3 px-4 text-center whitespace-nowrap hidden md:table-cell">
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-800 text-surface-300">{{ cat_labels.get(expense.category, expense.category) }}</span>
                         {% if expense.is_auto_generated %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-900/30 text-amber-400 ml-1">Auto</span>

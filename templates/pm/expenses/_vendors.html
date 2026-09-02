@@ -4,6 +4,11 @@
   Above the totals because it is the thing that makes the totals wrong when it
   is neglected: a month nobody has entered looks exactly like a month that cost
   nothing. The nudge is the loud version of the same point.
+
+  A healthy vendor is a number here, not a chip. Drawing one bordered pill per
+  vendor gave a failed Stripe sync exactly the same weight as three vendors that
+  were fine, repeated the same date four times, and wrapped onto a second line
+  to do it. Only a vendor with something to do earns its own control.
 #}
 
 {% for provider, missing_month in pending_manual %}
@@ -25,63 +30,51 @@
 </div>
 {% endfor %}
 
-<div class="glass-card p-4 sm:p-5">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">Vendors</h3>
-        <div class="flex flex-wrap items-center gap-2">
+<div class="glass-card px-4 sm:px-5 py-3">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+
+        <div class="flex items-baseline gap-2.5 min-w-0 mr-auto">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">Vendors</h3>
+            {% if vendors.summary %}
+            <p class="text-xs text-surface-500 truncate">{{ vendors.summary }}</p>
+            {% endif %}
+        </div>
+
+        {# Only what needs doing. Manual entry is the common one and reads as
+           the primary action; a failed sync is red because it is the one thing
+           here that is actually wrong. #}
+        {% for v in vendors.attention %}
+        {% set tone = {'manual': 'border-brand-500/40 bg-brand-500/5 text-brand-300 hover:bg-brand-500/10',
+                       'failed': 'border-red-500/40 bg-red-500/5 text-red-300 hover:bg-red-500/10',
+                       'stale':  'border-amber-500/40 bg-amber-500/5 text-amber-300 hover:bg-amber-500/10'}[v.tone] %}
+        <a href="{{ v.href }}" {% if v.provider.sync_error %}title="{{ v.provider.sync_error }}"{% endif %}
+           class="inline-flex items-center gap-2 px-3 min-h-[44px] text-sm rounded-xl border transition-colors {{ tone }}">
+            <span class="font-medium">{{ v.provider.display_name }}</span>
+            <span class="text-xs opacity-75">{{ v.note }}</span>
+        </a>
+        {% endfor %}
+
+        {# Reference, not action: quieter than anything above, and last.
+           Wrapping, because three of them plus a vendor needing attention is
+           wider than 375px and the last one was hanging off the card. #}
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
             <a href="{{ url_for('service_costs.mappings_list') }}"
-               class="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+               class="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-xl text-surface-400 hover:text-surface-200 hover:bg-white/5 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5"/></svg>
                 Mappings
             </a>
             <a href="{{ url_for('service_costs.providers_list') }}"
-               class="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+               class="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-xl text-surface-400 hover:text-surface-200 hover:bg-white/5 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
                 Providers
             </a>
             <form method="POST" action="{{ url_for('service_costs.sync_all') }}">
-                <button type="submit"
-                        class="inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
+                <button type="submit" title="Pull the latest charges from every vendor that reports them"
+                        class="inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] min-w-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                    Sync all
+                    Sync
                 </button>
             </form>
         </div>
     </div>
-
-    {% if providers %}
-    <div class="flex flex-wrap gap-2">
-        {% for p in providers %}
-        {#
-          A vendor whose numbers are typed in gets a button, because there is
-          something to do. One whose sync reads real amounts gets a chip saying
-          when it last managed to, because there is not.
-        #}
-        {% if p.name in manual_monthly %}
-        <a href="{{ url_for('service_costs.provider_monthly', id=p.id) }}"
-           class="inline-flex items-center gap-2 px-3 min-h-[44px] text-sm rounded-xl border border-brand-500/40 bg-brand-500/5 text-brand-300 hover:bg-brand-500/10 transition-colors">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-            <span class="font-medium">{{ p.display_name }}</span>
-            <span class="text-xs text-brand-400/80">enter monthly</span>
-        </a>
-        {% else %}
-        <span class="inline-flex items-center gap-2 px-3 min-h-[44px] text-sm rounded-xl border border-white/10 text-surface-300
-                     {% if p.sync_error %}border-red-500/40{% endif %}"
-              {% if p.sync_error %}title="{{ p.sync_error }}"{% endif %}>
-            <span class="font-medium">{{ p.display_name }}</span>
-            <span class="text-xs {{ 'text-red-400' if p.sync_error else 'text-surface-500' }}">
-                {%- if p.sync_error -%}sync failed
-                {%- elif p.last_sync_at -%}synced {{ p.last_sync_at.date()|format_date }}
-                {%- else -%}never synced{%- endif -%}
-            </span>
-        </span>
-        {% endif %}
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="text-sm text-surface-400">
-        No vendors yet. Add one and its charges land in the ledger below, against
-        the client they belong to.
-    </p>
-    {% endif %}
 </div>

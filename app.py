@@ -3233,7 +3233,9 @@ def create_app():
         projects = Project.query.order_by(Project.name).all()
         clients = Client.query.order_by(Client.name).all()
 
-        from pm.service_costs_routes import months_missing_manual_costs, MANUAL_MONTHLY_PROVIDERS
+        from pm.service_costs_routes import (
+            months_missing_manual_costs, vendor_health, MANUAL_MONTHLY_PROVIDERS,
+        )
         providers = ServiceProvider.query.filter_by(is_active=True).order_by(
             ServiceProvider.display_name).all()
         # Nudge: manual-entry vendors whose last calendar month has no entries.
@@ -3245,7 +3247,8 @@ def create_app():
             expenses=pagination.items, pagination=pagination, projects=projects,
             clients=clients, category=category, project_id=project_id,
             client_id=client_id, total_expenses=total_expenses, summary=summary,
-            providers=providers, vendor_by_expense=vendor_by_expense,
+            providers=providers, vendors=vendor_health(providers),
+            vendor_by_expense=vendor_by_expense,
             manual_monthly=MANUAL_MONTHLY_PROVIDERS, pending_manual=pending_manual)
 
     @pm_bp.route("/expenses/new", methods=["GET", "POST"])

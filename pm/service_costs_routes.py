@@ -6,6 +6,7 @@ from flask import (
     Blueprint, render_template, redirect, url_for, flash, request,
     abort, jsonify,
 )
+
 from flask_login import login_required
 
 from models import db, Client, Project, ServiceProvider, ServiceMapping, ServiceCostEntry
@@ -721,6 +722,72 @@ def _prune_stale_allocations(provider, resource_id, p_start, p_end):
         # no-mapping row is then the correct and only row.
         if valid or e.mapping_id is not None:
             _discard_entry(e)
+
+
+STALE_AFTER_DAYS = 3
+
+
+def vendor_health(providers):
+    """Which vendors need something, and a count for the ones that do not.
+
+    The Expenses page used to draw one bordered chip per vendor, all the same
+    weight, most of them reading "synced" and the same date. Five of those wrap
+    onto two lines and say almost nothing: the useful content was one failure
+    and one vendor waiting to be typed into, and both were camouflaged by the
+    three that were fine.
+
+    So a healthy vendor is a number here, not a chip. Only the ones with
+    something to do come back individually, each with the reason and where to
+    go about it.
+    """
+    attention, healthy, oldest = [], 0, None
+    now = datetime.now(timezone.utc)
+
+    for p in providers:
+        if p.name in MANUAL_MONTHLY_PROVIDERS:
+            attention.append({
+                "provider": p, "tone": "manual", "note": "enter monthly",
+                "href": url_for("service_costs.provider_monthly", id=p.id),
+            })
+            continue
+        if p.sync_error:
+            attention.append({
+                "provider": p, "tone": "failed", "note": "sync failed",
+                "href": url_for("service_costs.providers_list"),
+            })
+            continue
+
+        last = p.last_sync_at
+        if last is None:
+            attention.append({
+                "provider": p, "tone": "stale", "note": "never synced",
+                "href": url_for("service_costs.providers_list"),
+            })
+            continue
+        # Stored through a column with no timezone, so it can come back naive
+        # even though it was written aware. Comparing the two raises.
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if (now - last).days >= STALE_AFTER_DAYS:
+            attention.append({
+                "provider": p, "tone": "stale",
+                "note": f"last synced {last:%b %d}",
+                "href": url_for("service_costs.providers_list"),
+            })
+            continue
+
+        healthy += 1
+        if oldest is None or last < oldest:
+            oldest = last
+
+    if healthy == 0:
+        summary = "" if attention else "No vendors yet"
+    elif oldest is not None and oldest.date() == now.date():
+        summary = f"{healthy} synced today"
+    else:
+        summary = f"{healthy} synced, oldest {oldest:%b %d}"
+
+    return {"attention": attention, "healthy": healthy, "summary": summary}
 
 
 def months_missing_manual_costs(providers, lookback=1):
