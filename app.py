@@ -21,7 +21,8 @@ import signadoc_service
 import time
 from tax_engine import compute as tax_compute
 from models import (
-    db, Client, Project, Ticket, TicketNote, Expense, TimeEntry, Document, User,
+    db, Client, ClientContact, Project, Ticket, TicketNote, Expense, TimeEntry,
+    Document, User,
     Invoice, InvoiceLineItem, TimerSession, TaxSetting,
     ServiceProvider, ServiceCostEntry,
     Playbook, PlaybookStep, ProjectPlaybook, ProjectPlaybookStep,
@@ -29,9 +30,11 @@ from models import (
     TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_CLOSED_STATUSES,
     TICKET_PRIORITIES, TICKET_PRIORITY_LABELS,
     TICKET_BILLING_BUCKETS, TICKET_BILLING_LABELS, TICKET_BILLING_RATES,
+    CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES,
 )
 from forms import (
-    ClientForm, ProjectForm, TicketForm, ExpenseForm, TimeEntryForm, LoginForm,
+    ClientForm, ContactLogForm, ProjectForm, TicketForm, ExpenseForm,
+    TimeEntryForm, LoginForm,
     PHASE_CHOICES, PROJECT_STATUS_CHOICES, TICKET_STATUS_CHOICES,
     PRIORITY_CHOICES, RATE_TYPE_CHOICES, EXPENSE_CATEGORY_CHOICES,
     FREQUENCY_CHOICES,
@@ -822,14 +825,39 @@ def create_app():
     def clients_list():
         page = request.args.get("page", 1, type=int)
         search = request.args.get("search", "")
+        stage = request.args.get("stage", "")
+        # Two halves of one question. "Emailed but not phoned yet" is a
+        # channel that has been used and a channel that has not, and there is
+        # no single dropdown that says it.
+        tried = request.args.get("tried", "")
+        not_tried = request.args.get("not_tried", "")
+
         query = Client.query
         if search:
             query = query.filter(
                 db.or_(Client.name.ilike(f"%{search}%"), Client.company.ilike(f"%{search}%"))
             )
+        if stage:
+            query = query.filter(Client.stage == stage)
+        if tried == "none":
+            query = query.filter(~Client.contacts.any())
+        elif tried:
+            query = query.filter(Client.contacts.any(ClientContact.channel == tried))
+        if not_tried:
+            query = query.filter(~Client.contacts.any(ClientContact.channel == not_tried))
+
         query = query.order_by(Client.name.asc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
-        return render_template("pm/clients/list.html", clients=pagination.items, pagination=pagination, search=search)
+        return render_template("pm/clients/list.html",
+            clients=pagination.items, pagination=pagination, search=search,
+            stage=stage, tried=tried, not_tried=not_tried,
+            stage_choices=CLIENT_STAGE_CHOICES,
+            channel_choices=CONTACT_CHANNEL_CHOICES,
+            # Counts for the whole roster, not this page of it: a stage with
+            # nothing in it should still be pickable, and should say so.
+            stage_counts=dict(
+                db.session.query(Client.stage, db.func.count(Client.id))
+                .group_by(Client.stage).all()))
 
     def _apply_client_app_fields(client, form):
         """Wire a client's own app to this board.
@@ -873,6 +901,7 @@ def create_app():
                 company=form.company.data or "",
                 address=form.address.data or "",
                 notes=form.notes.data or "",
+                stage=form.stage.data or "lead",
             )
             _apply_client_app_fields(client, form)
             db.session.add(client)
@@ -896,7 +925,59 @@ def create_app():
         documents = client.documents.order_by(Document.uploaded_at.desc()).all()
         return render_template("pm/clients/detail.html",
             client=client, projects=projects, documents=documents,
-            total_hours=total_hours, total_revenue=total_revenue, total_expenses=total_expenses)
+            total_hours=total_hours, total_revenue=total_revenue, total_expenses=total_expenses,
+            contact_form=ContactLogForm(), stage_choices=CLIENT_STAGE_CHOICES,
+            today_iso=date.today().isoformat())
+
+    @pm_bp.route("/clients/<int:id>/contacts", methods=["POST"])
+    @login_required
+    def client_contact_add(id):
+        """Record one attempt to reach a business."""
+        client = db.session.get(Client, id) or abort(404)
+        form = ContactLogForm()
+        if not form.validate_on_submit():
+            flash("That contact could not be saved.", "warning")
+            return redirect(url_for("pm.client_detail", id=client.id))
+
+        db.session.add(ClientContact(
+            client_id=client.id,
+            channel=form.channel.data or "phone",
+            occurred_on=form.occurred_on.data or date.today(),
+            note=(form.note.data or "").strip(),
+        ))
+        # Logging a call is the moment a name on a list stops being one, so
+        # the stage follows along rather than waiting to be remembered. Only
+        # from "lead": anything further on was set deliberately and a phone
+        # call is not a reason to walk it backwards.
+        moved = False
+        if (client.stage or "lead") == "lead":
+            client.stage = "contacted"
+            moved = True
+        db.session.commit()
+        flash(f"Contact logged{' — moved to Contacted' if moved else ''}.", "success")
+        return redirect(url_for("pm.client_detail", id=client.id))
+
+    @pm_bp.route("/contacts/<int:id>/delete", methods=["POST"])
+    @login_required
+    def client_contact_delete(id):
+        row = db.session.get(ClientContact, id) or abort(404)
+        client_id = row.client_id
+        db.session.delete(row)
+        db.session.commit()
+        flash("Contact removed.", "success")
+        return redirect(url_for("pm.client_detail", id=client_id))
+
+    @pm_bp.route("/clients/<int:id>/stage", methods=["POST"])
+    @login_required
+    def client_stage_update(id):
+        """Move a client along without opening the edit form for one field."""
+        client = db.session.get(Client, id) or abort(404)
+        new_stage = request.form.get("stage")
+        if new_stage in {key for key, _ in CLIENT_STAGE_CHOICES}:
+            client.stage = new_stage
+            db.session.commit()
+            flash(f"Moved to {dict(CLIENT_STAGE_CHOICES)[new_stage]}.", "success")
+        return redirect(url_for("pm.client_detail", id=client.id))
 
     @pm_bp.route("/clients/<int:id>/edit", methods=["GET", "POST"])
     @login_required

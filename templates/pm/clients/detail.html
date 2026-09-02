@@ -54,6 +54,21 @@
             </div>
         </div>
 
+        {# Moving somebody along is one field, and opening the whole edit form
+           to change it is why it never got changed. #}
+        <div class="mt-6 pt-4 border-t border-surface-700">
+            <p class="text-xs text-surface-400 mb-2">Stage</p>
+            <form method="POST" action="{{ url_for('pm.client_stage_update', id=client.id) }}">
+                <select name="stage" onchange="this.form.submit()"
+                        class="input-ring w-full px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                    {% for key, label in stage_choices %}
+                    <option value="{{ key }}" {% if (client.stage or 'lead') == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <noscript><button type="submit" class="mt-2 px-3 py-1.5 text-xs bg-surface-800 text-surface-300 rounded-lg">Save</button></noscript>
+            </form>
+        </div>
+
         <!-- Stripe Status -->
         <div class="mt-6 pt-4 border-t border-surface-700">
             <p class="text-xs text-surface-400 mb-1">Stripe</p>
@@ -93,6 +108,88 @@
 
     <!-- Financial Summary + Projects -->
     <div class="lg:col-span-2 space-y-6">
+
+        {# Every attempt to reach them, newest first, with the box to add one
+           at the top. Above the money, because for most of the rows on the
+           clients page there is no money yet and this is the whole record. #}
+        <div class="glass-card p-6" x-data="{ adding: false }">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-white uppercase tracking-wider">
+                    Contact log
+                    {% if client.contacts %}
+                    <span class="ml-1 text-surface-500 normal-case font-normal tracking-normal">
+                        {%- set days = client.days_since_contact %}
+                        &middot; contacted
+                        {%- if days == 0 %} today
+                        {%- elif days == 1 %} yesterday
+                        {%- elif days is not none %} {{ days }} days ago
+                        {%- else %} {{ client.last_contact.occurred_on | format_date }}{% endif %}
+                    </span>
+                    {% endif %}
+                </h3>
+                <button type="button" @click="adding = !adding"
+                        class="inline-flex items-center gap-1.5 text-sm font-medium text-brand-400 hover:text-brand-300">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span x-text="adding ? 'Cancel' : 'Log contact'"></span>
+                </button>
+            </div>
+
+            <form x-show="adding" x-cloak method="POST"
+                  action="{{ url_for('pm.client_contact_add', id=client.id) }}"
+                  class="mb-5 p-4 rounded-xl bg-surface-800/40 space-y-3">
+                {{ contact_form.hidden_tag() }}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-surface-400 mb-1.5">How</label>
+                        {{ contact_form.channel(class="input-ring w-full px-3 py-2 bg-surface-900/60 text-white text-sm rounded-xl") }}
+                    </div>
+                    <div>
+                        <label class="block text-xs text-surface-400 mb-1.5">When</label>
+                        {# Defaulted here rather than on the field, so a form
+                           reopened tomorrow says tomorrow. #}
+                        {{ contact_form.occurred_on(class="input-ring w-full px-3 py-2 bg-surface-900/60 text-white text-sm rounded-xl",
+                                                    value=today_iso) }}
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs text-surface-400 mb-1.5">What happened</label>
+                    {{ contact_form.note(rows=2,
+                        class="input-ring w-full px-3 py-2 bg-surface-900/60 text-white text-sm rounded-xl placeholder-surface-500",
+                        placeholder="Left a voicemail. Call back after the 15th.") }}
+                </div>
+                <button type="submit" class="px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">Save</button>
+            </form>
+
+            {% if client.contacts %}
+            <div class="space-y-2">
+                {% for c in client.contacts %}
+                <div class="flex items-start gap-3 p-3 rounded-xl bg-surface-800/40">
+                    <span class="flex-shrink-0 px-2 py-0.5 mt-0.5 text-[10px] font-medium rounded bg-surface-900 text-surface-300">{{ c.channel_label }}</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs text-surface-400 tabular-nums">{{ c.occurred_on | format_date }}</p>
+                        {% if c.note %}
+                        <p class="text-sm text-white whitespace-pre-line mt-0.5">{{ c.note }}</p>
+                        {% endif %}
+                    </div>
+                    <form method="POST" action="{{ url_for('pm.client_contact_delete', id=c.id) }}"
+                          onsubmit="return confirm('Remove this contact from the log?')">
+                        <button type="submit" title="Remove"
+                                class="p-1.5 rounded-lg text-surface-600 hover:text-red-400 hover:bg-white/5 transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-surface-500 py-2">
+                Nobody has been in touch with this business yet.
+            </p>
+            {% endif %}
+        </div>
+
         <!-- Financials -->
         <div class="grid grid-cols-1 {% if time_tracking %}sm:grid-cols-4{% else %}sm:grid-cols-3{% endif %} gap-4">
             <div class="glass-card p-4">

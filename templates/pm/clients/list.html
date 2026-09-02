@@ -14,16 +14,61 @@
 {% endblock %}
 
 {% block content %}
+{% set channel_labels = dict(channel_choices) %}
 <div class="glass-card p-6" x-data="{ search: '{{ search }}' }">
-    <!-- Search -->
+    {# Search and filters are one form, so setting a stage does not throw away
+       what was typed in the box. The two channel dropdowns are halves of one
+       question: "emailed but not phoned yet" is a channel that has been used
+       and a channel that has not. #}
+    {% set filtering = search or stage or tried or not_tried %}
     <div class="mb-6">
-        <form method="GET" class="flex gap-3">
-            <input type="text" name="search" x-model="search" placeholder="Search clients..."
-                   class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
-            <button type="submit" class="px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">Search</button>
-            {% if search %}
-            <a href="{{ url_for('pm.clients_list') }}" class="px-4 py-2.5 text-sm text-surface-500 hover:text-surface-300 rounded-xl transition-colors">Clear</a>
-            {% endif %}
+        <form method="GET" class="space-y-3">
+            <div class="flex gap-3">
+                <input type="text" name="search" x-model="search" placeholder="Search clients..."
+                       class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
+                <button type="submit" class="px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">Search</button>
+                {% if filtering %}
+                <a href="{{ url_for('pm.clients_list') }}" class="px-4 py-2.5 text-sm text-surface-500 hover:text-surface-300 rounded-xl transition-colors whitespace-nowrap">Clear all</a>
+                {% endif %}
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+                <label class="flex items-center gap-2">
+                    <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Stage</span>
+                    <select name="stage" onchange="this.form.submit()"
+                            class="input-ring px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                        <option value="">Any</option>
+                        {% for key, label in stage_choices %}
+                        <option value="{{ key }}" {% if stage == key %}selected{% endif %}>
+                            {{ label }} ({{ stage_counts.get(key, 0) }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="flex items-center gap-2">
+                    <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Tried</span>
+                    <select name="tried" onchange="this.form.submit()"
+                            class="input-ring px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                        <option value="">Any</option>
+                        <option value="none" {% if tried == 'none' %}selected{% endif %}>Never contacted</option>
+                        {% for key, label in channel_choices %}
+                        <option value="{{ key }}" {% if tried == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="flex items-center gap-2">
+                    <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Not tried</span>
+                    <select name="not_tried" onchange="this.form.submit()"
+                            class="input-ring px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                        <option value="">Any</option>
+                        {% for key, label in channel_choices %}
+                        <option value="{{ key }}" {% if not_tried == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
         </form>
     </div>
 
@@ -37,6 +82,7 @@
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Name</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Phone</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Email</th>
+                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden lg:table-cell">Contact</th>
                     <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Stage</th>
                     <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">Projects</th>
                     {# No header. The edit pencil at the end of each row says what
@@ -60,6 +106,28 @@
                     <td class="py-3 px-4 hidden md:table-cell">
                         <p class="text-sm text-surface-400">{{ client.email or '—' }}</p>
                     </td>
+                    {# Which channels have been tried, and how stale the last
+                       attempt is. Both at a glance, because the question this
+                       page gets asked while somebody works down a list is
+                       "have we already rung them". #}
+                    <td class="py-3 px-4 hidden lg:table-cell">
+                        {% set tried_channels = client.channels_tried %}
+                        {% if tried_channels %}
+                        <div class="flex flex-wrap items-center gap-1">
+                            {% for key in tried_channels %}
+                            <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-surface-800 text-surface-300">{{ channel_labels[key] }}</span>
+                            {% endfor %}
+                        </div>
+                        {% set days = client.days_since_contact %}
+                        {% if days is not none %}
+                        <p class="text-[11px] text-surface-500 mt-1 whitespace-nowrap">
+                            {% if days == 0 %}today{% elif days == 1 %}yesterday{% else %}{{ days }} days ago{% endif %}
+                        </p>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-xs text-surface-600">Never contacted</span>
+                        {% endif %}
+                    </td>
                     <td class="py-3 px-4 text-center">
                         {{ badge(client.stage or 'lead') }}
                     </td>
@@ -82,17 +150,25 @@
         </table>
     </div>
 
-    {{ render_pagination(pagination, 'pm.clients_list', extra_args={'search': search}) }}
+    {{ render_pagination(pagination, 'pm.clients_list', extra_args={
+        'search': search, 'stage': stage, 'tried': tried, 'not_tried': not_tried}) }}
     {% else %}
     <div class="text-center py-12">
         <svg class="w-12 h-12 mx-auto text-surface-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
         </svg>
+        {% if filtering %}
+        <p class="text-surface-400 mb-4">No clients match those filters</p>
+        <a href="{{ url_for('pm.clients_list') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
+            Clear the filters
+        </a>
+        {% else %}
         <p class="text-surface-400 mb-4">No clients yet</p>
         <a href="{{ url_for('pm.client_create') }}" class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             Add Your First Client
         </a>
+        {% endif %}
     </div>
     {% endif %}
 </div>

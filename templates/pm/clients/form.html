@@ -23,6 +23,10 @@
                         {% for error in form.email.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
                     </div>
                     <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Stage</label>
+                        {{ form.stage(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm") }}
+                    </div>
+                    <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Phone</label>
                         {# Shown formatted, so the field agrees with every other place the
                            number appears. The filter hands anything it cannot read - an

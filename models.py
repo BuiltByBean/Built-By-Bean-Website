@@ -41,6 +41,37 @@ class User(UserMixin, db.Model):
         return f"<User {self.username}>"
 
 
+# How far along a business is, from a name on a list to somebody paying.
+#
+# The two closed stages earn their place: without "Not interested" the only
+# record of a no is that nobody wrote anything down, and a business that has
+# already turned you down gets called again six weeks later. "Follow up later"
+# is the other half of that — a no for now is not a no.
+CLIENT_STAGE_CHOICES = [
+    ("lead", "Lead"),
+    ("contacted", "Contacted"),
+    ("in_conversation", "In conversation"),
+    ("proposal_sent", "Proposal sent"),
+    ("contracted", "Contracted"),
+    ("active_client", "Active client"),
+    ("follow_up", "Follow up later"),
+    ("not_interested", "Not interested"),
+]
+
+# Stages that mean nobody should be ringing this business again — one because
+# they said no, one because they are already paying.
+CLIENT_STAGES_CLOSED = ("not_interested", "active_client")
+
+# How you reached them. This order is the order they render in.
+CONTACT_CHANNEL_CHOICES = [
+    ("phone", "Phone"),
+    ("email", "Email"),
+    ("text", "Text"),
+    ("in_person", "In person"),
+    ("other", "Other"),
+]
+
+
 class Client(db.Model):
     __tablename__ = "clients"
 
@@ -77,6 +108,35 @@ class Client(db.Model):
     tickets = db.relationship("Ticket", back_populates="client",
                               cascade="all, delete-orphan", lazy="dynamic")
     time_entries = db.relationship("TimeEntry", backref="client", lazy="dynamic")
+    # Newest first, because the only question anybody asks of this list is
+    # "when did we last try them".
+    contacts = db.relationship("ClientContact", back_populates="client",
+                               cascade="all, delete-orphan",
+                               order_by="ClientContact.occurred_on.desc(),"
+                                        " ClientContact.id.desc()")
+
+    @property
+    def last_contact(self):
+        """The most recent attempt, or None if nobody has tried yet."""
+        return self.contacts[0] if self.contacts else None
+
+    @property
+    def channels_tried(self):
+        """Which channels have been used, in the order they are offered.
+
+        A set would be the obvious type and the wrong one: the row renders
+        this, and "Email · Phone" flipping to "Phone · Email" between page
+        loads reads as a change when nothing changed.
+        """
+        used = {c.channel for c in self.contacts}
+        return [key for key, _ in CONTACT_CHANNEL_CHOICES if key in used]
+
+    @property
+    def days_since_contact(self):
+        last = self.last_contact
+        if not last or not last.occurred_on:
+            return None
+        return (date.today() - last.occurred_on).days
 
     @property
     def active_projects_count(self):
@@ -95,6 +155,39 @@ class Client(db.Model):
 
     def __repr__(self):
         return f"<Client {self.name}>"
+
+
+class ClientContact(db.Model):
+    """One attempt to reach a business.
+
+    Cold calling a town means the only thing standing between you and ringing
+    somebody for the second time is a written record. A flag saying "phoned"
+    would answer that for about a fortnight; what you actually need three
+    months later is the date and the sentence — "left a voicemail", "spoke to
+    the owner, call back in September" — which is why this is a row per
+    attempt and not a column per channel.
+    """
+
+    __tablename__ = "client_contacts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    channel = db.Column(db.String(20), nullable=False, default="phone")
+    # A date, not a timestamp: nobody logging a call remembers the minute, and
+    # a date is what "have we called them this week" is answered with.
+    occurred_on = db.Column(db.Date, nullable=False, default=lambda: date.today())
+    note = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    client = db.relationship("Client", back_populates="contacts")
+
+    @property
+    def channel_label(self):
+        return dict(CONTACT_CHANNEL_CHOICES).get(self.channel, self.channel)
+
+    def __repr__(self):
+        return f"<ClientContact {self.channel} {self.occurred_on}>"
 
 
 class Project(db.Model):
