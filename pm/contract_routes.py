@@ -165,7 +165,11 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
     # somebody says they never got it. Michael's own link is surfaced
     # separately by the caller so he can sign immediately.
     link = next((l for l in links if l.get("signerId") == "client"), links[0])
-    own_link = next((l for l in links if l.get("signerId") == "bbb"), None)
+    # Only when this document actually has his signature line on it. A
+    # stray "bbb" link on a single-signer envelope would otherwise send him
+    # off to sign something he is not a party to.
+    own_link = (next((l for l in links if l.get("signerId") == "bbb"), None)
+                if countersigner else None)
     row = SignatureRequest(
         envelope_id=reply["id"],
         title=title[:200],
@@ -465,6 +469,35 @@ def sent_message(row):
             f"configured, so copy the signing link below and send it to them.")
 
 
+def wants_send():
+    """Whether this build is the one that goes out electronically.
+
+    Asked by the document builders as well as by the sender, because the
+    signature block is genuinely different: sent, it has to be empty with
+    fields on it, so the signature on the finished PDF is one somebody
+    actually gave. Printed, the name is typeset so a paper copy is ready to
+    sign by hand. Getting this from a different signal than the one that
+    decides whether to send is how a document went out with a typeset name
+    and no field to sign in.
+
+    The preview page's button wins. Failing that, the older checkbox on the
+    form. Failing both - which is the first build, the one being previewed -
+    it shows what would go out, provided sending is switched on at all.
+    """
+    action = request.form.get("preview_action")
+    if action:
+        return action == "send"
+    if request.form.get("send_for_signature"):
+        return True
+    return signadoc.configured()
+
+
+# Returned when sending was asked for and could not be done. Distinct from
+# None, which means the download was what was wanted: handing somebody a PDF
+# is the right answer to one of those and a silent failure to the other.
+SEND_FAILED = object()
+
+
 def send_generated(pdf_bytes, *, filename, title, kind, fields,
                    client=None, project=None, document=None,
                    countersigner=False):
@@ -478,15 +511,18 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
     the worse of the two outcomes, so a failure here flashes what went wrong
     and lets the download happen anyway.
     """
-    if not request.form.get("send_for_signature"):
+    # The preview page asks outright, and its answer wins. The checkbox on
+    # the form is the older way in and still works for anything posting
+    # straight through.
+    if not wants_send():
         return None
 
     name = (request.form.get("signer_name") or "").strip()
     email = (request.form.get("signer_email") or "").strip()
     if not name or not email:
-        flash("Sending for signature needs a signer name and email — "
-              "the PDF downloaded instead.", "warning")
-        return None
+        flash("This needs a name and an email address to send to. "
+              "Nothing was sent.", "error")
+        return SEND_FAILED
 
     try:
         row = create_request(
@@ -502,12 +538,47 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
             if request.form.get("revision_of", type=int) else None,
         )
     except SignaDocError as exc:
-        flash(f"Could not send it for signature: {exc} The PDF downloaded instead.", "error")
-        return None
+        flash(f"Could not send it for signature: {exc} Nothing was sent — the document is still here, try again.", "error")
+        return SEND_FAILED
 
     flash(sent_message(row), "success")
     return row
 
+
+def finish_send(sent, *, pdf_bytes, filename):
+    """What to do with a document once sending has been attempted.
+
+    Three outcomes, and they were previously two. Sent goes to whoever has to
+    act next — which for a document carrying a Built by Bean signature line is
+    Michael, straight into the signing portal, because a countersigned
+    contract is waiting on him and nobody else can move it. Failed keeps the
+    preview and says so, rather than handing over a download that looks like
+    success. Not asked for hands over the download, which is what was wanted.
+    """
+    token = request.form.get("preview_token")
+
+    if sent is SEND_FAILED:
+        # The token is deliberately not dropped: the document is still on the
+        # preview page, which is where retrying from belongs.
+        if token and load_preview(token):
+            return redirect(url_for("contracts.preview", token=token))
+        return redirect(url_for("contracts.contracts_index"))
+
+    if token:
+        drop_preview(token)
+
+    if sent:
+        own = getattr(sent, "own_signing_url", None)
+        if own:
+            # Off to the portal. He asked for the signing step to happen
+            # rather than be described, and a URL in a flash message is a
+            # description.
+            return redirect(own)
+        return redirect(url_for("contracts.contract_detail", id=sent.id))
+
+    resp = Response(pdf_bytes, mimetype="application/pdf")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
 
 # ── Add-ons and addendums ────────────────────────────────
 #
@@ -585,13 +656,7 @@ def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page
         pdf_bytes, filename=filename, title=title, kind=kind, fields=fields,
         countersigner=bool(own), client=client, project=project,
     )
-    if token := request.form.get("preview_token"):
-        drop_preview(token)
-    if sent:
-        return redirect(url_for("contracts.contract_detail", id=sent.id))
-    resp = Response(pdf_bytes, mimetype="application/pdf")
-    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return resp
+    return finish_send(sent, pdf_bytes=pdf_bytes, filename=filename)
 
 
 def _safe(name):
@@ -639,7 +704,7 @@ def generate_addon():
         reference=(request.form.get("reference") or
                    "the Statement of Work between the same parties").strip(),
         notes=(request.form.get("notes") or "").strip(),
-        countersign=bool(request.form.get("send_for_signature")),
+        countersign=wants_send(),
     )
     return _deliver(pdf_bytes, f"{_safe(client.name)}_AddOn_{_safe(name)}.pdf",
                     f"Add-On Agreement - {name}", "addon", own, cli, w, h, client)
@@ -674,7 +739,7 @@ def generate_addendum():
         fee_change=(request.form.get("fee_change") or "").strip(),
         date_str=date_str,
         effective=_fmt(request.form.get("effective")),
-        countersign=bool(request.form.get("send_for_signature")),
+        countersign=wants_send(),
     )
     return _deliver(pdf_bytes, f"{_safe(client.name)}_Addendum.pdf",
                     f"Addendum - {title}", "addendum", own, cli, w, h, client)
@@ -766,8 +831,27 @@ def preview(token):
         flash("That preview has expired. Fill the form in again.", "warning")
         return redirect(url_for("contracts.contracts_index"))
     form = {k: (v[0] if len(v) == 1 else v) for k, v in meta["form"].items()}
+
+    # Whoever it goes to, defaulted from the form that built it and from the
+    # client record behind that. Asked for again here because an empty
+    # address is the one thing that turns a send into a silent download.
+    signer_name = (form.get("signer_name") or "").strip()
+    signer_email = (form.get("signer_email") or "").strip()
+    if not (signer_name and signer_email):
+        client = None
+        if form.get("client_id"):
+            try:
+                client = db.session.get(Client, int(form["client_id"]))
+            except (TypeError, ValueError):
+                client = None
+        if client:
+            signer_name = signer_name or client.name
+            signer_email = signer_email or (client.email or "").strip()
+
     return render_template("pm/contracts/preview.html", token=token, meta=meta,
-                           form=form, sending=bool(form.get("send_for_signature")))
+                           form=form, configured=signadoc.configured(),
+                           signer_name=signer_name, signer_email=signer_email,
+                           countersigned=meta.get("kind") in ("sow", "addon", "addendum"))
 
 
 @contracts_bp.route("/preview/<token>/file.pdf")

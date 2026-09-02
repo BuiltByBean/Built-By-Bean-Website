@@ -5,8 +5,19 @@
 
   Every field from the form that made it is carried through as a hidden input,
   so pressing Send replays exactly what was previewed rather than rebuilding
-  from something edited since. `previewed` is what tells the generator to stop
-  showing and start sending.
+  from something edited since.
+
+  **This page is where sending is decided.** It used to be decided by a
+  checkbox on the form three screens back, and this page only reported what
+  that checkbox had said — so a document could be built, read and confirmed,
+  and still quietly land in a downloads folder because of a box ticked or not
+  ticked several minutes earlier. Now the button you press is the instruction:
+  `preview_action` says send or download, and it is read in preference to the
+  old checkbox.
+
+  The buttons sit in the page header, next to Discard, and drive this form
+  through `form="send-form"` rather than living inside it — the actions belong
+  with the other actions, and the fields belong with the document.
 
   The PDF is served inline from its own route rather than embedded as a data
   URI: a base64 SOW is a third of a megabyte of markup, and the browser's own
@@ -18,18 +29,40 @@
 {% block page_subtitle %}{{ meta.title }}{% endblock %}
 
 {% block header_actions %}
-<form method="POST" action="{{ url_for('contracts.preview_discard', token=token) }}">
-    <button type="submit"
-            class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-red-400 hover:border-red-500/40 transition-colors">
-        Discard
+<div class="flex flex-wrap items-center gap-2">
+    {% if configured %}
+    <button type="submit" form="send-form" name="preview_action" value="send"
+            class="inline-flex items-center min-h-[44px] px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
+        Looks right &mdash; send it
     </button>
-</form>
+    {% endif %}
+    <button type="submit" form="send-form" name="preview_action" value="download"
+            class="inline-flex items-center min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white hover:border-white/25 transition-colors">
+        Download
+    </button>
+    <form method="POST" action="{{ url_for('contracts.preview_discard', token=token) }}">
+        <button type="submit"
+                class="inline-flex items-center min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-red-400 hover:border-red-500/40 transition-colors">
+            Discard
+        </button>
+    </form>
+</div>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-4">
+{# Replays the same form through the same route. The buttons that submit it
+   are in the header; only the fields are here. #}
+<form method="POST" action="{{ url_for(meta.endpoint) }}" id="send-form" class="space-y-4">
+    {% for name, values in meta.form.items() %}
+        {% if name not in ("signer_email", "signer_name") %}
+        {% for value in values %}
+    <input type="hidden" name="{{ name }}" value="{{ value }}">
+        {% endfor %}
+        {% endif %}
+    {% endfor %}
+    <input type="hidden" name="previewed" value="1">
+    <input type="hidden" name="preview_token" value="{{ token }}">
 
-    {# What pressing the button will actually do, said before the button. #}
     <div class="glass-card p-4 sm:p-5">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div class="min-w-0">
@@ -41,25 +74,52 @@
                 </p>
             </div>
 
-            {% if sending %}
+            {% if not configured %}
+            <div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 max-w-md">
+                <p class="text-xs font-medium text-amber-300">Sending is switched off</p>
+                <p class="text-xs text-surface-300 mt-1">
+                    SIGNADOC_URL and SIGNADOC_API_KEY are not both set, so this can
+                    only be downloaded and signed on paper.
+                </p>
+            </div>
+            {% else %}
             <div class="rounded-lg border border-brand-500/30 bg-brand-500/5 px-3 py-2 max-w-md">
                 <p class="text-xs font-medium text-brand-300">Sending it will:</p>
                 <ul class="text-xs text-surface-300 mt-1 space-y-0.5">
-                    <li>&bull; Put your signature lines in front of you first</li>
-                    <li>&bull; Email
-                        <span class="text-white">{{ form.signer_email or 'the client' }}</span>
-                        the moment you have signed</li>
+                    {% if countersigned %}
+                    <li>&bull; Open it for <span class="text-white">your</span> signature straight away</li>
+                    <li>&bull; Email the signer the moment you are done</li>
+                    {% else %}
+                    <li>&bull; Email the signer a one-click link to sign</li>
+                    {% endif %}
                 </ul>
-            </div>
-            {% else %}
-            <div class="rounded-lg border border-white/10 bg-surface-800/40 px-3 py-2 max-w-md">
-                <p class="text-xs text-surface-300">
-                    Nothing will be sent. This downloads the PDF, with your signature
-                    already on it, to sign on paper.
-                </p>
             </div>
             {% endif %}
         </div>
+
+        {# Who it goes to, editable, and here rather than three screens back.
+           An empty address is the one thing that turns a send into a silent
+           download, so it is asked for on the page that does the sending. #}
+        {% if configured %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/10">
+            <div>
+                <label class="block text-xs text-surface-400 mb-1.5">Signer name</label>
+                <input type="text" name="signer_name" value="{{ signer_name }}"
+                       class="input-ring w-full px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div>
+                <label class="block text-xs text-surface-400 mb-1.5">Signer email</label>
+                <input type="email" name="signer_email" value="{{ signer_email }}"
+                       placeholder="name@example.com"
+                       class="input-ring w-full px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                {% if not signer_email %}
+                <p class="text-xs text-amber-400 mt-1">
+                    No email on file for this client — sending needs one.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {# The document. Tall on a desktop, still usable on a phone, and the
@@ -75,38 +135,9 @@
         Not showing?
         <a href="{{ url_for('contracts.preview_file', token=token) }}" target="_blank"
            rel="noopener" class="text-brand-400 hover:text-brand-300">Open it in a new tab</a>.
-    </p>
-
-    {# Replays the same form through the same route, with `previewed` set. #}
-    <form method="POST" action="{{ url_for(meta.endpoint) }}"
-          class="flex flex-wrap items-center gap-3">
-        {% for name, values in meta.form.items() %}
-            {% for value in values %}
-        <input type="hidden" name="{{ name }}" value="{{ value }}">
-            {% endfor %}
-        {% endfor %}
-        <input type="hidden" name="previewed" value="1">
-        <input type="hidden" name="preview_token" value="{{ token }}">
-
-        <button type="submit"
-                class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
-            {% if sending %}
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-            </svg>
-            Looks right &mdash; send it
-            {% else %}
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-            </svg>
-            Download it
-            {% endif %}
-        </button>
-
+        &middot;
         <a href="{{ url_for('contracts.contracts_index') }}"
-           class="text-sm text-surface-400 hover:text-surface-200">Back to contracts</a>
-    </form>
-</div>
+           class="text-brand-400 hover:text-brand-300">Back to contracts</a>
+    </p>
+</form>
 {% endblock %}

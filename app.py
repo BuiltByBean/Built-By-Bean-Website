@@ -33,6 +33,7 @@ from models import (
     CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES,
 )
 from project_phases import sync_project_phases, explain as explain_phase
+from pm.contract_routes import wants_send as _wants_send  # noqa: E402
 from forms import (
     ClientForm, ContactLogForm, ProjectForm, TicketForm, ExpenseForm,
     TimeEntryForm, LoginForm,
@@ -2255,17 +2256,8 @@ def create_app():
             fields=signadoc_service.fields_for(sign_anchors, pdf.w, pdf.h),
             client=client, document=doc,
         )
-        if token := request.form.get("preview_token"):
-            from pm.contract_routes import drop_preview
-            drop_preview(token)
-        if sent:
-            return redirect(url_for("contracts.contract_detail", id=sent.id))
-
-        from flask import make_response as _make_response
-        response = _make_response(pdf_bytes)
-        response.headers["Content-Type"] = "application/pdf"
-        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-        return response
+        from pm.contract_routes import finish_send
+        return finish_send(sent, pdf_bytes=bytes(pdf_bytes), filename=filename)
 
     @pm_bp.route("/contracts/new/statement-of-work", methods=["GET"])
     @login_required
@@ -2343,7 +2335,7 @@ def create_app():
                                   maintenance_rate, feature_rate,
                                   # An electronically-sent SOW is signed by
                                   # both parties, Michael first.
-                                  countersign=bool(request.form.get("send_for_signature")))
+                                  countersign=_wants_send())
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2793,18 +2785,8 @@ def create_app():
             countersigner=bool(own_anchors),
             client=client, project=project, document=doc,
         )
-        if token := request.form.get("preview_token"):
-            from pm.contract_routes import drop_preview
-            drop_preview(token)
-        if sent:
-            return redirect(url_for("contracts.contract_detail", id=sent.id))
-
-        from flask import make_response
-        response = make_response(pdf_bytes)
-        response.headers["Content-Type"] = "application/pdf"
-        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-        response.headers["Content-Length"] = len(pdf_bytes)
-        return response
+        from pm.contract_routes import finish_send
+        return finish_send(sent, pdf_bytes=bytes(pdf_bytes), filename=filename)
 
     # ── Time Tracking ────────────────────────────────────────
 
