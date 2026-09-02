@@ -1,19 +1,11 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}New statement of work - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
 {% block page_title %}New statement of work{% endblock %}
 {% block page_subtitle %}Generate it, and send it straight to the client to sign{% endblock %}
-
-{% block header_actions %}
-<a href="{{ url_for('contracts.contracts_index') }}"
-   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:bg-white/5 transition-colors">
-    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-    </svg>
-    All contracts
-</a>
-{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl">

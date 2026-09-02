@@ -1,7 +1,9 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}Save Working Session{% endblock %}
+{% block back %}{{ back_link(url_for('pm.time_list'), 'Time Tracking') }}{% endblock %}
 {% block page_title %}Save Working Session{% endblock %}
 {% block page_subtitle %}Describe what you worked on and apply it to a project{% endblock %}
 

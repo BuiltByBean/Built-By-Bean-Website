@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
+{% block back %}{%- if editing -%}{{ back_link(url_for('pm.ticket_detail', id=ticket.id), ticket.display_title) }}{%- else -%}{{ back_link(url_for('pm.tickets_list'), 'Tickets') }}{%- endif -%}{% endblock %}
 {% block page_title %}{{ 'Edit ticket' if editing else 'New ticket' }}{% endblock %}
 {% block page_subtitle %}{{ ticket.display_title if editing else 'Raise one against a client' }}{% endblock %}
 

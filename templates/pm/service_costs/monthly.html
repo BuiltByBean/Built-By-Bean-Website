@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
 {#
   Monthly cost entry for a vendor that has no billing API.
@@ -14,15 +15,9 @@
 #}
 
 {% block title %}{{ provider.display_name }} Monthly Costs - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('service_costs.providers_list'), 'Service Providers') }}{% endblock %}
 {% block page_title %}{{ provider.display_name }} monthly costs{% endblock %}
 {% block page_subtitle %}One row per resource, one number per month{% endblock %}
-
-{% block header_actions %}
-<a href="{{ url_for('service_costs.providers_list') }}"
-   class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-800 text-surface-200 hover:bg-surface-700 transition-colors">
-    Providers
-</a>
-{% endblock %}
 
 {% block content %}
 <div class="space-y-6 stagger-in max-w-3xl">

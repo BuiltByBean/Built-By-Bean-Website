@@ -1,7 +1,10 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
+{% from "pm/components/back_link.html" import back_link %}
+
 {% block title %}Resource Mappings - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('pm.expenses_list') ~ '#services', 'Expenses') }}{% endblock %}
 {% block page_title %}Resource Mappings{% endblock %}
 {% block page_subtitle %}Map service resources to clients and projects{% endblock %}
 

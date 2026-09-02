@@ -1,7 +1,9 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}Create Invoice - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('stripe.invoices_list'), 'Invoices') }}{% endblock %}
 {% block page_title %}Create Invoice{% endblock %}
 {% block page_subtitle %}Generate an invoice from {% if time_tracking %}time entries and {% endif %}expenses{% endblock %}
 

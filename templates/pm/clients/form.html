@@ -1,5 +1,7 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
+{% block back %}{%- if editing -%}{{ back_link(url_for('pm.client_detail', id=client.id), client.name) }}{%- else -%}{{ back_link(url_for('pm.clients_list'), 'Clients') }}{%- endif -%}{% endblock %}
 {% block page_title %}{{ 'Edit Client' if editing else 'New Client' }}{% endblock %}
 {% block page_subtitle %}{{ client.name if editing else 'Add a new client' }}{% endblock %}
 

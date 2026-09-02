@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
+{% block back %}{{ back_link(url_for('pm.expenses_list'), 'Expenses') }}{% endblock %}
 {% block page_title %}{{ 'Edit Expense' if editing else 'Add Expense' }}{% endblock %}
 {% block page_subtitle %}{{ 'Update expense details' if editing else 'Record a project expense' }}{% endblock %}
 

@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
 {#
   The document, on screen, before anybody else sees it.
@@ -25,6 +26,15 @@
 #}
 
 {% block title %}Preview - Built By Bean{% endblock %}
+{# Back to the form that generated this, so a correction does not mean
+   filling the whole thing in again. Contracts index when that is unknown. #}
+{% block back %}
+    {%- if meta.endpoint -%}
+        {{ back_link(url_for(meta.endpoint), 'Edit the details') }}
+    {%- else -%}
+        {{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}
+    {%- endif -%}
+{% endblock %}
 {% block page_title %}Read it before it goes{% endblock %}
 {% block page_subtitle %}{{ meta.title }}{% endblock %}
 

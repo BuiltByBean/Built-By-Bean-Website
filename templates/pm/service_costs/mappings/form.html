@@ -1,7 +1,20 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
+{% from "pm/components/back_link.html" import back_link %}
+
 {% block title %}{{ 'Edit' if editing else 'New' }} Mapping - Built By Bean{% endblock %}
+{# Back to wherever the form was opened from. The monthly page passes ?next=,
+   and it is constrained to this admin for the same reason the redirect is:
+   an unchecked next is an open redirect. #}
+{% block back %}
+    {%- set nxt = request.args.get('next') or '' -%}
+    {%- if nxt.startswith('/admin/pm/') -%}
+        {{ back_link(nxt, 'Back') }}
+    {%- else -%}
+        {{ back_link(url_for('service_costs.mappings_list'), 'Resource Mappings') }}
+    {%- endif -%}
+{% endblock %}
 {% block page_title %}{{ 'Edit' if editing else 'New' }} Resource Mapping{% endblock %}
 {% block page_subtitle %}Map a service resource to a client{% endblock %}
 

@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
+{% block back %}{%- if editing -%}{{ back_link(url_for('pm.project_detail', id=project.id), project.name) }}{%- else -%}{{ back_link(url_for('pm.projects_list'), 'Projects') }}{%- endif -%}{% endblock %}
 {% block page_title %}{{ 'Edit Project' if editing else 'New Project' }}{% endblock %}
 {% block page_subtitle %}{{ project.name if editing else 'Create a new project' }}{% endblock %}
 

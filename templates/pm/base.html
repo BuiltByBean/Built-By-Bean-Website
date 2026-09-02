@@ -545,6 +545,11 @@
                         </svg>
                     </button>
                     <div class="min-w-0">
+                        {# Above the title rather than beside it. The row already
+                           holds the mobile menu button, the timer and the page
+                           actions, and a fourth thing competing on one line is
+                           how the actions left the screen the last time. #}
+                        {% block back %}{% endblock %}
                         <h2 class="text-lg font-bold text-white">{% block page_title %}Dashboard{% endblock %}</h2>
                         <p class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
                     </div>
@@ -587,6 +592,124 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+<!--
+  Scroll memory.
+
+  Going back to a page should return it to the depth it was left at, and the
+  browser only does that for its own back and forward. A back link is an
+  ordinary navigation as far as it is concerned, so it lands at the top, and
+  after a save redirect there is no history entry to go back to at all.
+
+  So this owns scroll restoration outright: remember the position per URL,
+  and put it back on a return. A return is either a real back/forward, or a
+  click on something carrying data-back-to. An ordinary forward click into a
+  page is not a return and lands at the top, which is why intent is recorded
+  rather than restoring on every arrival.
+-->
+<script>
+(function () {
+    var store;
+    try {
+        store = window.sessionStorage;
+        store.getItem('pm:probe');
+    } catch (e) {
+        return;  // private mode, or site data blocked. No memory, no errors.
+    }
+
+    var INTENT = 'pm:return-to';
+    var PREFIX = 'pm:scroll:';
+
+    function key(url) {
+        var u = url ? new URL(url, location.href) : location;
+        return PREFIX + u.pathname + u.search + u.hash;
+    }
+
+    function save() {
+        try { store.setItem(key(), String(Math.round(window.scrollY))); } catch (e) {}
+    }
+
+    // Record the position continuously rather than only on the way out.
+    // pagehide alone misses the case where the tab is discarded, and on iOS
+    // it is not guaranteed to run at all.
+    //
+    // Throttled on a timestamp rather than requestAnimationFrame, because rAF
+    // is paused outright in a background tab. That would be survivable here
+    // but the same call in the restore loop below would hang forever, so both
+    // stay off it.
+    var last = 0;
+    var timer = null;
+    window.addEventListener('scroll', function () {
+        var now = Date.now();
+        if (now - last > 100) { last = now; save(); return; }
+        clearTimeout(timer);
+        timer = setTimeout(function () { last = Date.now(); save(); }, 100);
+    }, { passive: true });
+    window.addEventListener('pagehide', save);
+
+    // A back control announces where it is going, so the destination knows
+    // this arrival is a return and not a fresh visit.
+    document.addEventListener('click', function (ev) {
+        var a = ev.target.closest('a[data-back-to]');
+        if (!a || ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
+        save();
+        try { store.setItem(INTENT, key(a.getAttribute('href'))); } catch (e) {}
+    }, true);
+
+    function isReturn() {
+        var intent = null;
+        try {
+            intent = store.getItem(INTENT);
+            store.removeItem(INTENT);
+        } catch (e) {}
+        if (intent && intent === key()) return true;
+
+        var nav = performance.getEntriesByType &&
+                  performance.getEntriesByType('navigation')[0];
+        return !!nav && nav.type === 'back_forward';
+    }
+
+    if (!isReturn()) return;
+
+    // An anchor that names a real element is the user asking for that element,
+    // and it outranks a remembered position. The tab hashes on Expenses name
+    // no element, so they fall through to the scroll memory as intended.
+    if (location.hash.length > 1) {
+        try {
+            if (document.querySelector(location.hash)) return;
+        } catch (e) {}
+    }
+
+    var target = parseInt(store.getItem(key()) || '', 10);
+    if (!(target > 0)) return;
+
+    try { history.scrollRestoration = 'manual'; } catch (e) {}
+
+    // The page is shorter at load than it ends up: Alpine reveals x-cloak'd
+    // content, tabs decide which half to show, images settle. Scrolling once
+    // lands short of the mark, so keep asking until the document is tall
+    // enough to honour it, and give up rather than fight a user who has
+    // already started scrolling themselves.
+    var deadline = Date.now() + 2000;
+    var abort = false;
+    function stop() { abort = true; }
+    ['wheel', 'touchstart', 'keydown'].forEach(function (evt) {
+        window.addEventListener(evt, stop, { passive: true, once: true });
+    });
+
+    (function attempt() {
+        if (abort) return;
+        window.scrollTo(0, target);
+        if (Math.abs(window.scrollY - target) < 2 || Date.now() > deadline) {
+            ['wheel', 'touchstart', 'keydown'].forEach(function (evt) {
+                window.removeEventListener(evt, stop);
+            });
+            return;
+        }
+        setTimeout(attempt, 16);
+    })();
+})();
+</script>
 
 </body>
 </html>

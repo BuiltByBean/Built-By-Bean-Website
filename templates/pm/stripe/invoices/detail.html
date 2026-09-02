@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
 {% block title %}Invoice {{ invoice.invoice_number or invoice.id }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('stripe.invoices_list'), 'Invoices') }}{% endblock %}
 {% block page_title %}Invoice {{ invoice.invoice_number or ('Draft #' ~ invoice.id) }}{% endblock %}
 {% block page_subtitle %}{{ invoice.client.name }}{% endblock %}
 

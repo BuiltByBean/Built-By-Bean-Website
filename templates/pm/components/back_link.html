@@ -1,0 +1,30 @@
+{#
+  The return control for a page reached from somewhere else.
+
+  Deliberately a real link with a real href rather than a history.back() button.
+  Three ways of arriving at a page all have to end up somewhere sensible, and
+  only an href covers all of them: followed a link, landed after a save
+  redirect, or opened a bookmark. history.back() is right for the first and
+  wrong for the other two, where it would either bounce to the form that was
+  just submitted or leave the page entirely.
+
+  Scroll position is handled separately. `data-back-to` tells the restore
+  script in base.html that this navigation is a return, so it should put the
+  destination back at the depth it was left at. An ordinary forward link
+  carries no such attribute and lands at the top, which is what a forward
+  click should do.
+
+  Not text alone: a border and an arrow, per the convention that anything
+  which acts on press looks pressable.
+#}
+{% macro back_link(href, label) %}
+<a href="{{ href }}" data-back-to
+   class="inline-flex items-center gap-1.5 mb-1.5 px-2.5 min-h-[44px] text-xs font-medium
+          rounded-lg border border-surface-700 bg-surface-800/60 text-surface-300
+          hover:bg-surface-700 hover:text-white transition-colors">
+    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    <span class="truncate">{{ label }}</span>
+</a>
+{% endmacro %}

@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
 {% block title %}{{ 'Edit' if editing else 'Add' }} Provider - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('service_costs.providers_list'), 'Service Providers') }}{% endblock %}
 {% block page_title %}{{ 'Edit' if editing else 'Add' }} Service Provider{% endblock %}
 {% block page_subtitle %}Configure API credentials for cost tracking{% endblock %}
 

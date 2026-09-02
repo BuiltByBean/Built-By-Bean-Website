@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
 {% block title %}Service Providers - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('pm.expenses_list') ~ '#services', 'Expenses') }}{% endblock %}
 {% block page_title %}Service Providers{% endblock %}
 {% block page_subtitle %}Manage API connections to your infrastructure services{% endblock %}
 

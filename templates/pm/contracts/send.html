@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 
 {#
   Send a document that is already filed here out for signature.
@@ -11,6 +12,7 @@
 #}
 
 {% block title %}Send for signature - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
 {% block page_title %}Send for signature{% endblock %}
 {% block page_subtitle %}{{ document.original_name }}{% endblock %}
 

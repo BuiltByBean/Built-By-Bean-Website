@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/status_badge.html" import badge %}
 
+{% block back %}{{ back_link(url_for('pm.clients_list'), 'Clients') }}{% endblock %}
 {% block page_title %}{{ client.name }} {{ badge(client.stage or 'lead') }}{% endblock %}
 {% block page_subtitle %}{{ client.company or 'Client Details' }}{% endblock %}
 

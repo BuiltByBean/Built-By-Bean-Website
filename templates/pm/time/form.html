@@ -1,6 +1,8 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
+{% block back %}{{ back_link(url_for('pm.time_list'), 'Time Tracking') }}{% endblock %}
 {% block page_title %}{{ 'Edit Time Entry' if editing else 'Log Time' }}{% endblock %}
 {% block page_subtitle %}{{ 'Update your time entry' if editing else 'Record work hours' }}{% endblock %}
 
