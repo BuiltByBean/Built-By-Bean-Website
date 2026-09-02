@@ -1,0 +1,175 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  The recurring half of a delivered build.
+
+  Picking the project is what makes this more than a PDF: the fee lands on the
+  project, and the hosting page holds it against what that project's
+  infrastructure actually costs. Choosing a client narrows the project list, so
+  a fee cannot be filed against somebody else's application by mis-click.
+#}
+
+{% block title %}New hosting agreement - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
+{% block page_title %}New hosting agreement{% endblock %}
+{% block page_subtitle %}What it costs to keep an application online{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('contracts.generate_hosting') }}"
+      x-data='{
+        clientId: "",
+        projectId: "",
+        clients: {{ client_lookup | tojson }},
+        projects: {{ projects | tojson }},
+        chosen: null,
+        application: "",
+        fee: "",
+        cycle: "monthly",
+        get mine() {
+          return this.projects.filter(p => p.client_id === this.clientId);
+        },
+        pickProject() {
+          const p = this.projects.find(p => p.id === this.projectId);
+          if (!p) return;
+          if (!this.application) this.application = p.name;
+          if (!this.fee && p.hosting_fee) this.fee = String(p.hosting_fee);
+          if (p.hosting_cycle) this.cycle = p.hosting_cycle;
+        }
+      }'
+      x-effect="chosen = clients[clientId] || null">
+
+    {% include "pm/contracts/_prefill.html" %}
+
+    <div class="glass-card p-5 sm:p-6 space-y-5 max-w-3xl">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
+                {{ select_dropdown("client_id", client_options, "", "Choose a client",
+                                   full_width=true, model="clientId") }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
+                <input type="date" name="date" required value="{{ today }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        {# A plain select rather than the styled dropdown, because the options
+           are filtered live by the chosen client and the macro renders a fixed
+           list at template time. #}
+        <div>
+            <label for="project" class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
+            <select id="project" name="project_id" x-model="projectId" @change="pickProject()"
+                    class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                <option value="">No project</option>
+                <template x-for="p in mine" :key="p.id">
+                    <option :value="p.id" x-text="p.name"></option>
+                </template>
+            </select>
+            <p class="mt-1.5 text-xs text-surface-400">
+                Choose one and the fee below is saved against it, so the hosting page
+                can show it next to what that project actually costs to run.
+            </p>
+        </div>
+
+        <div>
+            <label for="application" class="block text-sm font-medium text-surface-300 mb-1.5">
+                Application *
+            </label>
+            <input id="application" type="text" name="application" required x-model="application"
+                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                   placeholder="e.g. Talent Booker">
+            <p class="mt-1.5 text-xs text-surface-400">
+                The name the client calls it, which is not always what it is filed under here.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+                <label for="fee" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Fee <span class="text-surface-500 font-normal">$</span> *
+                </label>
+                <input id="fee" type="text" name="fee" required x-model="fee"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="25">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Billing cycle</label>
+                {{ select_dropdown("cycle", [("monthly", "Monthly"), ("quarterly", "Quarterly"),
+                                             ("annually", "Annually")], "monthly",
+                                   full_width=true, model="cycle") }}
+            </div>
+            <div>
+                <label for="start-date" class="block text-sm font-medium text-surface-300 mb-1.5">Starts</label>
+                <input id="start-date" type="date" name="start_date"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                <p class="mt-1.5 text-xs text-surface-400">Blank means on signature.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+                <label for="includes" class="block text-sm font-medium text-surface-300 mb-1.5">Covered</label>
+                <textarea id="includes" name="includes" rows="7"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ includes }}</textarea>
+                <p class="mt-1 text-xs text-surface-400">One per line.</p>
+            </div>
+            <div>
+                <label for="excludes" class="block text-sm font-medium text-surface-300 mb-1.5">Not covered</label>
+                <textarea id="excludes" name="excludes" rows="7"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ excludes }}</textarea>
+                <p class="mt-1 text-xs text-surface-400">
+                    One per line. This is the half that stops a support request turning
+                    into free development.
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="reference" class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Attaches to <span class="text-surface-500 font-normal">optional</span>
+                </label>
+                <input id="reference" type="text" name="reference"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="the Statement of Work between the same parties">
+                <p class="mt-1 text-xs text-surface-400">
+                    Leave blank for an application with no statement of work behind it.
+                    The protections are stated outright either way.
+                </p>
+            </div>
+            <div>
+                <label for="notes" class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
+                <textarea id="notes" name="notes" rows="3"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                          placeholder="Anything specific to this one"></textarea>
+            </div>
+        </div>
+
+        {# Stated on the form as well as in the PDF, because it is the clause
+           most likely to be asked about and the one that changed. #}
+        <div class="rounded-xl border border-white/10 bg-surface-800/40 p-4">
+            <p class="text-sm font-medium text-surface-200">The fee can be raised at any time</p>
+            <p class="mt-1 text-xs text-surface-400">
+                Section 4 gives no notice period. When you change the price you send an
+                updated agreement stating the new fee and why it moved, and it applies
+                from the next billing cycle after that.
+            </p>
+        </div>
+
+        {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                Preview it
+            </button>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="text-sm text-surface-400 hover:text-surface-200">Cancel</a>
+        </div>
+    </div>
+</form>
+{% endblock %}

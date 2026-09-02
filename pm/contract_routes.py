@@ -606,7 +606,21 @@ def finish_send(sent, *, pdf_bytes, filename):
 # need - the client picker, sending, the signature-request record - is here.
 
 import contract_docs
-from models import Client
+from models import Client, Project
+
+
+def _projects_for_picker():
+    """Every project, and the client it belongs to.
+
+    Keyed by id as strings because that is what a select's value is, and the
+    hosting form filters this list down to the chosen client in the browser
+    rather than fetching it again.
+    """
+    projects = (Project.query.join(Client, Project.client_id == Client.id)
+                .order_by(Client.name, Project.name).all())
+    return [{"id": str(p.id), "client_id": str(p.client_id), "name": p.name,
+             "hosting_fee": p.hosting_fee, "hosting_cycle": p.hosting_cycle or "monthly"}
+            for p in projects]
 
 
 def _clients_for_picker():
@@ -726,6 +740,75 @@ def generate_addon():
     )
     return _deliver(pdf_bytes, f"{_safe(client.name)}_AddOn_{_safe(name)}.pdf",
                     f"Add-On Agreement - {name}", "addon", own, cli, w, h, client)
+
+
+# ── Hosting and infrastructure ───────────────────────────
+
+
+@contracts_bp.route("/new/hosting", methods=["GET"])
+@login_required
+def hosting_form():
+    options, lookup = _clients_for_picker()
+    return render_template("pm/contracts/hosting_form.html",
+                           today=datetime.now(timezone.utc).date().isoformat(),
+                           client_options=options, client_lookup=lookup,
+                           projects=_projects_for_picker(),
+                           includes="\n".join(contract_docs.HOSTING_INCLUDES),
+                           excludes="\n".join(contract_docs.HOSTING_EXCLUDES))
+
+
+@contracts_bp.route("/new/hosting", methods=["POST"])
+@login_required
+def generate_hosting():
+    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    project = db.session.get(Project, request.form.get("project_id", type=int) or 0)
+    # The application's name on the contract. The project it maps to is what
+    # the hosting page needs, but a client reads the name they call the thing,
+    # which is not always what the project is filed under here.
+    application = ((request.form.get("application") or "").strip()
+                   or (project.name if project else ""))
+    fee = (request.form.get("fee") or "").strip()
+    cycle = (request.form.get("cycle") or "monthly").strip()
+
+    if not client or not application or not fee:
+        flash("Choose a client, name the application, and set the fee.", "warning")
+        return redirect(url_for("contracts.hosting_form"))
+
+    if project is not None and project.client_id != client.id:
+        # The picker filters by client, so this only happens to a stale form.
+        # Filing a fee against another client's project would put the wrong
+        # number on the wrong margin.
+        flash("That project belongs to a different client.", "warning")
+        return redirect(url_for("contracts.hosting_form"))
+
+    def lines(field, fallback):
+        raw = (request.form.get(field) or "").strip()
+        return [l.strip(" -\t") for l in raw.splitlines() if l.strip()] if raw else fallback
+
+    pdf_bytes, own, cli, w, h = contract_docs.build_hosting(
+        client_name=client.name, application=application, fee=fee, cycle=cycle,
+        start_date=_fmt(request.form.get("start_date")),
+        date_str=_fmt(request.form.get("date")),
+        includes=lines("includes", contract_docs.HOSTING_INCLUDES),
+        excludes=lines("excludes", contract_docs.HOSTING_EXCLUDES),
+        reference=(request.form.get("reference") or "").strip(),
+        notes=(request.form.get("notes") or "").strip(),
+        countersign=wants_send(),
+    )
+
+    # Written on the way out, not on the way to the preview: a document that was
+    # looked at and abandoned has not changed what anybody agreed to pay.
+    if project is not None and request.form.get("previewed"):
+        try:
+            project.hosting_fee = float(fee.replace(",", "").replace("$", ""))
+            project.hosting_cycle = cycle
+            db.session.commit()
+        except (ValueError, TypeError):
+            db.session.rollback()
+
+    return _deliver(pdf_bytes, f"{_safe(client.name)}_Hosting_{_safe(application)}.pdf",
+                    f"Hosting & Infrastructure Agreement - {application}",
+                    "hosting", own, cli, w, h, client, project)
 
 
 @contracts_bp.route("/new/addendum", methods=["GET"])

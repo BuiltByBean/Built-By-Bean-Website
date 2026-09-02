@@ -207,6 +207,11 @@ class Project(db.Model):
     mvp_date = db.Column(db.Date, nullable=True)
     go_live_date = db.Column(db.Date, nullable=True)
     maintenance_days = db.Column(db.Integer, default=30)
+    # What the client pays to stay online, as agreed in the contract that set
+    # it. Nullable with no default: 0 means "hosted for free" and None means
+    # "nobody has set this", and only the second one is a thing to go and fix.
+    hosting_fee = db.Column(db.Float, nullable=True)
+    hosting_cycle = db.Column(db.String(20), nullable=True)
     # Set the moment a phase is changed by hand. mvp_date is a promise,
     # not a fact - a build running late would otherwise be marched to
     # Delivered by its own contract date and marched back every reload.
@@ -226,6 +231,19 @@ class Project(db.Model):
     # orphan rows here.
     time_entries = db.relationship("TimeEntry", backref="project", lazy="dynamic",
                                    cascade="all, delete-orphan")
+
+    # A quarterly or annual fee compared against a monthly cost reads as a
+    # fat margin for two months and a disaster on the third. Everything on the
+    # hosting page is per month, so the divisor lives here rather than in the
+    # page doing the comparing.
+    HOSTING_CYCLE_MONTHS = {"monthly": 1, "quarterly": 3, "annually": 12}
+
+    @property
+    def monthly_hosting_fee(self):
+        """The hosting fee expressed per month, or None if none is set."""
+        if self.hosting_fee is None:
+            return None
+        return self.hosting_fee / self.HOSTING_CYCLE_MONTHS.get(self.hosting_cycle or "monthly", 1)
 
     @property
     def maintenance_anchor(self):
@@ -1129,6 +1147,9 @@ class SignatureRequest(db.Model):
         return {
             "engagement_letter": "Engagement letter",
             "sow": "Statement of work",
+            "addon": "Add-on agreement",
+            "addendum": "Addendum",
+            "hosting": "Hosting agreement",
         }.get(self.kind, "Document")
 
     def __repr__(self):

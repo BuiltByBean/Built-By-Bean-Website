@@ -35,8 +35,9 @@
     {% endif %}
 
     {# The only place these live. Full width on a phone so they are thumb
-       sized, side by side once there is room. #}
-    <div class="flex flex-col sm:flex-row gap-3">
+       sized, side by side once there is room, wrapping rather than squeezing
+       once there are more of them than fit on one line. #}
+    <div class="flex flex-col sm:flex-row sm:flex-wrap gap-3">
         <a href="{{ url_for('pm.engagement_letter_form') }}"
            class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,6 +51,13 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
             Statement of work
+        </a>
+        <a href="{{ url_for('contracts.hosting_form') }}"
+           class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Hosting
         </a>
         <a href="{{ url_for('contracts.addon_form') }}"
            class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">

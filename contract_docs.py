@@ -151,6 +151,50 @@ PRODUCTS = {
 PRODUCT_CHOICES = [(k, v["name"] or "Something else") for k, v in PRODUCTS.items()]
 
 
+# ── Hosting and infrastructure ───────────────────────────
+#
+# Written once and used twice: Section 7 of the Statement of Work says this, and
+# the standalone Hosting & Infrastructure Agreement says this. Two copies of a
+# pricing clause is two clauses that disagree the first time one is edited.
+
+HOSTING_INCLUDES = [
+    "Application hosting on managed infrastructure, kept running and reachable",
+    "Data storage and the database the application runs on",
+    "SSL certificates, issued and renewed before they expire",
+    "Domain and DNS management for the addresses the application answers on",
+    "Routine infrastructure upkeep: platform updates, dependency and security patching",
+    "Backups of application data, and restoration from them if it is ever needed",
+]
+
+HOSTING_EXCLUDES = [
+    "New features, changes to existing ones, and any other development work",
+    "Third-party services billed to the Client's own accounts, such as payment "
+    "processing, messaging, or email delivery",
+    "Content, images, and data the Client is responsible for supplying",
+]
+
+# The fee moves when the infrastructure under it moves, and it is not worth a
+# month of unbillable notice every time a provider raises a price. Michael sets
+# it; the Client is told in writing, with the reason, in a document they keep.
+HOSTING_PRICE_CHANGE = (
+    "The fee may be updated at any time. Built by Bean LLC may revise it as needed to "
+    "reflect changes in infrastructure requirements, application usage, or third-party "
+    "provider pricing, and is not required to give advance notice before doing so. When "
+    "the fee changes, an updated agreement stating the new fee and explaining the reason "
+    "for the change is sent to the Client, and the new fee applies from the first billing "
+    "cycle that begins after that agreement is issued."
+)
+
+# What happens when it stops being paid. A hosting agreement without this is a
+# promise to keep paying a vendor on somebody else's behalf indefinitely.
+HOSTING_LAPSE = (
+    "If the fee is not paid, Built by Bean LLC may suspend the application after giving "
+    "the Client written notice and a reasonable opportunity to bring the account current. "
+    "The Client's own data remains the Client's, and a copy of it will be provided on "
+    "request for thirty (30) days following any suspension or termination."
+)
+
+
 # ── Shared chrome ────────────────────────────────────────
 
 
@@ -390,6 +434,95 @@ def build_addon(*, client_name, product_key, product_name, summary, includes,
         style.body(notes)
 
     _incorporated_terms(style, reference)
+    own, client = _signatures(style, client_name, date_str, countersign, script_font)
+    return bytes(pdf.output()), own, client, pdf.w, pdf.h
+
+
+# ── Hosting and infrastructure agreement ─────────────────
+
+
+def build_hosting(*, client_name, application, fee, cycle, start_date, date_str,
+                  includes=None, excludes=None, reference="", notes="",
+                  countersign=False, script_font=None):
+    """The recurring agreement for keeping a delivered application online.
+
+    Section 7 of a Statement of Work already says a hosting fee is payable, but
+    a SOW is signed once, when the build is scoped, and prices a project. This
+    is the thing that recurs: it names the application, states the fee and the
+    cycle, and carries the clause that lets the fee move when the infrastructure
+    under it moves.
+
+    `reference` is optional and it is the difference between this attaching to a
+    Statement of Work and standing entirely on its own. An application taken
+    over from somebody else has no SOW to point at, so with no reference the
+    protections are stated outright rather than inherited from a document that
+    does not exist.
+    """
+    pdf, style = _document("Hosting Agreement")
+    pdf.add_page()
+
+    cycle = (cycle or "monthly").lower()
+    per = {"monthly": "month", "quarterly": "quarter", "annually": "year"}.get(cycle, "month")
+
+    style.eyebrow("Built by Bean LLC")
+    style.rule(gap=1)
+    pdf.ln(6)
+    style.title("Hosting & Infrastructure Agreement", f"{application} - {client_name}")
+    _facts(style, [("Client:", client_name), ("Date:", date_str),
+                   ("Application:", application),
+                   ("Starts:", start_date or "on signature")])
+
+    style.section_heading("1. What this covers")
+    style.body(
+        f"A delivered application does not stay online by itself. It runs on paid "
+        f"infrastructure, answers on a domain, holds data that has to be stored and backed "
+        f"up, and needs the platform underneath it kept patched and current. This "
+        f"agreement covers all of that for {application}, billed separately from any "
+        f"development work.")
+    style.bullets(includes or HOSTING_INCLUDES)
+
+    style.section_heading("2. What this does not cover")
+    style.body(
+        "This is upkeep of what has already been built. Building anything new, or "
+        "changing what exists, is development work and is quoted and billed separately.")
+    style.bullets(excludes or HOSTING_EXCLUDES)
+
+    style.section_heading("3. Fee")
+    style.table([
+        ("Hosting & Infrastructure Fee", f"${fee}/{per}"),
+        ("Billing Cycle", cycle.title()),
+        ("Invoicing", "Net 30 days from invoice date"),
+    ])
+    style.body(
+        "The fee is payable for as long as the application is hosted, and begins on the "
+        "start date above.")
+
+    style.section_heading("4. Changes to the fee")
+    style.body(HOSTING_PRICE_CHANGE)
+
+    style.section_heading("5. Term, and stopping")
+    style.body(
+        "This agreement continues until either party ends it in writing. The Client may "
+        "end it at any time, effective at the end of the billing cycle then in progress; "
+        "fees already paid for that cycle are not refunded. Built by Bean LLC will give at "
+        "least thirty (30) days written notice before ending it, so the Client has time to "
+        "move the application elsewhere.")
+    style.body(HOSTING_LAPSE)
+
+    if notes:
+        style.section_heading("6. Notes")
+        style.body(notes)
+
+    if reference:
+        _incorporated_terms(style, reference)
+    else:
+        # Nothing to inherit from. An application taken on from another
+        # developer has no Statement of Work behind it, and a terms section
+        # that only pointed at one would protect nobody.
+        style.section_heading("Terms")
+        style.body("The following apply to the services described here:")
+        style.bullets(STANDALONE_PROTECTIONS, size=8.5)
+
     own, client = _signatures(style, client_name, date_str, countersign, script_font)
     return bytes(pdf.output()), own, client, pdf.w, pdf.h
 
