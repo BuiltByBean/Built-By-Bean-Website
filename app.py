@@ -32,6 +32,7 @@ from models import (
     TICKET_BILLING_BUCKETS, TICKET_BILLING_LABELS, TICKET_BILLING_RATES,
     CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES,
 )
+from project_phases import sync_project_phases, explain as explain_phase
 from forms import (
     ClientForm, ContactLogForm, ProjectForm, TicketForm, ExpenseForm,
     TimeEntryForm, LoginForm,
@@ -628,6 +629,7 @@ def create_app():
     @pm_bp.route("/")
     @login_required
     def dashboard():
+        sync_project_phases()
         today = date.today()
 
         # All-time financials, pulled live from Stripe rather than from local
@@ -1011,6 +1013,8 @@ def create_app():
     @pm_bp.route("/projects")
     @login_required
     def projects_list():
+        # Phases follow their own dates; this is where they catch up.
+        sync_project_phases()
         page = request.args.get("page", 1, type=int)
         search = request.args.get("search", "")
         phase = request.args.get("phase", "")
@@ -1047,6 +1051,9 @@ def create_app():
                 description=form.description.data or "",
                 phase=form.phase.data,
                 status=form.status.data,
+                budget=form.budget.data,
+                mvp_date=form.mvp_date.data,
+                go_live_date=form.go_live_date.data,
                 notes=form.notes.data or "",
             )
             db.session.add(project)
@@ -1078,6 +1085,7 @@ def create_app():
     @login_required
     def project_detail(id):
         project = db.session.get(Project, id) or abort(404)
+        sync_project_phases([project])
 
         # No tickets, time, expenses, documents or invoices are loaded: this
         # page shows playbooks, and each of the others has a page of its own.
@@ -1107,7 +1115,8 @@ def create_app():
 
         return render_template("pm/projects/detail.html",
             project=project, applied_playbooks=applied, available_playbooks=available,
-            playbook_state=playbook_state, playbook_categories=Playbook.CATEGORIES)
+            playbook_state=playbook_state, playbook_categories=Playbook.CATEGORIES,
+            phase_note=explain_phase(project))
 
     @pm_bp.route("/projects/<int:id>/playbooks/add", methods=["POST"])
     @login_required
@@ -1185,7 +1194,12 @@ def create_app():
         form = ProjectForm(obj=project)
         form.client_id.choices = [(c.id, c.name) for c in Client.query.order_by(Client.name).all()]
         if form.validate_on_submit():
+            # Changing the phase here means the same as changing it on the
+            # board: the dates are wrong about this one, hold it.
+            was = project.phase
             form.populate_obj(project)
+            if project.phase != was:
+                project.phase_locked = True
             db.session.commit()
             flash(f"Project '{project.name}' updated.", "success")
             return redirect(url_for("pm.project_detail", id=project.id))
@@ -1210,8 +1224,28 @@ def create_app():
         valid_phases = [p[0] for p in PHASE_CHOICES]
         if new_phase in valid_phases:
             project.phase = new_phase
+            # Setting a phase by hand says the dates are wrong about this
+            # project. Without the hold, a late build would be marched
+            # back to Delivered by its own contract date on the next load.
+            project.phase_locked = True
             db.session.commit()
-            flash(f"Phase updated to '{dict(PHASE_CHOICES)[new_phase]}'.", "success")
+            flash(f"Phase set to '{dict(PHASE_CHOICES)[new_phase]}' and held there.",
+                  "success")
+        return redirect(url_for("pm.project_detail", id=project.id))
+
+    @pm_bp.route("/projects/<int:id>/phase/auto", methods=["POST"])
+    @login_required
+    def project_phase_auto(id):
+        """Hand the phase back to the dates."""
+        project = db.session.get(Project, id) or abort(404)
+        project.phase_locked = False
+        db.session.commit()
+        moved = sync_project_phases([project])
+        if moved:
+            flash(f"Following its dates again — moved to "
+                  f"'{dict(PHASE_CHOICES)[project.phase]}'.", "success")
+        else:
+            flash("Following its dates again.", "success")
         return redirect(url_for("pm.project_detail", id=project.id))
 
     def _ticket_choices(blank="No specific ticket"):

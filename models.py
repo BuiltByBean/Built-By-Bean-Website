@@ -197,10 +197,20 @@ class Project(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
-    phase = db.Column(db.String(30), default="discovery")
+    # Nothing reaches this board before it is under contract, so that is
+    # where a project starts.
+    phase = db.Column(db.String(30), default="contracted")
     budget = db.Column(db.Float, nullable=True)
+    # What the contract promised, and what actually happened. The first
+    # comes from the SOW; the second is set when it goes live, and is what
+    # the free-maintenance clock runs from.
     mvp_date = db.Column(db.Date, nullable=True)
+    go_live_date = db.Column(db.Date, nullable=True)
     maintenance_days = db.Column(db.Integer, default=30)
+    # Set the moment a phase is changed by hand. mvp_date is a promise,
+    # not a fact - a build running late would otherwise be marched to
+    # Delivered by its own contract date and marched back every reload.
+    phase_locked = db.Column(db.Boolean, default=False, nullable=False)
     status = db.Column(db.String(20), default="active")
     notes = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -218,9 +228,20 @@ class Project(db.Model):
                                    cascade="all, delete-orphan")
 
     @property
+    def maintenance_anchor(self):
+        """The day the free window starts counting from.
+
+        Go-live, falling back to the delivery date for the projects that
+        predate go_live_date - without the fallback every one of them would
+        have no window at all, and every past hour would turn billable.
+        """
+        return self.go_live_date or self.mvp_date
+
+    @property
     def free_maintenance_end(self):
-        if self.mvp_date:
-            return self.mvp_date + timedelta(days=self.maintenance_days or 30)
+        anchor = self.maintenance_anchor
+        if anchor:
+            return anchor + timedelta(days=self.maintenance_days or 30)
         return None
 
     @property

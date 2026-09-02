@@ -3,12 +3,19 @@ from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, SelectField, FloatField, DateField, PasswordField, DecimalField, BooleanField
 from wtforms.validators import DataRequired, Email, Optional, NumberRange
 
+# Where a build has got to. Nothing reaches this board before it is under
+# contract, so the old lead-chasing phases - discovery, proposal - were
+# describing a stage of the client relationship, which the client stages
+# now cover properly.
+#
+# In order, and the order is load-bearing: phases only ever advance on
+# their own, never go backwards, and 'later' means further down this list.
 PHASE_CHOICES = [
-    ("discovery", "Discovery"),
-    ("proposal", "Proposal"),
     ("contracted", "Contracted"),
     ("mvp", "MVP"),
-    ("live", "Live"),
+    ("delivered", "Delivered"),
+    ("free_maintenance", "Free maintenance"),
+    ("in_production", "In production"),
 ]
 
 PROJECT_STATUS_CHOICES = [
@@ -133,9 +140,10 @@ class ProjectForm(FlaskForm):
     name = StringField("Project Name", validators=[DataRequired()])
     client_id = SelectField("Client", coerce=int, validators=[DataRequired()])
     description = TextAreaField("Description", validators=[Optional()])
-    phase = SelectField("Phase", choices=PHASE_CHOICES, default="discovery")
+    phase = SelectField("Phase", choices=PHASE_CHOICES, default="contracted")
     budget = FloatField("Budget ($)", validators=[Optional(), NumberRange(min=0)])
     mvp_date = DateField("MVP Delivery Date", validators=[Optional()])
+    go_live_date = DateField("Go-Live Date", validators=[Optional()])
     status = SelectField("Status", choices=PROJECT_STATUS_CHOICES, default="active")
     notes = TextAreaField("Notes", validators=[Optional()])
 

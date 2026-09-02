@@ -31,7 +31,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Phase</label>
-                        {{ select_dropdown(form.phase.name, form.phase.choices, form.phase.data or 'discovery', "Select Phase...", full_width=true) }}
+                        {{ select_dropdown(form.phase.name, form.phase.choices, form.phase.data or 'contracted', "Select Phase...", full_width=true) }}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Status</label>
@@ -39,24 +39,46 @@
                     </div>
                 </div>
 
-                <div x-data="{ mvpDate: '{{ form.mvp_date.data or '' }}' }">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {# Two dates and what they imply. Delivery is what the contract
+                   promised; go-live is when it actually went live, and the free
+                   maintenance window runs from that - falling back to delivery
+                   where go-live has not been set yet, which is what the model
+                   does too. Between them these move the phase on their own. #}
+                {% set maint_days = project.maintenance_days if project else 30 %}
+                <div x-data="{
+                        mvpDate: '{{ form.mvp_date.data or '' }}',
+                        goLive: '{{ form.go_live_date.data or '' }}',
+                        get anchor() { return this.goLive || this.mvpDate; },
+                        get endsOn() {
+                            if (!this.anchor) return '';
+                            const d = new Date(this.anchor);
+                            d.setDate(d.getDate() + {{ maint_days }});
+                            return d.toLocaleDateString('en-US',
+                                { month: 'short', day: 'numeric', year: 'numeric' });
+                        },
+                     }">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-surface-300 mb-1.5">MVP Delivery Date</label>
                             {{ form.mvp_date(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm", **{"x-model": "mvpDate"}) }}
+                            <p class="text-xs text-surface-500 mt-1">Moves the phase to Delivered.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-surface-300 mb-1.5">Go-Live Date</label>
+                            {{ form.go_live_date(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm", **{"x-model": "goLive"}) }}
+                            <p class="text-xs text-surface-500 mt-1">Starts the free maintenance window.</p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-surface-300 mb-1.5">Free Maintenance Ends</label>
                             <div class="px-4 py-2.5 rounded-full border border-white/10 bg-surface-800/30 text-sm"
-                                 :class="mvpDate ? 'text-white' : 'text-surface-500'">
-                                <template x-if="mvpDate">
-                                    <span x-text="(() => { const d = new Date(mvpDate); d.setDate(d.getDate() + 30); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); })()"></span>
-                                </template>
-                                <template x-if="!mvpDate">
-                                    <span>Set MVP date to calculate</span>
-                                </template>
-                                <span class="text-xs text-surface-500 ml-1">(30 days after MVP)</span>
+                                 :class="anchor ? 'text-white' : 'text-surface-500'">
+                                <span x-show="anchor" x-text="endsOn"></span>
+                                <span x-show="!anchor">Set a date to calculate</span>
                             </div>
+                            <p class="text-xs text-surface-500 mt-1">
+                                {{ maint_days }} days after
+                                <span x-text="goLive ? 'go-live' : 'delivery'"></span>.
+                            </p>
                         </div>
                     </div>
                 </div>

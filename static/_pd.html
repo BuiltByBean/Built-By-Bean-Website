@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ sidebarOpen: false }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Built By Bean - Project Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            // No darkMode setting and no `dark` class on <html>: this app has one
+            // theme and every colour below is simply it. A dark: variant would
+            // need both back, so do not reach for one.
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    /*
+                      The palette is builtbybeans.com's, moved across whole.
+                      `brand` is the site's --primary #c084fc at 400 and
+                      --primary-dark #a855f7 at 500, which is Tailwind's purple
+                      ramp exactly, so the rest of the scale comes for free.
+                      `surface` is the site's neutrals, which turn out to be
+                      zinc, with the three steps the admin leans on hardest
+                      pinned to the site's own values: 950 is --bg, 900 is
+                      --surface, 800 is --border. `accent` is --accent #38bdf8
+                      at 400, the sky the primary gradient runs into.
+
+                      Re-pointing these two scales is what re-skins the app.
+                      Roughly 1,250 utility classes across 40-odd templates
+                      already read from them, so the colours move without the
+                      markup being touched.
+                    */
+                    colors: {
+                        brand: {
+                            50: '#faf5ff', 100: '#f3e8ff', 200: '#e9d5ff', 300: '#d8b4fe',
+                            400: '#c084fc', 500: '#a855f7', 600: '#9333ea', 700: '#7e22ce',
+                            800: '#6b21a8', 900: '#581c87', 950: '#3b0764'
+                        },
+                        surface: {
+                            50: '#fafafa', 100: '#f4f4f5', 200: '#e4e4e7', 300: '#d4d4d8',
+                            400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 700: '#3f3f46',
+                            800: '#2a2a32', 900: '#1a1a1f', 950: '#0a0a0b'
+                        },
+                        accent: {
+                            50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc',
+                            400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1',
+                            800: '#075985', 900: '#0c4a6e', 950: '#082f49'
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.4s ease-out',
+                        'scale-in': 'scaleIn 0.2s ease-out',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'shimmer': 'shimmer 2s linear infinite',
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+                        scaleIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+                        shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+
+        /*
+          Lifted from static/css/style.css under the same names, so the admin
+          and the public site cannot quietly drift apart. If a value changes
+          there, it changes here.
+        */
+        :root {
+            --primary: #c084fc;
+            --primary-dark: #a855f7;
+            --primary-rgb: 168, 85, 247;
+            --primary-glow: rgba(168, 85, 247, 0.15);
+            --accent: #38bdf8;
+            --accent-rgb: 56, 189, 248;
+            --bg: #0a0a0b;
+            --surface: #1a1a1f;
+            --surface-alpha: rgba(26, 26, 31, 0.78);
+            --border: #2a2a32;
+        }
+
+        body { font-family: 'Inter', system-ui, sans-serif; }
+
+        .mesh-bg {
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(at 40% 20%, rgba(var(--primary-rgb), 0.15) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(var(--accent-rgb), 0.10) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, rgba(var(--primary-rgb), 0.08) 0px, transparent 50%);
+        }
+
+        .sidebar-gradient {
+            background: linear-gradient(180deg, #171021 0%, var(--bg) 100%);
+        }
+
+        .glass {
+            background: rgba(10, 10, 11, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+        }
+
+        .glass-card {
+            background: var(--surface-alpha);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        /*
+          The site's signature hover: the border turns into the primary to
+          accent gradient and a purple glow comes up under the card. Two
+          stacked backgrounds do it. The first is clipped to the padding box so
+          it covers everything except the 1px border; the second to the border
+          box, so the gradient shows only there.
+
+          The inner layer repeats the card's own alpha rather than going
+          opaque. Painting a solid colour here is the obvious way to write it
+          and makes every card visibly solidify the moment a cursor touches it.
+        */
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover {
+            border-color: transparent;
+            background-image:
+                linear-gradient(var(--surface-alpha), var(--surface-alpha)),
+                linear-gradient(135deg, var(--primary), var(--accent));
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
+            box-shadow: 0 0 30px var(--primary-glow);
+            transform: translateY(-4px);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /*
+          The primary button, matched to .btn-primary on the public site.
+          A purple to sky gradient under a layered glow, with a second gradient
+          faded in on hover rather than swapped for the first, so the colour
+          moves instead of jumping. Sizing and shape stay with the utility
+          classes on the element; this owns only the colour and the lift.
+        */
+        .btn-brand {
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, var(--accent) 140%);
+            box-shadow:
+                0 10px 30px -8px rgba(var(--primary-rgb), 0.5),
+                0 0 0 1px rgba(var(--primary-rgb), 0.35),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12);
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
+        }
+        .btn-brand::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            z-index: -1;
+        }
+        .btn-brand:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 18px 44px -8px rgba(var(--primary-rgb), 0.65),
+                0 0 60px -6px rgba(var(--accent-rgb), 0.3),
+                0 0 0 1px rgba(var(--primary-rgb), 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        }
+        .btn-brand:hover::before { opacity: 1; }
+
+        /* The logo, drawn the way the site draws it: the mark used as a mask
+           over the primary-to-accent gradient, so it is the same object in
+           both places rather than a lookalike. */
+        .logo-mark {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-mask-image: var(--logo-src);
+            mask-image: var(--logo-src);
+            -webkit-mask-size: contain;
+            mask-size: contain;
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+            -webkit-mask-position: center;
+            mask-position: center;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.625rem 1rem;
+            /* 0.625rem of padding round a 21px line box comes to 41px, which is
+               under the 44px a thumb needs. Every link in this nav was short by
+               the same three pixels. */
+            min-height: 44px;
+            border-radius: 0.75rem;
+            color: rgba(255, 255, 255, 0.65);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .sidebar-link:hover {
+            color: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .sidebar-link.active {
+            color: #fff;
+            background: rgba(var(--primary-rgb), 0.18);
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+        .sidebar-link.active svg { color: var(--primary); }
+
+        .input-ring {
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(10, 10, 11, 0.5);
+            color: #e4e4e7;
+            transition: all 0.2s ease;
+        }
+        .input-ring:focus {
+            outline: none;
+            border-color: var(--primary-dark);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25);
+        }
+
+        .stagger-in > * {
+            animation: slideUp 0.4s ease-out both;
+        }
+        .stagger-in > *:nth-child(1) { animation-delay: 0.05s; }
+        .stagger-in > *:nth-child(2) { animation-delay: 0.1s; }
+        .stagger-in > *:nth-child(3) { animation-delay: 0.15s; }
+        .stagger-in > *:nth-child(4) { animation-delay: 0.2s; }
+        .stagger-in > *:nth-child(5) { animation-delay: 0.25s; }
+        .stagger-in > *:nth-child(6) { animation-delay: 0.3s; }
+
+        .noise::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(var(--primary-rgb), 0.25); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary-rgb), 0.45); }
+    </style>
+
+    <!--
+      The dropdown behind every select in this app.
+
+      A native <select> paints its option list with the OS widget, and no CSS
+      reaches inside it: square corners, system grey, system font, and not one
+      of them aware of whether the app is in dark mode. That list is the thing
+      that looks wrong, and styling the closed control cannot fix it, so the
+      list is ours and the only native part left is the hidden input that
+      carries the value to the server, which is all a form ever needed.
+
+      Everything a native select gave away for free is therefore ours to give
+      back, and the reason this is longer than a <select>: arrow keys, Home and
+      End, type-ahead, Escape, focus returning to the trigger when it closes,
+      and the roles that let a screen reader still call it a listbox.
+
+      Registered on alpine:init, which is safe from here: this script is inline
+      and runs while the Alpine bundle is still deferred.
+    -->
+    <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('bbbSelect', (config) => ({
+            name: config.name,
+            options: config.options,
+            placeholder: config.placeholder,
+            value: String(config.value ?? ''),
+            open: false,
+            active: -1,      // the row the keyboard is on, -1 when closed
+            dropUp: false,
+            _typed: '',
+            _typedAt: 0,
+
+            get chosen() {
+                return this.options.find(o => o.v === this.value) || null;
+            },
+            /* Asked by index, never by embedding the value in the markup: a
+               value spliced into an attribute has to be quoted, and a quote is
+               how the attribute ends early. */
+            isPicked(i) {
+                return !!this.options[i] && this.options[i].v === this.value;
+            },
+            get label() {
+                return this.chosen ? this.chosen.l : this.placeholder;
+            },
+
+            toggle() { this.open ? this.close() : this.reveal(); },
+
+            reveal() {
+                this.measure();
+                this.open = true;
+                const i = this.options.findIndex(o => o.v === this.value);
+                this.active = i < 0 ? 0 : i;
+                this.$nextTick(() => this.scrollActiveIntoView());
+            },
+
+            close(refocus = true) {
+                if (!this.open) return;
+                this.open = false;
+                this.active = -1;
+                if (refocus && this.$refs.trigger) this.$refs.trigger.focus();
+            },
+
+            /* Open upward when the list would run off the bottom of the window
+               and there is more room above it. The triage row on the last card
+               of a long board is otherwise a list you have to scroll the page
+               to read. */
+            measure() {
+                const r = this.$refs.trigger.getBoundingClientRect();
+                const need = Math.min(256, this.options.length * 36 + 10) + 12;
+                this.dropUp = (window.innerHeight - r.bottom) < need && r.top > need;
+            },
+
+            move(step) {
+                if (!this.open) return this.reveal();
+                const n = this.options.length;
+                if (!n) return;
+                this.active = (this.active + step + n) % n;
+                this.scrollActiveIntoView();
+            },
+
+            jump(where) {
+                if (!this.open) this.reveal();
+                this.active = where === 'first' ? 0 : this.options.length - 1;
+                this.scrollActiveIntoView();
+            },
+
+            scrollActiveIntoView() {
+                const row = this.$refs.list && this.$refs.list.children[this.active];
+                if (row) row.scrollIntoView({ block: 'nearest' });
+            },
+
+            /* Type-ahead, because a native select has it and a list of forty
+               clients is miserable without it. Letters typed within a second of
+               each other build one search rather than starting a new one, so
+               "ke" finds Kenali rather than landing on everything with an e. */
+            seek(key) {
+                const now = Date.now();
+                this._typed = (now - this._typedAt < 1000 ? this._typed : '') + key.toLowerCase();
+                this._typedAt = now;
+                const n = this.options.length;
+                if (!n) return;
+                const from = this.active < 0 ? 0 : this.active;
+                /* A repeat of the same single letter steps to the next match;
+                   a longer search re-reads from where we already are. */
+                const offset = this._typed.length > 1 ? 0 : 1;
+                for (let k = 0; k < n; k++) {
+                    const i = (from + k + offset) % n;
+                    if (this.options[i].l.toLowerCase().startsWith(this._typed)) {
+                        if (!this.open) this.reveal();
+                        this.active = i;
+                        this.scrollActiveIntoView();
+                        return;
+                    }
+                }
+            },
+
+            pick(i) {
+                const opt = this.options[i];
+                if (!opt) return;
+                this.value = opt.v;
+                /* Written to the input by hand as well as by binding. A form
+                   that submits on change reads the DOM in this same tick, and
+                   Alpine's own write to it is a tick away. */
+                if (this.$refs.input) this.$refs.input.value = opt.v;
+                this.close();
+                this.$dispatch('dropdown-change', { name: this.name, value: opt.v });
+            },
+        }));
+    });
+    </script>
+</head>
+<body class="mesh-bg noise min-h-screen">
+
+    <!-- Mobile sidebar overlay -->
+    <div x-show="sidebarOpen" x-cloak
+         class="fixed inset-0 bg-black/50 z-40 lg:hidden"
+         @click="sidebarOpen = false"
+         x-transition:enter="transition-opacity ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar-gradient fixed top-0 left-0 h-full w-[260px] z-50 flex flex-col shadow-2xl transition-transform duration-300"
+           :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
+
+        <!-- Logo -->
+        <div class="p-6 pb-4">
+            <div class="flex items-center gap-3">
+                <div class="logo-mark w-10 h-10 flex-shrink-0"
+                     style="--logo-src: url('/static/images/logo.png?v=1788316306')"></div>
+                <div>
+                    <h1 class="text-white font-bold text-lg leading-tight">Built By Bean</h1>
+                    <span class="text-brand-300/70 text-xs font-medium tracking-wide uppercase">Project Manager</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
+            <a href="/admin/pm/apps/"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                </svg>
+                My Apps
+            </a>
+            <div class="my-2 border-t border-white/10"></div>
+
+            <a href="/admin/pm/"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z"/>
+                </svg>
+                Finances
+            </a>
+            <a href="/admin/pm/clients"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Clients
+            </a>
+            <a href="/admin/pm/projects"
+               class="sidebar-link active">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+                Projects
+            </a>
+            <a href="/admin/pm/tickets"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+                Tickets
+            </a>
+            
+            <a href="/admin/pm/contracts/"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25A3.375 3.375 0 0113.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 013.375 3.375M9 15l2.25 2.25L15 12"/>
+                </svg>
+                Contracts
+            </a>
+            <a href="/admin/pm/playbooks/"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+                Playbooks
+            </a>
+            <div class="my-2 border-t border-white/10"></div>
+
+            <a href="/admin/pm/taxes/"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 6h.008v.008h-.008V15zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+                </svg>
+                Taxes
+            </a>
+            
+            <a href="/admin/pm/expenses"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Expenses
+            </a>
+            
+            <a href="/admin/pm/stripe/invoices"
+               class="sidebar-link ">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Invoices
+            </a>
+        </nav>
+
+        <!-- Footer -->
+        <div class="px-6 py-4 border-t border-white/10">
+            
+            <p class="text-white/50 text-xs">&copy; 2026 Built By Bean, LLC</p>
+        </div>
+    </aside>
+
+    <!-- Main content -->
+    <div class="lg:ml-[260px] min-h-screen relative z-10">
+        <!-- Top header -->
+        <header class="glass sticky top-0 z-30 px-6 py-4">
+            
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <div class="flex items-center gap-4 min-w-0">
+                    <!-- Mobile menu button -->
+                    <button @click="sidebarOpen = !sidebarOpen" class="lg:hidden p-2 rounded-lg hover:bg-surface-700">
+                        <svg class="w-5 h-5 text-surface-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <div class="min-w-0">
+                        <h2 class="text-lg font-bold text-white">Late Build</h2>
+                        <p class="text-sm text-surface-400">Route Probe</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                    
+                    
+<div class="flex items-center gap-2" x-data="{ confirmDelete: false }">
+    
+    <a href="/admin/pm/projects/3/edit"
+       class="px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
+        Edit
+    </a>
+    <div x-show="!confirmDelete">
+        <button @click="confirmDelete = true"
+                class="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-600 text-sm font-medium rounded-xl transition-colors">
+            Delete
+        </button>
+    </div>
+    
+    
+    
+    <form x-show="confirmDelete" x-cloak method="POST" action="/admin/pm/projects/3/delete" class="inline-flex items-center gap-2">
+        <span class="text-xs text-red-500">
+            Delete project?
+        </span>
+        <button type="submit" class="px-3 py-2 text-xs bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium">Yes</button>
+        <button type="button" @click="confirmDelete = false" class="px-3 py-2 text-xs text-surface-500 hover:text-surface-300 font-medium">No</button>
+    </form>
+</div>
+
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash messages -->
+        
+        
+        
+
+        <!-- Page content -->
+        <main class="p-6 animate-fade-in">
+            
+<!-- Phase Progress Bar -->
+
+
+
+
+<div class="glass-card p-6 mb-6">
+    <div class="relative mb-6">
+        <!-- Connector lines (behind circles) -->
+        <div class="absolute top-[18px] left-0 right-0 px-[10%]">
+            <div class="grid grid-cols-4 gap-0">
+                
+                
+                
+                <div class="h-0.5 rounded-full bg-brand-500"></div>
+                
+                
+                
+                
+                <div class="h-0.5 rounded-full bg-brand-500"></div>
+                
+                
+                
+                
+                <div class="h-0.5 rounded-full bg-surface-700"></div>
+                
+                
+                
+                
+                <div class="h-0.5 rounded-full bg-surface-700"></div>
+                
+                
+                
+                
+            </div>
+        </div>
+        <!-- Step circles -->
+        <div class="relative grid grid-cols-5 gap-0">
+            
+            
+            <form method="POST" action="/admin/pm/projects/3/phase" class="flex flex-col items-center">
+                <input type="hidden" name="phase" value="contracted">
+                <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
+                    bg-brand-600 text-white shadow-md shadow-brand-500/30 hover:bg-brand-700
+                    ">
+                    
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    
+                </button>
+                <span class="mt-2 text-[11px] font-medium whitespace-nowrap
+                    text-brand-400">Contracted</span>
+            </form>
+            
+            
+            <form method="POST" action="/admin/pm/projects/3/phase" class="flex flex-col items-center">
+                <input type="hidden" name="phase" value="mvp">
+                <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
+                    bg-brand-600 text-white shadow-md shadow-brand-500/30 hover:bg-brand-700
+                    ">
+                    
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    
+                </button>
+                <span class="mt-2 text-[11px] font-medium whitespace-nowrap
+                    text-brand-400">MVP</span>
+            </form>
+            
+            
+            <form method="POST" action="/admin/pm/projects/3/phase" class="flex flex-col items-center">
+                <input type="hidden" name="phase" value="delivered">
+                <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
+                    bg-brand-600 text-white shadow-lg shadow-brand-500/40 ring-4 ring-brand-500/20
+                    ">
+                    3
+                </button>
+                <span class="mt-2 text-[11px] font-medium whitespace-nowrap
+                    text-brand-400">Delivered</span>
+            </form>
+            
+            
+            <form method="POST" action="/admin/pm/projects/3/phase" class="flex flex-col items-center">
+                <input type="hidden" name="phase" value="free_maintenance">
+                <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
+                    bg-surface-700 text-surface-400 hover:bg-surface-600">
+                    4
+                </button>
+                <span class="mt-2 text-[11px] font-medium whitespace-nowrap
+                    text-surface-500">Free maintenance</span>
+            </form>
+            
+            
+            <form method="POST" action="/admin/pm/projects/3/phase" class="flex flex-col items-center">
+                <input type="hidden" name="phase" value="in_production">
+                <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
+                    bg-surface-700 text-surface-400 hover:bg-surface-600">
+                    5
+                </button>
+                <span class="mt-2 text-[11px] font-medium whitespace-nowrap
+                    text-surface-500">In production</span>
+            </form>
+            
+        </div>
+    </div>
+
+    <!-- Project Info -->
+    <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-400 uppercase">Status:</span>
+            
+
+
+
+
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-900/30 text-emerald-400">
+    Active
+</span>
+
+        </div>
+        
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-400 uppercase">MVP Date:</span>
+            <span class="text-sm font-medium text-white">Aug 27, 2026</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-400 uppercase">Free Maint. Ends:</span>
+            
+            
+            <span class="text-sm font-medium text-emerald-400">Sep 26, 2026</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-900/30 text-emerald-400">Active</span>
+            
+        </div>
+        
+    </div>
+
+    
+    
+    <div class="mt-4 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+            
+            <svg class="w-4 h-4 flex-shrink-0 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            
+            <p class="text-sm text-surface-400">Set a go-live date to start the free maintenance window.</p>
+        </div>
+        
+    </div>
+    
+
+    
+</div>
+
+<!-- The running app, where this project has one -->
+
+
+<!-- Financial Summary -->
+<div class="grid grid-cols-2  gap-4 mb-6">
+    
+    <div class="glass-card p-4">
+        <p class="text-xs font-medium text-emerald-400 mb-1">Revenue</p>
+        <p class="text-lg font-bold text-emerald-300">$0.00</p>
+    </div>
+    <div class="glass-card p-4">
+        <p class="text-xs font-medium text-red-400 mb-1">Expenses</p>
+        <p class="text-lg font-bold text-red-300">$0.00</p>
+    </div>
+</div>
+
+<!-- Playbooks -->
+
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.store('pb', {
+        books: {},
+        busy: {},
+
+        isDone(book, step) {
+            const b = this.books[book];
+            return !!(b && b.steps[step]);
+        },
+        isBusy(book, step) {
+            return !!this.busy[book + ':' + step];
+        },
+        get totalDone() {
+            return Object.values(this.books).reduce((n, b) => n + b.done, 0);
+        },
+
+        async toggle(book, step, url) {
+            const key = book + ':' + step;
+            if (this.busy[key]) return;          // a double click is one tick
+            this.busy[key] = true;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error(res.status);
+                const data = await res.json();
+                const b = this.books[book];
+                b.steps[step] = data.done;
+                b.done = data.book.done;
+                b.total = data.book.total;
+                b.percent = data.book.percent;
+                b.complete = data.book.complete;
+            } catch (err) {
+                /* Never leave a tick that did not save looking like it did.
+                   Reloading costs the scroll position, which is the thing this
+                   file exists to preserve — but a checkbox lying about what the
+                   server knows is the worse of the two. */
+                console.error('playbook tick failed', err);
+                window.location.reload();
+            } finally {
+                delete this.busy[key];
+            }
+        },
+    });
+});
+
+function playbookPanel(ids, preferred) {
+    return {
+        sel: '',
+        init() {
+            // A playbook removed since the link was made must not leave the
+            // panel showing nothing, so the hash is checked against what is
+            // actually here.
+            const m = location.hash.match(/^#pb-(\d+)$/);
+            this.sel = (m && ids.includes(m[1])) ? m[1] : preferred;
+        },
+        pick(id) {
+            this.sel = id;
+            // replaceState, not a hash assignment: setting location.hash
+            // scrolls the matching element into view, which on a phone jumps
+            // the panel out from under your thumb.
+            history.replaceState(null, '', '#pb-' + id);
+        },
+    };
+}
+</script>
+
+
+<div class="glass-card p-8 text-center">
+    <p class="text-surface-400 mb-1">No playbooks on this project</p>
+    <p class="text-sm text-surface-500 mb-4">Add one and its checklist appears here.</p>
+    
+    <button type="button" @click="$dispatch('open-playbook-picker')"
+            class="inline-flex items-center gap-1.5 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add playbook
+    </button>
+    
+</div>
+
+
+
+
+<div x-data="{ open: false, q: '' }"
+     @open-playbook-picker.window="open = true; $nextTick(() => $refs.q && $refs.q.focus())"
+     @keydown.escape.window="open = false">
+    <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 lg:pl-[260px]"
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="open = false"></div>
+        <div class="relative w-full max-w-lg glass-card shadow-2xl flex flex-col max-h-[70vh]"
+             x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+
+            <div class="p-4 border-b border-white/10 flex items-center gap-3">
+                <input type="text" x-model="q" x-ref="q" placeholder="Search playbooks..."
+                       class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
+                <button @click="open = false" class="text-surface-400 hover:text-surface-200 p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto p-3 space-y-4">
+                
+                
+                
+                
+                <div x-show='["stripe", "twilio", "gmail smtp", "tripleseat", "squarespace", "app store"].some(n => n.includes(q.toLowerCase()))'>
+                    <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">Services</p>
+                    <div class="space-y-1">
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'stripe'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="1">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/stripe.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Stripe</span>
+                                <span class="text-xs text-surface-500 tabular-nums">9 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'twilio'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="2">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/twilio.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Twilio</span>
+                                <span class="text-xs text-surface-500 tabular-nums">12 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'gmail smtp'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="8">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/gmail.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Gmail SMTP</span>
+                                <span class="text-xs text-surface-500 tabular-nums">10 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'tripleseat'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="9">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/tripleseat.png?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Tripleseat</span>
+                                <span class="text-xs text-surface-500 tabular-nums">11 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'squarespace'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="10">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/squarespace.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Squarespace</span>
+                                <span class="text-xs text-surface-500 tabular-nums">11 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'app store'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="17">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/appstore.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">App Store</span>
+                                <span class="text-xs text-surface-500 tabular-nums">12 steps</span>
+                            </button>
+                        </form>
+                        
+                    </div>
+                </div>
+                
+                
+                
+                
+                
+                <div x-show='["resend", "cloudflare", "aws", "railway", "postgresql", "github", "sentry"].some(n => n.includes(q.toLowerCase()))'>
+                    <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">Infrastructure</p>
+                    <div class="space-y-1">
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'resend'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="5">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/resend.png?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Resend</span>
+                                <span class="text-xs text-surface-500 tabular-nums">9 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'cloudflare'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="3">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/cloudflare.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Cloudflare</span>
+                                <span class="text-xs text-surface-500 tabular-nums">7 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'aws'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="7">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/aws.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">AWS</span>
+                                <span class="text-xs text-surface-500 tabular-nums">10 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'railway'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="4">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/railway.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Railway</span>
+                                <span class="text-xs text-surface-500 tabular-nums">8 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'postgresql'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="11">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/postgresql.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">PostgreSQL</span>
+                                <span class="text-xs text-surface-500 tabular-nums">9 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'github'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="6">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/github.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">GitHub</span>
+                                <span class="text-xs text-surface-500 tabular-nums">8 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'sentry'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="12">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/sentry.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">Sentry</span>
+                                <span class="text-xs text-surface-500 tabular-nums">8 steps</span>
+                            </button>
+                        </form>
+                        
+                    </div>
+                </div>
+                
+                
+                
+                
+                
+                <div x-show='["openstreetmap", "youtube data api", "esv api", "llm apis"].some(n => n.includes(q.toLowerCase()))'>
+                    <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">APIs</p>
+                    <div class="space-y-1">
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'openstreetmap'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="13">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/openstreetmap.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">OpenStreetMap</span>
+                                <span class="text-xs text-surface-500 tabular-nums">7 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'youtube data api'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="14">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/youtube.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">YouTube Data API</span>
+                                <span class="text-xs text-surface-500 tabular-nums">8 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'esv api'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="15">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/book.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">ESV API</span>
+                                <span class="text-xs text-surface-500 tabular-nums">6 steps</span>
+                            </button>
+                        </form>
+                        
+                        <form method="POST" action="/admin/pm/projects/3/playbooks/add"
+                              x-show="'llm apis'.includes(q.toLowerCase())">
+                            <input type="hidden" name="playbook_id" value="16">
+                            <button type="submit"
+                                    class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                                
+                                <img src="/static/pm/logos/anthropic.svg?v=1788316306" alt=""
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                
+                                <span class="flex-1 text-sm font-medium text-surface-200">LLM APIs</span>
+                                <span class="text-xs text-surface-500 tabular-nums">10 steps</span>
+                            </button>
+                        </form>
+                        
+                    </div>
+                </div>
+                
+                
+
+                
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+        </main>
+    </div>
+
+</body>
+</html>
