@@ -2775,7 +2775,15 @@ def create_app():
         # a typed name, which filed nothing when the spelling drifted.
         doc = None
         project = None
-        if client:
+        # Only on the way out. This route is posted twice: once to build the
+        # preview, and again from the preview page, which replays every field
+        # with `previewed` set. Everything below records something agreed, and
+        # it was all happening on the first pass - so opening a statement of
+        # work to look at it filed the PDF against the client, moved them to
+        # "contracted", and booked the MVP price as contract revenue, whether
+        # or not the document was ever sent. Backing out of the preview left
+        # all of it behind. The hosting agreement has always drawn this line.
+        if client and request.form.get("previewed"):
             stored_name = f"{uuid.uuid4().hex}.pdf"
             if _s3_client:
                 s3_key = f"documents/{stored_name}"
@@ -2811,12 +2819,8 @@ def create_app():
             # the infrastructure cost against. An SOW is the thing that brings
             # a project into being, so a name that matches nothing makes the
             # project rather than skipping the block.
-            #
-            # Only on the way out. The preview step reaches this code as well,
-            # and a document that was looked at and abandoned should not leave
-            # a project behind - the rule the hosting agreement already keeps.
             created_project = False
-            if project is None and request.form.get("previewed"):
+            if project is None:
                 project = Project(client_id=client.id, name=project_name)
                 db.session.add(project)
                 created_project = True
