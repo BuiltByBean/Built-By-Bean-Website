@@ -2307,10 +2307,12 @@ def create_app():
     @pm_bp.route("/contracts/new/statement-of-work", methods=["GET"])
     @login_required
     def sow_form():
+        from pm.contract_routes import _projects_for_picker
         options, lookup = _client_picker()
         return render_template("pm/contracts/sow_form.html",
                                today=date.today().isoformat(),
-                               client_options=options, client_lookup=lookup)
+                               client_options=options, client_lookup=lookup,
+                               projects=_projects_for_picker())
 
     @pm_bp.route("/contracts/new/statement-of-work", methods=["POST"])
     @login_required
@@ -2321,6 +2323,9 @@ def create_app():
         client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
         client_name = client.name if client else ""
         project_name = request.form.get("project_name", "").strip()
+        # The picker's answer. "new" and an empty value both come back as None,
+        # which is the fall-through to matching on the name.
+        project_id = request.form.get("project_id", type=int)
         project_description = request.form.get("project_description", "").strip()
         mvp_price = request.form.get("mvp_price", "2,500").strip()
         raw_sow_date = request.form.get("sow_date", "")
@@ -2380,7 +2385,8 @@ def create_app():
                                   maintenance_rate, feature_rate,
                                   # An electronically-sent SOW is signed by
                                   # both parties, Michael first.
-                                  countersign=_wants_send())
+                                  countersign=_wants_send(),
+                                  project_id=project_id)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -2392,7 +2398,7 @@ def create_app():
                         payment_description, payment_milestones,
                         hosting_fee, hosting_cycle, supersedes_date="",
                         maintenance_rate="75", feature_rate="100",
-                        countersign=False):
+                        countersign=False, project_id=None):
         # The chosen client, passed in rather than looked up again by name.
         client_name = client.name
         from fpdf import FPDF
@@ -2809,10 +2815,24 @@ def create_app():
             client.stage = "contracted"
             client.contract_revenue = price_val
             # Update matching project with MVP date and maintenance days
-            project = Project.query.filter(
-                Project.client_id == client.id,
-                Project.name.ilike(project_name),
-            ).first()
+            # Chosen from the picker where one was used, which is exact. The
+            # name match stays as the fall-through: a preview stashed before
+            # the picker existed replays without an id, a revision prefill
+            # fills the name and not the select, and either has to keep
+            # working.
+            project = None
+            if project_id:
+                candidate = db.session.get(Project, project_id)
+                # A stale form can carry a project belonging to somebody else.
+                # Filing this SOW against it would write the fee onto another
+                # client's margin.
+                if candidate is not None and candidate.client_id == client.id:
+                    project = candidate
+            if project is None:
+                project = Project.query.filter(
+                    Project.client_id == client.id,
+                    Project.name.ilike(project_name),
+                ).first()
             # No match used to mean no record: the fee, budget, delivery date,
             # maintenance window and phase all went into the PDF and stopped
             # there, without a word, and the hosting page had no fee to hold

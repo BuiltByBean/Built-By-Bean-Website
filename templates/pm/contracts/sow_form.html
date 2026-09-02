@@ -11,7 +11,9 @@
 <div class="max-w-2xl">
     <div class="glass-card p-6">
         <form method="POST" action="{{ url_for('pm.generate_sow') }}"
-              x-data='Object.assign(sowForm(), { clientId: "", chosen: null, clients: {{ client_lookup|tojson }} })'
+              x-data='Object.assign(sowForm(), { clientId: "", chosen: null,
+                                                clients: {{ client_lookup|tojson }},
+                                                projects: {{ projects|tojson }} })'
               x-effect="chosen = clients[clientId] || null">
 
     {% include "pm/contracts/_prefill.html" %}
@@ -32,11 +34,47 @@
                         {% endif %}
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Project Name *</label>
-                        <input type="text" name="project_name" required
-                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
-                               placeholder="e.g. Talent Booker Web App">
+                        <label for="sow_project" class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
+                        {#- A plain select rather than the styled dropdown, because
+                            the options are filtered live by the chosen client and
+                            the macro renders a fixed list at template time. Same
+                            reason the hosting form uses one. -#}
+                        <select id="sow_project" name="project_id" x-model="projectId" @change="pickProject()"
+                                class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                            <option value="">Choose an existing project</option>
+                            <template x-for="p in mine" :key="p.id">
+                                <option :value="p.id" x-text="p.name"></option>
+                            </template>
+                            <option value="new">+ New project</option>
+                        </select>
                     </div>
+                </div>
+
+                <div>
+                    <label for="sow_project_name" class="block text-sm font-medium text-surface-300 mb-1.5">Project Name *</label>
+                    {#- Always present and always submitted: the document, its
+                        filename and the project record are all written from this.
+                        Filled from the picker and locked while an existing project
+                        is chosen, so the name on the contract cannot drift from the
+                        name on the row it is filed against - which is how a typo
+                        used to become a second project. -#}
+                    <input id="sow_project_name" type="text" name="project_name" required
+                           x-model="projectName"
+                           {#- A real boolean, not just something falsy. Alpine drops a
+                               boolean attribute for null, undefined and false only, so
+                               the bare `projectId && ...` gave back "" with nothing
+                               picked and rendered readonly="readonly" - locking the
+                               field the moment the client changed. -#}
+                           :readonly="!!projectId && projectId !== 'new'"
+                           :class="projectId && projectId !== 'new'
+                                   ? 'text-surface-400 cursor-not-allowed' : 'text-white'"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-sm"
+                           placeholder="e.g. Talent Booker Web App">
+                    <p class="mt-1.5 text-xs text-surface-400">
+                        Pick the project above and this SOW's fee, budget and dates are
+                        recorded against it. Choose
+                        <span class="text-surface-300">+ New project</span> to start one.
+                    </p>
                 </div>
 
                 <div>
@@ -204,6 +242,23 @@
 <script>
 function sowForm() {
     return {
+        projects: [],
+        projectId: '',
+        projectName: '',
+        init() {
+            // A project chosen under one client does not belong to the next.
+            // Left selected, this SOW would be filed against another client's
+            // project and put its fee on the wrong margin.
+            this.$watch('clientId', () => { this.projectId = ''; this.projectName = ''; });
+        },
+        get mine() {
+            return this.projects.filter(p => p.client_id === this.clientId);
+        },
+        pickProject() {
+            if (this.projectId === 'new') { this.projectName = ''; return; }
+            const p = this.projects.find(p => p.id === this.projectId);
+            if (p) this.projectName = p.name;
+        },
         features: [''],
         addFeature() {
             this.features.push('');
