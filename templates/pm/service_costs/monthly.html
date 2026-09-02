@@ -73,6 +73,73 @@
     </form>
     {% endif %}
 
+    {#
+      Paste, rather than type.
+
+      The request was for a monthly upload and what got built was nineteen
+      number fields, which is the same job done by hand. The figures already
+      exist as text on the vendor's usage screen, so the shortest correct path
+      is to copy that screen and let this read it. Nothing is saved by pasting:
+      it fills the fields below, and the save button is still the save button,
+      so a bad parse is visible before it is a stored number.
+    #}
+    <div class="glass-card p-4" x-data="pasteFill()">
+        <button type="button" @click="open = !open"
+                class="w-full flex items-center justify-between gap-3 min-h-[44px] text-left">
+            <span class="text-sm font-semibold text-white">Paste from {{ provider.display_name }}</span>
+            <svg class="w-4 h-4 flex-shrink-0 text-surface-400 transition-transform"
+                 :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+
+        <div x-show="open" x-cloak class="mt-3 space-y-3">
+            <p class="text-xs text-surface-400">
+                Select the vendor's usage-by-project list, copy it, and paste it here.
+                Names are matched to the rows below and the amounts filled in. Nothing
+                is saved until you press Save.
+            </p>
+            <textarea x-model="raw" rows="5" spellcheck="false"
+                      placeholder="Talent Booker&#10;Current Cost&#10;$22.30&#10;Data Dungeon&#10;Current Cost&#10;$4.96"
+                      class="w-full input-ring px-3 py-2 text-xs font-mono bg-surface-800 text-white rounded-lg"></textarea>
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button" @click="apply()" :disabled="!raw.trim()"
+                        class="px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all disabled:opacity-40">
+                    Fill the amounts
+                </button>
+                <button type="button" @click="raw = ''; report = null"
+                        class="px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:text-surface-200 transition-colors">
+                    Clear
+                </button>
+            </div>
+
+            <template x-if="report">
+                <div class="text-xs space-y-1.5 pt-1">
+                    <p class="text-emerald-400" x-show="report.filled.length">
+                        Filled <span x-text="report.filled.length"></span>:
+                        <span class="text-surface-400" x-text="report.filled.join(', ')"></span>
+                    </p>
+                    {# A pasted name with no row means the vendor's API did not
+                       return that project, which is a different problem from a
+                       name that does not match, and the fix differs. #}
+                    <p class="text-amber-400" x-show="report.unmatched.length">
+                        No row here for <span x-text="report.unmatched.length"></span>:
+                        <span class="text-surface-400" x-text="report.unmatched.join(', ')"></span>.
+                        {{ provider.display_name }} did not list those, so either the names
+                        differ from what is shown above or the sync could not reach it.
+                    </p>
+                    <p class="text-surface-400" x-show="report.untouched.length">
+                        Left alone, not in what you pasted:
+                        <span x-text="report.untouched.join(', ')"></span>
+                    </p>
+                    <p class="text-red-400" x-show="!report.filled.length && !report.unmatched.length">
+                        Nothing that looked like an amount was found in that.
+                    </p>
+                </div>
+            </template>
+        </div>
+    </div>
+
     <!-- Entry table -->
     <form method="POST" action="{{ url_for('service_costs.provider_monthly', id=provider.id) }}">
         <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
@@ -80,20 +147,43 @@
         <div class="glass-card">
             <div class="p-4 border-b border-surface-700 flex items-center justify-between">
                 <h3 class="text-sm font-semibold text-white">{{ month.strftime('%B %Y') }}</h3>
+                {# The catch-all is not one of the vendor's projects, so it is
+                   not counted as one. #}
+                {% set project_rows = rows|length - 1 %}
                 <span class="text-xs text-surface-400">
-                    {{ rows|length }} resource{{ '' if rows|length == 1 else 's' }}
+                    {{ project_rows }} project{{ '' if project_rows == 1 else 's' }}
                 </span>
             </div>
 
-            {% if rows %}
+            {% if project_rows == 0 %}
+            {# Not an error state any more. A month before the per-project
+               breakdown was kept has no projects to list and is entered as one
+               figure on the catch-all row below, which is the whole reason
+               that row exists. #}
+            <div class="px-4 pt-4 -mb-2">
+                <p class="text-xs text-surface-400">
+                    {{ provider.display_name }} lists no projects for this month. Put the
+                    invoice total on the row below and it will be booked unallocated.
+                </p>
+            </div>
+            {% endif %}
+
             <div class="divide-y divide-surface-800">
                 {% for row in rows %}
                 <div class="p-4 flex flex-wrap items-center gap-3">
                     <input type="hidden" name="lbl:{{ row.id }}" value="{{ row.label }}">
 
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium text-white truncate">{{ row.label }}</div>
+                        <div class="text-sm font-medium {{ 'text-surface-300' if row.is_other else 'text-white' }} truncate">{{ row.label }}</div>
                         <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            {% if row.is_other %}
+                            {# No Map link and no suggestion: the whole point of
+                               this row is the part that has no owner. #}
+                            <span class="text-surface-500">
+                                The plan fee, deleted projects, and any month with no per-project
+                                breakdown. Stays unallocated.
+                            </span>
+                            {% else %}
                             {% if row.historical %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400"
                                   title="Not in the vendor's current project list">
@@ -126,13 +216,18 @@
                                                      month=month.strftime('%Y-%m'))) }}"
                                    class="min-h-[44px] inline-flex items-center px-2 text-brand-400 hover:text-brand-300 font-medium">Map →</a>
                             {% endif %}
+                            {% endif %}
                         </div>
                     </div>
 
                     <div class="flex items-center gap-1.5 shrink-0">
                         <span class="text-sm text-surface-400">$</span>
+                        {# data-fill-name is what the paste parser matches a
+                           vendor's project name against. #}
                         <input type="number" name="amt:{{ row.id }}" step="0.0001" min="0"
                                inputmode="decimal"
+                               data-fill-name="{{ row.label }}"
+                               {% if row.is_other %}data-fill-other="1"{% endif %}
                                value="{{ row.amount_str }}"
                                placeholder="0.00"
                                class="w-28 min-h-[44px] input-ring px-3 py-2 text-sm text-right bg-surface-800 text-white rounded-lg">
@@ -140,18 +235,7 @@
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="p-8 text-center">
-                <p class="text-sm text-surface-400">
-                    No resources found for this provider.
-                </p>
-                <p class="text-xs text-surface-500 mt-1">
-                    Check the provider's credentials, or wait for the first sync to list its projects.
-                </p>
-            </div>
-            {% endif %}
 
-            {% if rows %}
             <div class="p-4 border-t border-surface-700 flex items-center justify-between">
                 <div class="text-xs text-surface-400">
                     Blank or 0 removes an entry for this month.
@@ -160,10 +244,8 @@
                     Current total <span class="font-bold text-white">${{ "%.2f"|format(total) }}</span>
                 </div>
             </div>
-            {% endif %}
         </div>
 
-        {% if rows %}
         <div class="mt-4 flex items-center gap-3">
             <button type="submit" class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
                 Save {{ month.strftime('%b %Y') }}
@@ -171,7 +253,106 @@
             <a href="{{ url_for('pm.expenses_list') }}"
                class="px-6 min-h-[44px] inline-flex items-center text-sm font-medium text-surface-500 hover:text-surface-300">Cancel</a>
         </div>
-        {% endif %}
     </form>
 </div>
+
+<script>
+function pasteFill() {
+    return {
+        open: false,
+        raw: '',
+        report: null,
+
+        // Two names are the same name if they differ only by case, spacing or
+        // punctuation. The vendor writes "Built By Beans Website" and a project
+        // here might be "Built by Beans website"; refusing that match would
+        // send somebody back to retype what they just pasted.
+        key(s) {
+            return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        },
+
+        // Deliberately forgiving about layout. A copied web page arrives as
+        // "name / Current Cost / $12.34" over three lines, but a copy out of a
+        // table arrives tab separated on one, and both should work.
+        parse(text) {
+            const MONEY = /\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)/;
+            const NOISE = /^(current cost|usage by project|show deleted projects|project|cost)$/i;
+            const found = [];
+            let pending = null;
+
+            for (const rawLine of text.split(/\r?\n/)) {
+                const line = rawLine.replace(/\s+/g, ' ').trim();
+                if (!line) continue;
+
+                const m = line.match(MONEY);
+                if (!m) {
+                    if (!NOISE.test(line)) pending = line;
+                    continue;
+                }
+
+                const amount = parseFloat(m[1].replace(/,/g, ''));
+                if (!isFinite(amount)) continue;
+
+                // Railway prints its deleted-project total as one line with the
+                // money in the middle of a sentence. It has no owner and no row
+                // of its own, so it belongs in the catch-all.
+                if (/deleted/i.test(line)) {
+                    found.push({ other: true, name: 'Deleted projects', amount: amount });
+                    continue;
+                }
+
+                // The name may sit on this line before the amount, or on the
+                // last line that was not itself noise.
+                let before = line.slice(0, m.index).replace(/current cost/i, '').trim();
+                const name = before || pending;
+                if (name) found.push({ other: false, name: name, amount: amount });
+                pending = null;
+            }
+            return found;
+        },
+
+        apply() {
+            const inputs = Array.from(document.querySelectorAll('input[data-fill-name]'));
+            const byKey = new Map();
+            let otherInput = null;
+            for (const el of inputs) {
+                if (el.dataset.fillOther) { otherInput = el; continue; }
+                byKey.set(this.key(el.dataset.fillName), el);
+            }
+
+            const filled = [], unmatched = [], touched = new Set();
+            let otherTotal = null;
+
+            for (const item of this.parse(this.raw)) {
+                if (item.other) {
+                    otherTotal = (otherTotal || 0) + item.amount;
+                    continue;
+                }
+                const el = byKey.get(this.key(item.name));
+                if (!el) { unmatched.push(item.name); continue; }
+                // Trailing zeros stripped, but never below cents, so the field
+                // shows the number the vendor showed.
+                el.value = item.amount.toFixed(4).replace(/0+$/, '')
+                                      .replace(/\.$/, '.00').replace(/\.(\d)$/, '.$10');
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                filled.push(item.name);
+                touched.add(el);
+            }
+
+            if (otherTotal !== null && otherInput) {
+                otherInput.value = otherTotal.toFixed(2);
+                otherInput.dispatchEvent(new Event('input', { bubbles: true }));
+                filled.push('Deleted projects');
+                touched.add(otherInput);
+            }
+
+            const untouched = inputs
+                .filter(el => !touched.has(el) && !el.dataset.fillOther)
+                .map(el => el.dataset.fillName);
+
+            this.report = { filled, unmatched, untouched };
+        },
+    };
+}
+</script>
 {% endblock %}

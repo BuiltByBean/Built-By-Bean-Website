@@ -21,6 +21,24 @@ from service_costs_service import (
 # one-line add rather than a hunt through templates.
 MANUAL_MONTHLY_PROVIDERS = {"railway"}
 
+# The row that catches everything the vendor's per-project screen does not
+# account for, so a month can reconcile to the invoice instead of to the sum of
+# its projects. Three things land here and all of them are real money:
+#
+#   the plan or seat fee, which is a cost of being in business rather than a
+#   cost of any one client; usage by projects since deleted, which Railway
+#   reports as a single figure with no owner; and whole months from before the
+#   per-project breakdown was being kept, where the invoice total is all there
+#   is.
+#
+# Deliberately unallocatable. Splitting a seat fee across clients would bill
+# them for the privilege of being hosted alongside each other.
+OTHER_LABEL = "Not broken down"
+
+
+def _other_resource(provider):
+    return f"{provider.name}:other"
+
 
 def _safe_next(fallback):
     """A redirect target from ?next=, only if it stays on this admin.
@@ -510,7 +528,8 @@ def provider_monthly(id):
         live = list_provider_resources(provider)
     except Exception:
         live = []
-    seen = {r["id"] for r in live}
+    other_id = _other_resource(provider)
+    seen = {r["id"] for r in live} | {other_id}
 
     historical = (
         db.session.query(ServiceCostEntry.resource_identifier)
@@ -564,9 +583,26 @@ def provider_monthly(id):
             "suggestion": suggestion,
         })
     rows.sort(key=lambda r: (r["amount"] is None, -(r["amount"] or 0), r["label"].lower()))
+    # Suggestions are read before the catch-all is appended, so it can never be
+    # offered a project to map to.
+    suggested = [r for r in rows if r["suggestion"]]
+
+    # Pinned last whatever it holds. It is the remainder, and a remainder that
+    # sorted itself to the top by being the largest number would read as the
+    # most important line on the page.
+    other_amount = prefill_by_rid.get(other_id)
+    rows.append({
+        "id": other_id,
+        "label": OTHER_LABEL,
+        "historical": False,
+        "amount": other_amount,
+        "amount_str": _amount_str(other_amount),
+        "mappings": [],
+        "suggestion": None,
+        "is_other": True,
+    })
 
     total = sum(r["amount"] or 0 for r in rows)
-    suggested = [r for r in rows if r["suggestion"]]
 
     return render_template("pm/service_costs/monthly.html",
         provider=provider,
@@ -575,6 +611,7 @@ def provider_monthly(id):
         recent_months=_recent_months(),
         total=total,
         suggested=suggested,
+        other_id=other_id,
     )
 
 
