@@ -18,7 +18,7 @@ from models import db, Client, Expense, TaxSetting
 from stripe_service import get_stripe_income_transactions
 from tax_engine import FILING_STATUSES, compute, table_for
 
-tax_bp = Blueprint("taxes", __name__, url_prefix="/admin/pm/taxes")
+tax_bp = Blueprint("taxes", __name__, url_prefix="/admin/taxes")
 
 # US estimated payments fall due the month after each quarter closes, and Q4's
 # lands in the following January.

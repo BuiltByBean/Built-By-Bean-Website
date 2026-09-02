@@ -27,7 +27,7 @@ import signadoc_service as signadoc
 from signadoc_service import SignaDocError
 from models import db, Document, SignatureRequest
 
-contracts_bp = Blueprint("contracts", __name__, url_prefix="/admin/pm/contracts")
+contracts_bp = Blueprint("contracts", __name__, url_prefix="/admin/contracts")
 
 # Where a signature block goes on a document this board did not draw. Fractions
 # of the page, top-left origin; page -1 is the last one. Bottom third, left of

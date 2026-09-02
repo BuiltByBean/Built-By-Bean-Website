@@ -40,7 +40,7 @@ function revisionPrefill() {
             if (!id) return;
             let data;
             try {
-                const res = await fetch(`/admin/pm/contracts/${id}/prefill.json`,
+                const res = await fetch(`/admin/contracts/${id}/prefill.json`,
                                         { credentials: "same-origin" });
                 if (!res.ok) return;
                 data = await res.json();

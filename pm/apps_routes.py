@@ -22,7 +22,7 @@ from flask_login import login_required
 import app_icon_service
 from models import db, AppLink, Project
 
-apps_bp = Blueprint("apps", __name__, url_prefix="/admin/pm/apps")
+apps_bp = Blueprint("apps", __name__, url_prefix="/admin/apps")
 
 ICON_DIR = "app_icons"
 

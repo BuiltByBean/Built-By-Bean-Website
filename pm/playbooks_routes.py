@@ -1,7 +1,7 @@
 """Vendor runbooks: the tile grid, the runbook, and editing one.
 
 Addressed by slug rather than id, because these get linked to from notes and
-from each other, and `/admin/pm/playbooks/twilio` survives a reseed while
+from each other, and `/admin/playbooks/twilio` survives a reseed while
 `/9` does not. Delete is the one exception: it takes an id, because a delete
 posted against a name is the request most likely to be aimed at the wrong row
 after somebody renames one.
@@ -17,7 +17,7 @@ from markupsafe import Markup
 
 from models import db, Playbook, ServiceProvider
 
-playbooks_bp = Blueprint("playbooks", __name__, url_prefix="/admin/pm/playbooks")
+playbooks_bp = Blueprint("playbooks", __name__, url_prefix="/admin/playbooks")
 
 
 # ── Markdown ────────────────────────────────────────────────

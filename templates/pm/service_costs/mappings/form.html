@@ -9,7 +9,7 @@
    an unchecked next is an open redirect. #}
 {% block back %}
     {%- set nxt = request.args.get('next') or '' -%}
-    {%- if nxt.startswith('/admin/pm/') -%}
+    {%- if nxt.startswith('/admin/') -%}
         {{ back_link(nxt, 'Back') }}
     {%- else -%}
         {{ back_link(url_for('service_costs.mappings_list'), 'Resource Mappings') }}
@@ -138,7 +138,11 @@ function mappingForm() {
             if (!this.providerId) { this.resources = []; return; }
             this.loadingResources = true;
             try {
-                const resp = await fetch(`/service-costs/api/resources/${this.providerId}`);
+                {# Built from url_for rather than written out, because the
+                   hand-written version was missing the admin prefix entirely
+                   and this autocomplete had never once returned a result. #}
+                const base = "{{ url_for('service_costs.api_provider_resources', provider_id=0) }}";
+                const resp = await fetch(base.replace(/0$/, this.providerId));
                 this.resources = await resp.json();
             } catch (e) { console.error(e); }
             this.loadingResources = false;

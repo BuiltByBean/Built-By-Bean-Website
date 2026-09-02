@@ -26,11 +26,11 @@ def _safe_next(fallback):
 
     A raw redirect to whatever the URL says is an open redirect: someone can
     hand out a link that goes through the site to an outside page they own.
-    Constraining to /admin/pm/ is enough here because nothing outside the
+    Constraining to /admin/ is enough here because nothing outside the
     admin ever links back into this flow.
     """
     nxt = (request.args.get("next") or request.form.get("next") or "").strip()
-    if nxt.startswith("/admin/pm/"):
+    if nxt.startswith("/admin/"):
         return nxt
     return fallback
 
@@ -114,7 +114,7 @@ def _project_name_index():
         index[key] = None if key in index else p
     return {k: v for k, v in index.items() if v is not None}
 
-service_costs_bp = Blueprint("service_costs", __name__, url_prefix="/admin/pm/service-costs")
+service_costs_bp = Blueprint("service_costs", __name__, url_prefix="/admin/service-costs")
 
 PROVIDER_TYPES = [
     ("aws", "Amazon Web Services"),

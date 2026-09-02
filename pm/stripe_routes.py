@@ -15,7 +15,7 @@ from stripe_service import (
     get_stripe_invoices,
 )
 
-stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/pm/stripe")
+stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/stripe")
 
 
 def _clip(text, limit=380):

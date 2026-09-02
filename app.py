@@ -65,7 +65,7 @@ def create_app():
     pm_bp = Blueprint(
         "pm",
         __name__,
-        url_prefix="/admin/pm",
+        url_prefix="/admin",
         template_folder="templates/pm",
         static_folder="static/pm",
         static_url_path="/static/pm",
@@ -621,13 +621,48 @@ def create_app():
             return jsonify({"error": "Something went wrong. Please email me directly at mbean@builtbybeans.com"}), 500
 
     @app.route("/admin")
+    @app.route("/admin/")
     @login_required
     def admin_hub():
-        return redirect(url_for("apps.index"), code=301)
+        """Signing in lands on the board, not on the money.
+
+        Both spellings, because the admin no longer owns a `/` route of its
+        own to make Flask normalise one into the other, and a bare /admin/
+        404 is a rotten thing to hit from a bookmark.
+        """
+        return redirect(url_for("apps.index"), code=302)
+
+    # ── Legacy /admin/pm URLs ────────────────────────────────
+
+    # strict_slashes=False so the bare prefix matches with or without the
+    # trailing slash. Registering both spellings instead sent /admin/pm
+    # through a redirect to /admin/pm/ before this one, two hops to reach
+    # one page.
+    @app.route("/admin/pm", defaults={"rest": ""}, strict_slashes=False)
+    @app.route("/admin/pm/<path:rest>")
+    def legacy_pm_prefix(rest):
+        """Everything used to live under /admin/pm. Nothing does now.
+
+        The `pm` segment named a layer that no longer exists, but it is in
+        every bookmark, in the browser history, and in any link already sent
+        out. 308 rather than 301 so a stale open page's form POST survives
+        the hop with its method and body, and so the answer is not cached as
+        hard as a 301 if this ever moves again.
+
+        The dashboard is the one path that is not a straight swap: it was the
+        index of the old prefix and now has a name of its own.
+        """
+        target = url_for("pm.dashboard") if not rest else "/admin/" + rest
+        if request.query_string:
+            target += "?" + request.query_string.decode("utf-8", "replace")
+        return redirect(target, code=308)
 
     # ── Dashboard ────────────────────────────────────────────
 
-    @pm_bp.route("/")
+    # /finances, matching what the sidebar calls it. It used to be the index
+    # of the /admin/pm prefix, which left it at a bare trailing slash one
+    # character away from /admin meaning something else entirely.
+    @pm_bp.route("/finances")
     @login_required
     def dashboard():
         sync_project_phases()
@@ -3266,78 +3301,6 @@ def create_app():
             abort(404)
         return download_upload(expense.receipt_filename, expense.receipt_original_name, "receipts")
 
-    # ── Reports ──────────────────────────────────────────────
-
-    @pm_bp.route("/reports")
-    @login_required
-    def reports():
-        clients = Client.query.order_by(Client.name).all()
-        client_data = []
-        for c in clients:
-            projects = c.projects.all()
-            total_hours = c.total_hours
-            total_revenue = c.total_revenue
-            total_expenses = sum(p.total_expenses for p in projects)
-            client_data.append({
-                "client": c,
-                "projects_count": len(projects),
-                "total_hours": total_hours,
-                "total_revenue": total_revenue,
-                "total_expenses": total_expenses,
-                "net": total_revenue - total_expenses,
-            })
-
-        projects_list_data = []
-        for p in Project.query.join(Client).order_by(Project.name).all():
-            projects_list_data.append({
-                "project": p,
-                "client_name": p.client.name,
-                "phase": p.phase,
-                "total_hours": p.total_hours,
-                "total_revenue": p.total_revenue,
-                "total_expenses": p.total_expenses,
-            })
-
-        today = date.today()
-        monthly_data = []
-        for i in range(6):
-            month = today.month - i
-            year = today.year
-            while month <= 0:
-                month += 12
-                year -= 1
-            first = date(year, month, 1)
-            if month == 12:
-                last = date(year + 1, 1, 1)
-            else:
-                last = date(year, month + 1, 1)
-            entries = TimeEntry.query.filter(TimeEntry.date >= first, TimeEntry.date < last).all()
-            maint_hours = sum(e.hours for e in entries if e.rate_type == "maintenance")
-            feat_hours = sum(e.hours for e in entries if e.rate_type == "new_feature")
-            maint_rev = sum(e.cost for e in entries if e.rate_type == "maintenance")
-            feat_rev = sum(e.cost for e in entries if e.rate_type == "new_feature")
-            monthly_data.append({
-                "label": first.strftime("%b %Y"),
-                "maintenance_hours": maint_hours,
-                "feature_hours": feat_hours,
-                "maintenance_revenue": maint_rev,
-                "feature_revenue": feat_rev,
-                "total_revenue": maint_rev + feat_rev,
-            })
-
-        expense_by_cat = {}
-        for cat_val, cat_label in EXPENSE_CATEGORY_CHOICES:
-            total = sum(e.amount for e in Expense.query.filter_by(category=cat_val).filter(
-                Expense.time_entry_id.is_(None)).all())
-            if total > 0:
-                expense_by_cat[cat_label] = total
-
-        return render_template("pm/reports/index.html",
-            client_data=client_data,
-            projects_data=projects_list_data,
-            monthly_data=monthly_data,
-            expense_by_cat=expense_by_cat,
-        )
 
     # ── Register PM blueprint ────────────────────────────────
     app.register_blueprint(pm_bp)
