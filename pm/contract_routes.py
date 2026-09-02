@@ -107,7 +107,17 @@ def file_document(data, original_name, *, client_id=None, project_id=None):
 # Who signs on behalf of Built by Bean. Here rather than inline so the name on
 # a contract and the address the signing request goes to cannot drift apart.
 COUNTERSIGNER_NAME = "Michael Bean"
+# Where his own signing invitations arrive. Distinct from the address
+# contracts are sent FROM, which is the portal's MAIL_FROM.
 COUNTERSIGNER_EMAIL = os.environ.get("COUNTERSIGNER_EMAIL", "michaelbean21@gmail.com")
+
+# Who the portal says a document came from. This is display and audit only —
+# the actual From header on the email is the portal's own MAIL_FROM, set on
+# the SignaDoc service. Sending it means the portal stops falling back to
+# whichever account the API key belongs to, and the audit trail names a
+# person rather than the string "sender".
+SENDER_NAME = os.environ.get("CONTRACT_SENDER_NAME", "Built by Bean LLC")
+SENDER_EMAIL = os.environ.get("CONTRACT_SENDER_EMAIL", "mbean@builtbybeans.com")
 
 
 def _now():
@@ -159,6 +169,8 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
         fields=fields or DEFAULT_FIELDS,
         signers=signers,
         signing_order=order,
+        sender_name=SENDER_NAME,
+        sender_email=SENDER_EMAIL,
     )
     links = reply.get("links") or [{}]
     # The client's link is the one worth keeping: it is what gets resent when
