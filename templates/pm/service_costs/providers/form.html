@@ -146,7 +146,12 @@
         </div>
 
         <div class="glass-card p-6 space-y-4">
-            <div>
+            {# Hidden, not merely ignored, for a vendor whose costs are typed in
+               per project each month. Railway is why: a flat figure here booked
+               the same unallocated amount every month while the real bill moved
+               between a dozen projects and a dozen clients. The route refuses
+               the field for these vendors too, so a stale form cannot set it. #}
+            <div x-show="!{{ manual_monthly|tojson }}.includes(providerType)">
                 <label for="monthly-cost" class="block text-sm font-medium text-surface-300 mb-1.5">
                     Flat monthly cost
                     <span class="text-surface-500 font-normal">(optional)</span>
@@ -155,13 +160,30 @@
                        value="{{ provider.monthly_cost if editing and provider.monthly_cost else '' }}"
                        placeholder="0.00"
                        class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
-                {# Railway is the case this exists for: its API reports CPU,
-                   memory, disk and network, and nothing denominated in money,
-                   so the only way to book it is a figure set here. #}
                 <p class="text-xs text-surface-500 mt-1.5">
-                    For a vendor whose API will not report spend. Booked automatically
-                    each month. Leave blank when the sync can read real amounts.
+                    For a vendor that charges the same amount every month and offers no
+                    API to confirm it. Leave blank when the sync can read real amounts.
                 </p>
+            </div>
+
+            <div x-show="{{ manual_monthly|tojson }}.includes(providerType)">
+                <p class="text-sm font-medium text-surface-300">Costs are entered per project</p>
+                <p class="text-xs text-surface-400 mt-1.5">
+                    This vendor bills a different amount each month, spread across
+                    projects, and its API will not report money. The real numbers go in
+                    once a month on the Monthly costs page, one line per project, so
+                    each one lands on the client it belongs to.
+                </p>
+                {% if editing %}
+                <a href="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
+                   class="inline-flex items-center gap-2 mt-3 px-4 min-h-[44px] text-sm font-medium rounded-xl
+                          border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    Monthly costs
+                </a>
+                {% endif %}
             </div>
 
             {% if editing %}

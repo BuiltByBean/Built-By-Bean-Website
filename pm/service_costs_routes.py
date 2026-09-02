@@ -164,13 +164,23 @@ def _billing_day():
         return None
 
 
-def _monthly_cost():
+def _monthly_cost(provider_name=None):
     """The flat monthly figure, or None when the field is left blank.
 
     None and 0 mean different things here: None is "this vendor reports its
     own spend", 0 would be "this vendor costs nothing", and storing the second
     when the user meant the first books a zero every month.
+
+    Always None for a manual-monthly vendor. Railway spent months booked as a
+    flat twenty because a number sat in this field: it charged a different
+    amount every month, spread across a dozen projects, and a single unallocated
+    line of the same size forever was wrong in the total and useless per client.
+    Those vendors get their real numbers from the Monthly Costs page, so this
+    field has nothing left to mean for them and refusing it here is what stops
+    it coming back.
     """
+    if provider_name in MANUAL_MONTHLY_PROVIDERS:
+        return None
     raw = (request.form.get("monthly_cost") or "").strip()
     if not raw:
         return None
@@ -188,12 +198,14 @@ def _monthly_cost():
 def service_costs_dashboard():
     """Kept as a redirect.
 
-    Service costs are half of the Expenses page now. This route still
-    exists because bookmarks, the Sync All redirect and the provider and
-    mapping pages all point at it, and a dead link is a worse answer than
-    a hop.
+    Service costs are not a page any more. A vendor charge writes an expense,
+    so it is a row in the expense ledger like everything else that went out,
+    and the vendor breakdown is a way of reading that ledger rather than a
+    second one beside it. This route still exists because bookmarks, the Sync
+    All redirect and the provider and mapping pages all point at it, and a dead
+    link is a worse answer than a hop.
     """
-    return redirect(url_for("pm.expenses_list") + "#services")
+    return redirect(url_for("pm.expenses_list"))
 
 
 # ── Providers ───────────────────────────────────────────────
@@ -226,7 +238,7 @@ def provider_create():
             name=name,
             display_name=display_name,
             credentials_json=json.dumps(creds),
-            monthly_cost=_monthly_cost(),
+            monthly_cost=_monthly_cost(name),
             billing_day=_billing_day(),
         )
         db.session.add(provider)
@@ -238,6 +250,7 @@ def provider_create():
         provider_types=PROVIDER_TYPES,
         editing=False,
         provider=None,
+        manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
     )
 
 
@@ -249,7 +262,7 @@ def provider_edit(id):
     if request.method == "POST":
         creds = _extract_credentials(provider.name)
         provider.credentials_json = json.dumps(creds)
-        provider.monthly_cost = _monthly_cost()
+        provider.monthly_cost = _monthly_cost(provider.name)
         provider.billing_day = _billing_day()
         if provider.name == "flat":
             provider.display_name = (
@@ -266,6 +279,7 @@ def provider_edit(id):
         editing=True,
         provider=provider,
         creds=creds,
+        manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
     )
 
 
