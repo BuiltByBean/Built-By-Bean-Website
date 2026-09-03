@@ -156,7 +156,8 @@ def build_prompt(sale):
 @products_bp.route("/")
 @login_required
 def products_index():
-    products = Product.query.order_by(Product.sort_order, Product.name).all()
+    products = (Product.query.filter_by(is_active=True)
+                .order_by(Product.sort_order, Product.name).all())
     sales = (ProductSale.query
              .order_by(ProductSale.created_at.desc()).all())
 
