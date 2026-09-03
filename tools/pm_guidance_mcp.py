@@ -122,7 +122,12 @@ def _http(method, path, payload=None):
     req = urllib.request.Request(
         BASE + path, method=method,
         headers={"Authorization": f"Bearer {KEY}",
-                 "Content-Type": "application/json"},
+                 "Content-Type": "application/json",
+                 # Named, because Cloudflare's browser integrity check 403s
+                 # Python's default urllib agent outright (error 1010) - the
+                 # token never even gets looked at. Learned the day this
+                 # bridge first called the deployed board.
+                 "User-Agent": "pm-guidance-bridge/1.0"},
         data=json.dumps(payload).encode() if payload is not None else None)
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
