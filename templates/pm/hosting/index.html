@@ -241,12 +241,18 @@
         be split between clients.
         {%- endif %}
         The line to the right is that project's cost month by month, drawn from zero,
-        and only once there are two months to draw.
+        plotting only the months that recorded something and evenly spacing them - a
+        month nobody measured is not a month that cost nothing, and a line diving to
+        zero across a gap would report a collapse that never happened. It appears once
+        there are two such months.
     </p>
 
     <p class="text-xs text-surface-500">
-        The bars are one month. Costs come from the service mappings, for
-        {{ month.strftime('%B %Y') }} - the last complete month. The month in progress is left out, because a month three days
+        The bars are one month, {{ month.strftime('%B %Y') }} - the last complete one.
+        A project's cost is its mapped vendor charges plus anything filed by hand
+        against it; a client-level cost with no project on it, like Stripe's fee, is
+        not counted here, because that fee tracks whatever the client was invoiced for
+        rather than what their application costs to run. The month in progress is left out, because a month three days
         old makes everything look cheap. A charge that buys a year, like a domain
         registration, is spread across the twelve months it covers rather than landing
         on the month it was invoiced; the expense ledger still keeps it whole, on its

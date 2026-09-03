@@ -10,10 +10,23 @@ discover a fee had been overtaken was to notice.
 This is the page that notices. One row per project, the fee next to the cost,
 sorted so the ones about to go underwater are at the top.
 
-Costs come through ServiceMapping.project_id rather than through the expense's
-own project_id. A mapping is the deliberate statement "this Railway project
-belongs to that build", made once, and it is what the monthly entry page writes
-against. An expense's project is whatever it was filed under.
+A project's cost is two things added together. Vendor charges arrive through
+ServiceMapping.project_id - a mapping being the deliberate statement "this
+Railway project belongs to that build", made once, and what the monthly entry
+page writes against. Anything filed by hand straight onto a project counts too:
+a Twilio number bought for one build, or an agent billed to it, is as much the
+cost of running that build as its Railway bill is, and reading only the mapped
+half left Talent Booker showing one month of history when it had three.
+
+Expenses mirrored from a cost entry are counted once, on the mapped side. They
+carry a project_id as well, so summing both without excluding them would double
+every vendor charge on the page.
+
+Client-level costs are deliberately out. Stripe's fee is attributed to a client
+but to no project, and it tracks whatever that client was invoiced for - mostly
+development work, at 2.9% of four-figure invoices. Counted as the cost of
+running an application it would swamp a $50 hosting fee with the cost of
+collecting money that has nothing to do with hosting.
 """
 from datetime import date, timedelta
 
@@ -135,6 +148,29 @@ def _costs_by_project(months):
                 bucket = target.setdefault(project_id, {})
                 bucket[m] = bucket.get(m, 0.0) + value
 
+    # The other half: costs filed straight onto a project, which never had a
+    # mapping to arrive through. Dated by the expense rather than by a billing
+    # period, because that is all a hand-entered cost has.
+    #
+    # Mirrored expenses are excluded by id. Every mapped cost entry writes one
+    # and stamps it with the project, so counting both sides would double each
+    # vendor charge the loop above just recorded.
+    mirrored = (db.session.query(ServiceCostEntry.expense_id)
+                .filter(ServiceCostEntry.expense_id.isnot(None)))
+    direct = (db.session.query(Expense.project_id, Expense.date, Expense.amount)
+              .filter(Expense.project_id.isnot(None))
+              .filter(Expense.date >= window_start)
+              .filter(Expense.id.notin_(mirrored))
+              .all())
+    for project_id, when, amount in direct:
+        if when is None:
+            continue
+        first = when.replace(day=1)
+        if first not in wanted:
+            continue
+        bucket = out.setdefault(project_id, {})
+        bucket[first] = bucket.get(first, 0.0) + (amount or 0.0)
+
     return out, annual
 
 
@@ -226,10 +262,12 @@ def _railway_all_time():
 def _trend(by_month, months, width=132, height=30, pad=4):
     """A month-by-month line of what this project cost, as SVG points.
 
-    Months before the first one with anything recorded are dropped rather than
-    drawn as zero. A project first mapped in August did not cost nothing in
-    July - it was not being measured - and a line climbing out of a flat run of
-    zeros reports a cost explosion that never happened.
+    Only months with something recorded are plotted, evenly spaced. A month
+    nobody measured is not a month that cost nothing, and Talent Booker - with
+    February, April and August on record and the months between them empty -
+    would otherwise dive to zero and back twice, reporting a cost that
+    collapsed and recovered when nothing of the sort happened. The label says
+    how many months are on the line so the spacing is not read as time.
 
     The scale runs from zero rather than from the lowest month. Money read
     against its own minimum turns a wobble of a few cents into a mountain, and
@@ -240,14 +278,11 @@ def _trend(by_month, months, width=132, height=30, pad=4):
     not a trend and drawing it as a flat line implies a history that does not
     exist yet.
     """
-    first = next((i for i, m in enumerate(months) if m in by_month), None)
-    if first is None:
-        return None
-    span = months[first:]
+    span = [m for m in months if m in by_month]
     if len(span) < 2:
         return None
 
-    values = [by_month.get(m, 0.0) for m in span]
+    values = [by_month[m] for m in span]
     high = max(values) or 1.0
     step = (width - 2 * pad) / (len(values) - 1)
     points = " ".join(
