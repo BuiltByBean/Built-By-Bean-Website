@@ -178,13 +178,16 @@ def _status(fee, cost):
     infrastructure is paid for, or it does not and is a fee to raise. The
     middle band that used to sit here was a second guess at the same question
     and said "Watch" about a project nobody was going to act on.
+
+    An unpriced project cannot reach here - the page lists only what a contract
+    has priced. A fee of nothing is still guarded, and reads as free hosting,
+    because whether it is unset or agreed at zero the money recovered is the
+    same and the page should say so rather than crash.
     """
-    if fee is None:
-        return ("unpriced", "No fee set")
+    if not fee:
+        return ("loss", "Hosted free")
     if cost <= 0:
         return ("fine", "No cost recorded")
-    if fee <= 0:
-        return ("loss", "Hosted free")
     if cost >= fee:
         return ("loss", "Costs more than it earns")
     if fee - cost < MIN_MARGIN:
@@ -258,7 +261,7 @@ def _railway_all_time():
 
 # Worst first. A page whose whole job is to surface the two projects that need
 # attention should not open on the eleven that do not.
-STATUS_ORDER = {"loss": 0, "raise": 1, "unpriced": 2, "fine": 3}
+STATUS_ORDER = {"loss": 0, "raise": 1, "fine": 2}
 
 
 @hosting_bp.route("/")
@@ -292,10 +295,16 @@ def hosting_index():
 
     rows = []
     for p in projects:
-        by_month = costs.get(p.id, {})
-        if month not in by_month and p.hosting_fee is None:
-            # Nothing charged, nothing spent, nothing to say.
+        # Priced by a contract, or it does not belong here. A statement of
+        # work and a hosting agreement both write the fee onto the project,
+        # so appearing on this page is what having agreed one looks like.
+        # A project hosted without an agreement is a contract to write, not a
+        # fee to type into this screen, and offering to type it here was an
+        # invitation to have the number in two places and a document for
+        # neither.
+        if p.hosting_fee is None:
             continue
+        by_month = costs.get(p.id, {})
         cost = by_month.get(month, 0.0)
         fee = p.monthly_hosting_fee
         key, label = _status(fee, cost)
@@ -333,7 +342,6 @@ def hosting_index():
 
     totals = {
         "needs_attention": sum(1 for r in rows if r["status"] in ("loss", "raise")),
-        "unpriced": sum(1 for r in rows if r["status"] == "unpriced"),
     }
 
     # The lifetime question, which is a different one from the month's. The

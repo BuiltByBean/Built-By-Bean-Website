@@ -12,14 +12,6 @@
 {% block page_title %}Hosting{% endblock %}
 {% block page_subtitle %}What each application earns, against what it costs to run{% endblock %}
 
-{% block header_actions %}
-<a href="{{ url_for('contracts.hosting_form') }}"
-   class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
-    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-    New agreement
-</a>
-{% endblock %}
-
 {#
   The running total for one client.
 
@@ -88,13 +80,7 @@
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Needs a look</p>
             <p class="text-xl sm:text-2xl font-bold mt-2 {{ 'text-amber-400' if totals.needs_attention else 'text-white' }}">{{ totals.needs_attention }}</p>
-            <p class="text-xs text-surface-400 mt-1">
-                {%- if totals.unpriced -%}
-                    and {{ totals.unpriced }} with no fee set
-                {%- else -%}
-                    Under {{ min_margin|format_currency }} left over
-                {%- endif -%}
-            </p>
+            <p class="text-xs text-surface-400 mt-1">Under {{ min_margin|format_currency }} left over</p>
         </div>
     </div>
 
@@ -117,11 +103,9 @@
         {% for r in rows %}
         {% set tone = {'loss': 'bg-red-500/10 text-red-300',
                        'raise': 'bg-amber-500/10 text-amber-300',
-                       'unpriced': 'bg-surface-700/40 text-surface-300',
                        'fine': 'bg-emerald-500/10 text-emerald-300'}[r.status] %}
         {% set fill = {'loss': 'bg-red-500',
                        'raise': 'bg-amber-500',
-                       'unpriced': 'bg-surface-600',
                        'fine': 'bg-emerald-500'}[r.status] %}
         <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
 
@@ -174,19 +158,12 @@
             {{ lifetime_strip(r) }}
 
             {% else %}
-            {# No fee means no width to measure against, so there is no bar to
-               draw - only the cost, and the thing to go and do about it. #}
-            <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <p class="text-xs text-surface-400">
-                    Cost {{ r.cost|format_currency }}, with no fee to hold it against.
-                </p>
-                <a href="{{ url_for('pm.project_edit', id=r.project.id) }}"
-                   class="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 text-xs font-medium rounded-lg
-                          border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                    Set a fee
-                </a>
-            </div>
+            {# Only an agreed fee of nothing reaches this. There is no width to
+               measure a cost against, so there is no bar - just what it cost to
+               run something nobody is being charged for. #}
+            <p class="mt-3 text-xs text-surface-400">
+                Hosted free - {{ r.cost|format_currency }} of cost, none of it recovered.
+            </p>
             {{ lifetime_strip(r) }}
             {% endif %}
 
@@ -234,9 +211,10 @@
         </svg>
         <p class="text-surface-400 mb-1">Nothing to compare yet</p>
         <p class="text-sm text-surface-500 max-w-md mx-auto">
-            A project appears here once it has a hosting fee on it, or once a vendor
-            cost has been mapped to it. Write a hosting agreement to set the first,
-            and map the vendor's projects to set the second.
+            A project appears here once a contract has priced it. A statement of work
+            and a hosting agreement both write the fee onto the project they are for,
+            so this page fills itself as the agreements are made rather than asking
+            for the figure a second time.
         </p>
     </div>
     {% endif %}
