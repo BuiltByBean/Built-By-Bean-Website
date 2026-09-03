@@ -250,6 +250,19 @@
         .stagger-in > * {
             animation: slideUp 0.4s ease-out backwards;
         }
+
+        /* A filter bar pins just below the sticky header while the list it
+           filters scrolls. The offset is the header's REAL height, measured
+           into --pm-header-h by the script under the header, because the
+           header wraps on phones and a hardcoded number drifts the moment a
+           title grows a back link. z-30 is the LM-1 page-content ceiling, so
+           the bar and its dropdown panels ride over everything that scrolls
+           underneath and stay under the drawer. See CLAUDE.md LM-4. */
+        .sticky-filters {
+            position: sticky;
+            top: calc(var(--pm-header-h, 64px) + 12px);
+            z-index: 30;
+        }
         .stagger-in > *:nth-child(1) { animation-delay: 0.05s; }
         .stagger-in > *:nth-child(2) { animation-delay: 0.1s; }
         .stagger-in > *:nth-child(3) { animation-delay: 0.15s; }
@@ -608,7 +621,7 @@
     <!-- Main content -->
     <div class="lg:ml-[260px] min-h-screen relative z-10">
         <!-- Top header -->
-        <header class="glass sticky top-0 z-30 px-6 py-4">
+        <header id="pm-topbar" class="glass sticky top-0 z-30 px-6 py-4">
             {# flex-wrap, because this row has no other guard: on a phone the
                title, the timer and any page actions all compete for one line,
                and without it the actions simply leave the screen. min-w-0 lets
@@ -637,6 +650,21 @@
                 </div>
             </div>
         </header>
+        <script>
+            /* Sticky filter bars offset themselves by the header's real
+               height. Observed, not measured once: the header wraps on
+               phones and grows a back link on detail pages, and a single
+               first reading would pin every bar against yesterday's
+               height. */
+            (() => {
+                const bar = document.getElementById('pm-topbar');
+                if (!bar) return;
+                const set = () => document.documentElement.style.setProperty(
+                    '--pm-header-h', bar.offsetHeight + 'px');
+                new ResizeObserver(set).observe(bar);
+                set();
+            })();
+        </script>
 
         <!-- Flash messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}

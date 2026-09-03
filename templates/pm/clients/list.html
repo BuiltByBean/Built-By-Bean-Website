@@ -22,9 +22,10 @@
        question: "emailed but not phoned yet" is a channel that has been used
        and a channel that has not. #}
     {% set filtering = search or stage or tried or not_tried %}
-    {# relative z-30 per CLAUDE.md LM-1: the filter panels open over the
-       table below. #}
-    <div class="mb-6 relative z-30">
+    {# A card now, not a bare block: pinned below the header it needs its
+       own glass or the table reads straight through it. sticky-filters
+       carries the LM-1 z-30 and the pin (LM-4). #}
+    <div class="mb-6 glass-card p-4 sticky-filters">
         <form method="GET" class="space-y-3">
             <div class="flex gap-3">
                 <input type="text" name="search" x-model="search" placeholder="Search clients..."

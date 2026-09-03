@@ -46,7 +46,10 @@
    paint over it. #}
 <div class="glass-card p-6 relative z-30">
     <!-- Filters -->
-    <form method="GET" class="flex flex-wrap gap-3 mb-6">
+    {# sticky-filters pins the bar while the entries scroll (LM-4); it
+       lives inside this card, so it brings its own glass. #}
+    <form method="GET"
+          class="sticky-filters bg-surface-900/95 backdrop-blur-md rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6">
         {% set ns = namespace(proj_opts=[["", "All Projects"]]) %}
         {% for p in projects %}{% set ns.proj_opts = ns.proj_opts + [[p.id, p.name]] %}{% endfor %}
         {{ select_dropdown("project_id", ns.proj_opts, project_id) }}

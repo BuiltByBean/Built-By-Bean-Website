@@ -187,6 +187,10 @@
 
     {# ── the catalogue, one tap away ─────────────────────── #}
     <div id="pick" class="glass-card p-4 sm:p-5 space-y-4">
+        {# The search and the chips pin while ninety-odd rows scroll under
+           them - mid-call, the box the thumb is headed for must not leave
+           (LM-4). Inside the card, so it brings its own glass. #}
+        <div class="sticky-filters bg-surface-900/95 backdrop-blur-md rounded-xl p-3 -mx-3 space-y-3">
         <input type="text" x-model="q" placeholder="Search the catalogue"
                class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         <div class="flex gap-1.5 overflow-x-auto pb-1 -mb-1">
@@ -200,6 +204,7 @@
                     :class="cat === '{{ key }}' ? 'bg-brand-500/20 text-brand-300' : 'bg-surface-800 text-surface-400 hover:text-surface-200'">
                 {{ label }} ({{ counts[key] }})</button>
             {% endif %}{% endfor %}
+        </div>
         </div>
 
         <div x-show="cat === 'all'" class="space-y-1.5">

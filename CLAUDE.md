@@ -138,3 +138,35 @@ anomaly in verification is a finding, never a tooling excuse.
 
 **Grep.** None - this one is a discipline, enforced by the audit snippet in
 LM-1 whenever a dropdown or overlay changes.
+
+### LM-4 - the filters scroll away with the list they filter
+
+**What happened.** The Features page put ninety-three rows under a search
+box, and the first scroll took the search box off the screen - so refining
+a search meant scrolling back to the top, on the page that is open during a
+phone call. Every list page had shipped the same shape: clients, tickets,
+expenses, invoices, the MVP picker.
+
+**Why it is easy to do.** A filter bar laid out above its list is correct
+in every screenshot, because screenshots are taken at the top of the page.
+The failure only exists mid-scroll, which no static look catches, and each
+new list page copies the last one's layout.
+
+**The rule.** A search or filter bar above a scrollable list carries
+`.sticky-filters`: pinned below the header at
+`calc(var(--pm-header-h) + 12px)`, where `--pm-header-h` is measured off
+the real header by the ResizeObserver in base.html - never hardcoded,
+because the header wraps on phones and grows a back link on detail pages.
+A bar that lives INSIDE a card brings its own glass
+(`bg-surface-900/95 backdrop-blur-md rounded-xl p-3 -mx-3`), or the rows
+read straight through it the moment it sticks. The class carries the LM-1
+z-30, so panels still paint over the list and the drawer still wins.
+Verify by scrolling: after `scrollTo(0, big)`, the bar's
+`getBoundingClientRect().top` equals the header's height plus the gap.
+
+**Grep.**
+```
+rg -n 'form method="GET"' templates/pm
+```
+Every hit that filters a list below it must sit in (or be) a
+`.sticky-filters` container.

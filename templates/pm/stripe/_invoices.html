@@ -25,10 +25,9 @@
     </div>
 
     <!-- Filters -->
-    {# relative z-30 per CLAUDE.md LM-1: glass-card's backdrop-filter makes
-       every card a stacking context, so without this the filter panels
-       paint underneath the list card below. #}
-    <div class="glass-card p-4 relative z-30">
+    {# sticky-filters carries the LM-1 z-30 and pins the card below the
+       header while the invoice list scrolls (LM-4). #}
+    <div class="glass-card p-4 sticky-filters">
         <form method="GET" class="flex flex-wrap items-center gap-3">
             {% set fo = namespace(status=[("", "All Statuses"), ("draft", "Draft"), ("open", "Open"), ("paid", "Paid"), ("void", "Void"), ("uncollectible", "Uncollectible")], cli=[("", "All Clients")]) %}
             {% for c in clients %}{% set fo.cli = fo.cli + [(c.id, c.name)] %}{% endfor %}

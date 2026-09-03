@@ -16,9 +16,10 @@
 {% block content %}
 <div class="space-y-5 stagger-in" x-data="{ adding: false }">
 
-    {# relative z-30 per CLAUDE.md LM-1: this card's dropdown panels open
-       over the list card below it. #}
-    <form method="GET" class="relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
+    {# sticky-filters carries the LM-1 z-30 and pins the card below the
+       header: ninety-odd rows scroll under it, and the search never
+       leaves (LM-4). #}
+    <form method="GET" class="sticky-filters glass-card p-4 flex flex-wrap items-center gap-2">
         <input type="text" name="q" value="{{ q }}" placeholder="Search names, guidance, traps"
                class="input-ring flex-1 min-w-[180px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         {% set cat_opts = [("all", "All areas (" ~ total ~ ")")] %}
