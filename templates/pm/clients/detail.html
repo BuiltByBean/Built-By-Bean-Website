@@ -2,6 +2,7 @@
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/status_badge.html" import badge %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {% block back %}{{ back_link(url_for('pm.clients_list'), 'Clients') }}{% endblock %}
 {% block page_title %}{{ client.name }} {{ badge(client.stage or 'lead') }}{% endblock %}
@@ -169,14 +170,13 @@
                         <p class="text-sm text-white whitespace-pre-line mt-0.5">{{ c.note }}</p>
                         {% endif %}
                     </div>
-                    <form method="POST" action="{{ url_for('pm.client_contact_delete', id=c.id) }}"
-                          onsubmit="return confirm('Remove this contact from the log?')">
-                        <button type="submit" title="Remove"
-                                class="p-1.5 rounded-lg text-surface-600 hover:text-red-400 hover:bg-white/5 transition-colors">
+                    <form method="POST" action="{{ url_for('pm.client_contact_delete', id=c.id) }}">
+                        {% call confirm_button(question='Remove it?',
+                                               btn_class='p-1.5 rounded-lg text-surface-600 hover:text-red-400 hover:bg-white/5 transition-colors') %}
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
-                        </button>
+                        {% endcall %}
                     </form>
                 </div>
                 {% endfor %}

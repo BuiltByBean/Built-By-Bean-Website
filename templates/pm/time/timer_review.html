@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {% block title %}Save Working Session{% endblock %}
 {% block back %}{{ back_link(url_for('pm.time_list'), 'Time Tracking') }}{% endblock %}
@@ -95,12 +96,11 @@
         </form>
 
         <!-- Discard -->
-        <form method="POST" action="{{ url_for('pm.timer_cancel') }}" class="mt-4"
-              onsubmit="return confirm('Discard this session? Nothing will be logged.');">
-            <button type="submit"
-                    class="text-sm text-surface-500 hover:text-red-500 transition-colors">
-                Discard session
-            </button>
+        {# Asks in place, and wears a border: text alone is never a button,
+           least of all the one that throws the session away. #}
+        <form method="POST" action="{{ url_for('pm.timer_cancel') }}" class="mt-4">
+            {{ confirm_button('Discard session', 'Discard it? Nothing is logged.',
+                              btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
         </form>
     </div>
 </div>

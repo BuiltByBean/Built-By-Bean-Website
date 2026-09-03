@@ -88,6 +88,14 @@
             --border: #2a2a32;
         }
 
+        /* Every native widget CSS cannot reach - the date and month calendar
+           popups, number spinners, the autofill wash, scrollbars - renders
+           from the browser's own scheme. Without this it paints them LIGHT:
+           white calendars and dark-on-white text dropped into a dark app,
+           the same OS-chrome problem the select and checkbox components were
+           built to escape, on the one surface a component cannot replace. */
+        :root { color-scheme: dark; }
+
         body { font-family: 'Inter', system-ui, sans-serif; }
 
         .mesh-bg {

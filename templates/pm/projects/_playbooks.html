@@ -1,3 +1,4 @@
+{% from "pm/components/confirm_button.html" import confirm_button %}
 {#
   The checklists this project is working through.
 
@@ -228,14 +229,15 @@ function playbookPanel(ids, preferred) {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
                         </svg>
                     </a>
-                    <form method="POST" action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}"
-                          onsubmit="return confirm('Remove {{ pb.display_name }} from this project? What you have ticked goes with it.')">
-                        <button type="submit" title="Remove from this project"
-                                class="p-2 rounded-lg text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors">
+                    {# What has been ticked goes with it, so it asks - in
+                       place, where the row is. #}
+                    <form method="POST" action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}">
+                        {% call confirm_button(question='Remove it and the ticks?',
+                                               btn_class='p-2 rounded-lg text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors') %}
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
-                        </button>
+                        {% endcall %}
                     </form>
                 </div>
             </div>

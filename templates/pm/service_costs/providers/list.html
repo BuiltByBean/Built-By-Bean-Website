@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {% block title %}Service Providers - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('pm.expenses_list'), 'Expenses') }}{% endblock %}
@@ -86,11 +87,9 @@
                 <a href="{{ url_for('service_costs.provider_edit', id=provider.id) }}" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-700 text-surface-300 hover:bg-surface-600 transition-colors">
                     Edit
                 </a>
-                <form method="POST" action="{{ url_for('service_costs.provider_delete', id=provider.id) }}"
-                      x-data @submit.prevent="if(confirm('Delete this provider and all its data?')) $el.submit()">
-                    <button type="submit" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors">
-                        Delete
-                    </button>
+                <form method="POST" action="{{ url_for('service_costs.provider_delete', id=provider.id) }}">
+                    {{ confirm_button('Delete', 'Delete it and its data?',
+                                      btn_class='min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors') }}
                 </form>
             </div>
         </div>

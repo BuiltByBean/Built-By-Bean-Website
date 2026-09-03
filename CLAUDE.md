@@ -136,10 +136,25 @@ submits all still work; the visible box is styled through `peer-checked`
 with no script. When the label must react to the state, pass `model=` and
 put the reactive markup in a `{% call %}` block.
 
+Then `confirm()` turned out to be the same sin a third time: ten OS dialogs
+- system grey, system font, blocking the page - appearing at the exact
+moment somebody deletes something. Destructive actions now ask in place
+with `components/confirm_button.html`: pressed once the button becomes its
+own question with Cancel beside it, clicking outside backs out, and the
+armed button is the ONLY submit and is `:disabled` until armed, so a stray
+Enter cannot fire the destructive path. Two actions that had no guard at
+all (deleting an MVP package, erasing a sale) got one while sweeping.
+
+And the widgets no component can replace - the date, month and number
+pickers, the autofill wash, scrollbars - are handled by `:root {
+color-scheme: dark; }` in base.html. Without it the browser paints its own
+chrome LIGHT: white calendar popups dropped into a dark app.
+
 **Grep.**
 ```
 rg -n "<select" templates/pm --glob "!components/*"
 rg -n '<input type="checkbox"' templates/pm --glob "!components/*"
+rg -n 'confirm\(|alert\(' templates/pm --glob "!components/*"
 ```
 Any hit is the regression.
 

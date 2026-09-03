@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
   One runbook, five headed blocks, in the order the work happens in.
@@ -158,15 +159,9 @@
        header. Two destructive-adjacent controls next to each other is how the
        wrong one gets pressed. #}
     <div class="flex justify-end pt-2">
-        <form method="POST" action="{{ url_for('playbooks.playbook_delete', id=playbook.id) }}"
-              x-data @submit.prevent="if (confirm('Delete the {{ playbook.display_name }} playbook? This cannot be undone.')) $el.submit()">
-            <button type="submit"
-                    class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-red-500/30 bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-                Delete playbook
-            </button>
+        <form method="POST" action="{{ url_for('playbooks.playbook_delete', id=playbook.id) }}">
+            {{ confirm_button('Delete playbook', 'Delete it, for good?',
+                              btn_class='inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-red-500/30 bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors') }}
         </form>
     </div>
 

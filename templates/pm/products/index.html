@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
   The catalogue, and who has bought from it.
@@ -185,10 +186,12 @@
                     <button type="button" @click='prompt = {{ prompts[s.id]|tojson }}'
                             class="px-3 py-1.5 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
                         Claude prompt</button>
+                    {# Removing a sale erases the record of having sold it,
+                       so it asks - and wears a border, like every other
+                       control that acts on press. #}
                     <form method="POST" action="{{ url_for('products.sale_delete', id=s.id) }}">
-                        <button type="submit"
-                                class="px-2.5 py-1.5 text-xs font-medium rounded-lg text-surface-500 hover:text-red-300 transition-colors">
-                            Remove</button>
+                        {{ confirm_button('Remove', 'Erase this sale?',
+                                          btn_class='min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
                     </form>
                 </div>
             </div>
