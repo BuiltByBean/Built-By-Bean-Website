@@ -87,15 +87,9 @@
     {% if rows %}
     <div class="glass-card overflow-hidden">
 
-        {# What the bar means, said once rather than on every row. #}
-        <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
                 {{ month.strftime('%B %Y') }}
-            </span>
-            <span class="flex items-center gap-1.5 text-xs text-surface-500">
-                <span class="inline-block w-0.5 h-3 rounded-full bg-white/70"></span>
-                the line is {{ min_margin|format_currency }} left over - a bar reaching past it
-                is a fee to raise
             </span>
         </div>
 
