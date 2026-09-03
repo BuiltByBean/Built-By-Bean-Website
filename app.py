@@ -813,28 +813,6 @@ def create_app():
         estimated_tax = tax["business_tax"]
         post_tax_profit = pre_tax_profit - estimated_tax
 
-        # ── Where the money went, by service ─────────────────
-        #
-        # Grouped from the cost entries rather than from expense categories,
-        # because that is the only place a row knows which vendor it came
-        # from. Anything with no service behind it is gathered at the bottom
-        # so the table still adds up to Total Expenses.
-        by_service = db.session.query(
-            ServiceProvider.display_name,
-            db.func.sum(ServiceCostEntry.allocated_amount),
-        ).join(
-            ServiceCostEntry, ServiceCostEntry.provider_id == ServiceProvider.id
-        ).group_by(ServiceProvider.display_name).all()
-        service_expenses = [
-            {"name": name, "amount": float(amount or 0)}
-            for name, amount in by_service if (amount or 0) > 0
-        ]
-        service_expenses.sort(key=lambda r: -r["amount"])
-        tracked = sum(r["amount"] for r in service_expenses)
-        remainder = total_expenses - tracked
-        if round(remainder, 2) > 0:
-            service_expenses.append({"name": "Everything else", "amount": remainder})
-
         # Money that has already been asked for and has not arrived, and plans
         # that have stopped collecting. Both were being folded into "Invoiced",
         # where a fifty-day-old invoice looks exactly like one raised this
@@ -861,7 +839,6 @@ def create_app():
             estimated_tax=estimated_tax,
             post_tax_profit=post_tax_profit,
             tax=tax,
-            service_expenses=service_expenses,
         )
 
     # ── Clients ──────────────────────────────────────────────
