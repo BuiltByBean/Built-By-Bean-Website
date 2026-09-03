@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 import boto3
 from botocore.exceptions import ClientError
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload, joinedload
 from flask import (
     Flask, Blueprint, render_template, redirect, url_for, flash, request, abort,
     send_from_directory, jsonify, Response,
@@ -1533,7 +1534,14 @@ def create_app():
         if client_filter:
             query = query.filter(Ticket.client_id == client_filter)
 
-        tickets = _ticket_board_order(query).all()
+        # Notes come with the tickets rather than one query per card. The
+        # board already walked them for the unread count; now the cards expand
+        # to show the conversation itself, and a query per ticket to do it
+        # would be paid on every board load whether anything is expanded or not.
+        board = query.options(selectinload(Ticket.notes),
+                              joinedload(Ticket.client),
+                              joinedload(Ticket.project))
+        tickets = _ticket_board_order(board).all()
 
         # A separate query rather than sorted to the bottom of the main one:
         # they are not work in the queue, and anything that filters the board
@@ -1545,7 +1553,10 @@ def create_app():
                 oos = oos.filter(Ticket.category == category_filter)
             if client_filter:
                 oos = oos.filter(Ticket.client_id == client_filter)
-            out_of_scope = oos.order_by(Ticket.updated_at.desc()).all()
+            out_of_scope = (oos.options(selectinload(Ticket.notes),
+                                        joinedload(Ticket.client),
+                                        joinedload(Ticket.project))
+                            .order_by(Ticket.updated_at.desc()).all())
 
         return render_template(
             "pm/tickets/list.html",
@@ -1741,6 +1752,13 @@ def create_app():
                   "success")
         else:
             flash("Posted to the thread, and queued to go back to their app.", "success")
+        # Back where the reply was written. The board can answer inline now, and
+        # being thrown to the detail page for it is the thing that made having
+        # the conversation on the board pointless. Constrained to /admin/ so a
+        # crafted `next` cannot turn this into an open redirect.
+        nxt = (request.form.get("next") or "").strip()
+        if nxt.startswith("/admin/"):
+            return redirect(nxt)
         return redirect(url_for("pm.ticket_detail", id=ticket.id))
 
     # ── Sending my replies back to the client's app ───────────────

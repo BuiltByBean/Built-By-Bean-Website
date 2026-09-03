@@ -17,7 +17,7 @@
   two cannot drift into showing different things about the same ticket.
 #}
 {% macro ticket_card(t) %}
-<div class="rounded-2xl border border-surface-700 bg-surface-800/40 p-4 mb-3">
+<div class="rounded-2xl border border-surface-700 bg-surface-800/40 p-4 mb-3" x-data="{ open: false }">
   <div class="flex flex-wrap items-center gap-2 mb-2">
     {# Category first, because bugs sort first and the eye should agree with the order. #}
     <span class="px-2 py-0.5 rounded-lg text-xs font-semibold
@@ -47,9 +47,15 @@
     <span class="ml-auto text-xs text-surface-400">{{ t.created_at | format_date }}</span>
   </div>
 
-  <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
-     class="block text-sm font-medium text-white hover:text-brand-500">
-    {{ t.display_title }}</a>
+  <button type="button" @click="open = !open"
+          class="group flex w-full items-start gap-2 text-left"
+          :aria-expanded="open">
+    <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
+         :class="open && 'rotate-90'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+    </svg>
+    <span class="text-sm font-medium text-white group-hover:text-brand-500">{{ t.display_title }}</span>
+  </button>
 
   <p class="mt-1 text-xs text-surface-400">
     {{ t.client.name }}{% if t.project %} · {{ t.project.name }}{% endif %}
@@ -59,6 +65,61 @@
     <span class="ml-1 px-1.5 py-0.5 rounded bg-brand-600 text-white font-semibold">{{ t.unread_for_dev() }} new</span>
     {% endif %}
   </p>
+
+
+  <div x-show="open" style="display: none"
+       class="mt-3 pt-3 border-t border-surface-700 space-y-4">
+
+    {% if t.description %}
+    <div>
+      <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">What they said</h4>
+      <p class="text-sm text-surface-200 whitespace-pre-line">{{ t.description }}</p>
+      {% if t.source_label or t.source_path %}
+      <p class="mt-2 text-xs text-surface-400">
+        Reported from {{ t.source_label or t.source_path }}
+        {% if t.origin_url %}
+        &middot; <a href="{{ t.origin_url }}" target="_blank" rel="noopener"
+                    class="text-brand-500 hover:text-brand-600">open in their app</a>
+        {% endif %}
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div>
+      <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Conversation</h4>
+      {% for note in t.notes %}
+      <div class="mb-2 flex {% if note.is_staff_reply %}justify-end{% endif %}">
+        <div class="max-w-[85%] rounded-2xl px-3.5 py-2
+          {% if note.is_staff_reply %}bg-brand-600 text-white{% else %}bg-surface-800 text-surface-100{% endif %}">
+          <p class="text-sm whitespace-pre-line">{{ note.body }}</p>
+          <p class="mt-1 text-xs {% if note.is_staff_reply %}text-white/70{% else %}text-surface-400{% endif %}">
+            {{ note.author_name or "Them" }} &middot; {{ note.created_at | format_date }}
+            {%- if note.is_staff_reply %} &middot; {{ "delivered" if note.delivered_at else "not sent to their app yet" }}{% endif %}
+          </p>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-surface-400 mb-2">Nothing said yet.</p>
+      {% endfor %}
+
+      {# Answers from here and comes back here. `next` is what keeps the board
+         from throwing you at the detail page for a one-line reply. #}
+      <form method="POST" action="{{ url_for('pm.ticket_reply', id=t.id) }}" class="flex gap-2 mt-2">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <input type="text" name="body" required placeholder="Reply to {{ t.reporter_name or 'them' }}"
+               class="input-ring flex-1 min-w-0 px-3.5 py-2 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+        <button type="submit" class="shrink-0 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
+      </form>
+    </div>
+
+    {% if t.detailed_notes %}
+    <div>
+      <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Detailed notes</h4>
+      <p class="text-sm text-surface-200 whitespace-pre-line">{{ t.detailed_notes }}</p>
+    </div>
+    {% endif %}
+  </div>
 
   {# Triage: status, priority, category and billing are four independent facts,
      so they are four controls and one Save.
@@ -94,7 +155,7 @@
     </form>
     <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
        class="px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-400 hover:bg-brand-500/10">
-      Open and reply</a>
+      Open full page</a>
   </div>
 </div>
 {% endmacro %}
