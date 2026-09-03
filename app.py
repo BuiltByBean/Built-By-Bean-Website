@@ -259,6 +259,10 @@ def create_app():
     from pm.contract_routes import contracts_bp, send_generated
     app.register_blueprint(contracts_bp)
 
+    # ── What I sell ─────────────────────────────────────────
+    from pm.products_routes import products_bp
+    app.register_blueprint(products_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)

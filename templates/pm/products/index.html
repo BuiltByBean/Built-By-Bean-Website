@@ -1,0 +1,220 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  The catalogue, and who has bought from it.
+
+  Selling one thing does three: records it, puts the vendor's runbook on the
+  project, and opens the add-on contract already filled in. The sell dialog is
+  one form so those cannot come apart.
+#}
+
+{% block title %}Products - Built By Bean{% endblock %}
+{% block page_title %}Products{% endblock %}
+{% block page_subtitle %}What I sell, and who has it{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in"
+     x-data='{
+       sell: null,
+       prompt: null,
+       copied: false,
+       clients: {{ clients | map(attribute="id") | list | tojson }},
+       projects: {{ projects | tojson }},
+       clientId: "",
+       projectId: "",
+       get mine() { return this.projects.filter(p => p.client_id === this.clientId); },
+       open(id, name, price, monthly) {
+         this.sell = { id: id, name: name, price: price, monthly: monthly };
+         this.clientId = ""; this.projectId = "";
+       },
+       async copy(text) {
+         try { await navigator.clipboard.writeText(text); this.copied = true;
+               setTimeout(() => this.copied = false, 1800); } catch (e) {}
+       }
+     }'>
+
+    <div class="glass-card overflow-hidden">
+        <div class="divide-y divide-white/5">
+        {% for p in products %}
+        <div class="p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="text-sm font-medium text-white">{{ p.name }}</h3>
+                        {% if p.playbook_slug %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-brand-500/15 text-brand-300">
+                            {{ p.playbook_slug }} runbook</span>
+                        {% endif %}
+                        {% if sold_count.get(p.id) %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-300">
+                            sold {{ sold_count[p.id] }}</span>
+                        {% endif %}
+                    </div>
+                    {% if p.summary %}
+                    <p class="mt-1 text-xs text-surface-400 max-w-2xl">{{ p.summary }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    <form method="POST" action="{{ url_for('products.product_price', id=p.id) }}"
+                          class="flex items-center gap-1.5">
+                        <span class="text-xs text-surface-500">$</span>
+                        <input type="text" name="price" value="{{ '%g'|format(p.price) if p.price is not none else '' }}"
+                               placeholder="quoted"
+                               class="input-ring w-24 px-2 py-1.5 text-xs bg-surface-800/50 text-white rounded-lg">
+                        <input type="text" name="monthly_price" value="{{ '%g'|format(p.monthly_price) if p.monthly_price is not none else '' }}"
+                               placeholder="/mo"
+                               class="input-ring w-20 px-2 py-1.5 text-xs bg-surface-800/50 text-white rounded-lg">
+                        <button type="submit"
+                                class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                            Save</button>
+                    </form>
+                    <button type="button"
+                            @click="open({{ p.id }}, {{ p.name|tojson }}, {{ ('%g'|format(p.price)) if p.price is not none else '' | tojson }}, {{ ('%g'|format(p.monthly_price)) if p.monthly_price is not none else '' | tojson }})"
+                            class="px-3 py-1.5 text-xs font-semibold rounded-lg btn-brand transition-all">
+                        Sell</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+
+    {% if sales %}
+    <div class="glass-card overflow-hidden">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Sold</span>
+        </div>
+        <div class="divide-y divide-white/5">
+        {% for s in sales %}
+        <div class="p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-white">
+                        {{ s.product.name }}
+                        <span class="text-surface-400 font-normal">- {{ s.client.name }}</span>
+                    </p>
+                    <p class="text-xs text-surface-400 mt-0.5">
+                        <a href="{{ url_for('pm.project_detail', id=s.project_id) }}"
+                           class="hover:text-brand-300 transition-colors">{{ s.project.name }}</a>
+                        {%- if s.price is not none %} &middot; {{ s.price|format_currency }}{% endif %}
+                        {%- if s.monthly_price %} + {{ s.monthly_price|format_currency }}/mo{% endif %}
+                        {%- if s.delivery_date %} &middot; due {{ s.delivery_date|format_date }}{% endif %}
+                    </p>
+                    {% if s.notes %}
+                    <p class="text-xs text-surface-500 mt-1 max-w-2xl">{{ s.notes }}</p>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button type="button" @click="prompt = {{ prompts[s.id]|tojson }}"
+                            class="px-3 py-1.5 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                        Claude prompt</button>
+                    <form method="POST" action="{{ url_for('products.sale_delete', id=s.id) }}">
+                        <button type="submit"
+                                class="px-2.5 py-1.5 text-xs font-medium rounded-lg text-surface-500 hover:text-red-300 transition-colors">
+                            Remove</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── selling one ─────────────────────────────────────────── #}
+    <div x-show="sell" style="display: none"
+         class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 lg:pl-[260px]">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="sell = null"></div>
+        <form method="POST" action="{{ url_for('products.product_sell') }}"
+              class="relative w-full max-w-lg glass-card shadow-2xl p-5 space-y-4">
+            <input type="hidden" name="product_id" :value="sell && sell.id">
+
+            <p class="text-sm font-semibold text-white" x-text="sell && sell.name"></p>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
+                <select name="client_id" x-model="clientId" required
+                        class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    <option value="">Choose a client</option>
+                    {% for c in clients %}
+                    <option value="{{ c.id }}">{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
+                <select name="project_id" x-model="projectId"
+                        class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    <option value="">Start a new one</option>
+                    <template x-for="p in mine" :key="p.id">
+                        <option :value="p.id" x-text="p.name"></option>
+                    </template>
+                </select>
+                {# Only asked for when there is nothing to attach to. Blank is
+                   fine: the product and the client name it. #}
+                <input type="text" name="new_project_name" x-show="!projectId" style="display: none"
+                       placeholder="Name for the new project"
+                       class="input-ring mt-2 w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Price $</label>
+                    <input type="text" name="price" :value="sell && sell.price"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Ongoing $/mo</label>
+                    <input type="text" name="monthly_price" :value="sell && sell.monthly"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Delivery date</label>
+                <input type="date" name="delivery_date"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">What they want it for</label>
+                <textarea name="notes" rows="2"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" @click="sell = null"
+                        class="px-4 py-2 text-sm text-surface-300 hover:text-white transition-colors">Cancel</button>
+                <button type="submit" class="px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
+                    Sell and draft the contract</button>
+            </div>
+        </form>
+    </div>
+
+    {# ── the prompt ──────────────────────────────────────────── #}
+    <div x-show="prompt" style="display: none"
+         class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 lg:pl-[260px]">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="prompt = null"></div>
+        <div class="relative w-full max-w-2xl glass-card shadow-2xl flex flex-col max-h-[75vh]">
+            <div class="p-4 border-b border-white/10 flex items-center justify-between gap-3">
+                <span class="text-sm font-semibold text-white">Drop this into a new Claude session</span>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="copy(prompt)"
+                            class="px-3 py-1.5 text-xs font-semibold rounded-lg btn-brand transition-all">
+                        <span x-show="!copied">Copy</span>
+                        <span x-show="copied" style="display: none">Copied</span>
+                    </button>
+                    <button type="button" @click="prompt = null" class="text-surface-400 hover:text-surface-200 p-1">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+            <pre class="overflow-auto p-4 text-xs text-surface-200 whitespace-pre-wrap font-mono" x-text="prompt"></pre>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

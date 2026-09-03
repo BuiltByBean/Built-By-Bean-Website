@@ -1421,3 +1421,104 @@ class ProjectPlaybookStep(db.Model):
 
     def __repr__(self):
         return f"<ProjectPlaybookStep {self.playbook_step_id} done={self.done}>"
+
+
+# ── What I sell ──────────────────────────────────────────────
+
+
+class Product(db.Model):
+    """One thing that can be bought on its own, at its own price.
+
+    The prose that goes into an add-on contract already lives in
+    `contract_docs.PRODUCTS`, keyed by the same slug: what it includes, what
+    the client has to provide, the lead time, whose platform it touches. That
+    stays there, because it is the wording of an agreement and belongs beside
+    the document builder.
+
+    What lives here is everything that changes without a deploy - the price,
+    whether it is still offered, the order it reads in - and the two joins the
+    contract layer has no opinion about: which runbook to apply when it sells,
+    and who has bought it.
+
+    A null price means one that is quoted per client rather than listed. The
+    custom build is the case: it is the largest thing sold here and the only
+    one with no standard number.
+    """
+
+    __tablename__ = "products"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(60), unique=True, nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    summary = db.Column(db.Text, default="")
+    price = db.Column(db.Float, nullable=True)
+    monthly_price = db.Column(db.Float, nullable=True)
+    # The runbook applied to the project when this sells. Held as a slug
+    # rather than a foreign key so a product can name a playbook that has not
+    # been written yet without failing to save.
+    playbook_slug = db.Column(db.String(60), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, default=0)
+    # Anything specific to this product that a runbook does not already say,
+    # prepended to the prompt built for a sale. Usually empty: the playbook is
+    # the source, and a second copy of it here would go stale the first time
+    # the vendor changed a screen.
+    prompt_intro = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    sales = db.relationship("ProductSale", back_populates="product",
+                            cascade="all, delete-orphan", lazy="dynamic")
+
+    @property
+    def price_label(self):
+        """What to print where a price goes, including when there is not one."""
+        if self.price is None and self.monthly_price is None:
+            return "Quoted"
+        parts = []
+        if self.price is not None:
+            parts.append(f"${self.price:,.0f}")
+        if self.monthly_price:
+            parts.append(f"${self.monthly_price:,.0f}/mo")
+        return " + ".join(parts)
+
+    def __repr__(self):
+        return f"<Product {self.slug}>"
+
+
+class ProductSale(db.Model):
+    """One product, sold once, to one client.
+
+    Always against a project, even when nothing custom was built. Somebody
+    buying only a signing portal still needs somewhere for its runbook, its
+    hosting fee and its tickets to live, and a project is that place - so a
+    standalone sale makes a small one rather than inventing a second home for
+    all three.
+
+    The price is copied onto the sale rather than read back off the product,
+    because the catalogue price is what it costs today and this is what that
+    client agreed to. Changing the list price must not rewrite history.
+    """
+
+    __tablename__ = "product_sales"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    price = db.Column(db.Float, nullable=True)
+    monthly_price = db.Column(db.Float, nullable=True)
+    delivery_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    product = db.relationship("Product", back_populates="sales")
+    client = db.relationship("Client", backref=db.backref(
+        "product_sales", lazy="dynamic", cascade="all, delete-orphan"))
+    project = db.relationship("Project", backref=db.backref(
+        "product_sales", lazy="dynamic", cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<ProductSale {self.product_id} -> client {self.client_id}>"

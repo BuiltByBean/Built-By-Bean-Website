@@ -21,10 +21,10 @@
 {# `products` keyed by slug, so choosing one can fill the form without a fetch. #}
 <form method="POST" action="{{ url_for('contracts.generate_addon') }}"
       x-data='{
-        clientId: "",
+        clientId: "{{ request.args.get("client_id", "") }}",
         clients: {{ client_lookup | tojson }},
         products: {{ products | tojson }},
-        product: "texting",
+        product: "{{ request.args.get("product", "texting") }}",
         chosen: null,
         p: null,
         fill() {
@@ -37,7 +37,9 @@
           this.lead = this.p.lead_time || "";
           this.third = this.p.third_party || "";
         },
-        name: "", summary: "", includes: "", provides: "", lead: "", third: ""
+        name: {{ (request.args.get("product_name", "")) | tojson }},
+        summary: {{ (request.args.get("summary", "")) | tojson }},
+        includes: "", provides: "", lead: "", third: ""
       }'
       x-init="fill()"
       x-effect="chosen = clients[clientId] || null">
@@ -61,7 +63,8 @@
 
         <div>
             <label class="block text-sm font-medium text-surface-300 mb-1.5">What are you selling? *</label>
-            {{ select_dropdown("product", product_choices, "texting", "Pick a product",
+            {{ select_dropdown("product", product_choices,
+                               request.args.get("product", "texting"), "Pick a product",
                                full_width=true, model="product", on_change="fill()") }}
         </div>
 
@@ -98,7 +101,7 @@
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
                     One-time fee <span class="text-surface-500 font-normal">$, optional</span>
                 </label>
-                <input type="text" name="one_time_fee"
+                <input type="text" name="one_time_fee" value="{{ request.args.get("one_time_fee", "") }}"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                        placeholder="1,500">
             </div>
@@ -106,7 +109,7 @@
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
                     Ongoing <span class="text-surface-500 font-normal">$/month, optional</span>
                 </label>
-                <input type="text" name="monthly_fee"
+                <input type="text" name="monthly_fee" value="{{ request.args.get("monthly_fee", "") }}"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                        placeholder="50">
             </div>
@@ -135,7 +138,7 @@
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
                 <textarea name="notes" rows="3"
                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
-                          placeholder="Anything specific to this one"></textarea>
+                          placeholder="Anything specific to this one">{{ request.args.get("notes", "") }}</textarea>
             </div>
         </div>
 

@@ -511,6 +511,15 @@
             {# The recurring fee against the recurring cost. Its own entry
                rather than a panel on Expenses, because it is the one page
                that is about money coming in as well as going out. #}
+            {# What is for sale, and who has bought it. Beside Contracts
+               because selling one is what raises the agreement. #}
+            <a href="{{ url_for('products.products_index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('products.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                Products
+            </a>
             <a href="{{ url_for('hosting.hosting_index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('hosting.') %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
