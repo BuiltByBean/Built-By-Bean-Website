@@ -98,8 +98,16 @@ CATALOGUE = [
 
 
 def upgrade():
-    products = table(
-        "products",
+    bind = op.get_bind()
+
+    # On a database whose products table came from db.create_all() at a later
+    # model shape, includes_hosting exists as NOT NULL with only a Python-side
+    # default, and an insert that omits it fails. When this migration first
+    # ran in production the column did not exist yet - so it is included only
+    # where it is present. This board hit the omission on 2026-09-03, on a
+    # stale local database walking the chain fresh.
+    table_cols = {c["name"] for c in sa.inspect(bind).get_columns("products")}
+    stub = [
         column("slug", sa.String),
         column("name", sa.String),
         column("summary", sa.Text),
@@ -108,21 +116,27 @@ def upgrade():
         column("is_active", sa.Boolean),
         column("sort_order", sa.Integer),
         column("prompt_intro", sa.Text),
-    )
+    ]
+    if "includes_hosting" in table_cols:
+        stub.append(column("includes_hosting", sa.Boolean))
+    products = table("products", *stub)
+
     # Skip anything already there, for the same reason the table creation is
     # guarded: the app may have been opened against this database before the
     # migration shipped, and a second copy of a product would give the
     # catalogue two rows with the same slug and one unique constraint to fail
     # on.
-    bind = op.get_bind()
     have = {row[0] for row in bind.execute(sa.text("SELECT slug FROM products"))}
-    rows = [
-        {"slug": slug, "name": name, "summary": summary, "price": price,
-         "playbook_slug": playbook, "is_active": True, "sort_order": order,
-         "prompt_intro": ""}
-        for slug, name, summary, price, playbook, order in CATALOGUE
-        if slug not in have
-    ]
+    rows = []
+    for slug, name, summary, price, playbook, order in CATALOGUE:
+        if slug in have:
+            continue
+        row = {"slug": slug, "name": name, "summary": summary, "price": price,
+               "playbook_slug": playbook, "is_active": True,
+               "sort_order": order, "prompt_intro": ""}
+        if "includes_hosting" in table_cols:
+            row["includes_hosting"] = True
+        rows.append(row)
     if rows:
         op.bulk_insert(products, rows)
 

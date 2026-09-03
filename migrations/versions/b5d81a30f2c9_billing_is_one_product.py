@@ -46,36 +46,60 @@ def upgrade():
     bind.execute(sa.text(
         "DELETE FROM products WHERE slug IN ('invoicing', 'payments')"))
 
+    # On a database whose products table came from db.create_all() at today's
+    # model shape, includes_hosting already exists as NOT NULL with only a
+    # Python-side default, so an INSERT that omits it fails. When this
+    # migration first ran in production the column did not exist yet - so it
+    # is named only where it is present. This board hit the omission on
+    # 2026-09-03, on a stale local database walking the chain fresh.
+    cols = {c["name"] for c in sa.inspect(bind).get_columns("products")}
+    extra_col = ", includes_hosting" if "includes_hosting" in cols else ""
+    extra_val = ", true" if "includes_hosting" in cols else ""
+
     already = bind.execute(sa.text(
         "SELECT COUNT(*) FROM products WHERE slug = 'billing'")).scalar()
     if not already:
-        bind.execute(sa.text("""
+        # Bound parameters rather than inline literals: the original inline
+        # SQL leaned on newline string-literal concatenation, which Postgres
+        # performs and SQLite refuses, so the migration only ran where it had
+        # already run.
+        bind.execute(sa.text(f"""
             INSERT INTO products
                 (slug, name, summary, price, playbook_slug, is_active,
-                 sort_order, prompt_intro)
+                 sort_order, prompt_intro{extra_col})
             VALUES
-                ('billing', 'Invoicing and payments',
-                 'Invoices built from the work already recorded, and a way for '
-                 'customers to pay them by card. The money settles into the '
-                 'client''s own account - I never hold or handle it. Stripe '
-                 'unless they ask for a different provider.',
-                 2500, 'stripe', true, 20, '')
-        """))
+                (:slug, :name, :summary, 2500, 'stripe', true, 20, ''{extra_val})
+        """), {
+            "slug": "billing", "name": "Invoicing and payments",
+            "summary": "Invoices built from the work already recorded, and a "
+                       "way for customers to pay them by card. The money "
+                       "settles into the client's own account - I never hold "
+                       "or handle it. Stripe unless they ask for a different "
+                       "provider.",
+        })
 
 
 def downgrade():
     bind = op.get_bind()
+    cols = {c["name"] for c in sa.inspect(bind).get_columns("products")}
+    extra_col = ", includes_hosting" if "includes_hosting" in cols else ""
+    extra_val = ", true" if "includes_hosting" in cols else ""
     bind.execute(sa.text("DELETE FROM products WHERE slug = 'billing'"))
-    bind.execute(sa.text("""
+    statement = sa.text(f"""
         INSERT INTO products (slug, name, summary, price, playbook_slug,
-                              is_active, sort_order, prompt_intro)
-        VALUES
-            ('payments', 'Card payments',
-             'Customers pay through the software. The money lands in the '
-             'client''s own account; they stay merchant of record.',
-             1000, 'stripe', true, 20, ''),
-            ('invoicing', 'Invoice generation',
-             'Invoices built from the work already recorded, as PDFs, without '
-             'retyping any of it.',
-             1000, NULL, true, 40, '')
-    """))
+                              is_active, sort_order, prompt_intro{extra_col})
+        VALUES (:slug, :name, :summary, :price, :playbook, true, :order,
+                ''{extra_val})
+    """)
+    bind.execute(statement, {
+        "slug": "payments", "name": "Card payments",
+        "summary": "Customers pay through the software. The money lands in "
+                   "the client's own account; they stay merchant of record.",
+        "price": 1000, "playbook": "stripe", "order": 20,
+    })
+    bind.execute(statement, {
+        "slug": "invoicing", "name": "Invoice generation",
+        "summary": "Invoices built from the work already recorded, as PDFs, "
+                   "without retyping any of it.",
+        "price": 1000, "playbook": None, "order": 40,
+    })

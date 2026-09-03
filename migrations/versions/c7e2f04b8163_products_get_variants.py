@@ -80,17 +80,19 @@ def upgrade():
     # The API connection product, renamed from the placeholder the catalogue
     # was seeded with. "crm-sync" described one use of it; pulling data from a
     # system somebody already runs is the job, whether or not that system is
-    # a CRM.
+    # a CRM. The summary travels as a bound parameter because the inline
+    # version leaned on newline string-literal concatenation, which Postgres
+    # performs and SQLite refuses.
     bind.execute(sa.text("""
         UPDATE products
            SET slug = 'api-connection',
                name = 'API connection',
-               summary = 'Reading from, and writing back to, a system the '
-                         'business already runs on. The build is the same '
-                         'shape each time; which platform it connects to is '
-                         'the part that decides the work.'
+               summary = :summary
          WHERE slug = 'crm-sync'
-    """))
+    """), {"summary": "Reading from, and writing back to, a system the "
+                      "business already runs on. The build is the same shape "
+                      "each time; which platform it connects to is the part "
+                      "that decides the work."})
 
     have_products = {row[0]: row[1] for row in
                      bind.execute(sa.text("SELECT slug, id FROM products"))}
