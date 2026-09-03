@@ -198,26 +198,6 @@
         <p class="text-xs text-surface-500 mt-1">
             On this business only &middot; {{ '%.1f' % tax.effective_on_profit }}% of profit
         </p>
-        <dl class="mt-3 pt-3 border-t border-white/10 space-y-1 text-xs">
-            <div class="flex items-center justify-between">
-                <dt class="text-surface-400">Self-employment</dt>
-                <dd class="text-surface-300">{{ tax.se_tax | format_currency }}</dd>
-            </div>
-            <div class="flex items-center justify-between">
-                <dt class="text-surface-400">Income tax on the profit</dt>
-                <dd class="text-surface-300">{{ tax.federal_on_business | format_currency }}</dd>
-            </div>
-            {% if tax.state_tax %}
-            <div class="flex items-center justify-between">
-                <dt class="text-surface-400">State</dt>
-                <dd class="text-surface-300">{{ tax.state_tax | format_currency }}</dd>
-            </div>
-            {% endif %}
-            <div class="flex items-center justify-between pt-1">
-                <dt class="text-surface-400">Top band it lands in</dt>
-                <dd class="text-surface-300">{{ '%.0f' % tax.marginal_rate }}%</dd>
-            </div>
-        </dl>
         {#
           The one input that changes this the most, said out loud. Wages
           under the social security base mean the full 15.3% on profit; over
