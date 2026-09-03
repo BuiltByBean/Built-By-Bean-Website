@@ -71,7 +71,10 @@
                             Save</button>
                     </form>
                     <button type="button"
-                            @click="open({{ p.id }}, {{ p.name|tojson }}, {{ ('%g'|format(p.price)) if p.price is not none else '' | tojson }}, {{ ('%g'|format(p.monthly_price)) if p.monthly_price is not none else '' | tojson }})"
+                            {#- Single-quoted, because tojson writes double quotes and
+                                they would close a double-quoted attribute at the first
+                                one - truncating the handler mid product name. -#}
+                            @click='open({{ p.id }}, {{ p.name|tojson }}, {{ (("%g"|format(p.price)) if p.price is not none else "")|tojson }}, {{ (("%g"|format(p.monthly_price)) if p.monthly_price is not none else "")|tojson }})'
                             class="px-3 py-1.5 text-xs font-semibold rounded-lg btn-brand transition-all">
                         Sell</button>
                 </div>
@@ -107,7 +110,10 @@
                     {% endif %}
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                    <button type="button" @click="prompt = {{ prompts[s.id]|tojson }}"
+                    {#- Single-quoted for the same reason as Sell above: tojson
+                        escapes apostrophes but not double quotes, so a double-quoted
+                        attribute ends at the first one in the prompt. -#}
+                    <button type="button" @click='prompt = {{ prompts[s.id]|tojson }}'
                             class="px-3 py-1.5 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
                         Claude prompt</button>
                     <form method="POST" action="{{ url_for('products.sale_delete', id=s.id) }}">
