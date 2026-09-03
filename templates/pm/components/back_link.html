@@ -18,13 +18,17 @@
   which acts on press looks pressable.
 #}
 {% macro back_link(href, label) %}
+{#- max-w-full on the link and min-w-0 on the span are what make `truncate`
+    actually truncate. Without them an inline-flex sizes to its content and
+    the span never has a bound to ellipsis against, so a back link labelled
+    with a long ticket title dragged the whole page sideways at 375. -#}
 <a href="{{ href }}" data-back-to
-   class="inline-flex items-center gap-1.5 mb-1.5 px-2.5 min-h-[44px] text-xs font-medium
+   class="inline-flex max-w-full items-center gap-1.5 mb-1.5 px-2.5 min-h-[44px] text-xs font-medium
           rounded-lg border border-surface-700 bg-surface-800/60 text-surface-300
           hover:bg-surface-700 hover:text-white transition-colors">
     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
     </svg>
-    <span class="truncate">{{ label }}</span>
+    <span class="truncate min-w-0">{{ label }}</span>
 </a>
 {% endmacro %}

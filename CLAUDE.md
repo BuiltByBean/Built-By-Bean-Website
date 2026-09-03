@@ -30,7 +30,17 @@ because reporting sessions retry like any other API client.
 
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page
   sideways, nothing overflows its card, every tap target is at least 44px.
-  Verify with `getBoundingClientRect()`, not by looking.
+  Verify with `getBoundingClientRect()`, not by looking. Sweep every route
+  by loading it in a 375px-wide iframe and asserting
+  `documentElement.scrollWidth <= clientWidth` - and seed the fixtures with
+  LONG strings and a long URL first, because short seed data hides all four
+  of the causes found this way: a `flex-1` input with no `min-w-0` (its
+  min-width is its placeholder's intrinsic width), a `truncate` span with no
+  `max-w-full` on the flex parent to ellipsis against, a pill row that
+  cannot `flex-wrap`, and a long URL in rendered markdown, which overflows
+  as a TEXT node so every element box still measures inside the viewport. A
+  wide table is fine inside its own `overflow-auto` container: the table
+  scrolls, the page does not.
 - **No em dashes. Anywhere.** Not in product copy, not in commit messages.
 - **Text alone is never a button.** Anything that acts on press gets a border
   or a fill. Actions sit on the trailing edge.

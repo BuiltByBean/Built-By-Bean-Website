@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/status_badge.html" import badge %}
 
 {% block back %}{{ back_link(url_for('pm.tickets_list'), 'Tickets') }}{% endblock %}
@@ -41,13 +42,14 @@
     </div>
 
     <!-- Quick Status Change -->
-    <div class="flex items-center gap-2 mb-4">
+    {# flex-wrap: four status pills on one line ran off a 375 screen. #}
+    <div class="flex flex-wrap items-center gap-2 mb-4">
         <span class="text-xs font-medium text-surface-400">Status:</span>
         {% for val, label in ticket_status_choices %}
         <form method="POST" action="{{ url_for('pm.ticket_triage', id=ticket.id) }}" class="inline">
             <input type="hidden" name="status" value="{{ val }}">
             <button type="submit"
-                    class="px-3 py-1 text-xs font-medium rounded-lg transition-colors
+                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg transition-colors
                            {% if ticket.status == val %}bg-brand-600 text-white shadow-sm{% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
                 {{ label }}
             </button>
@@ -272,12 +274,12 @@
 </div>
 
 <!-- Delete -->
-<div x-data="{ confirmDelete: false }">
-    <button @click="confirmDelete = true" x-show="!confirmDelete" class="text-xs text-red-500 hover:text-red-600 font-medium">Delete Ticket</button>
-    <form x-show="confirmDelete" method="POST" action="{{ url_for('pm.ticket_delete', id=ticket.id) }}" class="inline-flex items-center gap-2">
-        <span class="text-xs text-red-500">Delete this ticket, its thread and all its data?</span>
-        <button type="submit" class="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
-        <button type="button" @click="confirmDelete = false" class="px-3 py-1 text-xs text-surface-500 hover:text-surface-300">Cancel</button>
-    </form>
-</div>
+{# The house component rather than its own copy of the same idea: it wraps
+   at 375, where the old one-line confirm row ran off the screen, and the
+   resting button gets a border like everything else that acts on press. #}
+<form method="POST" action="{{ url_for('pm.ticket_delete', id=ticket.id) }}"
+      class="flex flex-wrap">
+    {{ confirm_button('Delete ticket', 'Delete it, its thread and its data?',
+                      btn_class='min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+</form>
 {% endblock %}

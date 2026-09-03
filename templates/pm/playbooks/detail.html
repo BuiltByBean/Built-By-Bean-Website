@@ -32,7 +32,13 @@
     /* Colours come from the custom properties base.html defines, which came
        from the public site's stylesheet. Nothing here restates a hex that is
        already named somewhere else. */
-    .runbook { color: #d4d4d8; font-size: 0.9375rem; line-height: 1.7; }
+    /* A runbook is full of long URLs and console strings. Without this one
+       rule an unbreakable one pushes the whole page sideways at 375 - and
+       it does it as a TEXT node, so every element box still measures inside
+       the viewport and only documentElement.scrollWidth shows the damage. */
+    .runbook { color: #d4d4d8; font-size: 0.9375rem; line-height: 1.7;
+               overflow-wrap: break-word; }
+    .runbook a { word-break: break-word; }
     .runbook > *:first-child { margin-top: 0; }
     .runbook > *:last-child { margin-bottom: 0; }
     .runbook p { margin: 0 0 0.85rem; }

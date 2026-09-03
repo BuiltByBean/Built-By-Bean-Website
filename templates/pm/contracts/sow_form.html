@@ -147,14 +147,18 @@
 
                     <div class="space-y-2">
                         <template x-for="(milestone, index) in milestones" :key="index">
-                            <div class="flex items-center gap-2">
+                            {# flex-wrap and min-w-0: a flex-1 input defaults to
+                               min-width auto, which is its placeholder's
+                               intrinsic width, so this row pushed the whole
+                               page sideways at 375. #}
+                            <div class="flex flex-wrap items-center gap-2">
                                 <span class="text-xs text-surface-400 w-5 text-right flex-shrink-0" x-text="index + 1 + '.'"></span>
                                 <input type="number" :name="'payment_pct'" x-model.number="milestone.pct" min="0" max="100"
                                        class="input-ring w-20 px-3 py-2.5 bg-surface-800/50 text-white text-sm text-center flex-shrink-0"
                                        placeholder="%">
                                 <span class="text-xs text-surface-400 flex-shrink-0">% due</span>
                                 <input type="text" :name="'payment_label'" x-model="milestone.label"
-                                       class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                                       class="input-ring flex-1 min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                                        placeholder="e.g. at project kickoff, by May 1, upon delivery">
                                 <button type="button" @click="removeMilestone(index)" x-show="milestones.length > 1"
                                         class="p-2 text-red-400 hover:text-red-500 flex-shrink-0 transition-colors">
@@ -200,10 +204,10 @@
 
                     <div class="space-y-2">
                         <template x-for="(feature, index) in features" :key="index">
-                            <div class="flex items-center gap-2">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <span class="text-xs text-surface-400 w-5 text-right flex-shrink-0" x-text="index + 1 + '.'"></span>
                                 <input type="text" :name="'features'" x-model="features[index]" required
-                                       class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                                       class="input-ring flex-1 min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                                        placeholder="e.g. Homepage with hero section and company overview">
                                 <button type="button" @click="removeFeature(index)" x-show="features.length > 1"
                                         class="p-2 text-red-400 hover:text-red-500 flex-shrink-0 transition-colors">
