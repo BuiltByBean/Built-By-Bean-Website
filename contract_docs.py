@@ -115,6 +115,44 @@ PRODUCTS = {
             "receives no part of them."
         ),
     },
+    # Invoicing and taking the money were sold separately and read to a client
+    # as one thing - "bill people and get paid" - so two thousand-dollar line
+    # items for it felt like being charged twice. One product, one price.
+    "billing": {
+        "name": "Invoicing and payments",
+        "summary": (
+            "Invoices built from the work already recorded, and a way for your customers "
+            "to pay them by card. Money settles directly into your own account; Built by "
+            "Bean LLC never holds or handles your funds at any point."
+        ),
+        "includes": [
+            "Invoices generated from the jobs, hours and materials already in your system",
+            "Numbered, sent as PDFs, and filed against the customer they belong to",
+            "A pay button on them and, where you want one, on your booking flow",
+            "Payments recorded against the right invoice automatically",
+            "Refunds handled from inside your application",
+            "Failed and disputed payments surfaced rather than silently ignored",
+        ],
+        "client_provides": [
+            "A payment account created by you, in your business's name - it cannot be "
+            "created on your behalf",
+            "Your EIN, business address, and the bank account payouts should reach",
+            "Completion of the payment provider's identity check, which only you can do",
+            "Your invoice numbering, payment terms, and anything that has to appear on "
+            "the document",
+        ],
+        "lead_time": (
+            "Invoicing is ready as soon as the work it bills is being recorded. Payments "
+            "follow once your payment account passes its identity check, usually same-day "
+            "but sometimes several days."
+        ),
+        "third_party": (
+            "Card processing fees are charged by the payment provider directly to the "
+            "Client's own account and are not included in the fee below. Built by Bean LLC "
+            "receives no part of them. Stripe is used unless the Client asks for a "
+            "different provider, which may change the timeline."
+        ),
+    },
     "email": {
         "name": "Email from your own domain",
         "summary": (
