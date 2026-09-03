@@ -458,6 +458,12 @@
 
         <!-- Navigation -->
         <nav class="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
+            {# The catalogue, ahead of the day-to-day: the apps that exist,
+               what is sold, what has been built before, how the vendors get
+               set up, and the builder that spends it all. These are the
+               pages a phone call is answered from. #}
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Catalogue</p>
             <a href="{{ url_for('apps.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -465,14 +471,6 @@
                 </svg>
                 My Apps
             </a>
-            <div class="my-2 border-t border-white/10"></div>
-
-            {# The catalogue, ahead of the day-to-day: what is sold, what has
-               been built before, and how the vendors behind both get set up.
-               These are the pages a phone call is answered from, which is why
-               they outrank the working stack below. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Catalogue</p>
             <a href="{{ url_for('products.products_index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('products.') %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -494,16 +492,21 @@
                 </svg>
                 Playbooks
             </a>
+            {# The builder closes the catalogue: a client's build, assembled
+               from everything above it on the call, priced as it grows. #}
+            <a href="{{ url_for('mvp.mvp_index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('mvp.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"/>
+                </svg>
+                MVP Builder
+            </a>
             <div class="my-2 border-t border-white/10"></div>
 
-            <a href="{{ url_for('pm.dashboard') }}"
-               class="sidebar-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z"/>
-                </svg>
-                Finances
-            </a>
+            {# The working stack: who the work is for, the work itself, the
+               paper behind it, and what gets raised about it. #}
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Work</p>
             <a href="{{ url_for('pm.clients_list') }}"
                class="sidebar-link {% if request.endpoint and 'client' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -517,6 +520,13 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                 </svg>
                 Projects
+            </a>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="sidebar-link {% if request.endpoint and ('contract' in request.endpoint or request.endpoint in ('pm.engagement_letter_form', 'pm.generate_engagement_letter', 'pm.sow_form', 'pm.generate_sow')) %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25A3.375 3.375 0 0113.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 013.375 3.375M9 15l2.25 2.25L15 12"/>
+                </svg>
+                Contracts
             </a>
             <a href="{{ url_for('pm.tickets_list') }}"
                class="sidebar-link {% if request.endpoint and 'task' in request.endpoint %}active{% endif %}">
@@ -534,25 +544,20 @@
                 Time Tracking
             </a>
             {% endif %}
-            {# Scoping sits right before the agreement it turns into: a
-               client's build, assembled from the catalogue on the call,
-               priced as it grows. #}
-            <a href="{{ url_for('mvp.mvp_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('mvp.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"/>
-                </svg>
-                MVP Builder
-            </a>
-            <a href="{{ url_for('contracts.contracts_index') }}"
-               class="sidebar-link {% if request.endpoint and ('contract' in request.endpoint or request.endpoint in ('pm.engagement_letter_form', 'pm.generate_engagement_letter', 'pm.sow_form', 'pm.generate_sow')) %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25A3.375 3.375 0 0113.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 013.375 3.375M9 15l2.25 2.25L15 12"/>
-                </svg>
-                Contracts
-            </a>
             <div class="my-2 border-t border-white/10"></div>
 
+            {# Money, whole: the overview first, then what is owed on it,
+               spent on it, charged monthly for it, and invoiced from it. #}
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Finances</p>
+            <a href="{{ url_for('pm.dashboard') }}"
+               class="sidebar-link {% if request.endpoint == 'pm.dashboard' %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z"/>
+                </svg>
+                Dashboard
+            </a>
             <a href="{{ url_for('taxes.taxes_index') }}"
                class="sidebar-link {% if request.endpoint and 'taxes' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

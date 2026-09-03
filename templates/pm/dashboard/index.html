@@ -1,7 +1,9 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/status_badge.html" import badge %}
 
-{% block page_title %}Finances{% endblock %}
+{# "Dashboard" because that is the word on the nav item that lands here,
+   and the section heading above it already says Finances. #}
+{% block page_title %}Dashboard{% endblock %}
 {% block page_subtitle %}Where the money is{% endblock %}
 
 {% block content %}
