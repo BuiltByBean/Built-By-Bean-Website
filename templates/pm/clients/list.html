@@ -14,18 +14,21 @@
 </a>
 {% endblock %}
 
+{# The window never scrolls here: the roster is the page, so the roster is
+   the scroller (LM-4). #}
+{% block main_class %}contained-scroll{% endblock %}
+
 {% block content %}
 {% set channel_labels = dict(channel_choices) %}
-<div class="glass-card p-6" x-data="{ search: '{{ search }}' }">
+<div class="glass-card p-6 flex flex-col min-h-0" x-data="{ search: '{{ search }}' }">
     {# Search and filters are one form, so setting a stage does not throw away
        what was typed in the box. The two channel dropdowns are halves of one
        question: "emailed but not phoned yet" is a channel that has been used
        and a channel that has not. #}
     {% set filtering = search or stage or tried or not_tried %}
-    {# A card now, not a bare block: pinned below the header it needs its
-       own glass or the table reads straight through it. sticky-filters
-       carries the LM-1 z-30 and the pin (LM-4). #}
-    <div class="mb-6 glass-card p-4 sticky-filters">
+    {# Standing still because the page stands still; relative z-30 per LM-1
+       so the filter panels paint over the rows. #}
+    <div class="shrink-0 mb-6 relative z-30">
         <form method="GET" class="space-y-3">
             <div class="flex gap-3">
                 <input type="text" name="search" x-model="search" placeholder="Search clients..."
@@ -69,7 +72,8 @@
 
     {% if clients %}
     <!-- Table -->
-    <div class="overflow-x-auto">
+    {# The scroller: rows scroll inside it, the scrollbar starts here. #}
+    <div class="overflow-auto min-h-0">
         <table class="w-full">
             <thead>
                 <tr class="border-b border-surface-700">
@@ -145,8 +149,10 @@
         </table>
     </div>
 
-    {{ render_pagination(pagination, 'pm.clients_list', extra_args={
-        'search': search, 'stage': stage, 'tried': tried, 'not_tried': not_tried}) }}
+    <div class="shrink-0">
+        {{ render_pagination(pagination, 'pm.clients_list', extra_args={
+            'search': search, 'stage': stage, 'tried': tried, 'not_tried': not_tried}) }}
+    </div>
     {% else %}
     <div class="text-center py-12">
         <svg class="w-12 h-12 mx-auto text-surface-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

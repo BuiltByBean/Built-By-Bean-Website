@@ -1655,6 +1655,16 @@ class Feature(db.Model):
     reference_project = db.Column(db.String(120), default="")
     reference_path = db.Column(db.String(300), default="")
 
+    # Two kinds share this table because they share everything else - the
+    # categories, the guidance fields, the search. A `feature` is a
+    # capability that gets offered and priced. A `rule` is the layer under
+    # that: a way of building that must not be broken, regardless of which
+    # features were bought - the tojson quoting, the sticky bars, the
+    # migration guards. Rules never appear in the MVP picker and never carry
+    # a price; every one of them rides into every build prompt.
+    kind = db.Column(db.String(10), nullable=False, default="feature",
+                     index=True)
+
     # `built` is something shipped at least once. `idea` is something a client
     # asked for that does not exist yet - captured on the call rather than
     # lost, which is half the point of having the page open during one.

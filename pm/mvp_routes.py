@@ -111,15 +111,14 @@ def _feature_block(item):
     return out
 
 
-def _house_rules(chosen_feature_ids):
-    """Every platform and interface lesson in the catalogue, whether or not
-    it was picked. These are the mistakes that get repeated across builds,
-    and a build that did not select "timezones" still has timezones."""
-    rows = (Feature.query.filter_by(is_active=True)
-            .filter(Feature.category.in_(("platform", "ui")))
+def _house_rules():
+    """Every rule in the catalogue, regardless of what was picked. Rules
+    are the layer under the features - ways of building that hold whether
+    or not the feature they were learned on was bought - and a build that
+    did not select "timezones" still has timezones."""
+    rows = (Feature.query.filter_by(is_active=True, kind="rule")
             .order_by(Feature.sort_order, Feature.name).all())
-    rows = [r for r in rows
-            if r.has_guidance and r.id not in chosen_feature_ids]
+    rows = [r for r in rows if r.has_guidance]
     if not rows:
         return []
     out = ["THE HOUSE RULES"]
@@ -213,8 +212,7 @@ def build_package_prompt(package):
             for item in groups[key]:
                 out.extend(_feature_block(item))
 
-    chosen_ids = {i.feature_id for i in features if i.feature_id}
-    out.extend(_house_rules(chosen_ids))
+    out.extend(_house_rules())
 
     out.append("HOW TO WORK")
     out.append("  Start with the data model, and get a migration in from the "
@@ -266,7 +264,9 @@ def package_create():
 def package_detail(id):
     package = db.session.get(MvpPackage, id) or abort(404)
 
-    features = (Feature.query.filter_by(is_active=True)
+    # The picker offers what can be sold. Rules are not on the menu - they
+    # apply to every build regardless, through the prompt's house rules.
+    features = (Feature.query.filter_by(is_active=True, kind="feature")
                 .order_by(Feature.sort_order, Feature.name).all())
     products = (Product.query.filter_by(is_active=True)
                 .order_by(Product.sort_order, Product.name).all())

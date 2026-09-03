@@ -203,10 +203,20 @@ def products_index():
 @products_bp.route("/<int:id>/price", methods=["POST"])
 @login_required
 def product_price(id):
-    """The list price, which is a business decision and not a deploy."""
+    """The list price, which is a business decision and not a deploy.
+
+    The monthly is a yes-or-no here, not a figure: every one starts at the
+    same fifty, and the number that matters gets set on the sale. Checking
+    the box keeps whatever the monthly already is, or starts it at the
+    default; unchecking it ends it.
+    """
     product = db.session.get(Product, id) or abort(404)
     product.price = _parse_money(request.form.get("price"))
-    product.monthly_price = _parse_money(request.form.get("monthly_price"))
+    if request.form.get("has_monthly"):
+        if product.monthly_price is None:
+            product.monthly_price = DEFAULT_HOSTING_FEE
+    else:
+        product.monthly_price = None
     db.session.commit()
     flash(f"{product.name} price updated.", "success")
     return redirect(url_for("products.products_index"))

@@ -15,13 +15,17 @@
 </a>
 {% endblock %}
 
+{# The window never scrolls here: the table is the page, so the table is
+   the scroller (LM-4). #}
+{% block main_class %}contained-scroll{% endblock %}
+
 {% block content %}
-<div class="space-y-6 stagger-in">
+<div class="flex flex-col flex-1 min-h-0 gap-6 stagger-in">
 
     <!-- Filter -->
-    {# sticky-filters carries the LM-1 z-30 and pins the card below the
-       header while the table scrolls (LM-4). #}
-    <div class="glass-card p-4 sticky-filters">
+    {# Standing still because the page stands still; relative z-30 per LM-1
+       so the filter panel paints over the table card. #}
+    <div class="shrink-0 glass-card p-4 relative z-30">
         <form method="GET" class="flex flex-wrap items-center gap-3">
             {% set po = namespace(list=[("", "All Providers")]) %}
             {% for p in providers %}{% set po.list = po.list + [(p.id, p.display_name)] %}{% endfor %}
@@ -33,9 +37,10 @@
     </div>
 
     <!-- Mappings Table -->
-    <div class="glass-card overflow-hidden">
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
         {% if mappings %}
-        <div class="overflow-x-auto">
+        {# The scroller: rows scroll inside it, the scrollbar starts here. #}
+        <div class="overflow-auto min-h-0">
             <table class="w-full">
                 <thead>
                     <tr class="text-xs font-semibold uppercase tracking-wider text-surface-400 border-b border-surface-700">

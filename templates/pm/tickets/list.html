@@ -168,10 +168,14 @@
 </div>
 {% endmacro %}
 
+{# The window never scrolls here: the board is the page, so the board is
+   the scroller (LM-4). #}
+{% block main_class %}contained-scroll{% endblock %}
+
 {% block content %}
-<div class="glass-card p-6">
+<div class="glass-card p-6 flex flex-col min-h-0">
   {# Each tab counts EXACTLY what clicking it shows. #}
-  <div class="flex flex-wrap gap-2 mb-5">
+  <div class="shrink-0 flex flex-wrap gap-2 mb-5">
     {% for key, label in [("open", "Open"), ("follow-up", "Circle back"), ("resolved", "Resolved"), ("out-of-scope", "Out of scope"), ("all", "All")] %}
     {% set n = counts.get('total' if key == 'all' else key) %}
     <a href="{{ url_for('pm.tickets_list', status=key, category=category_filter, client_id=client_filter) }}"
@@ -183,10 +187,9 @@
     {% endfor %}
   </div>
 
-  {# sticky-filters carries the LM-1 z-30, the pin, and a SOLID background
-     (LM-4) - the rows must vanish under it, not read through it. #}
-  <form method="GET"
-        class="sticky-filters rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6">
+  {# Standing still because the page stands still; relative z-30 per LM-1
+     so the filter panels paint over the ticket cards. #}
+  <form method="GET" class="shrink-0 relative z-30 flex flex-wrap gap-3 mb-6">
     <input type="hidden" name="status" value="{{ status_filter }}">
     {% set ns = namespace(cat=[["all", "All kinds"]], cli=[["", "All clients"]]) %}
     {% for c in categories %}{% set ns.cat = ns.cat + [[c, category_labels[c]]] %}{% endfor %}
@@ -199,6 +202,9 @@
     {% endif %}
   </form>
 
+  {# The scroller: the board scrolls inside it, the scrollbar starts here,
+     and the out-of-scope pile rides along at its bottom. #}
+  <div class="min-h-0 overflow-y-auto">
   {% if tickets %}
     {% for t in tickets %}{{ ticket_card(t) }}{% endfor %}
   {% elif not out_of_scope %}
@@ -217,5 +223,6 @@
   <h2 class="mt-8 mb-1 text-xs font-semibold uppercase tracking-wider text-surface-400">Outside what these apps are for</h2>
   {% for t in out_of_scope %}{{ ticket_card(t) }}{% endfor %}
   {% endif %}
+  </div>
 </div>
 {% endblock %}

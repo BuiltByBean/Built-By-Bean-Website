@@ -6,6 +6,11 @@
 {% block page_title %}Time Tracking{% endblock %}
 {% block page_subtitle %}Log and manage work hours{% endblock %}
 
+{# The window never scrolls here: summary and filters stand, the log is
+   the scroller (LM-4). Declared at top level - a main_class block nested
+   inside content never reaches the parent's slot. #}
+{% block main_class %}contained-scroll{% endblock %}
+
 {% block header_actions %}
 <a href="{{ url_for('pm.time_create') }}"
    class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
@@ -16,7 +21,7 @@
 
 {% block content %}
 <!-- Summary -->
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+<div class="shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
     <div class="glass-card p-4 flex items-center justify-between">
         <div>
             <p class="text-xs font-medium text-surface-400">Total Hours</p>
@@ -41,15 +46,11 @@
     </div>
 </div>
 
-{# relative z-30 per CLAUDE.md LM-1: a filter panel taller than the rows
-   below it pokes past this card's bottom edge, and the next card would
-   paint over it. #}
-<div class="glass-card p-6 relative z-30">
+<div class="glass-card p-6 flex flex-col min-h-0">
     <!-- Filters -->
-    {# sticky-filters pins the bar with a SOLID background (LM-4) - the
-       entries must vanish under it, not read through it. #}
-    <form method="GET"
-          class="sticky-filters rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6">
+    {# Standing still because the page stands still; relative z-30 per LM-1
+       so the filter panels paint over the rows. #}
+    <form method="GET" class="shrink-0 relative z-30 flex flex-wrap gap-3 mb-6">
         {% set ns = namespace(proj_opts=[["", "All Projects"]]) %}
         {% for p in projects %}{% set ns.proj_opts = ns.proj_opts + [[p.id, p.name]] %}{% endfor %}
         {{ select_dropdown("project_id", ns.proj_opts, project_id) }}
@@ -62,7 +63,8 @@
     </form>
 
     {% if entries %}
-    <div class="overflow-x-auto">
+    {# The scroller: rows scroll inside it, the scrollbar starts here. #}
+    <div class="overflow-auto min-h-0">
         <table class="w-full">
             <thead>
                 <tr class="border-b border-surface-700">

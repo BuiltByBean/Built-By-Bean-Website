@@ -274,6 +274,23 @@
             z-index: 30;
             background: var(--surface);
         }
+
+        /* Contained scroll, for pages that ARE a filtered list: the main
+           area is sized to what is left under the header and clipped, so
+           the WINDOW never scrolls - the filter bar simply stands still,
+           and the results scroll inside their own container. The child
+           template makes its list region `flex-1 min-h-0 overflow-y-auto`,
+           which puts the scrollbar inside the results, starting below the
+           bar, instead of running the full height of the viewport. This is
+           the standard for every filter-over-list screen; sticky-filters
+           stays only for MIXED pages where content above the list must
+           itself scroll away. See CLAUDE.md LM-4. */
+        .contained-scroll {
+            height: calc(100vh - var(--pm-header-h, 64px));
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
         .stagger-in > *:nth-child(1) { animation-delay: 0.05s; }
         .stagger-in > *:nth-child(2) { animation-delay: 0.1s; }
         .stagger-in > *:nth-child(3) { animation-delay: 0.15s; }
@@ -503,11 +520,21 @@
                 Products
             </a>
             <a href="{{ url_for('features.features_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('features.') %}active{% endif %}">
+               class="sidebar-link {% if request.endpoint == 'features.features_index' %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
                 Features
+            </a>
+            {# The layer under the features: ways of building that hold no
+               matter what was bought. Every one rides into every build
+               prompt. #}
+            <a href="{{ url_for('features.rules_index') }}"
+               class="sidebar-link {% if request.endpoint == 'features.rules_index' %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+                </svg>
+                Rules
             </a>
             <a href="{{ url_for('playbooks.playbooks_index') }}"
                class="sidebar-link {% if request.endpoint and 'playbook' in request.endpoint %}active{% endif %}">
@@ -704,7 +731,12 @@
         {% endwith %}
 
         <!-- Page content -->
-        <main class="p-6 animate-fade-in">
+        {# A page that IS a filtered list opts into contained scroll by
+           filling this block with `contained-scroll`: the window then never
+           scrolls, the filter bar stands still, and the results scroll
+           inside their own container with the scrollbar starting below the
+           bar - never up the whole viewport. See CLAUDE.md LM-4. #}
+        <main class="p-6 animate-fade-in {% block main_class %}{% endblock %}">
             {% block content %}{% endblock %}
         </main>
     </div>

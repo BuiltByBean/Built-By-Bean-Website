@@ -9,17 +9,20 @@
   category and a number - which is what a phone call needs.
 #}
 
-{% block title %}Features - Built By Bean{% endblock %}
-{% block page_title %}Features{% endblock %}
-{% block page_subtitle %}What I have built before{% endblock %}
+{% block title %}{{ 'Rules' if page_kind == 'rule' else 'Features' }} - Built By Bean{% endblock %}
+{% block page_title %}{{ 'Rules' if page_kind == 'rule' else 'Features' }}{% endblock %}
+{% block page_subtitle %}{{ 'What never gets broken' if page_kind == 'rule' else 'What I have built before' }}{% endblock %}
+
+{# The window never scrolls here: the list is the page, so the list is
+   the scroller (LM-4). #}
+{% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
-<div class="space-y-5 stagger-in" x-data="{ adding: false }">
+<div class="flex flex-col flex-1 min-h-0 gap-5 stagger-in" x-data="{ adding: false }">
 
-    {# sticky-filters carries the LM-1 z-30 and pins the card below the
-       header: ninety-odd rows scroll under it, and the search never
-       leaves (LM-4). #}
-    <form method="GET" class="sticky-filters glass-card p-4 flex flex-wrap items-center gap-2">
+    {# Standing still because the page stands still; relative z-30 per LM-1
+       so its panels paint over the list card. #}
+    <form method="GET" class="shrink-0 relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
         <input type="text" name="q" value="{{ q }}" placeholder="Search names, guidance, traps"
                class="input-ring flex-1 min-w-[180px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         {% set cat_opts = [("all", "All areas (" ~ total ~ ")")] %}
@@ -32,7 +35,7 @@
         <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
             Filter</button>
         {% if q or category != 'all' or status != 'all' %}
-        <a href="{{ url_for('features.features_index') }}"
+        <a href="{{ url_for('features.rules_index' if page_kind == 'rule' else 'features.features_index') }}"
            class="px-3 py-2.5 text-sm text-surface-500 hover:text-surface-300 transition-colors">Clear</a>
         {% endif %}
         <button type="button" @click="adding = !adding"
@@ -46,9 +49,11 @@
        z-30 so the filter panels stay on top of this card too. #}
     <form method="POST" action="{{ url_for('features.feature_create') }}"
           x-show="adding" style="display: none"
-          class="relative z-20 glass-card p-4 flex flex-wrap items-end gap-3">
+          class="shrink-0 relative z-20 glass-card p-4 flex flex-wrap items-end gap-3">
+        <input type="hidden" name="kind" value="{{ page_kind }}">
         <div class="flex-1 min-w-[200px]">
-            <label class="block text-sm font-medium text-surface-300 mb-1.5">What did they call it?</label>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                {{ 'What must not happen?' if page_kind == 'rule' else 'What did they call it?' }}</label>
             <input type="text" name="name" required
                    class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         </div>
@@ -57,26 +62,31 @@
             {{ select_dropdown("category", categories, category if category != 'all' else 'records',
                                full_width=true) }}
         </div>
+        {% if page_kind != 'rule' %}
         <div>
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Worth $</label>
             <input type="text" name="typical_value" placeholder="later"
                    class="input-ring w-24 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         </div>
+        {% endif %}
         <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
             Add</button>
     </form>
 
     {% if features %}
-    <div class="glass-card overflow-hidden">
-        <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-center gap-x-3">
+    {# min-h-0 with default shrink: a short list keeps a short card, a long
+       one shrinks to the room that is left and scrolls INSIDE - the
+       scrollbar starts under the count strip, never up the viewport. #}
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="shrink-0 px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-center gap-x-3">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
                 {{ features|length }} shown</span>
-            {% if estimate %}
+            {% if estimate and page_kind != 'rule' %}
             <span class="text-xs text-surface-500">these add up to {{ estimate|format_currency }}</span>
             {% endif %}
         </div>
 
-        <div class="divide-y divide-white/5">
+        <div class="divide-y divide-white/5 min-h-0 overflow-y-auto">
         {% for f in features %}
         <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }">
 
@@ -101,8 +111,10 @@
                     <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ f.summary }}</span>
                     {% endif %}
                 </span>
+                {% if page_kind != 'rule' %}
                 <span class="shrink-0 text-sm tabular-nums {{ 'text-surface-200' if f.typical_value else 'text-surface-600' }}">
                     {{ f.typical_value|format_currency if f.typical_value else '—' }}</span>
+                {% endif %}
                 <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
                      :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -138,6 +150,7 @@
                     </div>
 
                     <div class="flex flex-wrap items-end gap-3">
+                        {% if page_kind != 'rule' %}
                         <div>
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
                             <input type="text" name="typical_value"
@@ -145,6 +158,7 @@
                                    placeholder="bundled"
                                    class="input-ring w-28 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
                         </div>
+                        {% endif %}
                         <div class="w-44">
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Status</label>
                             {{ select_dropdown("status", statuses, f.status, full_width=true) }}
@@ -162,7 +176,7 @@
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center">
         <p class="text-surface-400 mb-1">Nothing matches that.</p>
-        <a href="{{ url_for('features.features_index') }}"
+        <a href="{{ url_for('features.rules_index' if page_kind == 'rule' else 'features.features_index') }}"
            class="text-sm text-brand-400 hover:text-brand-300">Show everything</a>
     </div>
     {% endif %}

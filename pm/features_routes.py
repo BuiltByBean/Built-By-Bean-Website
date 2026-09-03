@@ -34,14 +34,15 @@ def _parse_money(raw):
         return None
 
 
-@features_bp.route("/")
-@login_required
-def features_index():
+def _index(kind):
+    """One page, two kinds: the features that get sold, and the rules that
+    never get broken. Same search, same categories, same editor - a rule is
+    a feature whose price is that nothing goes wrong."""
     category = (request.args.get("category") or "all").strip()
     status = (request.args.get("status") or "all").strip()
     query = (request.args.get("q") or "").strip()
 
-    rows = Feature.query.filter_by(is_active=True)
+    rows = Feature.query.filter_by(is_active=True, kind=kind)
     if category in Feature.CATEGORY_LABELS:
         rows = rows.filter(Feature.category == category)
     if status in Feature.STATUS_LABELS:
@@ -59,7 +60,7 @@ def features_index():
     features = rows.order_by(Feature.sort_order, Feature.name).all()
 
     counts = {}
-    for row in Feature.query.filter_by(is_active=True).all():
+    for row in Feature.query.filter_by(is_active=True, kind=kind).all():
         counts[row.category] = counts.get(row.category, 0) + 1
 
     return render_template("pm/features/index.html",
@@ -68,7 +69,24 @@ def features_index():
                            statuses=Feature.STATUSES,
                            category=category, status=status, q=query,
                            total=sum(counts.values()),
-                           estimate=sum(f.typical_value or 0 for f in features))
+                           estimate=sum(f.typical_value or 0 for f in features),
+                           page_kind=kind)
+
+
+@features_bp.route("/")
+@login_required
+def features_index():
+    return _index("feature")
+
+
+@features_bp.route("/rules")
+@login_required
+def rules_index():
+    return _index("rule")
+
+
+def _index_endpoint(kind):
+    return "features.rules_index" if kind == "rule" else "features.features_index"
 
 
 @features_bp.route("/new", methods=["POST"])
@@ -80,28 +98,31 @@ def feature_create():
     does not exist yet is worth five seconds and a name; making it worth two
     minutes and eight fields is how it goes unrecorded instead.
     """
+    kind = "rule" if request.form.get("kind") == "rule" else "feature"
     name = (request.form.get("name") or "").strip()
     if not name:
         flash("Give it a name.", "warning")
-        return redirect(url_for("features.features_index"))
+        return redirect(url_for(_index_endpoint(kind)))
 
     slug = "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")[:80]
     if Feature.query.filter_by(slug=slug).first():
         flash(f"\"{name}\" is already in the catalogue.", "warning")
-        return redirect(url_for("features.features_index"))
+        return redirect(url_for(_index_endpoint(kind)))
 
     category = request.form.get("category")
     last = db.session.query(db.func.max(Feature.sort_order)).scalar() or 0
     db.session.add(Feature(
-        slug=slug, name=name,
+        slug=slug, name=name, kind=kind,
         category=category if category in Feature.CATEGORY_LABELS else "records",
         summary=(request.form.get("summary") or "").strip(),
-        typical_value=_parse_money(request.form.get("typical_value")),
+        # A rule has no price; its worth is nothing going wrong.
+        typical_value=(None if kind == "rule"
+                       else _parse_money(request.form.get("typical_value"))),
         status="idea", sort_order=last + 10,
     ))
     db.session.commit()
     flash(f"\"{name}\" added as something not built yet.", "success")
-    return redirect(url_for("features.features_index", category=category or "all"))
+    return redirect(url_for(_index_endpoint(kind), category=category or "all"))
 
 
 @features_bp.route("/<int:id>", methods=["POST"])
@@ -111,7 +132,8 @@ def feature_edit(id):
     guidance. Everything else is a migration, because everything else is the
     catalogue's shape rather than its contents."""
     feature = db.session.get(Feature, id) or abort(404)
-    feature.typical_value = _parse_money(request.form.get("typical_value"))
+    if feature.kind != "rule":
+        feature.typical_value = _parse_money(request.form.get("typical_value"))
     if "gold_standard_md" in request.form:
         feature.gold_standard_md = (request.form.get("gold_standard_md") or "").strip()
     if "pitfalls_md" in request.form:
@@ -120,5 +142,5 @@ def feature_edit(id):
         feature.status = request.form["status"]
     db.session.commit()
     flash(f"{feature.name} updated.", "success")
-    return redirect(url_for("features.features_index",
+    return redirect(url_for(_index_endpoint(feature.kind),
                             category=request.form.get("return_category") or "all"))

@@ -6,7 +6,11 @@ production, SQLite locally. Pushing to `main` deploys.
 
 The feature catalogue at `/admin/features` is the CROSS-REPO lesson store:
 when any project teaches a lesson, it goes there (pitfalls_md) as well as
-here. This file is for lessons about THIS repo's own code.
+here. Its second half is `/admin/features/rules` - the layer under the
+features, `kind='rule'` on the same table: ways of building that hold no
+matter what was bought. Every rule rides into every MVP build prompt as a
+house rule, so writing a lesson there is how every future project gets
+it. This file is for lessons about THIS repo's own code.
 
 ## House rules
 
@@ -142,38 +146,48 @@ LM-1 whenever a dropdown or overlay changes.
 ### LM-4 - the filters scroll away with the list they filter
 
 **What happened.** The Features page put ninety-three rows under a search
-box, and the first scroll took the search box off the screen - so refining
-a search meant scrolling back to the top, on the page that is open during a
-phone call. Every list page had shipped the same shape: clients, tickets,
-expenses, invoices, the MVP picker.
+box, and the first scroll took the search box off the screen. The first
+fix made the bar sticky - and shipped twice wrong: once with a gap the
+rows scrolled through in the clear, once translucent with row text
+reading straight through it. The owner's verdict named the real design:
+the window should never have been scrolling at all. The scrollbar ran the
+full height of the viewport on a page that is one filtered list.
 
 **Why it is easy to do.** A filter bar laid out above its list is correct
-in every screenshot, because screenshots are taken at the top of the page.
-The failure only exists mid-scroll, which no static look catches, and each
-new list page copies the last one's layout.
+in every screenshot, because screenshots are taken at the top of the
+page. And sticky is the reflex fix because it changes one element; the
+right fix changes who owns the scroll.
 
-**The rule.** A search or filter bar above a scrollable list carries
-`.sticky-filters`: pinned FLUSH under the header at `var(--pm-header-h)`,
-measured off the real header by the ResizeObserver in base.html - never
-hardcoded, because the header wraps on phones and grows a back link on
-detail pages, and never with a gap, because a gap between the header and
-the bar is a window the rows scroll through in the clear. The class backs
-the bar SOLID (`var(--surface)`), overriding the glass-card alpha: a
-translucent pinned bar is a second window, with row text reading straight
-through it - Talent Booker's LM-45 said solid sticky bars and this repo
-shipped a glass one anyway, once. An in-card bar adds only shape
-(`rounded-xl p-3 -mx-3`); the class owns the background, and no Tailwind
-bg utility may sit beside it, because the CDN stylesheet loads later and
-would win the cascade back to translucent. The class carries the LM-1
-z-30, so panels still paint over the list and the drawer still wins.
-Verify by scrolling: after `scrollTo(0, big)`, the bar's
-`getBoundingClientRect().top` equals the header's height exactly, and
-text sampled just above and just behind the bar hit-tests as the bar,
-never as a row.
+**The rule, two tiers.** A page that IS a filtered list - features,
+rules, clients, tickets, time, resource mappings - gets CONTAINED scroll:
+the child template fills `{% block main_class %}` with
+`contained-scroll` (declared at template top level, never nested inside
+the content block, where it silently does nothing), the bar and any tabs
+are `shrink-0` normal blocks that simply stand still, and the results
+region is the one scroller (`flex flex-col` chain, `min-h-0`,
+`overflow-y-auto`). The window never scrolls; the scrollbar lives inside
+the results and starts below the bar - a viewport-height scrollbar on a
+list page is the tell that it is built wrong. `relative z-30` stays on
+the bar per LM-1 so its panels paint over the list.
+
+A MIXED page - real content above the list that must itself scroll away,
+like the MVP builder - keeps page scroll, and its bar uses
+`.sticky-filters`: flush under the measured header (`--pm-header-h`, from
+the ResizeObserver - never hardcoded, headers wrap), backed SOLID by the
+class (`var(--surface)`), with no Tailwind bg utility beside it because
+the CDN sheet loads later and wins the cascade back to translucent.
+
+Verify by scrolling, whichever tier: on contained pages
+`document.documentElement.scrollHeight <= innerHeight` while the inner
+scroller's `scrollHeight` exceeds its height; on sticky pages the bar's
+top equals the header's height exactly, and probes behind the bar
+hit-test as the bar, never as a row.
 
 **Grep.**
 ```
 rg -n 'form method="GET"' templates/pm
+rg -L 'main_class' $(rg -l 'form method="GET"' templates/pm)
 ```
-Every hit that filters a list below it must sit in (or be) a
-`.sticky-filters` container.
+Every filter-over-list page must either fill `main_class` with
+`contained-scroll` or sit in a `.sticky-filters` container - and the
+first choice is the default.
