@@ -28,6 +28,11 @@ import contract_docs
 
 products_bp = Blueprint("products", __name__, url_prefix="/admin/products")
 
+# What a project starts paying when a hosted product lands on it and nothing
+# has set a fee yet. The same fifty the two live builds are on, so a standalone
+# sale is priced the way an existing client already is.
+DEFAULT_HOSTING_FEE = 50.0
+
 
 def _parse_money(raw):
     """A price typed by hand, or None. Accepts $1,000 and 1000 alike."""
@@ -159,10 +164,15 @@ def products_index():
     clients = Client.query.order_by(Client.name).all()
     projects = [{"id": str(p.id), "client_id": str(p.client_id), "name": p.name}
                 for p in Project.query.order_by(Project.name).all()]
+    # A variant's mark is its playbook's: Stripe's own logo says more than any
+    # glyph, and the runbooks already carry them.
+    logos = {pb.slug: pb.logo_path
+             for pb in Playbook.query.filter(Playbook.logo_path != "").all()}
     variants = {str(p.id): [{"id": str(v.id), "name": v.name,
                              "price": ("%g" % v.price) if v.price is not None else ""}
                             for v in p.variants if v.is_active]
                 for p in products}
+    hosted = {str(p.id): bool(p.includes_hosting) for p in products}
 
     sold_count = {}
     for sale in sales:
@@ -175,7 +185,8 @@ def products_index():
     return render_template("pm/products/index.html",
                            products=products, sales=sales, prompts=prompts,
                            clients=clients, projects=projects,
-                           variants=variants,
+                           variants=variants, hosted=hosted, logos=logos,
+                           default_hosting_fee=DEFAULT_HOSTING_FEE,
                            sold_count=sold_count,
                            today=datetime.now(timezone.utc).date().isoformat())
 
@@ -271,9 +282,22 @@ def product_sell():
                                                playbook_id=playbook.id))
                 applied = playbook.display_name
 
+    # Hosting, where the sale leaves something of mine running. Asked on the
+    # form and defaulted from the product, because the answer is not always the
+    # product's: a client already paying to be hosted must not start paying
+    # twice, and an existing fee is left exactly as it is.
+    charged = None
+    if request.form.get("hosted") and project.hosting_fee is None:
+        fee = _parse_money(request.form.get("hosting_fee"))
+        project.hosting_fee = DEFAULT_HOSTING_FEE if fee is None else fee
+        project.hosting_cycle = "monthly"
+        charged = project.hosting_fee
+
     db.session.commit()
 
     note = f" {applied} checklist added to {project.name}." if applied else ""
+    if charged is not None:
+        note += f" Hosting set at ${charged:,.0f} a month."
     flash(f"{sale.label} recorded against {client.name}.{note}", "success")
 
     # Straight into the add-on contract with everything it needs. Prefilled and

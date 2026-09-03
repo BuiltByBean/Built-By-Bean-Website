@@ -1459,6 +1459,19 @@ class Product(db.Model):
     playbook_slug = db.Column(db.String(60), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     sort_order = db.Column(db.Integer, default=0)
+    # Whether selling this puts something on my infrastructure, and so brings
+    # the monthly hosting and storage fee with it. Most do. Routing somebody's
+    # mail through their own domain does not - that is DNS records on a domain
+    # they own, with nothing of mine running anywhere - and charging rent for
+    # it would be charging for nothing.
+    #
+    # A default, not a rule. The sell form asks, and the answer can differ:
+    # a client already paying to be hosted does not start paying twice.
+    includes_hosting = db.Column(db.Boolean, nullable=False, default=True)
+    # Which glyph to draw where the product is not one company's thing. A
+    # product with variants shows their logos instead - Stripe's mark says
+    # more than any icon could.
+    icon = db.Column(db.String(30), default="")
     # Anything specific to this product that a runbook does not already say,
     # prepended to the prompt built for a sale. Usually empty: the playbook is
     # the source, and a second copy of it here would go stale the first time
