@@ -25,13 +25,12 @@ from models import db, Client, Project, ServiceMapping, ServiceCostEntry
 hosting_bp = Blueprint("hosting", __name__, url_prefix="/admin/hosting")
 
 
-# How much of the fee the infrastructure is allowed to eat before this page
-# starts saying something. Not a policy, a tripwire: the fee also has to cover
-# the time spent keeping the thing alive, so cost approaching fee is already
-# a loss, and the point of the middle band is to see it coming a month or two
-# out rather than the month it happens.
-WATCH_AT = 0.60
-RAISE_AT = 0.80
+# What every hosted application has to clear, in dollars, after the
+# infrastructure is paid for. A share of the fee was the wrong shape: 80% of
+# $50 leaves $10 and 80% of $500 leaves $100, and those are not the same
+# situation. The fee also has to cover the time spent keeping the thing
+# alive, so the floor is a floor on the money left over, not on the ratio.
+MIN_MARGIN = 25.0
 
 # Charges that buy a year in one payment. A domain registration is the case:
 # it arrives as a single invoice in the month it renews, and bucketing the
@@ -135,13 +134,12 @@ def _costs_by_project(months):
 
 
 def _status(fee, cost):
-    """(key, label) for where this project sits.
+    """(key, label) for where this project sits, on last month's cost.
 
-    Judged on the worse of last month and the average, because those two answer
-    different questions and both matter. A single expensive month is the signal
-    to look now; a rising average is the signal that it was not a one-off.
-    Waiting for the average to confirm what last month already showed costs
-    two more months of it.
+    One line, not a set of bands: either the fee clears the floor after the
+    infrastructure is paid for, or it does not and is a fee to raise. The
+    middle band that used to sit here was a second guess at the same question
+    and said "Watch" about a project nobody was going to act on.
     """
     if fee is None:
         return ("unpriced", "No fee set")
@@ -149,25 +147,47 @@ def _status(fee, cost):
         return ("fine", "No cost recorded")
     if fee <= 0:
         return ("loss", "Hosted free")
-    ratio = cost / fee
-    if ratio >= 1:
+    if cost >= fee:
         return ("loss", "Costs more than it earns")
-    if ratio >= RAISE_AT:
+    if fee - cost < MIN_MARGIN:
         return ("raise", "Raise it")
-    if ratio >= WATCH_AT:
-        return ("watch", "Watch")
     return ("fine", "Fine")
+
+
+def _bar(fee, cost):
+    """Where the fill ends and where the floor sits, as percentages of the fee.
+
+    The bar's full width is one month of fee, so the fill is what the
+    infrastructure took out of it and the line is the point past which less
+    than MIN_MARGIN is left. Fill is capped: a project costing more than it
+    earns fills the bar and says so in red rather than running off the end.
+
+    Both are None without a fee, because there is no width to measure against.
+    A fee at or under the floor puts the line at zero, which is honest - every
+    dollar of cost on that project is already below the floor.
+    """
+    if fee is None or fee <= 0:
+        return None, None
+    fill = min(max(cost, 0.0) / fee * 100.0, 100.0)
+    line = max((fee - MIN_MARGIN) / fee * 100.0, 0.0)
+    return round(fill, 2), round(line, 2)
 
 
 # Worst first. A page whose whole job is to surface the two projects that need
 # attention should not open on the eleven that do not.
-STATUS_ORDER = {"loss": 0, "raise": 1, "watch": 2, "unpriced": 3, "fine": 4}
+STATUS_ORDER = {"loss": 0, "raise": 1, "unpriced": 2, "fine": 3}
 
 
 @hosting_bp.route("/")
 @login_required
 def hosting_index():
-    months = _complete_months(request.args.get("months", 3, type=int) or 3)
+    # One month, the last complete one. The average that used to sit beside it
+    # was answering a different question - whether an expensive month was a
+    # one-off - and a bar can only draw one number. Annual charges are spread
+    # across the months they cover, so the spikes the average existed to
+    # absorb are already gone by the time the cost gets here.
+    months = _complete_months(1)
+    month = months[-1]
     costs, annualised = _costs_by_project(months)
 
     projects = (Project.query.join(Client, Project.client_id == Client.id)
@@ -176,50 +196,41 @@ def hosting_index():
     rows = []
     for p in projects:
         by_month = costs.get(p.id, {})
-        # Averaged over the months that actually recorded something, not over
-        # the whole window. A project deployed six weeks ago has one month of
-        # history, and dividing it by three would report a third of its cost.
-        recorded = [by_month[m] for m in months if m in by_month]
-        if not recorded and p.hosting_fee is None:
+        if month not in by_month and p.hosting_fee is None:
             # Nothing charged, nothing spent, nothing to say.
             continue
-        last = by_month.get(months[-1], 0.0) if months else 0.0
-        average = sum(recorded) / len(recorded) if recorded else 0.0
+        cost = by_month.get(month, 0.0)
         fee = p.monthly_hosting_fee
-        key, label = _status(fee, max(last, average))
-        # The spread portion of the most recent month, which is the one the
-        # row shows. It is the same figure in every month a year covers, so
-        # taking it from the last is not a choice about which month to report.
-        annual_share = annualised.get(p.id, {}).get(months[-1], 0.0) if months else 0.0
+        key, label = _status(fee, cost)
+        fill_pct, line_pct = _bar(fee, cost)
         rows.append({
             "project": p,
             "fee": fee,
             "raw_fee": p.hosting_fee,
             "cycle": p.hosting_cycle or "monthly",
-            "last": last,
-            "average": average,
-            "annual_share": annual_share,
-            "months_recorded": len(recorded),
-            "series": [by_month.get(m, 0.0) for m in months],
-            "margin": (fee - max(last, average)) if fee is not None else None,
+            "cost": cost,
+            "annual_share": annualised.get(p.id, {}).get(month, 0.0),
+            "margin": (fee - cost) if fee is not None else None,
+            "fill_pct": fill_pct,
+            "line_pct": line_pct,
             "status": key,
             "status_label": label,
         })
 
     rows.sort(key=lambda r: (STATUS_ORDER.get(r["status"], 9),
-                             -(r["last"] or 0), r["project"].name.lower()))
+                             -(r["cost"] or 0), r["project"].name.lower()))
 
     priced = [r for r in rows if r["fee"] is not None]
     totals = {
         "fee": sum(r["fee"] for r in priced),
         # Every project's cost, priced or not: infrastructure for something
         # nobody is being charged for is still money going out the door.
-        "cost": sum(max(r["last"], r["average"]) for r in rows),
+        "cost": sum(r["cost"] for r in rows),
         "needs_attention": sum(1 for r in rows if r["status"] in ("loss", "raise")),
         "unpriced": sum(1 for r in rows if r["status"] == "unpriced"),
     }
     totals["margin"] = totals["fee"] - totals["cost"]
 
     return render_template("pm/hosting/index.html",
-                           rows=rows, months=months, totals=totals,
-                           watch_at=int(WATCH_AT * 100), raise_at=int(RAISE_AT * 100))
+                           rows=rows, month=month, totals=totals,
+                           min_margin=MIN_MARGIN)
