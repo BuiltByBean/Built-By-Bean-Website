@@ -72,12 +72,15 @@ def _increase_for(project, raw_fee, cycle):
     months = Project.HOSTING_CYCLE_MONTHS.get(cycle or "monthly", 1)
     new_fee = (raw_fee or 0.0) + RAISE_STEP * months
     effective = _next_month_start()
+    # The link's ingredients rather than the link: this also feeds a cached
+    # list read from the sidebar's context processor, and url_for needs a
+    # request to build against. increase_url() turns them into the link
+    # wherever there is one.
     return {
         "new_fee": new_fee,
         "new_monthly": new_fee / months,
         "effective": effective,
-        "url": url_for(
-            "contracts.hosting_form",
+        "args": dict(
             client_id=project.client_id, project_id=project.id,
             application=project.name, fee=f"{new_fee:g}",
             cycle=cycle or "monthly", previous_fee=f"{(raw_fee or 0.0):g}",
@@ -86,28 +89,47 @@ def _increase_for(project, raw_fee, cycle):
     }
 
 
+def increase_url(increase):
+    return url_for("contracts.hosting_form", **increase["args"])
+
+
 # The sidebar asks on every page how many fees need raising, and the answer
 # only changes when a month closes or a cost lands, so it is held for ten
-# minutes rather than recomputed on every click.
-_DUE_CACHE = {"at": 0.0, "count": 0}
+# minutes rather than recomputed on every click. Plain dicts, not rows: an
+# ORM object cached across requests is detached from every later session.
+_DUE_CACHE = {"at": 0.0, "rows": []}
 DUE_TTL_SECONDS = 600
 
 
-def increases_due_count():
+def increases_due():
+    """Every priced project under the floor, with the update it is due."""
     now = time.monotonic()
     if now - _DUE_CACHE["at"] < DUE_TTL_SECONDS:
-        return _DUE_CACHE["count"]
+        return _DUE_CACHE["rows"]
     months = _complete_months(1)
     costs, _ = _costs_by_project(months)
     month = months[-1]
-    count = 0
+    rows = []
     for p in Project.query.filter(Project.hosting_fee.isnot(None)).all():
         cost = costs.get(p.id, {}).get(month, 0.0)
-        key, _ = _status(p.monthly_hosting_fee, cost)
-        if key in ("loss", "raise"):
-            count += 1
-    _DUE_CACHE.update(at=now, count=count)
-    return count
+        fee = p.monthly_hosting_fee
+        key, label = _status(fee, cost)
+        if key not in ("loss", "raise"):
+            continue
+        increase = _increase_for(p, p.hosting_fee, p.hosting_cycle)
+        rows.append({
+            "project_id": p.id, "project_name": p.name,
+            "client_name": p.client.name if p.client else "",
+            "fee": fee or 0.0, "cost": cost, "margin": (fee or 0.0) - cost,
+            "status": key, "label": label,
+            "new_monthly": increase["new_monthly"], "args": increase["args"],
+        })
+    _DUE_CACHE.update(at=now, rows=rows)
+    return rows
+
+
+def increases_due_count():
+    return len(increases_due())
 
 
 # Charges that buy a year in one payment. A domain registration is the case:
@@ -387,8 +409,10 @@ def hosting_index():
             "status_label": label,
             # Under the floor, so a fee update is due: what it becomes, and
             # the link that drafts the agreement saying so.
-            "increase": (_increase_for(p, p.hosting_fee, p.hosting_cycle)
-                         if key in ("loss", "raise") else None),
+            "increase": (dict(inc, url=increase_url(inc))
+                         if key in ("loss", "raise")
+                         and (inc := _increase_for(p, p.hosting_fee, p.hosting_cycle))
+                         else None),
             # The same question the tiles ask, asked about one client.
             "life": {
                 "collected": collected,

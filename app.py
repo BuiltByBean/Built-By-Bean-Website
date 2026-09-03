@@ -277,6 +277,10 @@ def create_app():
     from pm.inbox_routes import inbox_bp
     app.register_blueprint(inbox_bp)
 
+    # ── What is waiting on him, in one place ───────────────
+    from pm.attention_routes import attention_bp
+    app.register_blueprint(attention_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)
@@ -539,26 +543,20 @@ def create_app():
                 # Table may not exist yet (pre-migration) — fail open, hide widget.
                 active_timer = None
                 timer_projects = []
-        # Two counts the sidebar wears as badges: changes waiting in the
-        # catalogue inbox, and hosting fees that no longer clear the floor.
-        # Both fail to zero, and roll the session back on failure so a
+        # What the sidebar wears as badges: everything waiting on him, as
+        # one total on the attention page, and the hosting share of it on
+        # Hosting. Fails to zero, and rolls the session back on failure so a
         # missing table cannot poison the rest of the request in Postgres.
-        inbox_pending = 0
-        hosting_due = 0
+        attention = {}
         if current_user.is_authenticated and not str(current_user.get_id()).startswith("bs_"):
             try:
-                from models import CatalogueProposal
-                inbox_pending = CatalogueProposal.query.filter_by(status="pending").count()
-            except Exception:
-                db.session.rollback()
-            try:
-                from pm.hosting_routes import increases_due_count
-                hosting_due = increases_due_count()
+                from pm.attention_routes import attention_counts
+                attention = attention_counts()
             except Exception:
                 db.session.rollback()
         return {
-            "inbox_pending": inbox_pending,
-            "hosting_due": hosting_due,
+            "attention_total": attention.get("total", 0),
+            "hosting_due": attention.get("hosting", 0),
             "now": datetime.now(timezone.utc),
             "asset_version": _asset_version,
             "phase_choices": PHASE_CHOICES,

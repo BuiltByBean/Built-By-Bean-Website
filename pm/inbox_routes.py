@@ -11,13 +11,23 @@ with" gets its "that I agree with".
 import json
 from datetime import datetime, timezone
 
-from flask import Blueprint, render_template, redirect, url_for, flash, abort
+from flask import Blueprint, render_template, redirect, url_for, flash, abort, request
 from flask_login import login_required
 
 from models import db, CatalogueProposal
 from pm.guidance_routes import apply_proposal, revert_proposal, target_label
 
 inbox_bp = Blueprint("inbox", __name__, url_prefix="/admin/features/inbox")
+
+
+def _back():
+    """Where a decision returns to. The attention hub posts here too and
+    wants its own page back; anything that is not a same-site path is
+    ignored rather than followed."""
+    nxt = request.form.get("next") or ""
+    if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+        return nxt
+    return url_for("inbox.inbox_index")
 
 FIELD_LABELS = {
     "name": "name", "display_name": "name", "summary": "summary",
@@ -74,16 +84,16 @@ def accept(id):
     proposal = db.session.get(CatalogueProposal, id) or abort(404)
     if proposal.status != "pending":
         flash("That one has already been decided.", "warning")
-        return redirect(url_for("inbox.inbox_index"))
+        return redirect(_back())
     ok, message = apply_proposal(proposal)
     if not ok:
         db.session.rollback()
         flash(f"Could not apply it: {message}.", "warning")
-        return redirect(url_for("inbox.inbox_index"))
+        return redirect(_back())
     _decide(proposal, "accepted")
     db.session.commit()
     flash("Accepted. It is in the catalogue now.", "success")
-    return redirect(url_for("inbox.inbox_index"))
+    return redirect(_back())
 
 
 @inbox_bp.route("/<int:id>/reject", methods=["POST"])
@@ -92,11 +102,11 @@ def reject(id):
     proposal = db.session.get(CatalogueProposal, id) or abort(404)
     if proposal.status != "pending":
         flash("That one has already been decided.", "warning")
-        return redirect(url_for("inbox.inbox_index"))
+        return redirect(_back())
     _decide(proposal, "rejected")
     db.session.commit()
     flash("Rejected. Nothing changed.", "success")
-    return redirect(url_for("inbox.inbox_index"))
+    return redirect(_back())
 
 
 @inbox_bp.route("/<int:id>/revert", methods=["POST"])
@@ -105,13 +115,13 @@ def revert(id):
     proposal = db.session.get(CatalogueProposal, id) or abort(404)
     if not proposal.is_live:
         flash("That one is not live, so there is nothing to put back.", "warning")
-        return redirect(url_for("inbox.inbox_index"))
+        return redirect(_back())
     ok, message = revert_proposal(proposal)
     if not ok:
         db.session.rollback()
         flash(f"Could not revert it: {message}.", "warning")
-        return redirect(url_for("inbox.inbox_index"))
+        return redirect(_back())
     _decide(proposal, "reverted")
     db.session.commit()
     flash("Reverted. The catalogue reads as it did before.", "success")
-    return redirect(url_for("inbox.inbox_index"))
+    return redirect(_back())

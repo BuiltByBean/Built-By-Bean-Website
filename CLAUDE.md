@@ -38,6 +38,18 @@ Sessions may also file operational records - `upsert_project`,
 contact a client, resolve a ticket or send a contract: those are
 Michael's, and the API has no route for them on purpose.
 
+## Needs attention
+
+`pm/attention_routes.py` is the one page that says what the board has
+noticed is waiting on Michael - contracts a client sent back, hosting
+fees under the floor, invoices past due, catalogue rewrites waiting on a
+yes, tickets untriaged or flagged, builds past their promised date with
+no go-live - worst first, each row carrying the press that resolves it.
+Its own nav section, top of the sidebar, with the total as the badge
+(`attention_counts()` in the context processor). A page that learns to
+notice something new adds it HERE, not a badge of its own; the inbox
+decisions take `next` so a press on this page comes back to it.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last

@@ -1,0 +1,177 @@
+{% extends "pm/base.html" %}
+
+{#
+  One list of everything waiting on him, worst first, each row carrying
+  the press that resolves it.
+
+  Order is by what it costs to leave alone: a contract sent back is a deal
+  stalling; a fee under the floor is money leaving every month; an overdue
+  invoice is money not arriving; a proposal waiting is the catalogue
+  reading the old way; a ticket untriaged is a client waiting; a build
+  past its date is a promise ageing. Sections that are empty do not
+  render, so on a good day this page is one sentence.
+#}
+
+{% block title %}Needs attention - Built By Bean{% endblock %}
+{% block page_title %}Needs attention{% endblock %}
+{% block page_subtitle %}{% if total %}{{ total }} thing{{ 's' if total != 1 }} waiting on you{% else %}Nothing is waiting on you{% endif %}{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% macro section_head(label, count, tone='amber') %}
+<div class="px-4 sm:px-5 py-3 border-y border-white/5 first:border-t-0 flex items-center justify-between gap-3">
+    <span class="text-xs font-semibold uppercase tracking-wider {{ 'text-red-300' if tone == 'red' else 'text-amber-300' if tone == 'amber' else 'text-surface-400' }}">{{ label }}</span>
+    <span class="text-xs font-medium text-surface-400">{{ count }}</span>
+</div>
+{% endmacro %}
+
+{% macro row_start() %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+    <div class="min-w-0 flex-1">
+{% endmacro %}
+
+{% macro row_end() %}
+    </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0 stagger-in">
+
+    {% if not total %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-surface-300">Nothing is waiting on you.</p>
+    </div>
+    {% else %}
+
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
+
+            {% if s.contracts %}
+            {{ section_head('Sent back by a client', s.contracts|length, 'red') }}
+            {% for r in s.contracts %}
+            {{ row_start() }}
+                <p class="font-medium text-white truncate">{{ r.title }}</p>
+                <p class="text-xs text-surface-400 truncate">
+                    {{ r.signer_name }}{% if r.client %} &middot; {{ r.client.name }}{% endif %}
+                    {% if r.declined_at %} &middot; {{ r.declined_at.strftime('%b') }} {{ r.declined_at.day }}{% endif %}
+                </p>
+                {% if r.decline_reason %}
+                <p class="text-sm text-surface-300 mt-1.5 break-words">{{ r.decline_reason }}</p>
+                {% endif %}
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <a href="{{ url_for('contracts.contract_detail', id=r.id) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Open</a>
+                    <a href="{{ url_for('contracts.revise', id=r.id) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">Revise it</a>
+            {{ row_end() }}
+            {% endfor %}
+            {% endif %}
+
+            {% if s.hosting %}
+            {{ section_head('Hosting fees under the floor', s.hosting|length, 'amber') }}
+            {% for r in s.hosting %}
+            {{ row_start() }}
+                <p class="font-medium text-white truncate">{{ r.project_name }}</p>
+                <p class="text-xs text-surface-400 truncate">
+                    {{ r.client_name }} &middot; {{ r.cost|format_currency }} of {{ r.fee|format_currency }}
+                    &middot; <span class="{{ 'text-red-400' if r.margin < 0 else 'text-surface-300' }}">{{ r.margin|format_currency }} left over</span>
+                </p>
+                </div>
+                <div class="shrink-0">
+                    <a href="{{ r.url }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
+                        Draft the increase to {{ r.new_monthly|format_currency }}/mo</a>
+            {{ row_end() }}
+            {% endfor %}
+            {% endif %}
+
+            {% if s.invoices %}
+            {{ section_head('Invoices past due', s.invoices|length, 'red') }}
+            {% for i in s.invoices %}
+            {{ row_start() }}
+                <p class="font-medium text-white truncate">
+                    {{ i.invoice_number or ('Invoice ' ~ i.id) }} &middot; {{ i.amount_due|format_currency }}
+                </p>
+                <p class="text-xs text-surface-400 truncate">
+                    {{ i.client.name }} &middot; due {{ i.due_date.strftime('%b') }} {{ i.due_date.day }}
+                    &middot; {{ (today - i.due_date).days }} day{{ 's' if (today - i.due_date).days != 1 }} late
+                </p>
+                </div>
+                <div class="shrink-0">
+                    <a href="{{ url_for('stripe.invoice_detail', id=i.id) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Open</a>
+            {{ row_end() }}
+            {% endfor %}
+            {% endif %}
+
+            {% if s.proposals %}
+            {{ section_head('Catalogue rewrites waiting on a yes', s.proposals|length, 'amber') }}
+            {% for p in s.proposals %}
+            <div class="p-4 sm:p-5 space-y-2">
+                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-white/5 text-surface-300 shrink-0">{{ p.kind_label }}</span>
+                    <span class="font-medium text-white truncate max-w-full">{{ p.label }}</span>
+                    <span class="text-xs text-surface-400">&middot; {{ p.verb|lower }} {{ p.field_label }} &middot; from {{ p.project or 'a session' }}</span>
+                </div>
+                {% if p.reason %}<p class="text-sm text-surface-300 break-words">{{ p.reason }}</p>{% endif %}
+                <div class="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3 text-sm text-surface-100 whitespace-pre-wrap break-words">{{ p.proposed }}</div>
+                <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+                    <a href="{{ url_for('inbox.inbox_index') }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">See what it replaces</a>
+                    <form method="POST" action="{{ url_for('inbox.reject', id=p.id) }}">
+                        <input type="hidden" name="next" value="{{ here }}">
+                        <button type="submit" class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300 transition-colors">Reject</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('inbox.accept', id=p.id) }}">
+                        <input type="hidden" name="next" value="{{ here }}">
+                        <button type="submit" class="min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">Accept</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if s.tickets %}
+            {{ section_head('Tickets to look at', s.tickets|length, 'amber') }}
+            {% for t in s.tickets %}
+            {{ row_start() }}
+                <p class="font-medium text-white truncate">{{ t.display_title }}</p>
+                <p class="text-xs text-surface-400 truncate">
+                    {{ t.client.name }}
+                    &middot; {{ 'untriaged' if t.status == 'new' else 'flagged to come back to' }}
+                    {% if t.priority %} &middot; {{ t.priority }}{% endif %}
+                </p>
+                </div>
+                <div class="shrink-0">
+                    <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Open</a>
+            {{ row_end() }}
+            {% endfor %}
+            {% endif %}
+
+            {% if s.projects %}
+            {{ section_head('Past the promised date, not yet live', s.projects|length, 'muted') }}
+            {% for p in s.projects %}
+            {{ row_start() }}
+                <p class="font-medium text-white truncate">{{ p.name }}</p>
+                <p class="text-xs text-surface-400 truncate">
+                    {{ p.client.name }} &middot; promised {{ p.mvp_date.strftime('%b') }} {{ p.mvp_date.day }}
+                    &middot; {{ (today - p.mvp_date).days }} days ago
+                </p>
+                </div>
+                <div class="shrink-0">
+                    <a href="{{ url_for('pm.project_detail', id=p.id) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Open</a>
+            {{ row_end() }}
+            {% endfor %}
+            {% endif %}
+
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -543,6 +543,23 @@
 
         <!-- Navigation -->
         <nav class="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
+            {# Before anything else: what is waiting on him. Every page below
+               is where work happens; this is the one where the board says
+               what it has noticed, and the badge is the count. #}
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Attention</p>
+            <a href="{{ url_for('attention.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('attention.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+                </svg>
+                Needs attention
+                {% if attention_total %}
+                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ attention_total }}</span>
+                {% endif %}
+            </a>
+            <div class="my-2 border-t border-white/10"></div>
+
             {# The catalogue, ahead of the day-to-day: the apps that exist,
                what is sold, what has been built before, how the vendors get
                set up, and the builder that spends it all. These are the
@@ -598,19 +615,9 @@
                 </svg>
                 MVP Builder
             </a>
-            {# Where the other sessions' proposals wait. The badge is the
-               count waiting on a decision, so it is quiet when there is
-               nothing to decide. #}
-            <a href="{{ url_for('inbox.inbox_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('inbox.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z"/>
-                </svg>
-                Inbox
-                {% if inbox_pending %}
-                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ inbox_pending }}</span>
-                {% endif %}
-            </a>
+            {# The catalogue's inbox has no entry of its own: what waits
+               there is on the attention page, and its history is a link
+               from that page. #}
             <div class="my-2 border-t border-white/10"></div>
 
             {# The working stack: who the work is for, the work itself, the
