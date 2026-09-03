@@ -1504,6 +1504,13 @@ class ProductSale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"),
                            nullable=False, index=True)
+    # Which platform this one landed on, where the product has a choice.
+    # Nullable because some products have none - a custom build is not "of"
+    # anybody else's system. SET NULL rather than CASCADE: retiring a variant
+    # from the catalogue must not delete the record of having sold it.
+    variant_id = db.Column(db.Integer,
+                           db.ForeignKey("product_variants.id", ondelete="SET NULL"),
+                           nullable=True, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"),
                           nullable=False, index=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"),
@@ -1515,10 +1522,68 @@ class ProductSale(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     product = db.relationship("Product", back_populates="sales")
+    variant = db.relationship("ProductVariant")
     client = db.relationship("Client", backref=db.backref(
         "product_sales", lazy="dynamic", cascade="all, delete-orphan"))
     project = db.relationship("Project", backref=db.backref(
         "product_sales", lazy="dynamic", cascade="all, delete-orphan"))
 
+    @property
+    def label(self):
+        """The product, named by its variant where there is one."""
+        if self.variant is not None:
+            return f"{self.product.name} - {self.variant.name}"
+        return self.product.name
+
     def __repr__(self):
         return f"<ProductSale {self.product_id} -> client {self.client_id}>"
+
+
+class ProductVariant(db.Model):
+    """Which one, within a product.
+
+    A product is the shape of the work; a variant is whose platform it lands
+    on. Invoicing is the same build every time - the hard half is which
+    payment provider it connects to. An API connection is the same shape of
+    job whether the far end is Tripleseat or something nobody here has heard
+    of yet.
+
+    Catalogued as they are met rather than guessed at in advance. Selling
+    something against a system that has no variant yet writes one, so the
+    second client on that platform picks it from a list instead of typing it
+    again. For a long time most sales will be the first of their kind; that is
+    the nature of there being more systems in the world than anybody can
+    enumerate.
+
+    Price is an override, not a second price. Most variants cost what the
+    product costs. The one that does not is the point of the column: a
+    provider nobody here has integrated before is more work than the one that
+    is known cold.
+    """
+
+    __tablename__ = "product_variants"
+    __table_args__ = (
+        db.UniqueConstraint("product_id", "slug", name="uq_product_variant_slug"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    slug = db.Column(db.String(60), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    # The runbook for this vendor, when one has been written. Held as a slug
+    # for the same reason the product's is: a variant can name a playbook that
+    # does not exist yet without failing to save.
+    playbook_slug = db.Column(db.String(60), nullable=True)
+    price = db.Column(db.Float, nullable=True)
+    notes = db.Column(db.Text, default="")
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    product = db.relationship("Product", backref=db.backref(
+        "variants", lazy="select", cascade="all, delete-orphan",
+        order_by="ProductVariant.sort_order"))
+
+    def __repr__(self):
+        return f"<ProductVariant {self.slug} of {self.product_id}>"

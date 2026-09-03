@@ -21,12 +21,22 @@
        copied: false,
        clients: {{ clients | map(attribute="id") | list | tojson }},
        projects: {{ projects | tojson }},
+       variants: {{ variants | tojson }},
        clientId: "",
        projectId: "",
+       variantId: "",
        get mine() { return this.projects.filter(p => p.client_id === this.clientId); },
+       get choices() { return (this.sell && this.variants[this.sell.id]) || []; },
+       /* A variant can cost more than the product it belongs to - a provider
+          nobody here has integrated is more work than the one known cold - so
+          picking one moves the price. */
+       get suggested() {
+         const v = this.choices.find(c => c.id === this.variantId);
+         return (v && v.price) || (this.sell && this.sell.price) || "";
+       },
        open(id, name, price, monthly) {
          this.sell = { id: id, name: name, price: price, monthly: monthly };
-         this.clientId = ""; this.projectId = "";
+         this.clientId = ""; this.projectId = ""; this.variantId = "";
        },
        async copy(text) {
          try { await navigator.clipboard.writeText(text); this.copied = true;
@@ -53,6 +63,17 @@
                     </div>
                     {% if p.summary %}
                     <p class="mt-1 text-xs text-surface-400 max-w-2xl">{{ p.summary }}</p>
+                    {% endif %}
+                    {# What this one has been sold against so far. The list
+                       grows itself: the first sale on a new platform writes
+                       its own entry here. #}
+                    {% if p.variants %}
+                    <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {% for v in p.variants if v.is_active %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] bg-surface-800 text-surface-300">
+                            {{ v.name }}{% if v.price is not none %} &middot; ${{ '%g'|format(v.price) }}{% endif %}</span>
+                        {% endfor %}
+                    </div>
                     {% endif %}
                 </div>
 
@@ -139,6 +160,24 @@
 
             <p class="text-sm font-semibold text-white" x-text="sell && sell.name"></p>
 
+            {# Only where the product has a choice to make. "Something else"
+               catalogues whatever is typed, so the next client on that
+               platform picks it from the list. #}
+            <div x-show="choices.length" style="display: none">
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Which one</label>
+                <select name="variant_id" x-model="variantId"
+                        class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    <option value="">Not decided yet</option>
+                    <template x-for="c in choices" :key="c.id">
+                        <option :value="c.id" x-text="c.name"></option>
+                    </template>
+                    <option value="new">Something else</option>
+                </select>
+                <input type="text" name="variant_name" x-show="variantId === 'new'" style="display: none"
+                       placeholder="Which system? It gets added to the list."
+                       class="input-ring mt-2 w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
                 <select name="client_id" x-model="clientId" required
@@ -169,7 +208,7 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Price $</label>
-                    <input type="text" name="price" :value="sell && sell.price"
+                    <input type="text" name="price" :value="suggested"
                            class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
                 </div>
                 <div>

@@ -15,6 +15,7 @@ buying only a signing portal still needs somewhere for the runbook, the
 hosting fee and the tickets to live, so a standalone purchase makes a small
 project rather than giving those three a second home to be looked for in.
 """
+import re
 from datetime import datetime, timezone
 
 from flask import (Blueprint, render_template, redirect, url_for, flash,
@@ -22,7 +23,7 @@ from flask import (Blueprint, render_template, redirect, url_for, flash,
 from flask_login import login_required
 
 from models import (db, Client, Project, Playbook, ProjectPlaybook,
-                    Product, ProductSale)
+                    Product, ProductVariant, ProductSale)
 import contract_docs
 
 products_bp = Blueprint("products", __name__, url_prefix="/admin/products")
@@ -46,6 +47,24 @@ def _parse_date(raw):
         return None
 
 
+def _slugify(name):
+    """A slug for a platform typed in by hand, the first time it is sold."""
+    out = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return out[:60] or "other"
+
+
+def _playbook_for(sale):
+    """The runbook this sale should run: the variant's, or the product's.
+
+    The variant wins because it names the platform. Invoicing against Stripe
+    and invoicing against something else are the same build with a different
+    second half, and the second half is the part with a runbook.
+    """
+    variant_slug = sale.variant.playbook_slug if sale.variant else None
+    slug = variant_slug or sale.product.playbook_slug
+    return Playbook.query.filter_by(slug=slug).first() if slug else None
+
+
 def build_prompt(sale):
     """The whole job, written out for a fresh Claude session.
 
@@ -60,7 +79,7 @@ def build_prompt(sale):
     """
     product, project, client = sale.product, sale.project, sale.client
     out = []
-    out.append(f"Set up {product.name} for {client.name}, on the project "
+    out.append(f"Set up {sale.label} for {client.name}, on the project "
                f"\"{project.name}\".")
     out.append("")
 
@@ -82,9 +101,7 @@ def build_prompt(sale):
         out.append(f"  What they want it for: {sale.notes.strip()}")
     out.append("")
 
-    playbook = None
-    if product.playbook_slug:
-        playbook = Playbook.query.filter_by(slug=product.playbook_slug).first()
+    playbook = _playbook_for(sale)
 
     if playbook is not None:
         out.append(f"THE RUNBOOK - {playbook.display_name}")
@@ -142,6 +159,10 @@ def products_index():
     clients = Client.query.order_by(Client.name).all()
     projects = [{"id": str(p.id), "client_id": str(p.client_id), "name": p.name}
                 for p in Project.query.order_by(Project.name).all()]
+    variants = {str(p.id): [{"id": str(v.id), "name": v.name,
+                             "price": ("%g" % v.price) if v.price is not None else ""}
+                            for v in p.variants if v.is_active]
+                for p in products}
 
     sold_count = {}
     for sale in sales:
@@ -154,6 +175,7 @@ def products_index():
     return render_template("pm/products/index.html",
                            products=products, sales=sales, prompts=prompts,
                            clients=clients, projects=projects,
+                           variants=variants,
                            sold_count=sold_count,
                            today=datetime.now(timezone.utc).date().isoformat())
 
@@ -201,8 +223,31 @@ def product_sell():
         db.session.add(project)
         db.session.flush()
 
+    # Which platform, where the product asks. "new" means one nobody has sold
+    # against before: it joins the catalogue here, so the next client on it
+    # picks from a list instead of typing it again.
+    variant = None
+    choice = (request.form.get("variant_id") or "").strip()
+    if choice == "new":
+        name = (request.form.get("variant_name") or "").strip()
+        if name:
+            slug = _slugify(name)
+            variant = ProductVariant.query.filter_by(
+                product_id=product.id, slug=slug).first()
+            if variant is None:
+                last = max([v.sort_order or 0 for v in product.variants] or [0])
+                variant = ProductVariant(product_id=product.id, slug=slug,
+                                         name=name, sort_order=last + 10)
+                db.session.add(variant)
+                db.session.flush()
+    elif choice.isdigit():
+        candidate = db.session.get(ProductVariant, int(choice))
+        if candidate is not None and candidate.product_id == product.id:
+            variant = candidate
+
     sale = ProductSale(
-        product_id=product.id, client_id=client.id, project_id=project.id,
+        product_id=product.id, variant_id=variant.id if variant else None,
+        client_id=client.id, project_id=project.id,
         price=_parse_money(request.form.get("price")),
         monthly_price=_parse_money(request.form.get("monthly_price")),
         delivery_date=_parse_date(request.form.get("delivery_date")),
@@ -213,8 +258,10 @@ def product_sell():
     # The runbook for the vendor behind it, if this product has one and the
     # project has not already got it.
     applied = None
-    if product.playbook_slug:
-        playbook = Playbook.query.filter_by(slug=product.playbook_slug,
+    variant_slug = variant.playbook_slug if variant else None
+    playbook_slug = variant_slug or product.playbook_slug
+    if playbook_slug:
+        playbook = Playbook.query.filter_by(slug=playbook_slug,
                                             is_active=True).first()
         if playbook is not None:
             exists = ProjectPlaybook.query.filter_by(
@@ -227,7 +274,7 @@ def product_sell():
     db.session.commit()
 
     note = f" {applied} checklist added to {project.name}." if applied else ""
-    flash(f"{product.name} recorded against {client.name}.{note}", "success")
+    flash(f"{sale.label} recorded against {client.name}.{note}", "success")
 
     # Straight into the add-on contract with everything it needs. Prefilled and
     # unsent: nothing goes to a client without being read first, which is how
@@ -240,10 +287,12 @@ def product_sell():
     return redirect(url_for("contracts.addon_form",
                             client_id=client.id,
                             product=key,
-                            product_name=product.name,
+                            product_name=sale.label,
                             summary=product.summary or "",
-                            one_time_fee=f"{sale.price:,.0f}" if sale.price else "",
-                            monthly_fee=f"{sale.monthly_price:,.0f}" if sale.monthly_price else "",
+                            one_time_fee=(f"{sale.price:,.0f}"
+                                          if sale.price else ""),
+                            monthly_fee=(f"{sale.monthly_price:,.0f}"
+                                         if sale.monthly_price else ""),
                             notes=sale.notes or ""))
 
 
