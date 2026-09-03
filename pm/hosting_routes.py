@@ -215,29 +215,24 @@ def _bar(fee, cost):
 
 
 def _railway_lifetime_by_project():
-    """Railway cost per project, and the first month any of it was attributed.
+    """{project_id: every dollar of Railway attributed to it}.
 
-    Returns ({project_id: total}, earliest month or None). The month is not
-    decoration. Per-project Railway figures start in August 2026; every month
-    before that was one flat charge with no project on it, so a per-client
-    total here covers less history than the lifetime figure at the top of the
-    page and would otherwise read as though a client had cost almost nothing
-    since the beginning.
+    Covers less history than the lifetime total at the top of the page, and
+    knowingly. Per-project Railway figures start in August 2026; every month
+    before that was one flat charge with no project on it, counted in the
+    total above but impossible to split between clients.
     """
     rows = (db.session.query(ServiceMapping.project_id,
-                             ServiceCostEntry.period_start,
                              ServiceCostEntry.allocated_amount)
             .join(ServiceCostEntry, ServiceCostEntry.mapping_id == ServiceMapping.id)
             .join(ServiceProvider, ServiceProvider.id == ServiceCostEntry.provider_id)
             .filter(ServiceProvider.name == "railway")
             .filter(ServiceMapping.project_id.isnot(None))
             .all())
-    totals, earliest = {}, None
-    for project_id, period_start, amount in rows:
+    totals = {}
+    for project_id, amount in rows:
         totals[project_id] = totals.get(project_id, 0.0) + (amount or 0.0)
-        if period_start and (earliest is None or period_start < earliest):
-            earliest = period_start
-    return totals, earliest
+    return totals
 
 
 def _railway_all_time():
@@ -284,7 +279,7 @@ def hosting_index():
     from stripe_service import get_hosting_revenue
     hosting = get_hosting_revenue()
     paid_by_customer = hosting["by_customer"]
-    railway_lifetime, railway_since = _railway_lifetime_by_project()
+    railway_lifetime = _railway_lifetime_by_project()
 
     # Hosting money belongs to a client, not to a project. A client running two
     # builds would otherwise show their whole hosting history against each of
@@ -361,5 +356,4 @@ def hosting_index():
 
     return render_template("pm/hosting/index.html",
                            rows=rows, month=month, totals=totals,
-                           lifetime=lifetime, min_margin=MIN_MARGIN,
-                           railway_since=railway_since)
+                           lifetime=lifetime, min_margin=MIN_MARGIN)

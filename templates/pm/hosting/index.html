@@ -172,38 +172,6 @@
         </div>
     </div>
 
-    <p class="text-xs text-surface-500">
-        The four totals at the top are lifetime, and answer a different question from
-        the bars: hosting actually collected, read from paid Stripe invoices rather
-        than from the fees agreed on the projects, against every Railway charge on
-        record. Anything billed and not yet paid is called out separately rather than
-        counted as earned.
-    </p>
-
-    <p class="text-xs text-surface-500">
-        The all-time line under each project asks the same thing about one client.
-        Its collected figure is that client's, so a client with two builds shows the
-        same total against both and says so.
-        {%- if railway_since %}
-        Its Railway figure starts at {{ railway_since.strftime('%B %Y') }}, which is
-        when per-project figures began; every month before that was a single flat
-        charge with no project on it, and is counted in the totals above but cannot
-        be split between clients.
-        {%- endif %}
-    </p>
-
-    <p class="text-xs text-surface-500">
-        The bars are one month, {{ month.strftime('%B %Y') }} - the last complete one.
-        A project's cost is its mapped vendor charges plus anything filed by hand
-        against it; a client-level cost with no project on it, like Stripe's fee, is
-        not counted here, because that fee tracks whatever the client was invoiced for
-        rather than what their application costs to run. The month in progress is left out, because a month three days
-        old makes everything look cheap. A charge that buys a year, like a domain
-        registration, is spread across the twelve months it covers rather than landing
-        on the month it was invoiced; the expense ledger still keeps it whole, on its
-        real date. The floor is {{ min_margin|format_currency }} left over after
-        infrastructure, and it still has to cover the time spent keeping the thing alive.
-    </p>
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center">
         <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -211,10 +179,7 @@
         </svg>
         <p class="text-surface-400 mb-1">Nothing to compare yet</p>
         <p class="text-sm text-surface-500 max-w-md mx-auto">
-            A project appears here once a contract has priced it. A statement of work
-            and a hosting agreement both write the fee onto the project they are for,
-            so this page fills itself as the agreements are made rather than asking
-            for the figure a second time.
+            A project appears here once a contract has priced it.
         </p>
     </div>
     {% endif %}
