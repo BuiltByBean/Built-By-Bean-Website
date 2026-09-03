@@ -100,6 +100,23 @@ function playbookPanel(ids, preferred) {
 }
 </script>
 
+{% if unplaybooked %}
+{# Billing this project, with no runbook for it here. #}
+<div class="mb-4 flex flex-wrap gap-2">
+    {% for pb in unplaybooked %}
+    <form method="POST" action="{{ url_for('pm.project_playbook_add', id=project.id) }}">
+        <input type="hidden" name="playbook_id" value="{{ pb.id }}">
+        <button type="submit"
+                class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium
+                       text-amber-300 border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            Add {{ pb.display_name }}
+        </button>
+    </form>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if applied_playbooks %}
 {# The one to open on: the first that still has work in it. #}
 {% set ns = namespace(first=none) %}

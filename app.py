@@ -25,7 +25,7 @@ from models import (
     db, Client, ClientContact, Project, Ticket, TicketNote, Expense, TimeEntry,
     Document, User,
     Invoice, InvoiceLineItem, TimerSession, TaxSetting,
-    ServiceProvider, ServiceCostEntry,
+    ServiceProvider, ServiceCostEntry, ServiceMapping,
     Playbook, PlaybookStep, ProjectPlaybook, ProjectPlaybookStep,
     TICKET_CATEGORIES, TICKET_CATEGORY_LABELS,
     TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_CLOSED_STATUSES,
@@ -1089,6 +1089,38 @@ def create_app():
             return redirect(url_for("pm.project_detail", id=project.id))
         return render_template("pm/projects/form.html", form=form, editing=False)
 
+    def _unplaybooked_vendors(project):
+        """Playbooks for vendors billing this project that it has not got.
+
+        Two kinds of evidence, both already on the row. A service mapping names
+        its provider outright, and provider names and playbook slugs are the
+        same words. An expense filed by hand leads with the vendor: "Twilio",
+        "Cloudflare - kuperplumbing.com registration".
+
+        Cloudflare billed Kuper Plumbing $10.46 a year with no runbook for it on
+        the project, and Twilio has been on Talent Booker since April the same
+        way. Both were visible in this data the whole time; nothing was looking.
+        """
+        active = Playbook.query.filter_by(is_active=True).all()
+        by_slug = {pb.slug: pb for pb in active}
+        by_name = {pb.display_name.lower(): pb for pb in active}
+
+        found = {}
+        for mapping in ServiceMapping.query.filter_by(project_id=project.id).all():
+            provider = db.session.get(ServiceProvider, mapping.provider_id)
+            if provider and provider.name in by_slug:
+                pb = by_slug[provider.name]
+                found[pb.id] = pb
+        for expense in Expense.query.filter_by(project_id=project.id).all():
+            head = (expense.description or "").strip().lower()
+            for name, pb in by_name.items():
+                if head.startswith(name):
+                    found[pb.id] = pb
+
+        taken = {a.playbook_id for a in
+                 ProjectPlaybook.query.filter_by(project_id=project.id).all()}
+        return [pb for pid, pb in sorted(found.items()) if pid not in taken]
+
     def _apply_default_playbooks(project):
         """Attach every playbook marked default. Returns how many were added.
 
@@ -1122,6 +1154,7 @@ def create_app():
         taken = {a.playbook_id for a in applied}
         available = [pb for pb in Playbook.query.filter_by(is_active=True)
                      .order_by(Playbook.sort_order).all() if pb.id not in taken]
+        unplaybooked = _unplaybooked_vendors(project)
 
         # Ticking a step happens without leaving the page, so the browser needs
         # the same counts the server just worked out. Built here rather than in
@@ -1139,6 +1172,7 @@ def create_app():
 
         return render_template("pm/projects/detail.html",
             project=project, applied_playbooks=applied, available_playbooks=available,
+            unplaybooked=unplaybooked,
             playbook_state=playbook_state, playbook_categories=Playbook.CATEGORIES,
             phase_note=explain_phase(project))
 
@@ -2838,6 +2872,12 @@ def create_app():
             if project is None:
                 project = Project(client_id=client.id, name=project_name)
                 db.session.add(project)
+                # Flushed for its id, then given the playbooks every build
+                # gets. The project form has always done this and this path
+                # did not, so a project born from a statement of work started
+                # life with no GitHub or Railway checklist and nothing said so.
+                db.session.flush()
+                _apply_default_playbooks(project)
                 created_project = True
             if project:
                 try:
