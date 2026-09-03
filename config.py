@@ -59,6 +59,9 @@ class Config:
     CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mbean@builtbybeans.com")
     MAIL_USE_TLS = True
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USERNAME", "")
+    # The same app password that sends also reads. pm/mail_service.py pulls
+    # mail from clients' addresses over IMAP so it shows on the board.
+    IMAP_SERVER = os.environ.get("IMAP_SERVER", "imap.gmail.com")
     # Time tracking is built and kept — routes, models, data all intact — but
     # not shown. Set FEATURE_TIME_TRACKING=1 to bring back the nav entry, the
     # header timer, the hours figures and the time tab on projects, tickets

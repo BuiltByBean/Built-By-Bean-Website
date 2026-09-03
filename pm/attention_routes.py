@@ -20,11 +20,12 @@ anything a session could resolve without him.
 """
 from datetime import date
 
-from flask import Blueprint, render_template, url_for
+from flask import Blueprint, render_template, url_for, current_app
 from flask_login import login_required
 
 from models import (db, CatalogueProposal, SignatureRequest, Invoice, Ticket,
-                    Project)
+                    Project, Message)
+from pm import mail_service
 from pm.hosting_routes import increases_due, increases_due_count, increase_url
 from pm.inbox_routes import _decorate
 
@@ -34,6 +35,13 @@ attention_bp = Blueprint("attention", __name__, url_prefix="/admin/attention")
 def _declined():
     return (SignatureRequest.query.filter_by(status="declined")
             .order_by(SignatureRequest.created_at.desc()))
+
+
+def _unanswered():
+    # A person is waiting: a client's mail, or a lead through the site's
+    # form, with no reply from here yet.
+    return (Message.query.filter_by(direction="in", status="new")
+            .order_by(Message.received_at.desc()))
 
 
 def _overdue_invoices(today):
@@ -73,6 +81,7 @@ def attention_counts():
     today = date.today()
     counts = {
         "contracts": _declined().count(),
+        "messages": _unanswered().count(),
         "hosting": increases_due_count(),
         "invoices": _overdue_invoices(today).count(),
         "proposals": _pending_proposals().count(),
@@ -87,8 +96,12 @@ def attention_counts():
 @login_required
 def index():
     today = date.today()
+    # New mail is fetched in the background while this renders; the next
+    # look has it. Never on the request itself - IMAP takes seconds.
+    mail_service.kick(current_app._get_current_object())
     sections = {
         "contracts": _declined().all(),
+        "messages": _unanswered().all(),
         # The link is built here, in the request, from the cached ingredients.
         "hosting": [dict(r, url=increase_url(r)) for r in increases_due()],
         "invoices": _overdue_invoices(today).all(),

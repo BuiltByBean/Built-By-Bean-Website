@@ -1710,6 +1710,70 @@ class Feature(db.Model):
 # ── The MVP, assembled ───────────────────────────────────────
 
 
+class Message(db.Model):
+    """One email's worth of conversation with a client or a lead, kept here.
+
+    Two ways in. The public site's contact form writes one directly, before
+    it tries to send the notification email - so a lead is on the board even
+    on the day SMTP is down. And the inbox sync reads Michael's Gmail over
+    IMAP for anything sent by a client's address, or by anyone who has
+    written through the form before, so a conversation that started on the
+    site can continue by email and still be seen here.
+
+    Replies go out from his own Gmail over SMTP and are stored as `out`
+    rows, threaded to what they answer with real In-Reply-To headers, so the
+    client's mail client threads them and Gmail keeps them in Sent.
+
+    `thread_id` is the root message's id, including on the root itself, so
+    a whole conversation is one query. `external_id` is the RFC Message-ID,
+    which is what makes a sync idempotent: the same mail fetched twice is
+    one row.
+    """
+
+    __tablename__ = "messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # contact_form | gmail
+    source = db.Column(db.String(20), nullable=False, default="gmail")
+    # in | out
+    direction = db.Column(db.String(3), nullable=False, default="in", index=True)
+    from_name = db.Column(db.String(200), default="")
+    from_email = db.Column(db.String(200), nullable=False, index=True)
+    to_email = db.Column(db.String(200), default="")
+    subject = db.Column(db.String(300), default="")
+    body = db.Column(db.Text, default="")
+    # What the form's "project type" picker said, when it came from the form.
+    project_type = db.Column(db.String(80), default="")
+    external_id = db.Column(db.String(300), nullable=True, unique=True)
+    thread_id = db.Column(db.Integer, nullable=True, index=True)
+    in_reply_to_id = db.Column(
+        db.Integer,
+        db.ForeignKey("messages.id", ondelete="SET NULL", name="fk_messages_in_reply_to_id"),
+        nullable=True)
+    client_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clients.id", ondelete="SET NULL", name="fk_messages_client_id"),
+        nullable=True, index=True)
+    # in: new | replied | archived.  out: sent.
+    status = db.Column(db.String(10), nullable=False, default="new", index=True)
+    received_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    replied_at = db.Column(db.DateTime, nullable=True)
+
+    client = db.relationship("Client", backref=db.backref("messages", lazy="dynamic"))
+
+    @property
+    def snippet(self):
+        text = " ".join((self.body or "").split())
+        return text[:140] + ("..." if len(text) > 140 else "")
+
+    @property
+    def sender_label(self):
+        return self.from_name or self.from_email
+
+    def __repr__(self):
+        return f"<Message {self.direction} {self.from_email} {self.status}>"
+
+
 class CatalogueProposal(db.Model):
     """One change a session asked to make to the catalogue, and what became of it.
 

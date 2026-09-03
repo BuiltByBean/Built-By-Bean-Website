@@ -281,6 +281,10 @@ def create_app():
     from pm.attention_routes import attention_bp
     app.register_blueprint(attention_bp)
 
+    # ── What clients and leads write ───────────────────────
+    from pm.messages_routes import messages_bp
+    app.register_blueprint(messages_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)
@@ -637,6 +641,17 @@ def create_app():
         message = (data.get("message") or "").strip()
         if not name or not email or not message:
             return jsonify({"error": "Please fill in all required fields."}), 400
+        # On the board first, before any mail is attempted: a lead is worth
+        # keeping on the day SMTP is down, and the attention page shows it
+        # either way. The email is the notification, not the record.
+        recorded = False
+        try:
+            from pm.mail_service import record_contact
+            record_contact(name, email, project_type, message)
+            recorded = True
+        except Exception as err:  # noqa: BLE001 - the form must still work
+            db.session.rollback()
+            print(f"Contact record error: {err}")
         try:
             mail_server = app.config.get("MAIL_SERVER", "smtp.gmail.com")
             mail_port = int(app.config.get("MAIL_PORT", 587))
@@ -658,6 +673,9 @@ def create_app():
             return jsonify({"success": True, "message": "Message sent! I'll get back to you soon."})
         except Exception as e:
             print(f"Email error: {e}")
+            if recorded:
+                # It reached the board, which is what "sent" means now.
+                return jsonify({"success": True, "message": "Message sent! I'll get back to you soon."})
             return jsonify({"error": "Something went wrong. Please email me directly at mbean@builtbybeans.com"}), 500
 
     @app.route("/admin")

@@ -1,0 +1,74 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One conversation, oldest first, and the reply box at the bottom where the
+  next thing said goes. Theirs on the left in the muted card, his on the
+  right in the brand tint, the way every chat reads.
+#}
+
+{% block title %}{{ root.subject or 'Message' }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('messages.index'), 'Messages') }}{% endblock %}
+{% block page_title %}{{ root.subject or '(no subject)' }}{% endblock %}
+{% block page_subtitle %}{{ root.sender_label }}{% if root.client %} &middot; {{ root.client.name }}{% elif root.source == 'contact_form' %} &middot; through the site{% endif %}{% endblock %}
+
+{% block header_actions %}
+<div class="flex flex-wrap items-center gap-2">
+    {% if root.client %}
+    <a href="{{ url_for('pm.client_detail', id=root.client.id) }}"
+       class="inline-flex items-center min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">
+        {{ root.client.name }}</a>
+    {% endif %}
+    {% if last_in and last_in.status == 'new' %}
+    <form method="POST" action="{{ url_for('messages.archive', id=root.id) }}">
+        <input type="hidden" name="next" value="{{ url_for('messages.detail', id=root.id) }}">
+        <button type="submit"
+                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">
+            Archive</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-4 stagger-in">
+
+    {% for m in thread %}
+    <div class="flex {{ 'justify-end' if m.direction == 'out' else 'justify-start' }}">
+        <div class="w-full sm:max-w-[85%] rounded-2xl p-4 sm:p-5 {{ 'bg-brand-500/10 border border-brand-500/20' if m.direction == 'out' else 'glass-card' }}">
+            <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2">
+                <span class="text-sm font-medium text-white truncate">{{ m.sender_label }}</span>
+                <span class="text-xs text-surface-500 whitespace-nowrap">
+                    {{ m.received_at.strftime('%b') }} {{ m.received_at.day }}, {{ m.received_at.strftime('%H:%M') }} UTC
+                    {% if m.source == 'contact_form' and m.direction == 'in' %} &middot; the site's form{% endif %}
+                </span>
+            </div>
+            {% if m.project_type %}
+            <p class="text-xs text-surface-400 mb-2">Project type: {{ m.project_type }}</p>
+            {% endif %}
+            <div class="text-sm text-surface-200 whitespace-pre-wrap break-words leading-relaxed">{{ m.body }}</div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if last_in %}
+    <form method="POST" action="{{ url_for('messages.reply', id=last_in.id) }}"
+          class="glass-card p-4 sm:p-5 space-y-3">
+        <label for="reply-body" class="block text-sm font-medium text-surface-300">
+            Reply to {{ last_in.from_email }}
+        </label>
+        <textarea id="reply-body" name="body" rows="6" required
+                  class="input-ring w-full min-w-0 px-4 py-3 text-sm bg-surface-800/50 text-white rounded-xl"></textarea>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            {% if not configured %}
+            <span class="text-xs text-amber-400">Mail is not configured on this server.</span>
+            {% endif %}
+            <button type="submit" {% if not configured %}disabled{% endif %}
+                    class="min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-xl btn-brand transition-all disabled:opacity-40">
+                Send from your Gmail</button>
+        </div>
+    </form>
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "pm/base.html" %}
+
+{#
+  Every conversation, the ones waiting on a reply first.
+
+  A row is a thread, not a mail: the lead who wrote through the form and
+  then answered the reply by email is one line here, with the count. The
+  page is one filtered list, so it scrolls inside itself.
+#}
+
+{% block title %}Messages - Built By Bean{% endblock %}
+{% block page_title %}Messages{% endblock %}
+{% block page_subtitle %}What clients and leads have written{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+{% if configured %}
+<form method="POST" action="{{ url_for('messages.sync_now') }}">
+    <button type="submit"
+            class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+        </svg>
+        Check mail
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0 stagger-in">
+
+    {% if mail.error %}
+    <div class="shrink-0 mb-4 rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-300 break-words">
+        The last check failed: {{ mail.error }}
+    </div>
+    {% endif %}
+
+    {% if threads %}
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
+            {% for t in threads %}
+            {% set m = t.root %}
+            <a href="{{ url_for('messages.detail', id=m.id) }}"
+               class="block p-4 sm:p-5 hover:bg-white/[0.02] transition-colors {{ 'bg-amber-500/5' if t.waiting }}">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2 min-w-0">
+                            <span class="font-medium text-white truncate max-w-full">{{ m.sender_label }}</span>
+                            {% if m.client %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-brand-500/10 text-brand-300 shrink-0">{{ m.client.name }}</span>
+                            {% elif m.source == 'contact_form' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-white/5 text-surface-300 shrink-0">Lead</span>
+                            {% endif %}
+                            {% if t.count > 1 %}
+                            <span class="text-xs text-surface-500 shrink-0">{{ t.count }} messages</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-sm text-surface-200 truncate mt-0.5">{{ m.subject or '(no subject)' }}</p>
+                        <p class="text-xs text-surface-400 truncate">{{ m.snippet }}</p>
+                    </div>
+                    <div class="shrink-0 text-right">
+                        {% if t.waiting %}
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 whitespace-nowrap">Waiting on you</span>
+                        {% endif %}
+                        <p class="text-xs text-surface-500 mt-1 whitespace-nowrap">{{ t.latest.strftime('%b') }} {{ t.latest.day }}</p>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <p class="text-surface-400 mb-1">Nothing written yet</p>
+        <p class="text-sm text-surface-500 max-w-md mx-auto">
+            The site's form and mail from your clients land here.
+        </p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -50,6 +50,21 @@ Its own nav section, top of the sidebar, with the total as the badge
 notice something new adds it HERE, not a badge of its own; the inbox
 decisions take `next` so a press on this page comes back to it.
 
+## The mail comes in
+
+`pm/mail_service.py` reads Michael's Gmail over IMAP with the same app
+password that already sends (`MAIL_USERNAME`/`MAIL_PASSWORD`; no OAuth,
+no Google Cloud project), pulling only mail from watched senders: every
+client's address and everyone who has written through the site's form.
+The mailbox is opened read-only; the board never marks, moves or deletes
+in Gmail. `/api/contact` writes a `Message` row BEFORE it tries SMTP, so a
+lead survives a mail outage. Replies (`/admin/messages/<id>/reply`) go
+out from his own address with a real In-Reply-To, and are stored as
+`out` rows in the thread. Sync runs in a background thread when the
+attention or messages page opens, at most every five minutes; "Check
+mail" is the synchronous version. Unanswered inbound mail is an attention
+signal; the messages page is the full history, linked from there.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last
