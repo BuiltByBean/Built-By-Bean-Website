@@ -225,11 +225,28 @@ HOSTING_PRICE_CHANGE = (
 
 # What happens when it stops being paid. A hosting agreement without this is a
 # promise to keep paying a vendor on somebody else's behalf indefinitely.
+#
+# Said the plain way on purpose: the fee is what keeps their application and
+# their data reachable, and a month past due is where that stops until it is
+# paid. The softer version of this clause asked for written notice and a
+# "reasonable opportunity", which is a negotiation with somebody who has
+# already stopped paying. Read into the Statement of Work, the standalone
+# agreement and every fee update, from this one place.
 HOSTING_LAPSE = (
-    "If the fee is not paid, Built by Bean LLC may suspend the application after giving "
-    "the Client written notice and a reasonable opportunity to bring the account current. "
-    "The Client's own data remains the Client's, and a copy of it will be provided on "
-    "request for thirty (30) days following any suspension or termination."
+    "The Hosting & Infrastructure Fee is what keeps the application online and the "
+    "Client's data stored and accessible; it is the Client's hosting and data fee. If an "
+    "invoice for it remains unpaid more than thirty (30) days past its due date, Built by "
+    "Bean LLC may suspend the Client's access to the application and to the data it holds, "
+    "and is not obliged to keep either available until the account is brought current. "
+    "Once all outstanding fees are paid, access is restored in full. The Client's data "
+    "remains the Client's throughout and is retained, not deleted, while access is "
+    "suspended."
+)
+
+# The reason a fee goes up, said once so every update contract says it the
+# same way.
+HOSTING_RAISE_REASON = (
+    "an increase in the data storage and infrastructure the application requires"
 )
 
 
@@ -481,7 +498,8 @@ def build_addon(*, client_name, product_key, product_name, summary, includes,
 
 def build_hosting(*, client_name, application, fee, cycle, start_date, date_str,
                   includes=None, excludes=None, reference="", notes="",
-                  countersign=False, script_font=None):
+                  countersign=False, script_font=None,
+                  previous_fee=None, effective="", reason=""):
     """The recurring agreement for keeping a delivered application online.
 
     Section 7 of a Statement of Work already says a hosting fee is payable, but
@@ -495,20 +513,30 @@ def build_hosting(*, client_name, application, fee, cycle, start_date, date_str,
     over from somebody else has no SOW to point at, so with no reference the
     protections are stated outright rather than inherited from a document that
     does not exist.
+
+    `previous_fee` turns this into a fee update: the same agreement, stating
+    that the old fee is cancelled and the new one applies from `effective`,
+    with the reason. One builder for both, so an update can never carry
+    different words from the agreement it replaces.
     """
     pdf, style = _document("Hosting Agreement")
     pdf.add_page()
 
     cycle = (cycle or "monthly").lower()
     per = {"monthly": "month", "quarterly": "quarter", "annually": "year"}.get(cycle, "month")
+    is_update = previous_fee not in (None, "")
 
     style.eyebrow("Built by Bean LLC")
     style.rule(gap=1)
     pdf.ln(6)
-    style.title("Hosting & Infrastructure Agreement", f"{application} - {client_name}")
-    _facts(style, [("Client:", client_name), ("Date:", date_str),
-                   ("Application:", application),
-                   ("Starts:", start_date or "on signature")])
+    style.title("Hosting & Infrastructure Agreement",
+                f"{application} - {client_name}" + (" - fee update" if is_update else ""))
+    facts = [("Client:", client_name), ("Date:", date_str),
+             ("Application:", application),
+             ("Starts:", start_date or "on signature")]
+    if is_update:
+        facts.append(("Replaces:", f"the ${previous_fee}/{per} fee"))
+    _facts(style, facts)
 
     style.section_heading("1. What this covers")
     style.body(
@@ -534,6 +562,13 @@ def build_hosting(*, client_name, application, fee, cycle, start_date, date_str,
     style.body(
         "The fee is payable for as long as the application is hosted, and begins on the "
         "start date above.")
+    if is_update:
+        style.body(
+            f"This agreement replaces the previous Hosting & Infrastructure Fee of "
+            f"${previous_fee}/{per}, which is cancelled. The fee above applies from "
+            f"{effective or 'the first billing cycle that begins after this agreement is issued'}. "
+            f"The change reflects {reason or HOSTING_RAISE_REASON}. Everything else "
+            f"agreed for the hosting of {application} continues unchanged.")
 
     style.section_heading("4. Changes to the fee")
     style.body(HOSTING_PRICE_CHANGE)

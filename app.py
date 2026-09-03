@@ -271,9 +271,11 @@ def create_app():
     from pm.mvp_routes import mvp_bp
     app.register_blueprint(mvp_bp)
 
-    # ── The god door ────────────────────────────────────────
+    # ── The god door, and the inbox behind it ──────────────
     from pm.guidance_routes import guidance_bp
     app.register_blueprint(guidance_bp)
+    from pm.inbox_routes import inbox_bp
+    app.register_blueprint(inbox_bp)
 
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
@@ -537,7 +539,26 @@ def create_app():
                 # Table may not exist yet (pre-migration) — fail open, hide widget.
                 active_timer = None
                 timer_projects = []
+        # Two counts the sidebar wears as badges: changes waiting in the
+        # catalogue inbox, and hosting fees that no longer clear the floor.
+        # Both fail to zero, and roll the session back on failure so a
+        # missing table cannot poison the rest of the request in Postgres.
+        inbox_pending = 0
+        hosting_due = 0
+        if current_user.is_authenticated and not str(current_user.get_id()).startswith("bs_"):
+            try:
+                from models import CatalogueProposal
+                inbox_pending = CatalogueProposal.query.filter_by(status="pending").count()
+            except Exception:
+                db.session.rollback()
+            try:
+                from pm.hosting_routes import increases_due_count
+                hosting_due = increases_due_count()
+            except Exception:
+                db.session.rollback()
         return {
+            "inbox_pending": inbox_pending,
+            "hosting_due": hosting_due,
             "now": datetime.now(timezone.utc),
             "asset_version": _asset_version,
             "phase_choices": PHASE_CHOICES,
@@ -2685,6 +2706,10 @@ def create_app():
         # two different ways.
         import contract_docs
         body_text(sanitize(contract_docs.HOSTING_PRICE_CHANGE))
+        # And what the fee is FOR, and what stops when it stops being paid -
+        # in the first contract they sign, not only in the update that
+        # arrives later.
+        body_text(sanitize(contract_docs.HOSTING_LAPSE))
 
         # Section 8 - General Terms (no termination clause, $50/day late fee)
         section_heading("8. General Terms")

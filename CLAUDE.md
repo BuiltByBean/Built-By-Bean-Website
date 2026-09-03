@@ -26,6 +26,33 @@ and key, and `~/.claude/CLAUDE.md` carries the standing order to use
 them. The write path appends with attribution and refuses duplicates,
 because reporting sessions retry like any other API client.
 
+The catalogue grows itself through the same door, with the policy set by
+the SHAPE of a change, not by trust in the sender. Everything a session
+sends becomes a `CatalogueProposal` (`pm/guidance_routes.py`, the
+`suggest_update` tool): an append or a create applies on arrival and can
+be reverted from `/admin/features/inbox` in one press; a replace of
+existing words waits there as pending and touches no build prompt until
+accepted. `previous` is snapshotted at apply time so revert is exact.
+Sessions may also file operational records - `upsert_project`,
+`log_expense`, `log_time`, `register_hosting_resource` - and may NOT
+contact a client, resolve a ticket or send a contract: those are
+Michael's, and the API has no route for them on purpose.
+
+## Hosting fees that raise themselves
+
+`pm/hosting_routes.py` holds every priced project's fee against last
+month's cost. Under `MIN_MARGIN` ($25 left over) the page offers "Draft
+the increase": one link that opens the hosting agreement form filled in
+as a fee update - the fee `RAISE_STEP` ($25/month) higher, the fee it
+cancels, the first of next month as the start, the reason - and what is
+left is reading it and sending it through the normal signing flow. The
+sidebar badge on Hosting is that count, cached ten minutes. The fee only
+lands on the project when the agreement goes out, through the same route
+as every hosting agreement. `contract_docs.HOSTING_LAPSE` is the clause
+that says what the fee is for and what stops when it stops being paid -
+read into the SOW, the standalone agreement and every fee update from
+that one place, so no two documents can describe it differently.
+
 ## House rules
 
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page

@@ -1710,6 +1710,59 @@ class Feature(db.Model):
 # ── The MVP, assembled ───────────────────────────────────────
 
 
+class CatalogueProposal(db.Model):
+    """One change a session asked to make to the catalogue, and what became of it.
+
+    The catalogue is meant to grow itself: a session that finds a Stripe step
+    moved, a better file to copy, or a rule that needs rewording says so
+    through the guidance API. But a rule rides into every future build
+    prompt, so a wrong one poisons every project after it. This row is the
+    difference between a catalogue that learns and one that can be vandalised
+    by a single confused session.
+
+    The policy is by shape, not by trust. Anything ADDITIVE - a lesson
+    appended, a new rule or feature created - applies on arrival, because it
+    cannot damage what was already there and can be reverted from the inbox
+    in one press. Anything that REPLACES existing words waits as `pending`
+    until Michael accepts it. `previous` is the snapshot that makes revert
+    possible; `payload_json` carries a create, whose fields do not fit one
+    column.
+    """
+
+    __tablename__ = "catalogue_proposals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # feature | rule | playbook | product
+    kind = db.Column(db.String(10), nullable=False)
+    target_slug = db.Column(db.String(80), nullable=True, index=True)
+    # The column being changed, or "*" for a create.
+    field = db.Column(db.String(40), nullable=False)
+    # append | replace | create
+    mode = db.Column(db.String(10), nullable=False)
+    proposed = db.Column(db.Text, default="")
+    previous = db.Column(db.Text, nullable=True)
+    reason = db.Column(db.Text, default="")
+    # Which project's session learned it. A change with no provenance is a
+    # change nobody can weigh.
+    project = db.Column(db.String(120), default="")
+    # applied (auto) | pending | accepted | rejected | reverted
+    status = db.Column(db.String(10), nullable=False, default="pending", index=True)
+    payload_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    decided_at = db.Column(db.DateTime, nullable=True)
+
+    KIND_LABELS = {"feature": "Feature", "rule": "Rule",
+                   "playbook": "Playbook", "product": "Product"}
+
+    @property
+    def is_live(self):
+        """Whether the change is currently in the catalogue."""
+        return self.status in ("applied", "accepted")
+
+    def __repr__(self):
+        return f"<CatalogueProposal {self.kind}:{self.target_slug} {self.mode} {self.status}>"
+
+
 class MvpPackage(db.Model):
     """One client's build, assembled while they are still talking.
 

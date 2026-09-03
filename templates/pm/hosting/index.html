@@ -149,6 +149,19 @@
                 </span>
             </div>
 
+            {% if r.increase %}
+            {# The page noticed; this is the doing. One press opens the fee
+               update filled in - the new fee, the one it cancels, the first
+               of next month, the reason - and what is left is reading it
+               and sending it. Trailing edge, filled, because it acts. #}
+            <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <a href="{{ r.increase.url }}"
+                   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
+                    Draft the increase to {{ r.increase.new_monthly|format_currency }}/mo
+                </a>
+            </div>
+            {% endif %}
+
             {{ lifetime_strip(r) }}
 
             {% else %}

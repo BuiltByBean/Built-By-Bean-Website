@@ -749,12 +749,20 @@ def generate_addon():
 @login_required
 def hosting_form():
     options, lookup = _clients_for_picker()
+    # The hosting page drafts a fee update by opening this form filled in.
+    # Everything it can prefill arrives on the query string; a form opened
+    # by hand gets empty strings and behaves as it always did.
+    prefill = {key: (request.args.get(key) or "").strip()
+               for key in ("client_id", "project_id", "application", "fee",
+                           "cycle", "start_date", "previous_fee", "effective",
+                           "reason")}
     return render_template("pm/contracts/hosting_form.html",
                            today=datetime.now(timezone.utc).date().isoformat(),
                            client_options=options, client_lookup=lookup,
                            projects=_projects_for_picker(),
                            includes="\n".join(contract_docs.HOSTING_INCLUDES),
-                           excludes="\n".join(contract_docs.HOSTING_EXCLUDES))
+                           excludes="\n".join(contract_docs.HOSTING_EXCLUDES),
+                           prefill=prefill)
 
 
 @contracts_bp.route("/new/hosting", methods=["POST"])
@@ -785,6 +793,11 @@ def generate_hosting():
         raw = (request.form.get(field) or "").strip()
         return [l.strip(" -\t") for l in raw.splitlines() if l.strip()] if raw else fallback
 
+    # A fee update carries the fee it cancels and the day the new one
+    # starts; a first agreement carries neither.
+    previous_fee = (request.form.get("previous_fee") or "").strip().replace("$", "")
+    is_update = bool(previous_fee)
+
     pdf_bytes, own, cli, w, h = contract_docs.build_hosting(
         client_name=client.name, application=application, fee=fee, cycle=cycle,
         start_date=_fmt(request.form.get("start_date")),
@@ -794,6 +807,9 @@ def generate_hosting():
         reference=(request.form.get("reference") or "").strip(),
         notes=(request.form.get("notes") or "").strip(),
         countersign=wants_send(),
+        previous_fee=previous_fee or None,
+        effective=_fmt(request.form.get("effective")) if is_update else "",
+        reason=(request.form.get("reason") or "").strip(),
     )
 
     # Written on the way out, not on the way to the preview: a document that was
@@ -813,8 +829,10 @@ def generate_hosting():
         flash("Fee saved to the PDF only - pick a project to record it against.",
               "warning")
 
-    return _deliver(pdf_bytes, f"{_safe(client.name)}_Hosting_{_safe(application)}.pdf",
-                    f"Hosting & Infrastructure Agreement - {application}",
+    label = "Hosting Fee Update" if is_update else "Hosting & Infrastructure Agreement"
+    stem = "HostingUpdate" if is_update else "Hosting"
+    return _deliver(pdf_bytes, f"{_safe(client.name)}_{stem}_{_safe(application)}.pdf",
+                    f"{label} - {application}",
                     "hosting", own, cli, w, h, client, project)
 
 

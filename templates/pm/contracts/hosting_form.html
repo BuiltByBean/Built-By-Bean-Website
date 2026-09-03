@@ -11,22 +11,23 @@
   a fee cannot be filed against somebody else's application by mis-click.
 #}
 
-{% block title %}New hosting agreement - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
-{% block page_title %}New hosting agreement{% endblock %}
-{% block page_subtitle %}What it costs to keep an application online{% endblock %}
+{% set is_update = prefill.previous_fee %}
+{% block title %}{{ 'Hosting fee update' if is_update else 'New hosting agreement' }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('hosting.hosting_index') if is_update else url_for('contracts.contracts_index'), 'Hosting' if is_update else 'Contracts') }}{% endblock %}
+{% block page_title %}{{ 'Hosting fee update' if is_update else 'New hosting agreement' }}{% endblock %}
+{% block page_subtitle %}{{ 'The old fee cancelled, the new one from next month' if is_update else 'What it costs to keep an application online' }}{% endblock %}
 
 {% block content %}
 <form method="POST" action="{{ url_for('contracts.generate_hosting') }}"
       x-data='{
-        clientId: "",
-        projectId: "",
+        clientId: {{ prefill.client_id | tojson }},
+        projectId: {{ prefill.project_id | tojson }},
         clients: {{ client_lookup | tojson }},
         projects: {{ projects | tojson }},
         chosen: null,
-        application: "",
-        fee: "",
-        cycle: "monthly",
+        application: {{ prefill.application | tojson }},
+        fee: {{ prefill.fee | tojson }},
+        cycle: {{ (prefill.cycle or "monthly") | tojson }},
         get mine() {
           return this.projects.filter(p => p.client_id === this.clientId);
         },
@@ -53,10 +54,26 @@
 
     <div class="glass-card p-5 sm:p-6 space-y-5 max-w-3xl">
 
+        {% if is_update %}
+        {# Carried through the preview and into the PDF. Said on the form
+           too, because it is the whole point of this particular document. #}
+        <input type="hidden" name="previous_fee" value="{{ prefill.previous_fee }}">
+        <input type="hidden" name="effective" value="{{ prefill.effective }}">
+        <input type="hidden" name="reason" value="{{ prefill.reason }}">
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <p class="text-sm font-semibold text-amber-300">
+                Replaces the ${{ prefill.previous_fee }}/{{ prefill.cycle or 'month' }} fee
+            </p>
+            <p class="text-sm text-surface-200 mt-1.5">
+                The new fee applies from {{ prefill.effective }}. Reason on the document: {{ prefill.reason }}.
+            </p>
+        </div>
+        {% endif %}
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
-                {{ select_dropdown("client_id", client_options, "", "Choose a client",
+                {{ select_dropdown("client_id", client_options, prefill.client_id, "Choose a client",
                                    full_width=true, model="clientId") }}
             </div>
             <div>
@@ -100,7 +117,7 @@
             </div>
             <div>
                 <label for="start-date" class="block text-sm font-medium text-surface-300 mb-1.5">Starts</label>
-                <input id="start-date" type="date" name="start_date"
+                <input id="start-date" type="date" name="start_date" value="{{ prefill.start_date }}"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
                 <p class="mt-1.5 text-xs text-surface-400">Blank means on signature.</p>
             </div>

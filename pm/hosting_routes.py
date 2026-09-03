@@ -29,11 +29,13 @@ development work, at 2.9% of four-figure invoices. Counted as the cost of
 running an application it would swamp a $50 hosting fee with the cost of
 collecting money that has nothing to do with hosting.
 """
+import time
 from datetime import date, timedelta
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, url_for
 from flask_login import login_required
 
+import contract_docs
 from models import (db, Client, Project, ServiceMapping, ServiceCostEntry,
                     ServiceProvider, Expense)
 
@@ -46,6 +48,67 @@ hosting_bp = Blueprint("hosting", __name__, url_prefix="/admin/hosting")
 # situation. The fee also has to cover the time spent keeping the thing
 # alive, so the floor is a floor on the money left over, not on the ratio.
 MIN_MARGIN = 25.0
+
+# What a fee goes up by, per month, when it stops clearing the floor. A flat
+# step rather than a recalculation: the client reads "twenty-five dollars
+# more", which is a sentence, where a recomputed figure is an argument. If
+# one step is not enough the page says so again next month.
+RAISE_STEP = 25.0
+
+
+def _next_month_start():
+    return _add_months(date.today().replace(day=1), 1)
+
+
+def _increase_for(project, raw_fee, cycle):
+    """The fee update this project is due, and the link that drafts it.
+
+    The draft opens the hosting agreement form filled in - client, project,
+    the new fee, the fee it cancels, the first of next month as the day it
+    starts, and the reason - so that what is left to do is read it and send
+    it. Nothing here writes to the project: the fee lands on it the day the
+    agreement goes out, through the same route every hosting agreement uses.
+    """
+    months = Project.HOSTING_CYCLE_MONTHS.get(cycle or "monthly", 1)
+    new_fee = (raw_fee or 0.0) + RAISE_STEP * months
+    effective = _next_month_start()
+    return {
+        "new_fee": new_fee,
+        "new_monthly": new_fee / months,
+        "effective": effective,
+        "url": url_for(
+            "contracts.hosting_form",
+            client_id=project.client_id, project_id=project.id,
+            application=project.name, fee=f"{new_fee:g}",
+            cycle=cycle or "monthly", previous_fee=f"{(raw_fee or 0.0):g}",
+            effective=effective.isoformat(), start_date=effective.isoformat(),
+            reason=contract_docs.HOSTING_RAISE_REASON),
+    }
+
+
+# The sidebar asks on every page how many fees need raising, and the answer
+# only changes when a month closes or a cost lands, so it is held for ten
+# minutes rather than recomputed on every click.
+_DUE_CACHE = {"at": 0.0, "count": 0}
+DUE_TTL_SECONDS = 600
+
+
+def increases_due_count():
+    now = time.monotonic()
+    if now - _DUE_CACHE["at"] < DUE_TTL_SECONDS:
+        return _DUE_CACHE["count"]
+    months = _complete_months(1)
+    costs, _ = _costs_by_project(months)
+    month = months[-1]
+    count = 0
+    for p in Project.query.filter(Project.hosting_fee.isnot(None)).all():
+        cost = costs.get(p.id, {}).get(month, 0.0)
+        key, _ = _status(p.monthly_hosting_fee, cost)
+        if key in ("loss", "raise"):
+            count += 1
+    _DUE_CACHE.update(at=now, count=count)
+    return count
+
 
 # Charges that buy a year in one payment. A domain registration is the case:
 # it arrives as a single invoice in the month it renews, and bucketing the
@@ -322,6 +385,10 @@ def hosting_index():
             "line_pct": line_pct,
             "status": key,
             "status_label": label,
+            # Under the floor, so a fee update is due: what it becomes, and
+            # the link that drafts the agreement saying so.
+            "increase": (_increase_for(p, p.hosting_fee, p.hosting_cycle)
+                         if key in ("loss", "raise") else None),
             # The same question the tiles ask, asked about one client.
             "life": {
                 "collected": collected,
