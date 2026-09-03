@@ -183,12 +183,10 @@
     {% endfor %}
   </div>
 
-  {# sticky-filters carries the LM-1 z-30 and pins the bar while the
-     tickets scroll (LM-4). It lives inside this card, so it brings its
-     own glass - a bare form would let every row read straight through
-     it the moment it sticks. #}
+  {# sticky-filters carries the LM-1 z-30, the pin, and a SOLID background
+     (LM-4) - the rows must vanish under it, not read through it. #}
   <form method="GET"
-        class="sticky-filters bg-surface-900/95 backdrop-blur-md rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6">
+        class="sticky-filters rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6">
     <input type="hidden" name="status" value="{{ status_filter }}">
     {% set ns = namespace(cat=[["all", "All kinds"]], cli=[["", "All clients"]]) %}
     {% for c in categories %}{% set ns.cat = ns.cat + [[c, category_labels[c]]] %}{% endfor %}

@@ -153,16 +153,23 @@ The failure only exists mid-scroll, which no static look catches, and each
 new list page copies the last one's layout.
 
 **The rule.** A search or filter bar above a scrollable list carries
-`.sticky-filters`: pinned below the header at
-`calc(var(--pm-header-h) + 12px)`, where `--pm-header-h` is measured off
-the real header by the ResizeObserver in base.html - never hardcoded,
-because the header wraps on phones and grows a back link on detail pages.
-A bar that lives INSIDE a card brings its own glass
-(`bg-surface-900/95 backdrop-blur-md rounded-xl p-3 -mx-3`), or the rows
-read straight through it the moment it sticks. The class carries the LM-1
+`.sticky-filters`: pinned FLUSH under the header at `var(--pm-header-h)`,
+measured off the real header by the ResizeObserver in base.html - never
+hardcoded, because the header wraps on phones and grows a back link on
+detail pages, and never with a gap, because a gap between the header and
+the bar is a window the rows scroll through in the clear. The class backs
+the bar SOLID (`var(--surface)`), overriding the glass-card alpha: a
+translucent pinned bar is a second window, with row text reading straight
+through it - Talent Booker's LM-45 said solid sticky bars and this repo
+shipped a glass one anyway, once. An in-card bar adds only shape
+(`rounded-xl p-3 -mx-3`); the class owns the background, and no Tailwind
+bg utility may sit beside it, because the CDN stylesheet loads later and
+would win the cascade back to translucent. The class carries the LM-1
 z-30, so panels still paint over the list and the drawer still wins.
 Verify by scrolling: after `scrollTo(0, big)`, the bar's
-`getBoundingClientRect().top` equals the header's height plus the gap.
+`getBoundingClientRect().top` equals the header's height exactly, and
+text sampled just above and just behind the bar hit-tests as the bar,
+never as a row.
 
 **Grep.**
 ```

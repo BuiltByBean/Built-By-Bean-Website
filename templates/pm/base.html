@@ -251,17 +251,28 @@
             animation: slideUp 0.4s ease-out backwards;
         }
 
-        /* A filter bar pins just below the sticky header while the list it
-           filters scrolls. The offset is the header's REAL height, measured
-           into --pm-header-h by the script under the header, because the
-           header wraps on phones and a hardcoded number drifts the moment a
-           title grows a back link. z-30 is the LM-1 page-content ceiling, so
-           the bar and its dropdown panels ride over everything that scrolls
-           underneath and stay under the drawer. See CLAUDE.md LM-4. */
+        /* A filter bar pins FLUSH under the sticky header while the list it
+           filters scrolls - flush, because any gap between the two is a
+           window the rows scroll through in the clear. The offset is the
+           header's REAL height, measured into --pm-header-h by the script
+           under the header, because the header wraps on phones and a
+           hardcoded number drifts the moment a title grows a back link.
+
+           The background is SOLID, overriding the glass-card alpha that
+           normally sits on these containers: a translucent pinned bar is a
+           second window, with row text reading straight through it (shipped
+           here 2026-09-03; Talent Booker's LM-45 already said solid sticky
+           bars). Declared after .glass-card so it wins the cascade without
+           !important.
+
+           z-30 is the LM-1 page-content ceiling, so the bar and its
+           dropdown panels ride over everything that scrolls underneath and
+           stay under the drawer. See CLAUDE.md LM-4. */
         .sticky-filters {
             position: sticky;
-            top: calc(var(--pm-header-h, 64px) + 12px);
+            top: var(--pm-header-h, 64px);
             z-index: 30;
+            background: var(--surface);
         }
         .stagger-in > *:nth-child(1) { animation-delay: 0.05s; }
         .stagger-in > *:nth-child(2) { animation-delay: 0.1s; }

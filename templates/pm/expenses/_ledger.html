@@ -15,10 +15,10 @@
    paint over it. #}
 <div class="glass-card p-4 sm:p-6 relative z-30">
 
-    {# sticky-filters pins the bar while the ledger scrolls (LM-4); it
-       lives inside this card, so it brings its own glass. #}
+    {# sticky-filters pins the bar with a SOLID background (LM-4) - the
+       ledger rows must vanish under it, not read through it. #}
     <form method="GET"
-          class="sticky-filters bg-surface-900/95 backdrop-blur-md rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6"
+          class="sticky-filters rounded-xl p-3 -mx-3 flex flex-wrap gap-3 mb-6"
           x-data @dropdown-change="$el.requestSubmit()">
         {% set cat_opts = [["", "All categories"]] + expense_category_choices|list %}
         {{ select_dropdown("category", cat_opts, category) }}
