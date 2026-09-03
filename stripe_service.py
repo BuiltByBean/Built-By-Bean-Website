@@ -459,19 +459,40 @@ def get_hosting_revenue(ttl=300):
     """
     collected = outstanding = 0.0
     paid_invoices = 0
+    by_customer = {}
+
+    def _bucket(customer_id):
+        return by_customer.setdefault(customer_id,
+                                      {"collected": 0.0, "outstanding": 0.0})
+
     for inv in get_stripe_invoices(ttl=ttl):
         amount = sum(line["amount"] for line in inv.get("lines") or []
                      if HOSTING_LINE in (line["description"] or "").lower())
         if amount <= 0:
             continue
+        customer_id = inv["customer_id"]
         if inv["status"] == "paid":
             collected += amount
             paid_invoices += 1
+            if customer_id:
+                _bucket(customer_id)["collected"] += amount
         elif inv["status"] in ISSUED_STATUSES:
             outstanding += amount
+            if customer_id:
+                _bucket(customer_id)["outstanding"] += amount
+
+    for bucket in by_customer.values():
+        bucket["collected"] = round(bucket["collected"], 2)
+        bucket["outstanding"] = round(bucket["outstanding"], 2)
+
     return {"collected": round(collected, 2),
             "outstanding": round(outstanding, 2),
-            "paid_invoices": paid_invoices}
+            "paid_invoices": paid_invoices,
+            # Keyed by Stripe customer id, which is what Client carries. The
+            # split matters more than the total does: all of the collected
+            # money is one client's, and an aggregate hides that the other has
+            # never paid a hosting invoice at all.
+            "by_customer": by_customer}
 
 
 def get_overdue_invoices(ttl=300):

@@ -48,6 +48,10 @@ MIN_MARGIN = 25.0
 ANNUAL_PREFIXES = ("cloudflare-domain:",)
 ANNUAL_MONTHS = 12
 
+# How far back the per-project trend looks. The bar is still one month; this
+# is only the window the little line is drawn over.
+TREND_MONTHS = 12
+
 
 def _is_annual(resource_identifier):
     return (resource_identifier or "").startswith(ANNUAL_PREFIXES)
@@ -174,6 +178,32 @@ def _bar(fee, cost):
     return round(fill, 2), round(line, 2)
 
 
+def _railway_lifetime_by_project():
+    """Railway cost per project, and the first month any of it was attributed.
+
+    Returns ({project_id: total}, earliest month or None). The month is not
+    decoration. Per-project Railway figures start in August 2026; every month
+    before that was one flat charge with no project on it, so a per-client
+    total here covers less history than the lifetime figure at the top of the
+    page and would otherwise read as though a client had cost almost nothing
+    since the beginning.
+    """
+    rows = (db.session.query(ServiceMapping.project_id,
+                             ServiceCostEntry.period_start,
+                             ServiceCostEntry.allocated_amount)
+            .join(ServiceCostEntry, ServiceCostEntry.mapping_id == ServiceMapping.id)
+            .join(ServiceProvider, ServiceProvider.id == ServiceCostEntry.provider_id)
+            .filter(ServiceProvider.name == "railway")
+            .filter(ServiceMapping.project_id.isnot(None))
+            .all())
+    totals, earliest = {}, None
+    for project_id, period_start, amount in rows:
+        totals[project_id] = totals.get(project_id, 0.0) + (amount or 0.0)
+        if period_start and (earliest is None or period_start < earliest):
+            earliest = period_start
+    return totals, earliest
+
+
 def _railway_all_time():
     """Every dollar Railway has cost, across every month on record.
 
@@ -193,6 +223,49 @@ def _railway_all_time():
     return float(total or 0.0)
 
 
+def _trend(by_month, months, width=132, height=30, pad=4):
+    """A month-by-month line of what this project cost, as SVG points.
+
+    Months before the first one with anything recorded are dropped rather than
+    drawn as zero. A project first mapped in August did not cost nothing in
+    July - it was not being measured - and a line climbing out of a flat run of
+    zeros reports a cost explosion that never happened.
+
+    The scale runs from zero rather than from the lowest month. Money read
+    against its own minimum turns a wobble of a few cents into a mountain, and
+    the question this answers is whether a cost is climbing, not whether it
+    ever moves.
+
+    Returns None with fewer than two recorded months, because a single point is
+    not a trend and drawing it as a flat line implies a history that does not
+    exist yet.
+    """
+    first = next((i for i, m in enumerate(months) if m in by_month), None)
+    if first is None:
+        return None
+    span = months[first:]
+    if len(span) < 2:
+        return None
+
+    values = [by_month.get(m, 0.0) for m in span]
+    high = max(values) or 1.0
+    step = (width - 2 * pad) / (len(values) - 1)
+    points = " ".join(
+        f"{pad + step * i:.1f},{height - pad - (height - 2 * pad) * (v / high):.1f}"
+        for i, v in enumerate(values))
+    return {
+        "points": points, "width": width, "height": height,
+        "months": len(values), "high": high,
+        "first_month": span[0], "last_month": span[-1],
+        # Which way it has gone overall, for the colour and the label. A trend
+        # that ends where it started is neither, and saying so beats picking a
+        # direction from rounding.
+        "direction": ("up" if values[-1] > values[0] else
+                      "down" if values[-1] < values[0] else "flat"),
+        "change": values[-1] - values[0],
+    }
+
+
 # Worst first. A page whose whole job is to surface the two projects that need
 # attention should not open on the eleven that do not.
 STATUS_ORDER = {"loss": 0, "raise": 1, "unpriced": 2, "fine": 3}
@@ -206,12 +279,28 @@ def hosting_index():
     # one-off - and a bar can only draw one number. Annual charges are spread
     # across the months they cover, so the spikes the average existed to
     # absorb are already gone by the time the cost gets here.
-    months = _complete_months(1)
+    # The window is a year so the little trend line under each project has
+    # something to draw; the bar itself still reads only the last month of it.
+    months = _complete_months(TREND_MONTHS)
     month = months[-1]
     costs, annualised = _costs_by_project(months)
 
     projects = (Project.query.join(Client, Project.client_id == Client.id)
                 .order_by(Client.name, Project.name).all())
+
+    # Read before the loop, so each row can carry its own running total beside
+    # the month's bar.
+    from stripe_service import get_hosting_revenue
+    hosting = get_hosting_revenue()
+    paid_by_customer = hosting["by_customer"]
+    railway_lifetime, railway_since = _railway_lifetime_by_project()
+
+    # Hosting money belongs to a client, not to a project. A client running two
+    # builds would otherwise show their whole hosting history against each of
+    # them, and the two rows would look like twice the revenue.
+    projects_per_client = {}
+    for p in projects:
+        projects_per_client[p.client_id] = projects_per_client.get(p.client_id, 0) + 1
 
     rows = []
     for p in projects:
@@ -223,6 +312,12 @@ def hosting_index():
         fee = p.monthly_hosting_fee
         key, label = _status(fee, cost)
         fill_pct, line_pct = _bar(fee, cost)
+
+        paid = paid_by_customer.get(
+            (p.client.stripe_customer_id if p.client else None) or "", {})
+        collected = paid.get("collected", 0.0)
+        railway = railway_lifetime.get(p.id, 0.0)
+
         rows.append({
             "project": p,
             "fee": fee,
@@ -235,6 +330,16 @@ def hosting_index():
             "line_pct": line_pct,
             "status": key,
             "status_label": label,
+            "trend": _trend(by_month, months),
+            "months_recorded": sum(1 for m in months if m in by_month),
+            # The same question the tiles ask, asked about one client.
+            "life": {
+                "collected": collected,
+                "outstanding": paid.get("outstanding", 0.0),
+                "railway": railway,
+                "margin": collected - railway,
+                "shared": projects_per_client.get(p.client_id, 1) > 1,
+            },
         })
 
     rows.sort(key=lambda r: (STATUS_ORDER.get(r["status"], 9),
@@ -252,8 +357,6 @@ def hosting_index():
     # agreed and a paid invoice is what arrived - Kuper's subscription is past
     # due as this is written, and a total built from the agreed fees would show
     # that money as earned.
-    from stripe_service import get_hosting_revenue
-    hosting = get_hosting_revenue()
     lifetime = {
         "collected": hosting["collected"],
         "outstanding": hosting["outstanding"],
@@ -264,4 +367,5 @@ def hosting_index():
 
     return render_template("pm/hosting/index.html",
                            rows=rows, month=month, totals=totals,
-                           lifetime=lifetime, min_margin=MIN_MARGIN)
+                           lifetime=lifetime, min_margin=MIN_MARGIN,
+                           railway_since=railway_since)
