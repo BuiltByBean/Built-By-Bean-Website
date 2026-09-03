@@ -13,11 +13,10 @@
   blocks submission with a validation message nobody can see — the browser
   refuses to submit and cannot show you why.
 #}
+{% from "pm/components/checkbox.html" import checkbox %}
 <div x-data="{ send: false }"
      class="rounded-xl border border-white/10 bg-surface-800/40 p-4 space-y-4">
-    <label class="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" name="send_for_signature" value="1" x-model="send"
-               class="mt-0.5 w-4 h-4 rounded border-white/20 bg-surface-900 text-brand-500 focus:ring-brand-500">
+    {% call checkbox(name='send_for_signature', model='send', align='start') %}
         <span>
             <span class="block text-sm font-medium text-white">Send it for signature</span>
             <span class="block text-xs text-surface-400 mt-0.5">
@@ -35,7 +34,7 @@
             </span>
             {% endif %}
         </span>
-    </label>
+    {% endcall %}
 
     <div x-show="send" x-cloak class="space-y-4">
 

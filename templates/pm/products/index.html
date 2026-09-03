@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/checkbox.html" import checkbox %}
 
 {#
   The catalogue, and who has bought from it.
@@ -116,25 +117,26 @@
                     {% endif %}
                 </div>
 
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    {# A checkbox, not a number: every monthly starts at the
+                       same fifty and gets adjusted on the sale if ever. The
+                       label answers the tap INSTANTLY - it shows what a save
+                       would set, not what the last save happened to leave. #}
                     <form method="POST" action="{{ url_for('products.product_price', id=p.id) }}"
-                          class="flex items-center gap-1.5">
-                        <span class="text-xs text-surface-500">$</span>
-                        <input type="text" name="price" value="{{ '%g'|format(p.price) if p.price is not none else '' }}"
-                               placeholder="quoted"
-                               class="input-ring w-24 px-2 py-1.5 text-xs bg-surface-800/50 text-white rounded-lg">
-                        {# A checkbox, not a number: every monthly starts at the
-                           same fifty and gets adjusted on the sale if ever. The
-                           label shows what it currently is. #}
-                        <label class="flex items-center gap-1.5 min-h-[44px] px-1 cursor-pointer">
-                            <input type="checkbox" name="has_monthly"
-                                   {% if p.monthly_price is not none %}checked{% endif %}
-                                   class="w-4 h-4 rounded border-white/20 bg-surface-800 text-brand-500">
-                            <span class="text-xs {{ 'text-surface-300' if p.monthly_price is not none else 'text-surface-500' }}">
-                                {% if p.monthly_price is not none %}${{ '%g'|format(p.monthly_price) }}/mo{% else %}/mo{% endif %}</span>
-                        </label>
+                          x-data='{ m: {{ "true" if p.monthly_price is not none else "false" }} }'
+                          class="flex flex-wrap items-center gap-2">
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500 pointer-events-none">$</span>
+                            <input type="text" name="price" value="{{ '%g'|format(p.price) if p.price is not none else '' }}"
+                                   placeholder="quoted"
+                                   class="input-ring w-28 pl-7 pr-3 py-2.5 text-sm bg-surface-800/50 text-white rounded-xl">
+                        </div>
+                        {% call checkbox(name='has_monthly', checked=(p.monthly_price is not none), model='m') %}
+                            <span class="text-sm tabular-nums transition-colors" :class="m ? 'text-surface-200' : 'text-surface-500'"
+                                  x-text='m ? {{ (("$%g/mo"|format(p.monthly_price)) if p.monthly_price is not none else ("$%g/mo"|format(default_hosting_fee)))|tojson }} : "/mo"'></span>
+                        {% endcall %}
                         <button type="submit"
-                                class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
                             Save</button>
                     </form>
                     <button type="button"
@@ -142,7 +144,7 @@
                                 they would close a double-quoted attribute at the first
                                 one - truncating the handler mid product name. -#}
                             @click='open({{ p.id }}, {{ p.name|tojson }}, {{ (("%g"|format(p.price)) if p.price is not none else "")|tojson }}, {{ (("%g"|format(p.monthly_price)) if p.monthly_price is not none else "")|tojson }})'
-                            class="px-3 py-1.5 text-xs font-semibold rounded-lg btn-brand transition-all">
+                            class="min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
                         Sell</button>
                 </div>
             </div>
@@ -273,14 +275,14 @@
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
             </div>
 
-            <label class="flex items-center gap-2.5 cursor-pointer">
-                <input type="checkbox" name="hosted" x-model="hostIt"
-                       class="w-4 h-4 rounded border-white/20 bg-surface-800 text-brand-500">
-                <span class="text-sm text-surface-300">I host this &mdash; monthly hosting and storage</span>
+            <div class="flex flex-wrap items-center gap-2.5">
+                {% call checkbox(name='hosted', model='hostIt') %}
+                    <span class="text-sm text-surface-300">I host this &mdash; monthly hosting and storage</span>
+                {% endcall %}
                 <input type="text" name="hosting_fee" value="{{ '%g'|format(default_hosting_fee) }}"
                        x-show="hostIt" style="display: none"
-                       class="input-ring w-20 px-2 py-1 text-xs bg-surface-800/50 text-white rounded-lg">
-            </label>
+                       class="input-ring w-24 px-3 py-2 text-sm bg-surface-800/50 text-white rounded-xl">
+            </div>
 
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">What they want it for</label>

@@ -2,6 +2,7 @@
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/checkbox.html" import checkbox %}
 
 {% block title %}{{ 'Edit' if editing else 'New' }} Mapping - Built By Bean{% endblock %}
 {# Back to wherever the form was opened from. The monthly page passes ?next=,
@@ -107,11 +108,7 @@
 
         {% if editing %}
         <div class="glass-card p-6">
-            <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" name="is_active" {{ 'checked' if mapping.is_active else '' }}
-                       class="w-4 h-4 rounded border-surface-600 text-brand-500 focus:ring-brand-500">
-                <span class="text-sm font-medium text-surface-300">Active</span>
-            </label>
+            {{ checkbox(name='is_active', checked=mapping.is_active, label='Active') }}
         </div>
         {% endif %}
 

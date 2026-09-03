@@ -1,0 +1,43 @@
+{#
+  One checkbox, standing in for every native one in the app.
+
+  The native control paints its box and tick with OS chrome - square,
+  OS-blue, blind to the theme - which is the same failure the native
+  <select> had (LM-2). The real input stays inside the label, screen-reader
+  only, and still carries the state, the name and the submit; the box
+  beside it is ours, driven purely by peer-checked so no script is needed
+  for the visual and an x-model bound through it keeps working.
+
+    name           submitted under this
+    checked        initial state, server-rendered
+    value          submitted value (default "1")
+    label          plain text label. For richer content use {% call %} -
+                   the caller's markup lands inside the label, so an
+                   Alpine scope on an ancestor is visible to it.
+    model          x-model target in the surrounding scope
+    bind_value     :value binding, for x-for rows
+    disabled_expr  :disabled binding
+    align          'center' (default) or 'start' for multi-line labels
+    compact        true drops the 44px floor, for table rows where the
+                   row itself is the tap target
+#}
+{% macro checkbox(name='', checked=false, value='1', label='', model='', bind_value='', disabled_expr='', align='center', compact=false, extra_class='') %}
+{#- The input sits immediately before the box so the adjacent-sibling rule
+    in base.html (.bb-check-input:checked + .bb-check) reaches it. Anything
+    else - a reactive label, plain text - comes after the box. -#}
+<label class="inline-flex {{ 'items-start' if align == 'start' else 'items-center' }} gap-2.5{% if not compact %} min-h-[44px]{% endif %} cursor-pointer select-none {{ extra_class }}">
+  <input type="checkbox"
+         {% if name %}name="{{ name }}"{% endif %}
+         {% if bind_value %}:value="{{ bind_value }}"{% else %}value="{{ value }}"{% endif %}
+         {% if checked %}checked{% endif %}
+         {% if model %}x-model="{{ model }}"{% endif %}
+         {% if disabled_expr %}:disabled="{{ disabled_expr }}"{% endif %}
+         class="bb-check-input sr-only">
+  <span class="bb-check{% if align == 'start' %} mt-0.5{% endif %}">
+    <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>
+  </span>
+  {% if caller %}{{ caller() }}{% elif label %}<span class="text-sm text-surface-300">{{ label }}</span>{% endif %}
+</label>
+{% endmacro %}

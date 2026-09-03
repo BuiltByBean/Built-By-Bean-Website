@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/checkbox.html" import checkbox %}
 
 {% block title %}Create Invoice - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('stripe.invoices_list'), 'Invoices') }}{% endblock %}
@@ -94,10 +95,9 @@
                             <template x-for="entry in timeEntries" :key="entry.id">
                                 <tr class="hover:bg-surface-800/30" :class="entry.is_free ? 'opacity-50' : ''">
                                     <td class="py-2 px-3">
-                                        <input type="checkbox" name="time_entries" :value="entry.id"
-                                               x-model="selectedTimeIds"
-                                               :disabled="entry.is_free"
-                                               class="w-4 h-4 rounded border-surface-600 text-brand-500 focus:ring-brand-500">
+                                        {{ checkbox(name='time_entries', bind_value='entry.id',
+                                                    model='selectedTimeIds', disabled_expr='entry.is_free',
+                                                    compact=true) }}
                                     </td>
                                     <td class="py-2 px-3 text-sm text-surface-300" x-text="entry.date"></td>
                                     <td class="py-2 px-3 text-sm text-surface-300" x-text="entry.project_name"></td>
@@ -152,9 +152,8 @@
                             <template x-for="expense in expenses" :key="expense.id">
                                 <tr class="hover:bg-surface-800/30">
                                     <td class="py-2 px-3">
-                                        <input type="checkbox" name="expenses" :value="expense.id"
-                                               x-model="selectedExpenseIds"
-                                               class="w-4 h-4 rounded border-surface-600 text-brand-500 focus:ring-brand-500">
+                                        {{ checkbox(name='expenses', bind_value='expense.id',
+                                                    model='selectedExpenseIds', compact=true) }}
                                     </td>
                                     <td class="py-2 px-3 text-sm text-surface-300" x-text="expense.date"></td>
                                     <td class="py-2 px-3 text-sm text-surface-300" x-text="expense.category"></td>

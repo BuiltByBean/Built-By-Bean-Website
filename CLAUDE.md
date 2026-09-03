@@ -128,9 +128,18 @@ fields resets the visible label too. Include an explicit `{v: '', l: ...}`
 row when "none" must be re-pickable; the placeholder alone is not an
 option.
 
+The same rule caught checkboxes next, on the same day: nine native ones
+wearing the OS-blue tick in a purple app, and the products-page one gave
+no feedback until Save. Every checkbox is the `components/checkbox.html`
+macro - real input kept `sr-only` inside the label so names, x-model and
+submits all still work; the visible box is styled through `peer-checked`
+with no script. When the label must react to the state, pass `model=` and
+put the reactive markup in a `{% call %}` block.
+
 **Grep.**
 ```
 rg -n "<select" templates/pm --glob "!components/*"
+rg -n '<input type="checkbox"' templates/pm --glob "!components/*"
 ```
 Any hit is the regression.
 

@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {#
@@ -108,13 +109,7 @@
                        class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
             </div>
 
-            <label for="pb-active"
-                   class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
-                <input id="pb-active" type="checkbox" name="is_active" value="1"
-                       {% if playbook.is_active or not editing %}checked{% endif %}
-                       class="w-5 h-5 flex-shrink-0 rounded border-white/20 bg-surface-800 text-brand-500 focus:ring-brand-500/40">
-                <span class="text-sm text-surface-300">Active</span>
-            </label>
+            {{ checkbox(name='is_active', checked=(playbook.is_active or not editing), label='Active') }}
         </div>
 
         {% for section in playbook.sections %}
