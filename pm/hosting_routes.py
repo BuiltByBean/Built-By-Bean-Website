@@ -15,8 +15,9 @@ ServiceMapping.project_id - a mapping being the deliberate statement "this
 Railway project belongs to that build", made once, and what the monthly entry
 page writes against. Anything filed by hand straight onto a project counts too:
 a Twilio number bought for one build, or an agent billed to it, is as much the
-cost of running that build as its Railway bill is, and reading only the mapped
-half left Talent Booker showing one month of history when it had three.
+cost of running that build as its Railway bill is. Reading only the mapped half
+meant a cost could be entered against a project and never reach the page that
+asks what that project costs.
 
 Expenses mirrored from a cost entry are counted once, on the mapped side. They
 carry a project_id as well, so summing both without excluding them would double
@@ -60,10 +61,6 @@ MIN_MARGIN = 25.0
 # real month, so the books still agree with the card statement.
 ANNUAL_PREFIXES = ("cloudflare-domain:",)
 ANNUAL_MONTHS = 12
-
-# How far back the per-project trend looks. The bar is still one month; this
-# is only the window the little line is drawn over.
-TREND_MONTHS = 12
 
 
 def _is_annual(resource_identifier):
@@ -259,48 +256,6 @@ def _railway_all_time():
     return float(total or 0.0)
 
 
-def _trend(by_month, months, width=132, height=30, pad=4):
-    """A month-by-month line of what this project cost, as SVG points.
-
-    Only months with something recorded are plotted, evenly spaced. A month
-    nobody measured is not a month that cost nothing, and Talent Booker - with
-    February, April and August on record and the months between them empty -
-    would otherwise dive to zero and back twice, reporting a cost that
-    collapsed and recovered when nothing of the sort happened. The label says
-    how many months are on the line so the spacing is not read as time.
-
-    The scale runs from zero rather than from the lowest month. Money read
-    against its own minimum turns a wobble of a few cents into a mountain, and
-    the question this answers is whether a cost is climbing, not whether it
-    ever moves.
-
-    Returns None with fewer than two recorded months, because a single point is
-    not a trend and drawing it as a flat line implies a history that does not
-    exist yet.
-    """
-    span = [m for m in months if m in by_month]
-    if len(span) < 2:
-        return None
-
-    values = [by_month[m] for m in span]
-    high = max(values) or 1.0
-    step = (width - 2 * pad) / (len(values) - 1)
-    points = " ".join(
-        f"{pad + step * i:.1f},{height - pad - (height - 2 * pad) * (v / high):.1f}"
-        for i, v in enumerate(values))
-    return {
-        "points": points, "width": width, "height": height,
-        "months": len(values), "high": high,
-        "first_month": span[0], "last_month": span[-1],
-        # Which way it has gone overall, for the colour and the label. A trend
-        # that ends where it started is neither, and saying so beats picking a
-        # direction from rounding.
-        "direction": ("up" if values[-1] > values[0] else
-                      "down" if values[-1] < values[0] else "flat"),
-        "change": values[-1] - values[0],
-    }
-
-
 # Worst first. A page whose whole job is to surface the two projects that need
 # attention should not open on the eleven that do not.
 STATUS_ORDER = {"loss": 0, "raise": 1, "unpriced": 2, "fine": 3}
@@ -314,9 +269,7 @@ def hosting_index():
     # one-off - and a bar can only draw one number. Annual charges are spread
     # across the months they cover, so the spikes the average existed to
     # absorb are already gone by the time the cost gets here.
-    # The window is a year so the little trend line under each project has
-    # something to draw; the bar itself still reads only the last month of it.
-    months = _complete_months(TREND_MONTHS)
+    months = _complete_months(1)
     month = months[-1]
     costs, annualised = _costs_by_project(months)
 
@@ -365,8 +318,6 @@ def hosting_index():
             "line_pct": line_pct,
             "status": key,
             "status_label": label,
-            "trend": _trend(by_month, months),
-            "months_recorded": sum(1 for m in months if m in by_month),
             # The same question the tiles ask, asked about one client.
             "life": {
                 "collected": collected,

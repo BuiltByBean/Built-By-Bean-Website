@@ -21,7 +21,7 @@
 {% endblock %}
 
 {#
-  The running total for one client, and the shape of its cost over time.
+  The running total for one client.
 
   Below the bar rather than beside it because they answer in different tenses:
   the bar is this month against the fee, this is every month there has ever
@@ -52,33 +52,6 @@
         <span class="text-surface-500">client total, across their projects</span>
         {%- endif %}
     </div>
-
-    {% if r.trend %}
-    <div class="flex items-center gap-2 ml-auto"
-         title="Cost by month, {{ r.trend.first_month.strftime('%b %Y') }} to {{ r.trend.last_month.strftime('%b %Y') }}. Peak {{ r.trend.high|format_currency }}.">
-        <svg viewBox="0 0 {{ r.trend.width }} {{ r.trend.height }}"
-             width="{{ r.trend.width }}" height="{{ r.trend.height }}"
-             class="overflow-visible shrink-0" aria-hidden="true">
-            <polyline points="{{ r.trend.points }}" fill="none" stroke-width="1.5"
-                      stroke-linecap="round" stroke-linejoin="round"
-                      class="{{ 'stroke-amber-400' if r.trend.direction == 'up'
-                                else 'stroke-emerald-400' if r.trend.direction == 'down'
-                                else 'stroke-surface-500' }}"/>
-        </svg>
-        <span class="text-xs text-surface-500 whitespace-nowrap">
-            {{ r.trend.months }} mo
-            {%- if r.trend.direction != 'flat' %},
-            {{ r.trend.change|abs|format_currency }} {{ 'up' if r.trend.direction == 'up' else 'down' }}
-            {%- endif %}
-        </span>
-    </div>
-    {% elif r.months_recorded %}
-    {# One month is a dot, not a line. Saying which it is beats drawing a flat
-       stroke that looks like a year of steady cost. #}
-    <span class="ml-auto text-xs text-surface-500 whitespace-nowrap">
-        one month recorded - a trend needs two
-    </span>
-    {% endif %}
 
 </div>
 {% endmacro %}
@@ -240,11 +213,6 @@
         charge with no project on it, and is counted in the totals above but cannot
         be split between clients.
         {%- endif %}
-        The line to the right is that project's cost month by month, drawn from zero,
-        plotting only the months that recorded something and evenly spacing them - a
-        month nobody measured is not a month that cost nothing, and a line diving to
-        zero across a gap would report a collapse that never happened. It appears once
-        there are two such months.
     </p>
 
     <p class="text-xs text-surface-500">
