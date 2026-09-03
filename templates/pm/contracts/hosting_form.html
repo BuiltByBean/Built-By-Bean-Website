@@ -69,10 +69,6 @@
                     <option :value="p.id" x-text="p.name"></option>
                 </template>
             </select>
-            <p class="mt-1.5 text-xs text-surface-400">
-                Choose one and the fee below is saved against it, so the hosting page
-                can show it next to what that project actually costs to run.
-            </p>
         </div>
 
         <div>
@@ -82,9 +78,6 @@
             <input id="application" type="text" name="application" required x-model="application"
                    class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                    placeholder="e.g. Talent Booker">
-            <p class="mt-1.5 text-xs text-surface-400">
-                The name the client calls it, which is not always what it is filed under here.
-            </p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -121,10 +114,6 @@
                 <label for="excludes" class="block text-sm font-medium text-surface-300 mb-1.5">Not covered</label>
                 <textarea id="excludes" name="excludes" rows="7"
                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ excludes }}</textarea>
-                <p class="mt-1 text-xs text-surface-400">
-                    One per line. This is the half that stops a support request turning
-                    into free development.
-                </p>
             </div>
         </div>
 
@@ -136,10 +125,6 @@
                 <input id="reference" type="text" name="reference"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                        placeholder="the Statement of Work between the same parties">
-                <p class="mt-1 text-xs text-surface-400">
-                    Leave blank for an application with no statement of work behind it.
-                    The protections are stated outright either way.
-                </p>
             </div>
             <div>
                 <label for="notes" class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
@@ -153,11 +138,6 @@
            most likely to be asked about and the one that changed. #}
         <div class="rounded-xl border border-white/10 bg-surface-800/40 p-4">
             <p class="text-sm font-medium text-surface-200">The fee can be raised at any time</p>
-            <p class="mt-1 text-xs text-surface-400">
-                Section 4 gives no notice period. When you change the price you send an
-                updated agreement stating the new fee and why it moved, and it applies
-                from the next billing cycle after that.
-            </p>
         </div>
 
         {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}

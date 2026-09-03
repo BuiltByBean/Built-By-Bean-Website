@@ -143,7 +143,6 @@
      in the queue, and anything that filters the board must not mix them in. #}
   {% if out_of_scope %}
   <h2 class="mt-8 mb-1 text-xs font-semibold uppercase tracking-wider text-surface-400">Outside what these apps are for</h2>
-  <p class="mb-3 text-xs text-surface-400">Fair asks that sit outside the app they came from. Kept as a record, not turned down, and nothing about this shows on their side.</p>
   {% for t in out_of_scope %}{{ ticket_card(t) }}{% endfor %}
   {% endif %}
 </div>

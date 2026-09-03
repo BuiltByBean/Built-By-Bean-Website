@@ -26,10 +26,6 @@
                            value="{{ link.url if link else '' }}"
                            class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                            placeholder="kuperplumbing.com">
-                    <p class="mt-1 text-xs text-surface-400">
-                        A domain or full address. Starts with <code class="text-brand-300">/</code> for a
-                        page inside this app. The icon is taken from whatever is here.
-                    </p>
                 </div>
 
                 <div>
@@ -55,10 +51,6 @@
                                placeholder="github.com/BuiltByBean/...">
                     </div>
                 </div>
-                <p class="-mt-2 text-xs text-surface-400">
-                    Both optional. Leave one blank and its button simply does not
-                    appear on the tile.
-                </p>
 
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
@@ -66,11 +58,6 @@
                     {{ select_dropdown("project_id", project_options,
                                        link.project_id if link else '',
                                        "Not a client project", full_width=true) }}
-                    <p class="mt-1.5 text-xs text-surface-400">
-                        Ties this tile to the engagement it belongs to, so the project
-                        page can reach the running app, its Railway service and its repo.
-                        Leave it unset for anything of mine.
-                    </p>
                 </div>
 
                 <div class="rounded-xl border border-white/10 bg-surface-800/40 p-4">

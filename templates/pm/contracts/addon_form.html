@@ -63,10 +63,6 @@
             <label class="block text-sm font-medium text-surface-300 mb-1.5">What are you selling? *</label>
             {{ select_dropdown("product", product_choices, "texting", "Pick a product",
                                full_width=true, model="product", on_change="fill()") }}
-            <p class="mt-1.5 text-xs text-surface-400">
-                Picking one fills everything below from a written description. Edit
-                anything that is not quite right for this client.
-            </p>
         </div>
 
         <div>
@@ -94,9 +90,6 @@
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">What the client provides</label>
                 <textarea name="client_provides" rows="6" x-model="provides"
                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
-                <p class="mt-1 text-xs text-surface-400">
-                    One per line. This is usually what decides the timeline.
-                </p>
             </div>
         </div>
 
@@ -118,9 +111,6 @@
                        placeholder="25">
             </div>
         </div>
-        <p class="-mt-2 text-xs text-surface-400">
-            Leave both blank and the contract says it is included at no additional charge.
-        </p>
 
         <div>
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Timeline</label>
@@ -132,9 +122,6 @@
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Third-party fees</label>
             <textarea name="third_party" rows="2" x-model="third"
                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
-            <p class="mt-1 text-xs text-surface-400">
-                Anything a provider bills them for directly. Leave blank if there is none.
-            </p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -143,10 +130,6 @@
                 <input type="text" name="reference"
                        value="the Statement of Work between the same parties"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
-                <p class="mt-1 text-xs text-surface-400">
-                    Named in the terms clause, which carries the IP and liability terms
-                    across rather than restating them.
-                </p>
             </div>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>

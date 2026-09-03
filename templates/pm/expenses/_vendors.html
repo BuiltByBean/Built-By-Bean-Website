@@ -17,9 +17,6 @@
         <p class="text-sm font-semibold text-white">
             {{ provider.display_name }}: no costs recorded for {{ missing_month.strftime('%B %Y') }}
         </p>
-        <p class="text-xs text-surface-400 mt-0.5">
-            Copy the per-project amounts off the vendor's usage screen, so the month stops reading as free.
-        </p>
     </div>
     <a href="{{ url_for('service_costs.provider_monthly',
                         id=provider.id,

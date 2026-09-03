@@ -61,11 +61,6 @@
                             <span x-show="copied" x-cloak>Copied</span>
                         </button>
                     </div>
-                    <p class="text-xs text-surface-400 mt-2">
-                        Already emailed to them. One click signs them in as {{ req.signer_email }}
-                        and opens the document — no password, nothing to install. The link lasts
-                        14 days; after that use "Send a fresh link".
-                    </p>
                 </div>
                 {% elif req.status == 'completed' %}
                 <div class="flex flex-wrap gap-3">
@@ -112,9 +107,6 @@
                             Revise and resend
                         </a>
                     </div>
-                    <p class="text-xs text-surface-400 mt-3">
-                        Opens the form that made this one, filled in as it was sent.
-                    </p>
                 </div>
                 {% endif %}
 
@@ -244,12 +236,6 @@
 
             <div class="glass-card p-5">
                 <h3 class="text-sm font-bold text-white mb-2">{{ req.signer_name }}'s copies</h3>
-                <p class="text-xs text-surface-400 leading-relaxed">
-                    Sending this gave {{ req.signer_email }} an account. They can sign back in
-                    with that address any time — no password, just a link emailed to them — and
-                    see every contract you have ever sent them, signed ones included, with the
-                    sealed PDF to download.
-                </p>
             </div>
 
             {% if req.status in ('sent', 'draft') %}

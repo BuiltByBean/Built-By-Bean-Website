@@ -107,11 +107,6 @@
                 Nothing to enter. This uses the app's own Stripe key, so there is no
                 second copy to leak or rotate.
             </p>
-            <p class="text-xs text-surface-400 mt-2">
-                Books Stripe's processing fees, roughly 3% of everything collected,
-                grouped by month and attributed to the client whose payment caused
-                them. Leave the flat monthly cost blank.
-            </p>
         </div>
 
         {# A flat provider has no credentials, because there is nothing to call.
@@ -125,9 +120,6 @@
                        value="{{ provider.display_name if editing and provider.name == 'flat' else '' }}"
                        placeholder="Claude"
                        class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
-                <p class="text-xs text-surface-400 mt-1.5">
-                    Shown on the expense, so make it the name you would look for.
-                </p>
             </div>
             <div>
                 <label for="billing-day" class="block text-sm font-medium text-surface-300 mb-1.5">
@@ -137,11 +129,6 @@
                        value="{{ provider.billing_day if editing and provider.billing_day else '' }}"
                        placeholder="17"
                        class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
-                <p class="text-xs text-surface-400 mt-1.5">
-                    The charge is booked on this day each month, and not before it
-                    has arrived. A day past the end of a short month falls back to
-                    the last day of that month.
-                </p>
             </div>
         </div>
 
@@ -160,20 +147,10 @@
                        value="{{ provider.monthly_cost if editing and provider.monthly_cost else '' }}"
                        placeholder="0.00"
                        class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
-                <p class="text-xs text-surface-500 mt-1.5">
-                    For a vendor that charges the same amount every month and offers no
-                    API to confirm it. Leave blank when the sync can read real amounts.
-                </p>
             </div>
 
             <div x-show="{{ manual_monthly|tojson }}.includes(providerType)">
                 <p class="text-sm font-medium text-surface-300">Costs are entered per project</p>
-                <p class="text-xs text-surface-400 mt-1.5">
-                    This vendor bills a different amount each month, spread across
-                    projects, and its API will not report money. The real numbers go in
-                    once a month on the Monthly costs page, one line per project, so
-                    each one lands on the client it belongs to.
-                </p>
                 {% if editing %}
                 <a href="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
                    class="inline-flex items-center gap-2 mt-3 px-4 min-h-[44px] text-sm font-medium rounded-xl

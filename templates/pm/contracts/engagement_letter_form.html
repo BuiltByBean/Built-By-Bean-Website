@@ -42,7 +42,6 @@
                     <textarea name="project_description" required rows="3"
                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400"
                               placeholder="e.g. design and develop a professional web presence for J&D Entertainment to support talent booking for events">{{ request.args.get('project_description', '') }}</textarea>
-                    <p class="mt-1 text-xs text-surface-400">This follows "Built by Bean LLC will..." in the letter</p>
                 </div>
 
                 {# Fixed in the source until Sept 2026, so every letter quoted the
@@ -70,10 +69,6 @@
                                class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
                     </div>
                 </div>
-                <p class="-mt-2 text-xs text-surface-400">
-                    Shown as the minimum starting price and the two hourly rates in
-                    Sections 2, 3 and 4. Change them per client before generating.
-                </p>
 
                 {% include "pm/contracts/_send_panel.html" %}
 
