@@ -458,6 +458,20 @@ class Ticket(db.Model):
         return text if len(text) <= 80 else text[:77] + "..."
 
     @property
+    def full_title(self):
+        """The same name with nothing trimmed off it.
+
+        A card that opens replaces the shortened name with this rather than
+        printing the whole report underneath the cut-off version of itself.
+        For a ticket with no title of its own the two are the same sentence,
+        and showing both is showing it twice, once broken.
+        """
+        if self.title:
+            return self.title
+        text = " ".join((self.description or "").split())
+        return text or f"Ticket #{self.id}"
+
+    @property
     def total_expenses(self):
         # Material expenses only — exclude time-entry-linked billable time rows.
         return sum(e.amount for e in self.expenses if e.time_entry_id is None)
