@@ -19,7 +19,10 @@
 <div class="space-y-6 stagger-in">
 
     <!-- Filter -->
-    <div class="glass-card p-4">
+    {# relative z-30 per CLAUDE.md LM-1: glass-card's backdrop-filter makes
+       every card a stacking context, so without this the filter panel
+       paints underneath the table card below. #}
+    <div class="glass-card p-4 relative z-30">
         <form method="GET" class="flex flex-wrap items-center gap-3">
             {% set po = namespace(list=[("", "All Providers")]) %}
             {% for p in providers %}{% set po.list = po.list + [(p.id, p.display_name)] %}{% endfor %}

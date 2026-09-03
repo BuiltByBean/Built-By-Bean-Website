@@ -21,8 +21,10 @@
 {% block content %}
 <div class="space-y-5 stagger-in">
 
+    {# relative z-30 per CLAUDE.md LM-1: the client dropdown opens over the
+       package list below. #}
     <form method="POST" action="{{ url_for('mvp.package_create') }}"
-          class="glass-card p-4 flex flex-wrap items-end gap-3">
+          class="relative z-30 glass-card p-4 flex flex-wrap items-end gap-3">
         <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Client</label>
             {{ select_dropdown("client_id", client_options, placeholder="Who is it for", full_width=true) }}

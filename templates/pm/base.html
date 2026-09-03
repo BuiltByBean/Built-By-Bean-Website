@@ -240,8 +240,15 @@
             box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25);
         }
 
+        /* Fill BACKWARDS, never both. `both` keeps the final keyframe applied
+           forever, and translateY(0) is still a transform - so every staggered
+           card stayed its own stacking context after the animation ended, and
+           a dropdown panel inside card one painted UNDERNEATH card two, its
+           option text blurred out by the next card's glass. With backwards the
+           transform evaporates when the animation ends and z-50 panels compare
+           against the whole page again. See CLAUDE.md LM-1. */
         .stagger-in > * {
-            animation: slideUp 0.4s ease-out both;
+            animation: slideUp 0.4s ease-out backwards;
         }
         .stagger-in > *:nth-child(1) { animation-delay: 0.05s; }
         .stagger-in > *:nth-child(2) { animation-delay: 0.1s; }
@@ -351,9 +358,32 @@
                 this.scrollActiveIntoView();
             },
 
+            /* By role, not by child index: the rows render from an x-for whose
+               <template> element is also a child of the list, so children[i]
+               is off by one forever. */
             scrollActiveIntoView() {
-                const row = this.$refs.list && this.$refs.list.children[this.active];
+                const rows = this.$refs.list
+                    ? this.$refs.list.querySelectorAll('[role="option"]') : [];
+                const row = rows[this.active];
                 if (row) row.scrollIntoView({ block: 'nearest' });
+            },
+
+            /* Options handed in after render, for the pickers whose list
+               depends on another field - projects filtered by the chosen
+               client, variants by the product. Callers dispatch
+               `dropdown-set-options` with { name, options: [{v, l}] }; the
+               event rides up to window, and every instance ignores names that
+               are not its own. A held value that is no longer in the list is
+               cleared rather than kept as an invisible submission. */
+            setOptions(detail) {
+                if (!detail || detail.name !== this.name) return;
+                this.options = (detail.options || []).map(
+                    o => ({ v: String(o.v ?? ''), l: String(o.l ?? '') }));
+                if (this.value && !this.options.some(o => o.v === this.value)) {
+                    this.value = '';
+                    if (this.$refs.input) this.$refs.input.value = '';
+                }
+                if (this.active >= this.options.length) this.active = -1;
             },
 
             /* Type-ahead, because a native select has it and a list of forty

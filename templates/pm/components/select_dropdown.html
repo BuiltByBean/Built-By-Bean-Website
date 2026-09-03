@@ -10,14 +10,23 @@
     options    [(value, label), ...] — values are compared as strings
     selected   current value, or none
     size       'md' for filter bars and forms, 'sm' for tight grids
-    model      an Alpine expression in the SURROUNDING scope to keep in step,
-               for the places that used to reach for x-model
+    model      a property in the SURROUNDING x-data to bind BOTH ways: a pick
+               writes it, and writing it from outside moves the dropdown too,
+               label included. That is what lets a modal reset its fields and
+               lets a prefill land visibly.
     on_change  an Alpine expression to run after a pick, e.g. submitting a form
     extra_class  extra classes for the wrapper, for callers that need to bound
                the width in a crowded filter row
 
-  `dropdown-change` still fires with {name, value} and still bubbles, because
-  two templates listen for it on the form above.
+  The option rows render from Alpine at runtime, not from Jinja at template
+  time, so a caller whose list depends on another field can replace it live:
+  dispatch `dropdown-set-options` with { name, options: [{v, l}] } from
+  anywhere and the instance carrying that name re-renders. This is what
+  retired the app's last native <select>s — the live-filtered project and
+  variant pickers that the fixed-list version could not serve.
+
+  `dropdown-change` still fires with {name, value} on every pick and still
+  bubbles, because two templates listen for it on the form above.
 
   Dark only, with no light counterpart, because this app is dark only. Nothing
   here needs a `dark:` variant and nothing new should grow one.
@@ -35,10 +44,19 @@
 {#- Single quotes on x-data are load-bearing: |tojson escapes < > & and ' for
     exactly this, but leaves " alone, so a label with a quote in it would end
     the attribute early were this delimited the other way round. -#}
+{#- model is bound twice on purpose. The @dropdown-change reaction assigns it
+    SYNCHRONOUSLY, because on_change handlers (fill, pickProject, loadEntries)
+    read it in the same tick as the pick. x-modelable adds the other
+    direction: writing the property from outside - a modal resetting its
+    fields, a prefill - moves the dropdown too, label included, which the
+    event wiring alone never did. The two cannot loop: the reaction writes
+    the value the component already holds, so the modelable sync is a no-op. -#}
 <div class="relative {% if full_width %}w-full{% else %}flex-1{% endif %}{% if sm %} min-w-0{% endif %} {{ extra_class }}"
      x-id="['bbbsel']"
      x-data='bbbSelect({{ {"name": name, "options": opts, "value": sel_str, "placeholder": placeholder}|tojson }})'
+     {% if model %}x-modelable="value" x-model="{{ model }}"{% endif %}
      {% if reaction %}@dropdown-change="{{ reaction|join('; ') }}"{% endif %}
+     @dropdown-set-options.window="setOptions($event.detail)"
      @click.outside="close(false)">
 
   <button type="button"
@@ -95,30 +113,37 @@
               max-h-64 overflow-y-auto overscroll-contain p-1.5
               bg-surface-800 border border-white/10
               rounded-2xl shadow-xl shadow-black/50">
-    {% for opt in opts %}
-    <button type="button"
-            :id="$id('bbbsel', {{ loop.index0 }})"
-            role="option"
-            :aria-selected="isPicked({{ loop.index0 }})"
-            tabindex="-1"
-            @click="pick({{ loop.index0 }})"
-            @mouseenter="active = {{ loop.index0 }}"
-            class="flex items-center gap-2 w-full text-left rounded-xl transition-colors duration-100
-                   {% if sm %}px-2.5 py-1.5 text-xs{% else %}px-3 py-2 text-sm{% endif %}"
-            :class="isPicked({{ loop.index0 }})
-                      ? 'bg-brand-500/15 text-brand-300 font-semibold'
-                      : (active === {{ loop.index0 }}
-                          ? 'bg-white/[0.07] text-surface-100'
-                          : 'text-surface-300')">
-      <span class="flex-1 truncate">{{ opt.l }}</span>
-      {#- A tick as well as the colour, so "which one is set" survives being
-          read by someone who cannot see the tint. -#}
-      <svg x-show="isPicked({{ loop.index0 }})" x-cloak class="w-3.5 h-3.5 shrink-0 text-brand-400"
-           fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-      </svg>
-    </button>
-    {% endfor %}
+    {#- Rendered by Alpine so setOptions can swap the list live. The key
+        carries the index as well as the value, because a caller-supplied list
+        is allowed to be momentarily imperfect and two rows sharing a value
+        must not blow up the render. -#}
+    <template x-for="(o, i) in options" :key="i + ':' + o.v">
+      <button type="button"
+              :id="$id('bbbsel', i)"
+              role="option"
+              :aria-selected="isPicked(i)"
+              tabindex="-1"
+              @click="pick(i)"
+              @mouseenter="active = i"
+              class="flex items-center gap-2 w-full text-left rounded-xl transition-colors duration-100
+                     {% if sm %}px-2.5 py-1.5 text-xs{% else %}px-3 py-2 text-sm{% endif %}"
+              :class="isPicked(i)
+                        ? 'bg-brand-500/15 text-brand-300 font-semibold'
+                        : (active === i
+                            ? 'bg-white/[0.07] text-surface-100'
+                            : 'text-surface-300')">
+        <span class="flex-1 truncate" x-text="o.l"></span>
+        {#- A tick as well as the colour, so "which one is set" survives being
+            read by someone who cannot see the tint. Toggled by class, never
+            x-show: a descendant x-show inside this x-for makes the panel's
+            own x-show transition wait on it forever (the cascade), and the
+            panel then never opens. See CLAUDE.md LM-4. -#}
+        <svg :class="isPicked(i) ? '' : 'hidden'" class="w-3.5 h-3.5 shrink-0 text-brand-400"
+             fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+      </button>
+    </template>
   </div>
 
   <input type="hidden" name="{{ name }}" x-ref="input" value="{{ sel_str }}" :value="value">

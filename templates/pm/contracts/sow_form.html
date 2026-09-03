@@ -21,7 +21,18 @@
                                                 features: {{ (arg_features if arg_features else [""])|tojson }},
                                                 clients: {{ client_lookup|tojson }},
                                                 projects: {{ projects|tojson }} })'
-              x-effect="chosen = clients[clientId] || null">
+              {#- The project options are rebuilt whenever the chosen client
+                  changes and handed to the dropdown live. Built synchronously
+                  so the effect tracks `mine`; delivered with plain DOM APIs in
+                  a setTimeout so the listener exists on the first run - and
+                  because $dispatch inside a $nextTick callback is a silent
+                  no-op (CLAUDE.md LM-2). -#}
+              x-effect="chosen = clients[clientId] || null;
+                        const projOpts = [{ v: '', l: 'No project' }]
+                            .concat(mine.map(p => ({ v: p.id, l: p.name })))
+                            .concat([{ v: 'new', l: '+ New project' }]);
+                        setTimeout(() => window.dispatchEvent(new CustomEvent('dropdown-set-options',
+                            { detail: { name: 'project_id', options: projOpts } })), 0)">
 
     {% include "pm/contracts/_prefill.html" %}
             <div class="space-y-5">
@@ -42,19 +53,12 @@
                         {% endif %}
                     </div>
                     <div>
-                        <label for="sow_project" class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
-                        {#- A plain select rather than the styled dropdown, because
-                            the options are filtered live by the chosen client and
-                            the macro renders a fixed list at template time. Same
-                            reason the hosting form uses one. -#}
-                        <select id="sow_project" name="project_id" x-model="projectId" @change="pickProject()"
-                                class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
-                            <option value="">Choose an existing project</option>
-                            <template x-for="p in mine" :key="p.id">
-                                <option :value="p.id" x-text="p.name"></option>
-                            </template>
-                            <option value="new">+ New project</option>
-                        </select>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
+                        {#- Options arrive from the form's x-effect above,
+                            refiltered on every client change. -#}
+                        {{ select_dropdown("project_id", [("", "No project")], "",
+                                           "Choose an existing project", full_width=true,
+                                           model="projectId", on_change="pickProject()") }}
                     </div>
                 </div>
 

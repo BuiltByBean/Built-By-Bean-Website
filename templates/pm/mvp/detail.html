@@ -18,8 +18,10 @@
 <div class="space-y-5 stagger-in" x-data='{ q: "", cat: "all" }'>
 
     {# ── the package ─────────────────────────────────────── #}
+    {# relative z-30 per CLAUDE.md LM-1: the status dropdown opens over the
+       cards below. #}
     <form method="POST" action="{{ url_for('mvp.package_update', id=package.id) }}"
-          class="glass-card p-4 sm:p-5 space-y-3">
+          class="relative z-30 glass-card p-4 sm:p-5 space-y-3">
         <div class="flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
@@ -282,14 +284,9 @@
                 <input type="text" name="new_name"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
-            <div>
+            <div class="w-48">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Area</label>
-                <select name="new_category"
-                        class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                    {% for key, label in categories %}
-                    <option value="{{ key }}">{{ label }}</option>
-                    {% endfor %}
-                </select>
+                {{ select_dropdown("new_category", categories, "records", full_width=true) }}
             </div>
             <div>
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>

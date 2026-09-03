@@ -38,7 +38,16 @@
           if (p.hosting_cycle) this.cycle = p.hosting_cycle;
         }
       }'
-      x-effect="chosen = clients[clientId] || null">
+      {#- Project options rebuilt whenever the client changes, handed to the
+          dropdown live. Synchronous build so `mine` is tracked; delivered
+          with plain DOM APIs in a setTimeout so the listener exists on the
+          first run - and because $dispatch inside a $nextTick callback is a
+          silent no-op (CLAUDE.md LM-2). -#}
+      x-effect="chosen = clients[clientId] || null;
+                const projOpts = [{ v: '', l: 'No project' }]
+                    .concat(mine.map(p => ({ v: p.id, l: p.name })));
+                setTimeout(() => window.dispatchEvent(new CustomEvent('dropdown-set-options',
+                    { detail: { name: 'project_id', options: projOpts } })), 0)">
 
     {% include "pm/contracts/_prefill.html" %}
 
@@ -57,18 +66,12 @@
             </div>
         </div>
 
-        {# A plain select rather than the styled dropdown, because the options
-           are filtered live by the chosen client and the macro renders a fixed
-           list at template time. #}
+        {# Options arrive from the form's x-effect above, refiltered on every
+           client change. #}
         <div>
-            <label for="project" class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
-            <select id="project" name="project_id" x-model="projectId" @change="pickProject()"
-                    class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
-                <option value="">No project</option>
-                <template x-for="p in mine" :key="p.id">
-                    <option :value="p.id" x-text="p.name"></option>
-                </template>
-            </select>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
+            {{ select_dropdown("project_id", [("", "No project")], "", "No project",
+                               full_width=true, model="projectId", on_change="pickProject()") }}
         </div>
 
         <div>

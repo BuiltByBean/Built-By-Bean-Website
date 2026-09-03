@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {#
   The catalogue of what has been built before.
@@ -15,24 +16,18 @@
 {% block content %}
 <div class="space-y-5 stagger-in" x-data="{ adding: false }">
 
-    <form method="GET" class="glass-card p-4 flex flex-wrap items-center gap-2">
+    {# relative z-30 per CLAUDE.md LM-1: this card's dropdown panels open
+       over the list card below it. #}
+    <form method="GET" class="relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
         <input type="text" name="q" value="{{ q }}" placeholder="Search names, guidance, traps"
                class="input-ring flex-1 min-w-[180px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
-        <select name="category"
-                class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-            <option value="all">All areas ({{ total }})</option>
-            {% for key, label in categories %}
-            <option value="{{ key }}" {% if category == key %}selected{% endif %}>
-                {{ label }}{% if counts.get(key) %} ({{ counts[key] }}){% endif %}</option>
-            {% endfor %}
-        </select>
-        <select name="status"
-                class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-            <option value="all">Built and not</option>
-            {% for key, label in statuses %}
-            <option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
+        {% set cat_opts = [("all", "All areas (" ~ total ~ ")")] %}
+        {% for key, label in categories %}
+        {% set _ = cat_opts.append((key, label ~ (" (" ~ counts[key] ~ ")" if counts.get(key) else ""))) %}
+        {% endfor %}
+        {{ select_dropdown("category", cat_opts, category, extra_class="max-w-[15rem]") }}
+        {{ select_dropdown("status", [("all", "Built and not")] + statuses|list, status,
+                           extra_class="max-w-[11rem]") }}
         <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
             Filter</button>
         {% if q or category != 'all' or status != 'all' %}
@@ -46,22 +41,20 @@
 
     {# Small on purpose: catching something a client just named has to cost
        seconds, or it does not get caught. #}
+    {# z-20: above the list its dropdown opens over, under the filter card's
+       z-30 so the filter panels stay on top of this card too. #}
     <form method="POST" action="{{ url_for('features.feature_create') }}"
           x-show="adding" style="display: none"
-          class="glass-card p-4 flex flex-wrap items-end gap-3">
+          class="relative z-20 glass-card p-4 flex flex-wrap items-end gap-3">
         <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-surface-300 mb-1.5">What did they call it?</label>
             <input type="text" name="name" required
                    class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         </div>
-        <div>
+        <div class="w-48">
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Area</label>
-            <select name="category"
-                    class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                {% for key, label in categories %}
-                <option value="{{ key }}" {% if category == key %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+            {{ select_dropdown("category", categories, category if category != 'all' else 'records',
+                               full_width=true) }}
         </div>
         <div>
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Worth $</label>
@@ -151,14 +144,9 @@
                                    placeholder="bundled"
                                    class="input-ring w-28 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
                         </div>
-                        <div>
+                        <div class="w-44">
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Status</label>
-                            <select name="status"
-                                    class="input-ring min-h-[40px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                                {% for key, label in statuses %}
-                                <option value="{{ key }}" {% if f.status == key %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
+                            {{ select_dropdown("status", statuses, f.status, full_width=true) }}
                         </div>
                         <button type="submit"
                                 class="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">

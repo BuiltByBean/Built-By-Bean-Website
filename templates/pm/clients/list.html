@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/pagination.html" import render_pagination %}
 {% from "pm/components/status_badge.html" import badge %}
 
@@ -21,7 +22,9 @@
        question: "emailed but not phoned yet" is a channel that has been used
        and a channel that has not. #}
     {% set filtering = search or stage or tried or not_tried %}
-    <div class="mb-6">
+    {# relative z-30 per CLAUDE.md LM-1: the filter panels open over the
+       table below. #}
+    <div class="mb-6 relative z-30">
         <form method="GET" class="space-y-3">
             <div class="flex gap-3">
                 <input type="text" name="search" x-model="search" placeholder="Search clients..."
@@ -33,40 +36,31 @@
             </div>
 
             <div class="flex flex-wrap gap-3">
+                {% set stage_opts = [("", "Any")] %}
+                {% for key, label in stage_choices %}
+                {% set _ = stage_opts.append((key, label ~ " (" ~ stage_counts.get(key, 0) ~ ")")) %}
+                {% endfor %}
                 <label class="flex items-center gap-2">
                     <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Stage</span>
-                    <select name="stage" onchange="this.form.submit()"
-                            class="input-ring px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                        <option value="">Any</option>
-                        {% for key, label in stage_choices %}
-                        <option value="{{ key }}" {% if stage == key %}selected{% endif %}>
-                            {{ label }} ({{ stage_counts.get(key, 0) }})
-                        </option>
-                        {% endfor %}
-                    </select>
+                    {{ select_dropdown("stage", stage_opts, stage, "Any",
+                                       on_change="$el.closest('form').requestSubmit()",
+                                       extra_class="max-w-[14rem]") }}
                 </label>
 
                 <label class="flex items-center gap-2">
                     <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Tried</span>
-                    <select name="tried" onchange="this.form.submit()"
-                            class="input-ring px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                        <option value="">Any</option>
-                        <option value="none" {% if tried == 'none' %}selected{% endif %}>Never contacted</option>
-                        {% for key, label in channel_choices %}
-                        <option value="{{ key }}" {% if tried == key %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
+                    {{ select_dropdown("tried", [("", "Any"), ("none", "Never contacted")] + channel_choices|list,
+                                       tried, "Any",
+                                       on_change="$el.closest('form').requestSubmit()",
+                                       extra_class="max-w-[13rem]") }}
                 </label>
 
                 <label class="flex items-center gap-2">
                     <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Not tried</span>
-                    <select name="not_tried" onchange="this.form.submit()"
-                            class="input-ring px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                        <option value="">Any</option>
-                        {% for key, label in channel_choices %}
-                        <option value="{{ key }}" {% if not_tried == key %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
+                    {{ select_dropdown("not_tried", [("", "Any")] + channel_choices|list,
+                                       not_tried, "Any",
+                                       on_change="$el.closest('form').requestSubmit()",
+                                       extra_class="max-w-[13rem]") }}
                 </label>
             </div>
         </form>

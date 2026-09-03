@@ -10,7 +10,10 @@
 {% from "pm/components/pagination.html" import render_pagination %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 
-<div class="glass-card p-4 sm:p-6">
+{# relative z-30 per CLAUDE.md LM-1: a filter panel taller than the ledger
+   below it pokes past this card's bottom edge, and the next card would
+   paint over it. #}
+<div class="glass-card p-4 sm:p-6 relative z-30">
 
     <form method="GET" class="flex flex-wrap gap-3 mb-6"
           x-data @dropdown-change="$el.requestSubmit()">

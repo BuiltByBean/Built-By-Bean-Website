@@ -41,7 +41,10 @@
     </div>
 </div>
 
-<div class="glass-card p-6">
+{# relative z-30 per CLAUDE.md LM-1: a filter panel taller than the rows
+   below it pokes past this card's bottom edge, and the next card would
+   paint over it. #}
+<div class="glass-card p-6 relative z-30">
     <!-- Filters -->
     <form method="GET" class="flex flex-wrap gap-3 mb-6">
         {% set ns = namespace(proj_opts=[["", "All Projects"]]) %}

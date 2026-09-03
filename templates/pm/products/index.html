@@ -194,7 +194,24 @@
          class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 lg:pl-[260px]">
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="sell = null"></div>
         <form method="POST" action="{{ url_for('products.product_sell') }}"
-              class="relative w-full max-w-lg glass-card shadow-2xl p-5 space-y-4">
+              class="relative w-full max-w-lg glass-card shadow-2xl p-5 space-y-4"
+              {#- Variant and project options follow the product and client
+                  live. Built synchronously so the effect tracks `choices` and
+                  `mine`; delivered with plain DOM APIs in a setTimeout so the
+                  listeners exist on the first run - and because $dispatch
+                  inside a $nextTick callback is a silent no-op
+                  (CLAUDE.md LM-2). -#}
+              x-effect="const projOpts = [{ v: '', l: 'Start a new one' }]
+                            .concat(mine.map(p => ({ v: p.id, l: p.name })));
+                        const varOpts = [{ v: '', l: 'Not decided yet' }]
+                            .concat(choices.map(c => ({ v: c.id, l: c.name })))
+                            .concat([{ v: 'new', l: 'Something else' }]);
+                        setTimeout(() => {
+                            window.dispatchEvent(new CustomEvent('dropdown-set-options',
+                                { detail: { name: 'project_id', options: projOpts } }));
+                            window.dispatchEvent(new CustomEvent('dropdown-set-options',
+                                { detail: { name: 'variant_id', options: varOpts } }));
+                        }, 0)">
             <input type="hidden" name="product_id" :value="sell && sell.id">
 
             <p class="text-sm font-semibold text-white" x-text="sell && sell.name"></p>
@@ -204,14 +221,8 @@
                platform picks it from the list. #}
             <div x-show="choices.length" style="display: none">
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Which one</label>
-                <select name="variant_id" x-model="variantId"
-                        class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
-                    <option value="">Not decided yet</option>
-                    <template x-for="c in choices" :key="c.id">
-                        <option :value="c.id" x-text="c.name"></option>
-                    </template>
-                    <option value="new">Something else</option>
-                </select>
+                {{ select_dropdown("variant_id", [("", "Not decided yet")], "", "Not decided yet",
+                                   full_width=true, model="variantId") }}
                 <input type="text" name="variant_name" x-show="variantId === 'new'" style="display: none"
                        placeholder="Which system? It gets added to the list."
                        class="input-ring mt-2 w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
@@ -219,24 +230,16 @@
 
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
-                <select name="client_id" x-model="clientId" required
-                        class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
-                    <option value="">Choose a client</option>
-                    {% for c in clients %}
-                    <option value="{{ c.id }}">{{ c.name }}</option>
-                    {% endfor %}
-                </select>
+                {% set client_opts = [] %}
+                {% for c in clients %}{% set _ = client_opts.append((c.id, c.name)) %}{% endfor %}
+                {{ select_dropdown("client_id", client_opts, "", "Choose a client",
+                                   full_width=true, model="clientId") }}
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
-                <select name="project_id" x-model="projectId"
-                        class="input-ring w-full min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm">
-                    <option value="">Start a new one</option>
-                    <template x-for="p in mine" :key="p.id">
-                        <option :value="p.id" x-text="p.name"></option>
-                    </template>
-                </select>
+                {{ select_dropdown("project_id", [("", "Start a new one")], "", "Start a new one",
+                                   full_width=true, model="projectId") }}
                 {# Only asked for when there is nothing to attach to. Blank is
                    fine: the product and the client name it. #}
                 <input type="text" name="new_project_name" x-show="!projectId" style="display: none"
