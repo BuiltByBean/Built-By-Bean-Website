@@ -69,3 +69,9 @@ class Config:
     # Bible Study
     ESV_API_KEY = os.environ.get("ESV_API_KEY", "")
     APP_URL = os.environ.get("APP_URL", "https://builtbybeans.com")
+
+    # The god door (pm/guidance_routes.py): other Claude sessions read the
+    # catalogue and report lessons back through /api/guidance with this as
+    # a bearer token. Empty means the door answers 401 to everything -
+    # closed, never open by default.
+    GUIDANCE_API_KEY = os.environ.get("GUIDANCE_API_KEY", "")

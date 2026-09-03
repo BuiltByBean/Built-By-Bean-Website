@@ -271,6 +271,10 @@ def create_app():
     from pm.mvp_routes import mvp_bp
     app.register_blueprint(mvp_bp)
 
+    # ── The god door ────────────────────────────────────────
+    from pm.guidance_routes import guidance_bp
+    app.register_blueprint(guidance_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)

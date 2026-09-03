@@ -12,6 +12,20 @@ matter what was bought. Every rule rides into every MVP build prompt as a
 house rule, so writing a lesson there is how every future project gets
 it. This file is for lessons about THIS repo's own code.
 
+## The god door
+
+Other Claude sessions reach the catalogue live through
+`/api/guidance/*` (`pm/guidance_routes.py`): the rules brief, feature
+search, playbook runbooks, and a POST that files lessons back - bearer
+token `GUIDANCE_API_KEY`, compared in constant time, 401 on everything
+when unset. `tools/pm_guidance_mcp.py` is the zero-dependency stdio MCP
+bridge that puts those four tools (`get_rules`, `get_feature_guidance`,
+`get_playbook`, `report_lesson`) into every session on this machine; it
+is registered at user scope in Claude Code with the deployed board's URL
+and key, and `~/.claude/CLAUDE.md` carries the standing order to use
+them. The write path appends with attribution and refuses duplicates,
+because reporting sessions retry like any other API client.
+
 ## House rules
 
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page
