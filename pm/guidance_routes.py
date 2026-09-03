@@ -30,10 +30,17 @@ def _slugify(value):
     return _SLUG_STRIP.sub("-", (value or "").strip().lower()).strip("-")[:80]
 
 
+# Everything but tab, newline and carriage return. Postgres refuses a NUL
+# in a text column outright, so one stray byte in a reported lesson was a
+# 500 instead of a record - found when the lesson ABOUT stray control
+# bytes failed to file because it contained some.
+_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
 def _cap(value, bound):
-    """Public-facing write discipline: truncate to a bound, never trust the
-    wire to be reasonable about length."""
-    return (value or "").strip()[:bound]
+    """Public-facing write discipline: scrub control characters and truncate
+    to a bound, never trusting the wire to be reasonable about either."""
+    return _CONTROL.sub("", (value or "")).strip()[:bound]
 
 
 def _authorised():
