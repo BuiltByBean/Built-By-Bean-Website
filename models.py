@@ -1600,3 +1600,98 @@ class ProductVariant(db.Model):
 
     def __repr__(self):
         return f"<ProductVariant {self.slug} of {self.product_id}>"
+
+
+# ── What I have built before ─────────────────────────────────
+
+
+class Feature(db.Model):
+    """One capability, catalogued once, reusable on the next build.
+
+    Products are things that run: an integration with somebody else's
+    platform, or a whole second system. Features are what somebody uses when
+    they open the app - a booking screen, an inquiry form, a way to tag
+    things. The two are priced and sold differently, which is why they are
+    two tables and not one with a flag.
+
+    Three jobs, in the order they get used:
+
+    Pricing. A number per feature turns a phone call into an estimate while
+    the client is still talking, instead of a quote written that evening from
+    memory.
+
+    Recall. "Here is what I have built before" is hard to answer from a list
+    of repositories, and the answer decides what gets offered.
+
+    And the one that pays for the rest: not building the same thing wrong
+    twice. Talent Booker carries fifty-three landmines and Data Dungeon
+    thirty-four, each written the day it cost an afternoon - and every one of
+    them is trapped in the repository it was learned in. Talent Booker's
+    LM-19 says a `|tojson` inside a double-quoted HTML attribute breaks the
+    attribute; that exact bug shipped from this repository on 2026-09-03,
+    because nothing here could see what was written over there.
+    """
+
+    __tablename__ = "features"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(80), unique=True, nullable=False)
+    name = db.Column(db.String(160), nullable=False)
+    category = db.Column(db.String(20), nullable=False, default="records", index=True)
+    summary = db.Column(db.Text, default="")
+
+    # What this contributes to an estimate. Nullable, because plenty of these
+    # are a morning's work bundled into the build and pricing them
+    # individually would be pricing a screen.
+    typical_value = db.Column(db.Float, nullable=True)
+
+    # How it should be built, and what goes wrong. The second is the reason
+    # this table exists; the first is what stops it being relearned.
+    gold_standard_md = db.Column(db.Text, default="")
+    pitfalls_md = db.Column(db.Text, default="")
+
+    # Where the version worth copying lives. A repo and a path, because "look
+    # at Talent Booker" is not an answer at eleven at night.
+    reference_project = db.Column(db.String(120), default="")
+    reference_path = db.Column(db.String(300), default="")
+
+    # `built` is something shipped at least once. `idea` is something a client
+    # asked for that does not exist yet - captured on the call rather than
+    # lost, which is half the point of having the page open during one.
+    status = db.Column(db.String(20), nullable=False, default="built")
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    # Ordered the way a build is discussed: what brings work in, what happens
+    # to it, what gets paid, and the machinery underneath.
+    CATEGORIES = (
+        ("intake", "Getting work in"),
+        ("scheduling", "Scheduling"),
+        ("records", "Records and data"),
+        ("money", "Money"),
+        ("comms", "Talking to people"),
+        ("documents", "Documents"),
+        ("portal", "Their own access"),
+        ("platform", "Underneath"),
+        ("ui", "Interface patterns"),
+    )
+    CATEGORY_LABELS = dict(CATEGORIES)
+
+    STATUSES = (("built", "Built before"), ("idea", "Not built yet"))
+    STATUS_LABELS = dict(STATUSES)
+
+    @property
+    def category_label(self):
+        return self.CATEGORY_LABELS.get(self.category, self.category)
+
+    @property
+    def has_guidance(self):
+        """Whether anything here would stop somebody rebuilding it badly."""
+        return bool((self.gold_standard_md or "").strip()
+                    or (self.pitfalls_md or "").strip())
+
+    def __repr__(self):
+        return f"<Feature {self.slug}>"

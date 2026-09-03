@@ -1,0 +1,182 @@
+{% extends "pm/base.html" %}
+
+{#
+  The catalogue of what has been built before.
+
+  A row opens to what stops it being built badly: how it should be done, what
+  went wrong last time, and the file worth copying. Closed, it is a name, a
+  category and a number - which is what a phone call needs.
+#}
+
+{% block title %}Features - Built By Bean{% endblock %}
+{% block page_title %}Features{% endblock %}
+{% block page_subtitle %}What I have built before{% endblock %}
+
+{% block content %}
+<div class="space-y-5 stagger-in" x-data="{ adding: false }">
+
+    <form method="GET" class="glass-card p-4 flex flex-wrap items-center gap-2">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search names, guidance, traps"
+               class="input-ring flex-1 min-w-[180px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        <select name="category"
+                class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            <option value="all">All areas ({{ total }})</option>
+            {% for key, label in categories %}
+            <option value="{{ key }}" {% if category == key %}selected{% endif %}>
+                {{ label }}{% if counts.get(key) %} ({{ counts[key] }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        <select name="status"
+                class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            <option value="all">Built and not</option>
+            {% for key, label in statuses %}
+            <option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+            Filter</button>
+        {% if q or category != 'all' or status != 'all' %}
+        <a href="{{ url_for('features.features_index') }}"
+           class="px-3 py-2.5 text-sm text-surface-500 hover:text-surface-300 transition-colors">Clear</a>
+        {% endif %}
+        <button type="button" @click="adding = !adding"
+                class="ml-auto px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+            Add one</button>
+    </form>
+
+    {# Small on purpose: catching something a client just named has to cost
+       seconds, or it does not get caught. #}
+    <form method="POST" action="{{ url_for('features.feature_create') }}"
+          x-show="adding" style="display: none"
+          class="glass-card p-4 flex flex-wrap items-end gap-3">
+        <div class="flex-1 min-w-[200px]">
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">What did they call it?</label>
+            <input type="text" name="name" required
+                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Area</label>
+            <select name="category"
+                    class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                {% for key, label in categories %}
+                <option value="{{ key }}" {% if category == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Worth $</label>
+            <input type="text" name="typical_value" placeholder="later"
+                   class="input-ring w-24 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+            Add</button>
+    </form>
+
+    {% if features %}
+    <div class="glass-card overflow-hidden">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-center gap-x-3">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
+                {{ features|length }} shown</span>
+            {% if estimate %}
+            <span class="text-xs text-surface-500">these add up to {{ estimate|format_currency }}</span>
+            {% endif %}
+        </div>
+
+        <div class="divide-y divide-white/5">
+        {% for f in features %}
+        <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }">
+
+            <button type="button" @click="open = !open"
+                    class="group flex w-full items-start gap-3 text-left" :aria-expanded="open">
+                <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors">
+                            {{ f.name }}</span>
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">
+                            {{ f.category_label }}</span>
+                        {% if f.status == 'idea' %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-300">
+                            not built yet</span>
+                        {% endif %}
+                        {% if f.pitfalls_md %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-red-500/10 text-red-300">
+                            traps</span>
+                        {% endif %}
+                    </span>
+                    {% if f.summary %}
+                    <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ f.summary }}</span>
+                    {% endif %}
+                </span>
+                <span class="shrink-0 text-sm tabular-nums {{ 'text-surface-200' if f.typical_value else 'text-surface-600' }}">
+                    {{ f.typical_value|format_currency if f.typical_value else '—' }}</span>
+                <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
+                     :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div x-show="open" style="display: none" class="mt-4 pt-4 border-t border-surface-700 space-y-4">
+
+                {% if f.reference_project %}
+                <p class="text-xs text-surface-400">
+                    <span class="text-surface-500">The one worth copying:</span>
+                    <span class="text-surface-200">{{ f.reference_project }}</span>
+                    {%- if f.reference_path %} <code class="text-brand-300">{{ f.reference_path }}</code>{% endif %}
+                </p>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('features.feature_edit', id=f.id) }}"
+                      class="space-y-3">
+                    <input type="hidden" name="return_category" value="{{ category }}">
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                            How it should be built</label>
+                        <textarea name="gold_standard_md" rows="4"
+                                  class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-surface-200 text-sm rounded-xl">{{ f.gold_standard_md }}</textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                            What went wrong last time</label>
+                        <textarea name="pitfalls_md" rows="4"
+                                  class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-surface-200 text-sm rounded-xl">{{ f.pitfalls_md }}</textarea>
+                    </div>
+
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
+                            <input type="text" name="typical_value"
+                                   value="{{ '%g'|format(f.typical_value) if f.typical_value is not none else '' }}"
+                                   placeholder="bundled"
+                                   class="input-ring w-28 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Status</label>
+                            <select name="status"
+                                    class="input-ring min-h-[40px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                                {% for key, label in statuses %}
+                                <option value="{{ key }}" {% if f.status == key %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit"
+                                class="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                            Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <p class="text-surface-400 mb-1">Nothing matches that.</p>
+        <a href="{{ url_for('features.features_index') }}"
+           class="text-sm text-brand-400 hover:text-brand-300">Show everything</a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
