@@ -23,21 +23,31 @@
 {% block content %}
 <div class="space-y-6 stagger-in">
 
+    {#
+      Lifetime, not this month. The bars below ask whether each fee still
+      covers its own infrastructure; these four ask whether hosting has been
+      worth doing at all, which only a running total can answer.
+    #}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div class="glass-card p-4 sm:p-5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Charged</p>
-            <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-2">{{ totals.fee|format_currency }}</p>
-            <p class="text-xs text-surface-400 mt-1">Per month, across all agreements</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Collected</p>
+            <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-2">{{ lifetime.collected|format_currency }}</p>
+            <p class="text-xs text-surface-400 mt-1">
+                Hosting paid, all time
+                {%- if lifetime.outstanding %}
+                <span class="block text-amber-400/90">{{ lifetime.outstanding|format_currency }} billed and unpaid</span>
+                {%- endif %}
+            </p>
         </div>
         <div class="glass-card p-4 sm:p-5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Costing</p>
-            <p class="text-xl sm:text-2xl font-bold text-red-300 mt-2">{{ totals.cost|format_currency }}</p>
-            <p class="text-xs text-surface-400 mt-1">{{ month.strftime('%B') }}, infrastructure</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Railway</p>
+            <p class="text-xl sm:text-2xl font-bold text-red-300 mt-2">{{ lifetime.railway|format_currency }}</p>
+            <p class="text-xs text-surface-400 mt-1">Every month on record</p>
         </div>
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Left over</p>
-            <p class="text-xl sm:text-2xl font-bold mt-2 {{ 'text-white' if totals.margin >= 0 else 'text-red-400' }}">{{ totals.margin|format_currency }}</p>
-            <p class="text-xs text-surface-400 mt-1">Before any time spent on upkeep</p>
+            <p class="text-xl sm:text-2xl font-bold mt-2 {{ 'text-white' if lifetime.margin >= 0 else 'text-red-400' }}">{{ lifetime.margin|format_currency }}</p>
+            <p class="text-xs text-surface-400 mt-1">Before Stripe's cut and time spent</p>
         </div>
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Needs a look</p>
@@ -147,8 +157,16 @@
     </div>
 
     <p class="text-xs text-surface-500">
-        Costs come from the service mappings, for {{ month.strftime('%B %Y') }} - the last
-        complete month. The month in progress is left out, because a month three days
+        The four totals at the top are lifetime, and answer a different question from
+        the bars: hosting actually collected, read from paid Stripe invoices rather
+        than from the fees agreed on the projects, against every Railway charge on
+        record. Anything billed and not yet paid is called out separately rather than
+        counted as earned.
+    </p>
+
+    <p class="text-xs text-surface-500">
+        The bars are one month. Costs come from the service mappings, for
+        {{ month.strftime('%B %Y') }} - the last complete month. The month in progress is left out, because a month three days
         old makes everything look cheap. A charge that buys a year, like a domain
         registration, is spread across the twelve months it covers rather than landing
         on the month it was invoiced; the expense ledger still keeps it whole, on its

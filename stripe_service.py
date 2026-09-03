@@ -370,6 +370,15 @@ def get_stripe_invoices(ttl=300):
                 "due_date": _at(getattr(inv, "due_date", None)),
                 "paid_at": _at(getattr(transitions, "paid_at", None) if transitions else None),
                 "description": getattr(inv, "description", None),
+                # The line items, as far as a list call returns them - the
+                # first ten, which is more than any invoice this business
+                # writes. Carried here so a caller can tell a hosting charge
+                # from a build payment without a request per invoice.
+                "lines": [
+                    {"description": getattr(li, "description", None) or "",
+                     "amount": (getattr(li, "amount", 0) or 0) / 100.0}
+                    for li in (getattr(getattr(inv, "lines", None), "data", None) or [])
+                ],
                 # Where the customer pays. Absent on a draft, which has not
                 # been finalised and so has no public page yet.
                 "hosted_url": getattr(inv, "hosted_invoice_url", None),
@@ -424,6 +433,45 @@ def get_stripe_invoice_totals(ttl=300):
             if customer:
                 out["open_by_customer"][customer] = out["open_by_customer"].get(customer, 0.0) + inv["amount_due"]
     return out
+
+
+# The word every hosting line has in common. The two live products word it
+# differently - "Monthly hosting and infrastructure" and "Monthly Hosting &
+# Data Storage" - so matching on the word they share survives a rename, and a
+# third product written next year, better than a list of price ids would.
+HOSTING_LINE = "hosting"
+
+
+def get_hosting_revenue(ttl=300):
+    """What the monthly hosting fee has actually collected, all time.
+
+    Read off the same invoice list as everything else, so this cannot disagree
+    with the invoice table about what Stripe is holding.
+
+    `collected` counts paid invoices only, because the question it answers is
+    what the fee has earned, not what it has been asked for. `outstanding` is
+    the rest of what was issued and is worth showing beside it: a hosting
+    subscription that has quietly gone past due looks, in a total, exactly like
+    one that was never sold.
+
+    Gross. Stripe's cut comes off these amounts and is booked as its own
+    expense, so subtracting it here would count it twice.
+    """
+    collected = outstanding = 0.0
+    paid_invoices = 0
+    for inv in get_stripe_invoices(ttl=ttl):
+        amount = sum(line["amount"] for line in inv.get("lines") or []
+                     if HOSTING_LINE in (line["description"] or "").lower())
+        if amount <= 0:
+            continue
+        if inv["status"] == "paid":
+            collected += amount
+            paid_invoices += 1
+        elif inv["status"] in ISSUED_STATUSES:
+            outstanding += amount
+    return {"collected": round(collected, 2),
+            "outstanding": round(outstanding, 2),
+            "paid_invoices": paid_invoices}
 
 
 def get_overdue_invoices(ttl=300):

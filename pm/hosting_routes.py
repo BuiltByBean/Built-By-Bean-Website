@@ -20,7 +20,8 @@ from datetime import date, timedelta
 from flask import Blueprint, render_template, request
 from flask_login import login_required
 
-from models import db, Client, Project, ServiceMapping, ServiceCostEntry
+from models import (db, Client, Project, ServiceMapping, ServiceCostEntry,
+                    ServiceProvider, Expense)
 
 hosting_bp = Blueprint("hosting", __name__, url_prefix="/admin/hosting")
 
@@ -173,6 +174,25 @@ def _bar(fee, cost):
     return round(fill, 2), round(line, 2)
 
 
+def _railway_all_time():
+    """Every dollar Railway has cost, across every month on record.
+
+    Matched on the description prefix rather than by joining the cost entries,
+    because half of this money has no cost entry to join to. Per-project
+    figures only start in August 2026; before that Railway was a single flat
+    expense a month, and a lifetime total that skipped those would be missing
+    two thirds of the months. Every Railway expense carries the provider's
+    display name as its prefix, and nothing else does.
+    """
+    provider = ServiceProvider.query.filter_by(name="railway").first()
+    if provider is None:
+        return 0.0
+    total = (db.session.query(db.func.coalesce(db.func.sum(Expense.amount), 0.0))
+             .filter(Expense.description.ilike(f"{provider.display_name} -%"))
+             .scalar())
+    return float(total or 0.0)
+
+
 # Worst first. A page whose whole job is to surface the two projects that need
 # attention should not open on the eleven that do not.
 STATUS_ORDER = {"loss": 0, "raise": 1, "unpriced": 2, "fine": 3}
@@ -220,17 +240,28 @@ def hosting_index():
     rows.sort(key=lambda r: (STATUS_ORDER.get(r["status"], 9),
                              -(r["cost"] or 0), r["project"].name.lower()))
 
-    priced = [r for r in rows if r["fee"] is not None]
     totals = {
-        "fee": sum(r["fee"] for r in priced),
-        # Every project's cost, priced or not: infrastructure for something
-        # nobody is being charged for is still money going out the door.
-        "cost": sum(r["cost"] for r in rows),
         "needs_attention": sum(1 for r in rows if r["status"] in ("loss", "raise")),
         "unpriced": sum(1 for r in rows if r["status"] == "unpriced"),
     }
-    totals["margin"] = totals["fee"] - totals["cost"]
+
+    # The lifetime question, which is a different one from the month's. The
+    # bars ask whether each fee still covers its own infrastructure; this asks
+    # whether hosting has been worth doing at all. Revenue comes from Stripe
+    # rather than from the fees on the projects, because a fee is what was
+    # agreed and a paid invoice is what arrived - Kuper's subscription is past
+    # due as this is written, and a total built from the agreed fees would show
+    # that money as earned.
+    from stripe_service import get_hosting_revenue
+    hosting = get_hosting_revenue()
+    lifetime = {
+        "collected": hosting["collected"],
+        "outstanding": hosting["outstanding"],
+        "paid_invoices": hosting["paid_invoices"],
+        "railway": _railway_all_time(),
+    }
+    lifetime["margin"] = lifetime["collected"] - lifetime["railway"]
 
     return render_template("pm/hosting/index.html",
                            rows=rows, month=month, totals=totals,
-                           min_margin=MIN_MARGIN)
+                           lifetime=lifetime, min_margin=MIN_MARGIN)
