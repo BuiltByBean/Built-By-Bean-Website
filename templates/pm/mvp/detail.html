@@ -1,0 +1,312 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  The page that is open during the call. Everything above the pickers is the
+  package as it stands; everything below is the catalogue, one tap from being
+  on it. Adding is a full submit and a redirect back to #pick, so the pickers
+  land back in view instead of the top of the page.
+#}
+
+{% block title %}{{ package.name }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('mvp.mvp_index'), 'MVP Builder') }}{% endblock %}
+{% block page_title %}{{ package.name }}{% endblock %}
+{% block page_subtitle %}{{ package.client.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-5 stagger-in" x-data='{ q: "", cat: "all" }'>
+
+    {# ── the package ─────────────────────────────────────── #}
+    <form method="POST" action="{{ url_for('mvp.package_update', id=package.id) }}"
+          class="glass-card p-4 sm:p-5 space-y-3">
+        <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    Working name</label>
+                <input type="text" name="name" value="{{ package.name }}" required
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    Status</label>
+                {{ select_dropdown("status", statuses, package.status) }}
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    Quoted $</label>
+                <input type="text" name="price_override"
+                       value="{{ '%g'|format(package.price_override) if package.price_override is not none else '' }}"
+                       placeholder="sum"
+                       class="input-ring w-28 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+        </div>
+        <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                What they are trying to do</label>
+            <textarea name="summary" rows="3" placeholder="In their words, while they say it"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-surface-200 text-sm rounded-xl">{{ package.summary }}</textarea>
+        </div>
+        <div class="flex items-center gap-3">
+            <button type="submit"
+                    class="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                Save</button>
+            {% if package.price_override is not none and package.items_total and package.price_override != package.items_total %}
+            <span class="text-xs text-surface-500">the parts add to {{ package.items_total|format_currency }}</span>
+            {% endif %}
+        </div>
+    </form>
+
+    {# ── where it goes next ──────────────────────────────── #}
+    <div class="flex flex-wrap items-center gap-2">
+        <a href="{{ url_for('mvp.package_sow', id=package.id) }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Draft the SOW</a>
+        <a href="{{ url_for('mvp.package_prompt', id=package.id) }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            Build prompt</a>
+    </div>
+
+    {# ── what is on it ───────────────────────────────────── #}
+    <div class="glass-card overflow-hidden">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-baseline gap-x-3">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
+                {{ package.items|length }} on it</span>
+            <span class="ml-auto text-sm tabular-nums text-white">
+                {{ package.estimate|format_currency if package.estimate else '—' }}{% if package.monthly_estimate %}
+                <span class="text-xs text-surface-500">+{{ package.monthly_estimate|format_currency }}/mo</span>{% endif %}
+            </span>
+        </div>
+
+        {% if package.items %}
+        <div class="divide-y divide-white/5">
+        {% for item in package.items %}
+            <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }">
+                <button type="button" @click="open = !open"
+                        class="group flex w-full items-start gap-3 text-left" :aria-expanded="open">
+                    <span class="min-w-0 flex-1">
+                        <span class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors">
+                                {{ item.name }}</span>
+                            {% if item.kind == 'product' %}
+                            <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-brand-500/10 text-brand-300">
+                                product</span>
+                            {% elif item.feature %}
+                            <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">
+                                {{ item.feature.category_label }}</span>
+                            {% if item.feature.status == 'idea' %}
+                            <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-300">
+                                not built yet</span>
+                            {% endif %}
+                            {% endif %}
+                        </span>
+                        {% if item.notes %}
+                        <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ item.notes }}</span>
+                        {% endif %}
+                    </span>
+                    <span class="shrink-0 text-right">
+                        <span class="block text-sm tabular-nums {{ 'text-surface-200' if item.price else 'text-surface-600' }}">
+                            {{ item.price|format_currency if item.price else '—' }}</span>
+                        {% if item.monthly_price %}
+                        <span class="block text-xs text-surface-500">+{{ item.monthly_price|format_currency }}/mo</span>
+                        {% endif %}
+                    </span>
+                    <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
+                         :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                <div x-show="open" style="display: none" class="mt-4 pt-4 border-t border-surface-700 space-y-3">
+                    {% if item.feature %}
+                    {% if item.feature.summary %}
+                    <p class="text-xs text-surface-400 max-w-3xl">{{ item.feature.summary }}</p>
+                    {% endif %}
+                    <p class="text-xs">
+                        <a href="{{ url_for('features.features_index', q=item.feature.name) }}"
+                           class="text-brand-400 hover:text-brand-300">Open in the catalogue</a>
+                    </p>
+                    {% elif item.product and item.product.summary %}
+                    <p class="text-xs text-surface-400 max-w-3xl">{{ item.product.summary }}</p>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('mvp.item_update', id=package.id, item_id=item.id) }}"
+                          class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                                For them $</label>
+                            <input type="text" name="price"
+                                   value="{{ '%g'|format(item.price) if item.price is not none else '' }}"
+                                   placeholder="bundled"
+                                   class="input-ring w-28 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                        </div>
+                        {% if item.kind == 'product' %}
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                                $/month</label>
+                            <input type="text" name="monthly_price"
+                                   value="{{ '%g'|format(item.monthly_price) if item.monthly_price is not none else '' }}"
+                                   class="input-ring w-24 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                        </div>
+                        {% endif %}
+                        <div class="flex-1 min-w-[200px]">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                                For this client</label>
+                            <input type="text" name="notes" value="{{ item.notes }}"
+                                   placeholder="Their version of it"
+                                   class="input-ring w-full px-4 py-2 bg-surface-800/50 text-surface-200 text-sm rounded-xl">
+                        </div>
+                        <button type="submit"
+                                class="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                            Save</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('mvp.item_remove', id=package.id, item_id=item.id) }}"
+                          class="flex justify-end">
+                        <button type="submit"
+                                class="px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors">
+                            Take it off</button>
+                    </form>
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center">
+            <p class="text-sm text-surface-400">Nothing on it yet. Add from the catalogue below.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── the catalogue, one tap away ─────────────────────── #}
+    <div id="pick" class="glass-card p-4 sm:p-5 space-y-4">
+        <input type="text" x-model="q" placeholder="Search the catalogue"
+               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        <div class="flex gap-1.5 overflow-x-auto pb-1 -mb-1">
+            <button type="button" @click="cat = 'all'"
+                    class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    :class="cat === 'all' ? 'bg-brand-500/20 text-brand-300' : 'bg-surface-800 text-surface-400 hover:text-surface-200'">
+                All</button>
+            {% for key, label in categories %}{% if counts.get(key) %}
+            <button type="button" @click="cat = '{{ key }}'"
+                    class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    :class="cat === '{{ key }}' ? 'bg-brand-500/20 text-brand-300' : 'bg-surface-800 text-surface-400 hover:text-surface-200'">
+                {{ label }} ({{ counts[key] }})</button>
+            {% endif %}{% endfor %}
+        </div>
+
+        <div x-show="cat === 'all'" class="space-y-1.5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Products</p>
+            {% for p in products %}
+            {% if p.id in chosen_products %}
+            <div class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 opacity-50"
+                 data-hay="{{ (p.name ~ ' ' ~ (p.summary or ''))|lower }}"
+                 x-show="!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase())">
+                <span class="min-w-0 flex-1 text-sm text-surface-300">{{ p.name }}</span>
+                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+            </div>
+            {% else %}
+            <form method="POST" action="{{ url_for('mvp.item_add', id=package.id) }}"
+                  data-hay="{{ (p.name ~ ' ' ~ (p.summary or ''))|lower }}"
+                  x-show="!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase())">
+                <input type="hidden" name="product_id" value="{{ p.id }}">
+                <button type="submit"
+                        class="group flex w-full items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 hover:border-brand-500/40 text-left transition-colors">
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-surface-200 group-hover:text-brand-300 transition-colors">{{ p.name }}</span>
+                    </span>
+                    <span class="shrink-0 text-xs tabular-nums text-surface-400">{{ p.price_label }}</span>
+                    <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-brand-300 transition-colors"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </button>
+            </form>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="space-y-1.5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Features</p>
+            {% for f in features %}
+            {% if f.id in chosen_features %}
+            <div class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 opacity-50"
+                 data-hay="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ f.category_label)|lower }}"
+                 x-show="(cat === 'all' || cat === '{{ f.category }}') && (!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase()))">
+                <span class="min-w-0 flex-1">
+                    <span class="block text-sm text-surface-300">{{ f.name }}</span>
+                    <span class="block text-[11px] text-surface-500">{{ f.category_label }}</span>
+                </span>
+                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+            </div>
+            {% else %}
+            <form method="POST" action="{{ url_for('mvp.item_add', id=package.id) }}"
+                  data-hay="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ f.category_label)|lower }}"
+                  x-show="(cat === 'all' || cat === '{{ f.category }}') && (!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase()))">
+                <input type="hidden" name="feature_id" value="{{ f.id }}">
+                <button type="submit"
+                        class="group flex w-full items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 hover:border-brand-500/40 text-left transition-colors">
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-surface-200 group-hover:text-brand-300 transition-colors">{{ f.name }}</span>
+                        <span class="block text-[11px] text-surface-500">{{ f.category_label }}{% if f.status == 'idea' %} &middot; not built yet{% endif %}</span>
+                    </span>
+                    <span class="shrink-0 text-xs tabular-nums text-surface-400">
+                        {{ f.typical_value|format_currency if f.typical_value else '' }}</span>
+                    <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-brand-300 transition-colors"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </button>
+            </form>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        {# The client just named something the catalogue has never heard of.
+           Five seconds, or it goes unrecorded: it lands as an idea in the
+           catalogue and straight onto this package in one move. #}
+        <form method="POST" action="{{ url_for('mvp.item_add', id=package.id) }}"
+              class="pt-3 border-t border-white/5 flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[180px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    They named something new</label>
+                <input type="text" name="new_name"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Area</label>
+                <select name="new_category"
+                        class="input-ring min-h-[44px] px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                    {% for key, label in categories %}
+                    <option value="{{ key }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
+                <input type="text" name="new_value" placeholder="later"
+                       class="input-ring w-24 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+                Add it</button>
+        </form>
+    </div>
+
+    <form method="POST" action="{{ url_for('mvp.package_delete', id=package.id) }}"
+          class="flex justify-end">
+        <button type="submit"
+                class="px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-500 hover:border-red-500/40 hover:text-red-300 transition-colors">
+            Delete this package</button>
+    </form>
+
+</div>
+{% endblock %}

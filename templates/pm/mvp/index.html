@@ -1,0 +1,77 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  Every package that has been scoped, and where each one stands. A package
+  with no contract behind it is the normal case: it is the record of a phone
+  call, kept warm for the follow-up.
+#}
+
+{% block title %}MVP Builder - Built By Bean{% endblock %}
+{% block page_title %}MVP Builder{% endblock %}
+{% block page_subtitle %}A build, assembled from the catalogue{% endblock %}
+
+{% set status_badge = {
+    "scoping": "bg-brand-500/10 text-brand-300",
+    "ready": "bg-amber-500/10 text-amber-300",
+    "contracted": "bg-emerald-500/10 text-emerald-300",
+    "parked": "bg-surface-800 text-surface-400",
+} %}
+
+{% block content %}
+<div class="space-y-5 stagger-in">
+
+    <form method="POST" action="{{ url_for('mvp.package_create') }}"
+          class="glass-card p-4 flex flex-wrap items-end gap-3">
+        <div class="flex-1 min-w-[200px]">
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Client</label>
+            {{ select_dropdown("client_id", client_options, placeholder="Who is it for", full_width=true) }}
+        </div>
+        <div class="flex-1 min-w-[200px]">
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">Working name</label>
+            <input type="text" name="name" placeholder="Their MVP"
+                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+            Start scoping</button>
+    </form>
+
+    {% if packages %}
+    <div class="glass-card overflow-hidden">
+        <div class="divide-y divide-white/5">
+        {% for p in packages %}
+            <a href="{{ url_for('mvp.package_detail', id=p.id) }}"
+               class="group flex items-center gap-3 p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
+                <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors">
+                            {{ p.name }}</span>
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium {{ status_badge.get(p.status, 'bg-surface-800 text-surface-400') }}">
+                            {{ p.status_label }}</span>
+                    </span>
+                    <span class="block mt-1 text-xs text-surface-400">
+                        {{ p.client.name }} &middot; {{ p.items|length }} item{{ 's' if p.items|length != 1 }}</span>
+                </span>
+                <span class="shrink-0 text-right">
+                    <span class="block text-sm tabular-nums {{ 'text-surface-200' if p.estimate else 'text-surface-600' }}">
+                        {{ p.estimate|format_currency if p.estimate else '—' }}</span>
+                    {% if p.monthly_estimate %}
+                    <span class="block text-xs text-surface-500">+{{ p.monthly_estimate|format_currency }}/mo</span>
+                    {% endif %}
+                </span>
+                <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-surface-300 transition-colors"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </a>
+        {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center">
+        <p class="text-surface-400">Nothing is being scoped. Pick a client above.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

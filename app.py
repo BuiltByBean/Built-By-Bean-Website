@@ -267,6 +267,10 @@ def create_app():
     from pm.features_routes import features_bp
     app.register_blueprint(features_bp)
 
+    # ── The MVP, assembled ──────────────────────────────────
+    from pm.mvp_routes import mvp_bp
+    app.register_blueprint(mvp_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)

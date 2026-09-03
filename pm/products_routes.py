@@ -70,6 +70,45 @@ def _playbook_for(sale):
     return Playbook.query.filter_by(slug=slug).first() if slug else None
 
 
+def playbook_lines(playbook):
+    """The runbook written out as prompt text, shared with the MVP builder.
+
+    Steps that wait on the client are marked, and their message is included,
+    because those are the ones that decide how long the whole thing takes and
+    the ones no agent can do alone.
+    """
+    out = []
+    out.append(f"THE RUNBOOK - {playbook.display_name}")
+    if playbook.one_liner:
+        out.append(f"  {playbook.one_liner}")
+    out.append("")
+    for label, body in (("Only the client can do these", playbook.client_only_md),
+                        ("Access you need from them", playbook.access_grant_md),
+                        ("Your steps", playbook.your_steps_md),
+                        ("Traps", playbook.traps_md),
+                        ("How to know it works", playbook.verify_md)):
+        if (body or "").strip():
+            out.append(f"{label}:")
+            out.extend("  " + line for line in body.strip().splitlines())
+            out.append("")
+
+    steps = playbook.steps.all()
+    if steps:
+        out.append("THE CHECKLIST")
+        for i, step in enumerate(steps, 1):
+            flag = "  [waits on the client]" if step.waits_on_client else ""
+            out.append(f"  {i}. {step.title}{flag}")
+            if (step.detail_md or "").strip():
+                out.extend("       " + line
+                           for line in step.detail_md.strip().splitlines())
+            if step.waits_on_client and (step.client_message_md or "").strip():
+                out.append("       Ask them, roughly:")
+                out.extend("         " + line
+                           for line in step.client_message_md.strip().splitlines())
+        out.append("")
+    return out
+
+
 def build_prompt(sale):
     """The whole job, written out for a fresh Claude session.
 
@@ -77,10 +116,6 @@ def build_prompt(sale):
     whatever the runbook says today. A prompt copied into a text field once
     would be describing a vendor's screens as they were the day it was
     written, which is exactly how a runbook goes quietly wrong.
-
-    Steps that wait on the client are marked, and their message is included,
-    because those are the ones that decide how long the whole thing takes and
-    the ones no agent can do alone.
     """
     product, project, client = sale.product, sale.project, sale.client
     out = []
@@ -109,34 +144,7 @@ def build_prompt(sale):
     playbook = _playbook_for(sale)
 
     if playbook is not None:
-        out.append(f"THE RUNBOOK - {playbook.display_name}")
-        if playbook.one_liner:
-            out.append(f"  {playbook.one_liner}")
-        out.append("")
-        for label, body in (("Only the client can do these", playbook.client_only_md),
-                            ("Access you need from them", playbook.access_grant_md),
-                            ("Your steps", playbook.your_steps_md),
-                            ("Traps", playbook.traps_md),
-                            ("How to know it works", playbook.verify_md)):
-            if (body or "").strip():
-                out.append(f"{label}:")
-                out.extend("  " + line for line in body.strip().splitlines())
-                out.append("")
-
-        steps = playbook.steps.all()
-        if steps:
-            out.append("THE CHECKLIST")
-            for i, step in enumerate(steps, 1):
-                flag = "  [waits on the client]" if step.waits_on_client else ""
-                out.append(f"  {i}. {step.title}{flag}")
-                if (step.detail_md or "").strip():
-                    out.extend("       " + line
-                               for line in step.detail_md.strip().splitlines())
-                if step.waits_on_client and (step.client_message_md or "").strip():
-                    out.append("       Ask them, roughly:")
-                    out.extend("         " + line
-                               for line in step.client_message_md.strip().splitlines())
-            out.append("")
+        out.extend(playbook_lines(playbook))
     else:
         out.append("There is no runbook for this one yet. Work out the steps, "
                    "and tell me what they were so one can be written.")

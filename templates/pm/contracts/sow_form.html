@@ -10,8 +10,15 @@
 {% block content %}
 <div class="max-w-2xl">
     <div class="glass-card p-6">
+        {#- The MVP builder opens this form through a redirect carrying the
+            package: client, name, description, price and the feature lines.
+            A plain visit carries no args and lands on the same blanks as
+            before. Single quotes on x-data are load-bearing (tojson). -#}
+        {% set arg_features = request.args.getlist('features') %}
         <form method="POST" action="{{ url_for('pm.generate_sow') }}"
-              x-data='Object.assign(sowForm(), { clientId: "", chosen: null,
+              x-data='Object.assign(sowForm(), { clientId: {{ request.args.get("client_id", "")|tojson }}, chosen: null,
+                                                projectName: {{ request.args.get("project_name", "")|tojson }},
+                                                features: {{ (arg_features if arg_features else [""])|tojson }},
                                                 clients: {{ client_lookup|tojson }},
                                                 projects: {{ projects|tojson }} })'
               x-effect="chosen = clients[clientId] || null">
@@ -25,6 +32,7 @@
                         {#- Chosen, never typed. The signed copy has to file itself
                             against a real client, and the email comes with it. -#}
                         {{ select_dropdown("client_id", client_options,
+                                           request.args.get('client_id', ''),
                                            placeholder="Choose a client", full_width=true, model="clientId") }}
                         {% if not client_options %}
                         <p class="mt-1.5 text-xs text-amber-400">
@@ -76,14 +84,14 @@
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Project Description *</label>
                     <textarea name="project_description" required rows="3"
                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400"
-                              placeholder="e.g. Design and develop a professional web application for J&D Entertainment to manage talent booking for events, including artist profiles, availability calendars, and booking requests."></textarea>
+                              placeholder="e.g. Design and develop a professional web application for J&D Entertainment to manage talent booking for events, including artist profiles, availability calendars, and booking requests.">{{ request.args.get('project_description', '') }}</textarea>
                 </div>
 
                 <!-- Pricing & Dates -->
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">MVP Price ($) *</label>
-                        <input type="text" name="mvp_price" required value="2,500"
+                        <input type="text" name="mvp_price" required value="{{ request.args.get('mvp_price', '2,500') }}"
                                class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
                                placeholder="2,500">
                     </div>

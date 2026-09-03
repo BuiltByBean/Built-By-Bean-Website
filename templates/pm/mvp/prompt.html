@@ -1,0 +1,36 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  The whole build, written out. Rendered fresh on every visit rather than
+  stored, so the guidance is whatever the catalogue says today.
+#}
+
+{% block title %}Build prompt - {{ package.name }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('mvp.package_detail', id=package.id), package.name) }}{% endblock %}
+{% block page_title %}Build prompt{% endblock %}
+{% block page_subtitle %}{{ package.name }}{% endblock %}
+
+{% block content %}
+<div class="stagger-in"
+     x-data="{ copied: false,
+               async copyIt() {
+                   try {
+                       await navigator.clipboard.writeText(this.$refs.text.textContent);
+                       this.copied = true;
+                       setTimeout(() => this.copied = false, 1600);
+                   } catch (e) {}
+               } }">
+    <div class="glass-card overflow-hidden">
+        <div class="p-4 border-b border-white/10 flex items-center justify-between gap-3">
+            <span class="text-sm font-semibold text-white">Drop this into a fresh Claude session</span>
+            <button type="button" @click="copyIt()"
+                    class="px-3 py-1.5 text-xs font-semibold rounded-lg btn-brand transition-all">
+                <span x-show="!copied">Copy</span>
+                <span x-show="copied" style="display: none">Copied</span>
+            </button>
+        </div>
+        <pre x-ref="text" class="overflow-auto p-4 sm:p-5 text-xs text-surface-200 whitespace-pre-wrap font-mono max-h-[72vh]">{{ prompt }}</pre>
+    </div>
+</div>
+{% endblock %}
