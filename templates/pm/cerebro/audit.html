@@ -2,38 +2,39 @@
 {% from "pm/components/back_link.html" import back_link %}
 
 {#
-  One repository against one rule: every place the scanner fired, as the
-  file and line a batch fix would open. The rule's own guidance sits above
-  the list so the fix and the reason travel together.
+  One repository against one signature: every place it fired, as the file
+  and line a batch fix would open - or, for a product or a feature, the
+  places that prove the thing is there. The guidance sits above the list
+  so the fix and the reason travel together.
 #}
 
-{% block title %}{{ rule.name }} in {{ repo.split('/')[-1] }} - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('cerebro.index', c=['rule:' ~ rule.slug]), 'Cerebro') }}{% endblock %}
-{% block page_title %}{{ rule.name }}{% endblock %}
-{% block page_subtitle %}{{ repo }} &middot; {{ audit.violations }} hit{{ 's' if audit.violations != 1 }}{% if audit.sha %} at {{ audit.sha }}{% endif %}{% endblock %}
+{% block title %}{{ title }} in {{ repo.split('/')[-1] }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(back, 'Cerebro') }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{{ repo }} &middot; {{ count }} {{ 'sighting' if presence else 'hit' }}{{ 's' if count != 1 }}{% if sha %} at {{ sha }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-4xl space-y-4 stagger-in">
 
     <div class="glass-card p-4 sm:p-5 space-y-3">
-        {% if rule.summary %}<p class="text-sm text-surface-200">{{ rule.summary }}</p>{% endif %}
-        {% if rule.gold_standard_md %}
+        {% if intro %}<p class="text-sm text-surface-200">{{ intro }}</p>{% endif %}
+        {% if guidance %}
         <div>
             <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">How it should be</p>
-            <p class="text-sm text-surface-300 whitespace-pre-wrap break-words">{{ rule.gold_standard_md }}</p>
+            <p class="text-sm text-surface-300 whitespace-pre-wrap break-words">{{ guidance }}</p>
         </div>
         {% endif %}
         <div>
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">The scanner</p>
-            <code class="block text-xs text-brand-200 bg-surface-900/60 border border-white/10 rounded-lg px-3 py-2 break-all">{{ rule.check_pattern }}</code>
-            <p class="text-xs text-surface-500 mt-1">in {{ rule.check_globs or 'every file' }}{% if rule.check_exclude %}, not {{ rule.check_exclude }}{% endif %}{% if rule.check_unless %}, unless the file mentions {{ rule.check_unless }}{% endif %}</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">{{ 'The signature' if presence else 'The scanner' }}</p>
+            <code class="block text-xs text-brand-200 bg-surface-900/60 border border-white/10 rounded-lg px-3 py-2 break-all">{{ pattern }}</code>
+            <p class="text-xs text-surface-500 mt-1">in {{ globs or 'every file' }}{% if exclude %}, not {{ exclude }}{% endif %}{% if unless %}, unless the file mentions {{ unless }}{% endif %}</p>
         </div>
     </div>
 
     <div class="glass-card overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3">
-            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Where it fires</span>
-            {% if audit.violations > samples | length %}<span class="text-xs text-surface-500">first {{ samples | length }} of {{ audit.violations }}</span>{% endif %}
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Where it {{ 'shows' if presence else 'fires' }}</span>
+            {% if count > samples | length %}<span class="text-xs text-surface-500">first {{ samples | length }} of {{ count }}</span>{% endif %}
         </div>
         <div class="divide-y divide-white/5">
             {% for s in samples %}

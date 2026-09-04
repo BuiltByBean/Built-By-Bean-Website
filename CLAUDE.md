@@ -125,7 +125,15 @@ broken scanner reads exactly like a clean repo - and the first seeded
 secrets scanner was exactly that until the fixture caught it. A project
 knows its repo through `Project.repo` (the edit form, or the link list at
 the bottom of Cerebro, which suggests from a shared word in the names).
-Sessions may propose scanners on rules through `suggest_update`.
+Sessions may propose scanners on rules through `suggest_update`. A product carries a
+signature the same way (`presence_pattern`, `presence_globs`,
+`presence_exclude`, `presence_fixture`) and `ProductAudit` holds where
+it fires: a product cell reads sale, then runbook applied, then "in the
+code". The first version read the sales ledger alone and told the
+owner two sites with working texting did not have it, because texting
+was built into them before the catalogue existed - the code is the
+truth about what a site has, the ledger is the truth about what was
+billed, and Cerebro asks the code first when the ledger is silent.
 
 ## Hosting fees that raise themselves
 

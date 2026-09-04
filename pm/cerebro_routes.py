@@ -6,11 +6,13 @@ a rule, who is breaking it and where. Add a second chip and the answer is
 the intersection: of the sites with text messaging, which ones still use
 naive UTC. That is what a batch fix starts from.
 
-Nothing here is typed in. Products come from sales, playbooks from what
-was applied to a project, features from the packages scoped for a client,
-and rules from the nightly audit that runs the catalogue's scanners over
-every repository. The one thing a person does on this page is tell it
-which repository a project lives in, once.
+Nothing here is typed in, and nothing is the ledger alone. A product is
+on a project if it was sold to it, or its runbook was applied to it, or
+its signature is in the code - texting built into an MVP before the
+products catalogue existed has no sale row, but it has twilio in it, and
+the nightly audit sees that. Features read the same way: a package, or
+the code. Rules come from the audit. The one thing a person does on this
+page is tell it which repository a project lives in, once.
 """
 import json
 import re
@@ -22,7 +24,7 @@ from flask_login import login_required
 import audit_repos
 from models import (db, Client, Project, Product, ProductSale, Playbook,
                     ProjectPlaybook, Feature, MvpPackage, MvpPackageItem,
-                    RuleAudit, RepoWatch)
+                    RuleAudit, ProductAudit, RepoWatch)
 
 cerebro_bp = Blueprint("cerebro", __name__, url_prefix="/admin/cerebro")
 
@@ -65,22 +67,41 @@ def _chips():
     return out
 
 
+def _seen_label(count):
+    return f"in the code ({count})"
+
+
 def _evidence(chips, projects):
-    """Per chip, a map from project id to (has, label, href). Built with
-    one query per chip rather than one per cell."""
+    """Per chip, a map from project id to (has, label, href). Built with a
+    few queries per chip rather than one per cell."""
     maps = []
     for kind, slug, row in chips:
         by_project = {}
         if kind == "product":
             sales = ProductSale.query.filter_by(product_id=row.id).all()
+            applied = set()
+            if row.playbook_slug:
+                pb = Playbook.query.filter_by(slug=row.playbook_slug).first()
+                if pb:
+                    applied = {a.project_id for a in
+                               ProjectPlaybook.query.filter_by(playbook_id=pb.id).all()}
+            seen = {a.repo: a for a in ProductAudit.query.filter_by(product_id=row.id).all()}
             for p in projects:
                 hit = next((s for s in sales if s.project_id == p.id), None) or \
                       next((s for s in sales if s.client_id == p.client_id
                             and s.project_id is None), None)
                 if hit:
-                    when = getattr(hit, "sold_at", None) or getattr(hit, "created_at", None)
+                    when = getattr(hit, "created_at", None)
                     by_project[p.id] = (True, "sold" + (f" {when:%b %Y}" if when else ""),
                                         url_for("products.products_index"))
+                elif p.id in applied:
+                    by_project[p.id] = (True, "runbook applied",
+                                        url_for("pm.project_detail", id=p.id))
+                elif p.repo and seen.get(p.repo) and seen[p.repo].hits:
+                    by_project[p.id] = (True, _seen_label(seen[p.repo].hits),
+                                        url_for("cerebro.presence_detail", repo=p.repo, slug=slug))
+                elif p.repo and p.repo in seen:
+                    by_project[p.id] = (False, "no sign of it", None)
         elif kind == "playbook":
             applied = {a.project_id: a for a in
                        ProjectPlaybook.query.filter_by(playbook_id=row.id).all()}
@@ -93,12 +114,16 @@ def _evidence(chips, projects):
             items = (db.session.query(MvpPackageItem, MvpPackage)
                      .join(MvpPackage, MvpPackage.id == MvpPackageItem.package_id)
                      .filter(MvpPackageItem.feature_id == row.id).all())
+            seen = {a.repo: a for a in RuleAudit.query.filter_by(rule_id=row.id).all()}
             for p in projects:
                 hit = next(((item, pkg) for item, pkg in items if pkg.client_id == p.client_id), None)
                 if hit:
                     _, pkg = hit
                     by_project[p.id] = (True, f"{pkg.name} ({pkg.status})",
                                         url_for("mvp.package_detail", id=pkg.id))
+                elif p.repo and seen.get(p.repo) and seen[p.repo].violations:
+                    by_project[p.id] = (True, _seen_label(seen[p.repo].violations),
+                                        url_for("cerebro.audit_detail", repo=p.repo, slug=slug))
         elif kind == "rule":
             audits = {a.repo: a for a in RuleAudit.query.filter_by(rule_id=row.id).all()}
             for p in projects:
@@ -177,6 +202,20 @@ def _suggest(project, repos):
     return ""
 
 
+def _health_counts():
+    """Every signature on the board, proven or not: rules, features and
+    products together, because a scanner that finds nothing looks exactly
+    like one that is broken."""
+    checks = audit_repos.health(Feature.query.filter_by(is_active=True)
+                                .filter(Feature.check_pattern.isnot(None)).all())
+    sigs = audit_repos.product_health(Product.query.filter_by(is_active=True)
+                                      .filter(Product.presence_pattern.isnot(None)).all())
+    counts = {"PASS": 0, "FAIL": 0, "NONE": 0}
+    for _, status in checks + sigs:
+        counts[status] = counts.get(status, 0) + 1
+    return counts, len(checks) + len(sigs)
+
+
 @cerebro_bp.route("/")
 @login_required
 def index():
@@ -186,13 +225,7 @@ def index():
         view = "all"
     rows = _rows(chips)
     shown = _filtered(rows, view)
-
-    rules_with_checks = (Feature.query.filter_by(kind="rule", is_active=True)
-                         .filter(Feature.check_pattern.isnot(None)).all())
-    health = audit_repos.health(rules_with_checks)
-    health_counts = {"PASS": 0, "FAIL": 0, "NONE": 0}
-    for _, status in health:
-        health_counts[status] = health_counts.get(status, 0) + 1
+    health, scanners = _health_counts()
 
     repos = sorted({r.repo for r in RepoWatch.query.all()}
                    | {a.repo for a in db.session.query(RuleAudit.repo).distinct()})
@@ -218,7 +251,7 @@ def index():
         chips=chip_views, view=view, views=VIEWS, rows=shown, total=len(rows),
         repo_options=repo_options,
         options=_options(), kind_labels=KIND_LABELS, kinds=KINDS,
-        health=health_counts, scanners=len(health), last_audit=last_audit,
+        health=health, scanners=scanners, last_audit=last_audit,
         unlinked=unlinked, repos=repos, suggestions=suggestions,
         link=link, label=_label,
         counts={"has": sum(1 for r in rows if r["has_all"]),
@@ -238,15 +271,41 @@ def link_repo():
     return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("cerebro.index"))
 
 
+def _samples(row):
+    try:
+        return json.loads(row.sample_json or "[]")
+    except ValueError:
+        return []
+
+
 @cerebro_bp.route("/audit/<path:repo>/<slug>")
 @login_required
 def audit_detail(repo, slug):
-    rule = Feature.query.filter_by(slug=slug, kind="rule").first() or abort(404)
-    audit = RuleAudit.query.filter_by(repo=repo, rule_id=rule.id).first() or abort(404)
-    try:
-        samples = json.loads(audit.sample_json or "[]")
-    except ValueError:
-        samples = []
-    projects = Project.query.filter_by(repo=repo).all()
-    return render_template("pm/cerebro/audit.html", rule=rule, audit=audit,
-                           samples=samples, repo=repo, projects=projects)
+    """A rule's hits, or a feature's sightings, in one repository."""
+    target = Feature.query.filter_by(slug=slug).first() or abort(404)
+    audit = RuleAudit.query.filter_by(repo=repo, rule_id=target.id).first() or abort(404)
+    presence = target.kind == "feature"
+    return render_template(
+        "pm/cerebro/audit.html", repo=repo, count=audit.violations, sha=audit.sha,
+        samples=_samples(audit), projects=Project.query.filter_by(repo=repo).all(),
+        title=target.name, presence=presence,
+        back=url_for("cerebro.index", c=[f"{target.kind}:{slug}"]),
+        intro=target.summary, guidance=target.gold_standard_md,
+        pattern=target.check_pattern, globs=target.check_globs,
+        exclude=target.check_exclude, unless=target.check_unless)
+
+
+@cerebro_bp.route("/present/<path:repo>/<slug>")
+@login_required
+def presence_detail(repo, slug):
+    """Where a product's signature fires in one repository."""
+    product = Product.query.filter_by(slug=slug).first() or abort(404)
+    audit = ProductAudit.query.filter_by(repo=repo, product_id=product.id).first() or abort(404)
+    return render_template(
+        "pm/cerebro/audit.html", repo=repo, count=audit.hits, sha=audit.sha,
+        samples=_samples(audit), projects=Project.query.filter_by(repo=repo).all(),
+        title=product.name, presence=True,
+        back=url_for("cerebro.index", c=[f"product:{slug}"]),
+        intro=product.summary, guidance="",
+        pattern=product.presence_pattern, globs=product.presence_globs,
+        exclude=product.presence_exclude, unless=None)

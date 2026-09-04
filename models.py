@@ -1496,6 +1496,15 @@ class Product(db.Model):
     # the source, and a second copy of it here would go stale the first time
     # the vendor changed a screen.
     prompt_intro = db.Column(db.Text, default="")
+    # What this product looks like in a codebase, so Cerebro can say a
+    # client has it from the code alone. Texting built into an MVP before
+    # the catalogue existed has no sale row, but it has twilio in it. A
+    # line matching presence_pattern in a file matching presence_globs is
+    # a sighting; presence_fixture is a line the pattern MUST match.
+    presence_pattern = db.Column(db.Text, nullable=True)
+    presence_globs = db.Column(db.String(300), nullable=True)
+    presence_exclude = db.Column(db.String(300), nullable=True)
+    presence_fixture = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     sales = db.relationship("ProductSale", back_populates="product",
@@ -1839,6 +1848,33 @@ class RuleAudit(db.Model):
 
     def __repr__(self):
         return f"<RuleAudit {self.repo} rule={self.rule_id} {self.violations}>"
+
+
+class ProductAudit(db.Model):
+    """One repository held against one product's signature, as of the last
+    nightly audit: how many lines looked like the product, and the first
+    few. The positive twin of RuleAudit."""
+
+    __tablename__ = "product_audits"
+    __table_args__ = (
+        db.UniqueConstraint("repo", "product_id", name="uq_product_audits_repo_product"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    repo = db.Column(db.String(200), nullable=False, index=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id", ondelete="CASCADE",
+                                                     name="fk_product_audits_product_id"),
+                           nullable=False, index=True)
+    sha = db.Column(db.String(64), nullable=True)
+    hits = db.Column(db.Integer, nullable=False, default=0)
+    sample_json = db.Column(db.Text, default="[]")
+    checked_at = db.Column(db.DateTime, nullable=True)
+
+    product = db.relationship("Product", backref=db.backref("audits", lazy="dynamic",
+                                                            cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<ProductAudit {self.repo} product={self.product_id} {self.hits}>"
 
 
 class RepoWatch(db.Model):
