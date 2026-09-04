@@ -43,6 +43,7 @@ def main():
 
     if not results:
         print("no active providers, nothing to sync")
+        _sweep()
         return 0
 
     failed = 0
@@ -54,7 +55,19 @@ def main():
             print(f"  {name:12} ok      {count} cost entr{'y' if count == 1 else 'ies'}")
 
     print(f"{len(results) - failed}/{len(results)} providers synced")
+    _sweep()
     return 1 if failed == len(results) else 0
+
+
+def _sweep():
+    """The other nightly job, on the same schedule, after the money. Its
+    failure is reported and never turns a good cost sync into a bad exit."""
+    try:
+        import sweep_repos
+        print("sweeping repos for new lessons", flush=True)
+        sweep_repos.main()
+    except Exception as err:  # noqa: BLE001
+        print(f"repo sweep failed: {str(err)[:200]}", flush=True)
 
 
 if __name__ == "__main__":
