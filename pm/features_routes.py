@@ -37,30 +37,29 @@ def _parse_money(raw):
 def _index(kind):
     """One page, two kinds: the features that get sold, and the rules that
     never get broken. Same search, same categories, same editor - a rule is
-    a feature whose price is that nothing goes wrong."""
+    a feature whose price is that nothing goes wrong.
+
+    Every row of the kind is rendered. The filtering happens on the page as
+    the search is typed and the moment a dropdown is picked, with the URL
+    kept in step, so the three parameters here only seed that state: a
+    link to a filtered view still opens filtered. The search covers the
+    guidance and the traps as well as the name, because half the value of a
+    landmine is being found by the symptom rather than by the title somebody
+    gave it months ago; the template packs that text onto each row.
+    """
     category = (request.args.get("category") or "all").strip()
     status = (request.args.get("status") or "all").strip()
     query = (request.args.get("q") or "").strip()
+    if category not in Feature.CATEGORY_LABELS:
+        category = "all"
+    if status not in Feature.STATUS_LABELS:
+        status = "all"
 
-    rows = Feature.query.filter_by(is_active=True, kind=kind)
-    if category in Feature.CATEGORY_LABELS:
-        rows = rows.filter(Feature.category == category)
-    if status in Feature.STATUS_LABELS:
-        rows = rows.filter(Feature.status == status)
-    if query:
-        # Searched across the guidance too, not only the name. Half the value
-        # of a landmine is being found by the symptom rather than by the title
-        # somebody gave it months ago.
-        like = f"%{query}%"
-        rows = rows.filter(db.or_(Feature.name.ilike(like),
-                                  Feature.summary.ilike(like),
-                                  Feature.gold_standard_md.ilike(like),
-                                  Feature.pitfalls_md.ilike(like),
-                                  Feature.reference_project.ilike(like)))
-    features = rows.order_by(Feature.sort_order, Feature.name).all()
+    features = (Feature.query.filter_by(is_active=True, kind=kind)
+                .order_by(Feature.sort_order, Feature.name).all())
 
     counts = {}
-    for row in Feature.query.filter_by(is_active=True, kind=kind).all():
+    for row in features:
         counts[row.category] = counts.get(row.category, 0) + 1
 
     return render_template("pm/features/index.html",
@@ -68,8 +67,7 @@ def _index(kind):
                            categories=Feature.CATEGORIES,
                            statuses=Feature.STATUSES,
                            category=category, status=status, q=query,
-                           total=sum(counts.values()),
-                           estimate=sum(f.typical_value or 0 for f in features),
+                           total=len(features),
                            page_kind=kind)
 
 
@@ -142,5 +140,13 @@ def feature_edit(id):
         feature.status = request.form["status"]
     db.session.commit()
     flash(f"{feature.name} updated.", "success")
-    return redirect(url_for(_index_endpoint(feature.kind),
-                            category=request.form.get("return_category") or "all"))
+    # Back to the view that was open, filters and all: the form carries the
+    # page's live state, and url_for drops whatever is empty.
+    back = {}
+    for key in ("category", "status"):
+        value = (request.form.get(f"return_{key}") or "").strip()
+        if value and value != "all":
+            back[key] = value
+    if (request.form.get("return_q") or "").strip():
+        back["q"] = request.form["return_q"].strip()
+    return redirect(url_for(_index_endpoint(feature.kind), **back))

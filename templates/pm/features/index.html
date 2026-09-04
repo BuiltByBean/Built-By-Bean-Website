@@ -18,31 +18,76 @@
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
-<div class="flex flex-col flex-1 min-h-0 gap-5 stagger-in" x-data="{ adding: false }">
+{# Every row is on the page; the bar filters them in place. The keystroke
+   is the apply and the pick is the apply: there is no Filter button, and
+   the only button the bar grows is the clear icon, while something is
+   active. The URL is kept in step so a link to this view still opens it
+   filtered, and a save comes back to it. #}
+<div class="flex flex-col flex-1 min-h-0 gap-5 stagger-in"
+     x-data='{
+       adding: false,
+       q: {{ q|tojson }},
+       category: {{ category|tojson }},
+       status: {{ status|tojson }},
+       shown: {{ features|length }},
+       estimate: 0,
+       get active() { return this.q.trim() !== "" || this.category !== "all" || this.status !== "all"; },
+       clear() { this.q = ""; this.category = "all"; this.status = "all"; },
+       filter() {
+         const needle = this.q.trim().toLowerCase();
+         let n = 0, sum = 0;
+         for (const row of this.$el.querySelectorAll("[data-row]")) {
+           const hit = (this.category === "all" || row.dataset.category === this.category)
+                    && (this.status === "all" || row.dataset.status === this.status)
+                    && (!needle || row.dataset.search.includes(needle));
+           row.hidden = !hit;
+           if (hit) { n += 1; sum += Number(row.dataset.value || 0); }
+         }
+         this.shown = n;
+         this.estimate = sum;
+         const p = new URLSearchParams();
+         if (needle) p.set("q", this.q.trim());
+         if (this.category !== "all") p.set("category", this.category);
+         if (this.status !== "all") p.set("status", this.status);
+         history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p.toString() : ""));
+       }
+     }'
+     x-effect="filter()">
 
     {# Standing still because the page stands still; relative z-30 per LM-1
-       so its panels paint over the list card. #}
-    <form method="GET" class="shrink-0 relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
-        <input type="text" name="q" value="{{ q }}" placeholder="Search names, guidance, traps"
-               class="input-ring flex-1 min-w-[180px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+       so its panels paint over the list card. Enter is swallowed: the state
+       is already applied, and a reload would only land here again. #}
+    <form method="GET" role="search" @submit.prevent
+          class="shrink-0 relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
+        <input type="text" name="q" x-model="q" placeholder="Search names, guidance, traps"
+               class="input-ring flex-1 min-w-[180px] min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         {% set cat_opts = [("all", "All areas (" ~ total ~ ")")] %}
         {% for key, label in categories %}
         {% set _ = cat_opts.append((key, label ~ (" (" ~ counts[key] ~ ")" if counts.get(key) else ""))) %}
         {% endfor %}
-        {{ select_dropdown("category", cat_opts, category, extra_class="max-w-[15rem]") }}
+        {{ select_dropdown("category", cat_opts, category, model="category", extra_class="max-w-[15rem]") }}
         {{ select_dropdown("status", [("all", "Built and not")] + statuses|list, status,
-                           extra_class="max-w-[11rem]") }}
-        <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
-            Filter</button>
-        {% if q or category != 'all' or status != 'all' %}
-        <a href="{{ url_for('features.rules_index' if page_kind == 'rule' else 'features.features_index') }}"
-           class="px-3 py-2.5 text-sm text-surface-500 hover:text-surface-300 transition-colors">Clear</a>
-        {% endif %}
-        <button type="button" @click="adding = !adding"
-                class="ml-auto px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-            Add one</button>
+                           model="status", extra_class="max-w-[11rem]") }}
+        <div class="ml-auto flex items-center gap-2">
+            <button type="button" x-show="active" x-cloak @click="clear()"
+                    aria-label="Clear filters" title="Clear filters"
+                    class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </button>
+            {# Features get named on a call and caught in seconds. Rules are
+               written by the sessions that learn them, through the door, so
+               there is nothing to type in here. #}
+            {% if page_kind != 'rule' %}
+            <button type="button" @click="adding = !adding"
+                    class="min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                Add one</button>
+            {% endif %}
+        </div>
     </form>
 
+    {% if page_kind != 'rule' %}
     {# Small on purpose: catching something a client just named has to cost
        seconds, or it does not get caught. #}
     {# z-20: above the list its dropdown opens over, under the filter card's
@@ -72,6 +117,7 @@
         <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
             Add</button>
     </form>
+    {% endif %}
 
     {% if features %}
     {# min-h-0 with default shrink: a short list keeps a short card, a long
@@ -80,15 +126,21 @@
     <div class="glass-card overflow-hidden flex flex-col min-h-0">
         <div class="shrink-0 px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-center gap-x-3">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
-                {{ features|length }} shown</span>
-            {% if estimate and page_kind != 'rule' %}
-            <span class="text-xs text-surface-500">these add up to {{ estimate|format_currency }}</span>
+                <span x-text="shown">{{ features|length }}</span> shown</span>
+            {% if page_kind != 'rule' %}
+            <span class="text-xs text-surface-500" x-show="estimate > 0" x-cloak>
+                these add up to <span x-text="estimate.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span></span>
             {% endif %}
         </div>
 
         <div class="divide-y divide-white/5 min-h-0 overflow-y-auto">
         {% for f in features %}
-        <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }">
+        {# The searchable text rides on the row, so the bar can test every
+           row without a request: name, summary, guidance, traps, source. #}
+        <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }"
+             data-row data-category="{{ f.category }}" data-status="{{ f.status }}"
+             data-value="{{ f.typical_value or 0 }}"
+             data-search="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ (f.gold_standard_md or '') ~ ' ' ~ (f.pitfalls_md or '') ~ ' ' ~ (f.reference_project or ''))|lower }}">
 
             <button type="button" @click="open = !open"
                     class="group flex w-full items-start gap-3 text-left" :aria-expanded="open">
@@ -133,7 +185,9 @@
 
                 <form method="POST" action="{{ url_for('features.feature_edit', id=f.id) }}"
                       class="space-y-3">
-                    <input type="hidden" name="return_category" value="{{ category }}">
+                    <input type="hidden" name="return_category" :value="category">
+                    <input type="hidden" name="return_status" :value="status">
+                    <input type="hidden" name="return_q" :value="q">
 
                     <div>
                         <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
@@ -172,12 +226,16 @@
         </div>
         {% endfor %}
         </div>
+        <div x-show="shown === 0" x-cloak class="p-8 sm:p-12 text-center">
+            <p class="text-surface-400 mb-3">Nothing matches that.</p>
+            <button type="button" @click="clear()"
+                    class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                Show everything</button>
+        </div>
     </div>
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center">
-        <p class="text-surface-400 mb-1">Nothing matches that.</p>
-        <a href="{{ url_for('features.rules_index' if page_kind == 'rule' else 'features.features_index') }}"
-           class="text-sm text-brand-400 hover:text-brand-300">Show everything</a>
+        <p class="text-surface-400">Nothing here yet.</p>
     </div>
     {% endif %}
 

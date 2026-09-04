@@ -85,8 +85,10 @@
                  {# The full-size variant is a thumb target, so it is pinned to
                     44px rather than left at whatever the padding happens to
                     produce. Padding alone gave 42, which is close enough to
-                    look right and not close enough to hit. #}
-                 {% if sm %}text-xs rounded-lg pl-2.5 pr-1.5 py-2{% else %}text-sm rounded-full pl-4 pr-3 py-2.5 min-h-[44px]{% endif %}"
+                    look right and not close enough to hit.
+                    rounded-xl, never a pill: this sits beside text inputs in
+                    every filter bar, and one bar carries one shape. #}
+                 {% if sm %}text-xs rounded-lg pl-2.5 pr-1.5 py-2{% else %}text-sm rounded-xl pl-4 pr-3 py-2.5 min-h-[44px]{% endif %}"
           :class="{ 'border-brand-500/70 ring-[3px] ring-brand-500/25': open }">
     <span class="truncate" :class="{ 'text-surface-500': !chosen }" x-text="label">{{ placeholder }}</span>
     <svg class="{% if sm %}w-3.5 h-3.5{% else %}w-4 h-4{% endif %} shrink-0 text-surface-500 transition-transform duration-200"
@@ -112,7 +114,7 @@
        class="absolute z-50 left-0 min-w-full w-max max-w-[min(20rem,calc(100vw-3rem))]
               max-h-64 overflow-y-auto overscroll-contain p-1.5
               bg-surface-800 border border-white/10
-              rounded-2xl shadow-xl shadow-black/50">
+              rounded-xl shadow-xl shadow-black/50">
     {#- Rendered by Alpine so setOptions can swap the list live. The key
         carries the index as well as the value, because a caller-supplied list
         is allowed to be momentarily imperfect and two rows sharing a value
