@@ -58,6 +58,14 @@
          return (v && v.price) || (this.sell && this.sell.price) || "";
        },
        hostIt: true,
+       /* Money the way it reads: 2,500 not 2500, cents only when there
+          are some. The server strips the commas back out. */
+       fmt(raw) {
+         const n = parseFloat(String(raw == null ? "" : raw).replace(/[^0-9.-]/g, ""));
+         if (isNaN(n)) return "";
+         return Number.isInteger(n) ? n.toLocaleString("en-US")
+              : n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+       },
        open(id, name, price, monthly) {
          this.sell = { id: id, name: name, price: price, monthly: monthly };
          this.clientId = ""; this.projectId = ""; this.variantId = "";
@@ -112,42 +120,57 @@
                             <img src="{{ url_for('static', filename=logos[v.playbook_slug]) }}?v={{ asset_version }}"
                                  alt="" class="w-3.5 h-3.5 rounded object-contain">
                             {% endif %}
-                            {{ v.name }}{% if v.price is not none %} &middot; ${{ '%g'|format(v.price) }}{% endif %}</span>
+                            {{ v.name }}{% if v.price is not none %} &middot; ${{ v.price|commas }}{% endif %}</span>
                         {% endfor %}
                     </div>
                     {% endif %}
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2">
-                    {# A checkbox, not a number: every monthly starts at the
-                       same fifty and gets adjusted on the sale if ever. The
-                       label answers the tap INSTANTLY - it shows what a save
-                       would set, not what the last save happened to leave. #}
-                    <form method="POST" action="{{ url_for('products.product_price', id=p.id) }}"
-                          x-data='{ m: {{ "true" if p.monthly_price is not none else "false" }} }'
-                          class="flex flex-wrap items-center gap-2">
-                        <div class="relative">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500 pointer-events-none">$</span>
-                            <input type="text" name="price" value="{{ '%g'|format(p.price) if p.price is not none else '' }}"
-                                   placeholder="quoted"
-                                   class="input-ring w-28 pl-7 pr-3 py-2.5 text-sm bg-surface-800/50 text-white rounded-xl">
-                        </div>
-                        {% call checkbox(name='has_monthly', checked=(p.monthly_price is not none), model='m') %}
-                            <span class="text-sm tabular-nums transition-colors" :class="m ? 'text-surface-200' : 'text-surface-500'"
-                                  x-text='m ? {{ (("$%g/mo"|format(p.monthly_price)) if p.monthly_price is not none else ("$%g/mo"|format(default_hosting_fee)))|tojson }} : "/mo"'></span>
-                        {% endcall %}
-                        <button type="submit"
-                                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                            Save</button>
-                    </form>
+                {# The trailing edge in the order the hand wants it: the price,
+                   then the switch, then the sale, then the save. The switch is
+                   the whole monthly: on means the standard fee rides with the
+                   product, fifty to start, and the figure is never typed here.
+                   What a client actually pays is set on the sale and raised
+                   from the hosting page. Off is no fee, and zero is off. #}
+                {% set fee = (p.monthly_price|commas) if p.monthly_price else (default_hosting_fee|commas) %}
+                <form method="POST" action="{{ url_for('products.product_price', id=p.id) }}"
+                      x-data='{ m: {{ "true" if p.monthly_price else "false" }},
+                                price: {{ (p.price|commas)|tojson }} }'
+                      class="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="has_monthly" :value="m ? '1' : ''">
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500 pointer-events-none">$</span>
+                        <input type="text" name="price" inputmode="decimal" value="{{ p.price|commas }}"
+                               x-model="price" @blur="price = fmt(price)" placeholder="quoted"
+                               class="input-ring w-28 min-h-[44px] pl-7 pr-3 py-2.5 text-sm tabular-nums bg-surface-800/50 text-white rounded-xl">
+                    </div>
+                    {# Single-quoted handlers where tojson lands in them: it
+                       writes double quotes, which would close a double-quoted
+                       attribute at the first one and truncate the handler. #}
+                    <button type="button" @click="m = !m"
+                            :aria-pressed="m" :title='m ? {{ ("Monthly fee: $" ~ fee ~ "/mo")|tojson }} : "Monthly fee: off"' aria-label="Monthly fee"
+                            :class="m ? 'border-brand-500/50 bg-brand-500/15 text-brand-300' : 'border-white/10 text-surface-500 hover:text-surface-300'"
+                            class="inline-flex items-center justify-center w-11 h-11 rounded-xl border transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"/>
+                        </svg>
+                    </button>
+                    {# Sells what the fields say right now, saved or not. #}
                     <button type="button"
-                            {#- Single-quoted, because tojson writes double quotes and
-                                they would close a double-quoted attribute at the first
-                                one - truncating the handler mid product name. -#}
-                            @click='open({{ p.id }}, {{ p.name|tojson }}, {{ (("%g"|format(p.price)) if p.price is not none else "")|tojson }}, {{ (("%g"|format(p.monthly_price)) if p.monthly_price is not none else "")|tojson }})'
-                            class="min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
-                        Sell</button>
-                </div>
+                            @click='open({{ p.id }}, {{ p.name|tojson }}, price, m ? {{ fee|tojson }} : "")'
+                            aria-label="Sell {{ p.name }}" title="Sell"
+                            class="inline-flex items-center justify-center w-11 h-11 rounded-xl btn-brand transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"/>
+                        </svg>
+                    </button>
+                    <button type="submit" aria-label="Save {{ p.name }}" title="Save"
+                            class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8"/>
+                        </svg>
+                    </button>
+                </form>
             </div>
         </div>
         {% endfor %}
@@ -262,13 +285,15 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Price $</label>
-                    <input type="text" name="price" :value="suggested"
-                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    <input type="text" name="price" inputmode="decimal" :value="fmt(suggested)"
+                           @blur="$el.value = fmt($el.value)"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm tabular-nums">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Ongoing $/mo</label>
-                    <input type="text" name="monthly_price" :value="sell && sell.monthly"
-                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                    <input type="text" name="monthly_price" inputmode="decimal" :value="fmt(sell && sell.monthly)"
+                           @blur="$el.value = fmt($el.value)"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm tabular-nums">
                 </div>
             </div>
 
@@ -282,7 +307,8 @@
                 {% call checkbox(name='hosted', model='hostIt') %}
                     <span class="text-sm text-surface-300">I host this &mdash; monthly hosting and storage</span>
                 {% endcall %}
-                <input type="text" name="hosting_fee" value="{{ '%g'|format(default_hosting_fee) }}"
+                <input type="text" name="hosting_fee" inputmode="decimal" value="{{ default_hosting_fee|commas }}"
+                       @blur="$el.value = fmt($el.value)"
                        x-show="hostIt" style="display: none"
                        class="input-ring w-24 px-3 py-2 text-sm bg-surface-800/50 text-white rounded-xl">
             </div>

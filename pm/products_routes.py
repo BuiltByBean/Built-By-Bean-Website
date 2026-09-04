@@ -205,15 +205,16 @@ def products_index():
 def product_price(id):
     """The list price, which is a business decision and not a deploy.
 
-    The monthly is a yes-or-no here, not a figure: every one starts at the
-    same fifty, and the number that matters gets set on the sale. Checking
-    the box keeps whatever the monthly already is, or starts it at the
-    default; unchecking it ends it.
+    The monthly is a switch, not a figure. On means the standard fee rides
+    with the product, fifty to start; what a client actually pays is set
+    on the sale and raised from the hosting page. Switching on keeps a fee
+    already there or starts it at the default, and a stored zero counts as
+    nothing, so the switch can never be on at zero. Off ends it.
     """
     product = db.session.get(Product, id) or abort(404)
     product.price = _parse_money(request.form.get("price"))
     if request.form.get("has_monthly"):
-        if product.monthly_price is None:
+        if not product.monthly_price:
             product.monthly_price = DEFAULT_HOSTING_FEE
     else:
         product.monthly_price = None

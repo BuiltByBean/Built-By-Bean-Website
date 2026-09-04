@@ -465,6 +465,18 @@ def create_app():
             return "$0.00"
         return f"${value:,.2f}"
 
+    @app.template_filter("commas")
+    def commas(value):
+        """A figure for a money field: 2,500 or 2,500.50, blank for none.
+
+        format_currency prints a total. This fills an input, so no dollar
+        sign (the field draws its own) and no .00 to type over.
+        """
+        if value is None:
+            return ""
+        text = f"{value:,.2f}"
+        return text[:-3] if text.endswith(".00") else text
+
     @app.template_filter("format_date")
     def format_date(value):
         if value is None:

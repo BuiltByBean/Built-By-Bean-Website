@@ -293,3 +293,36 @@ rg -L 'main_class' $(rg -l 'form method="GET"' templates/pm)
 Every filter-over-list page must either fill `main_class` with
 `contained-scroll` or sit in a `.sticky-filters` container - and the
 first choice is the default.
+
+### LM-5 - a switch that means "there is a fee" was tested with `is not none`
+
+**What happened.** The products row showed a ticked monthly box beside
+"$0/mo", and after one fix it still did. The tick was
+`monthly_price is not none`, a zero had been stored, and so the row
+asserted a fee that did not exist. The first fix made the label react to
+the tap and left the test alone. The fix after that added a field to type
+the monthly into, which was never the design: nobody types the monthly on
+that page.
+
+**Why it is easy to do.** None and zero are different values with the
+same meaning here, and the form only ever wrote None, so the zero case
+looked impossible until one arrived from somewhere else. And a wrong
+number on a label invites a field to correct it, when the number was
+never meant to be editable there.
+
+**The rule.** The product's monthly is a switch, not a figure. On means
+the standard fee (`DEFAULT_HOSTING_FEE`, fifty) rides with the product;
+what a client actually pays is set on the sale and raised from the
+hosting page. A stored amount is on when it is truthy, and only then, and
+the save route replaces a stored zero with the default, so on-at-zero
+cannot be stored, not merely not shown. The row is the price field, then
+three icon buttons on the trailing edge in the order toggle, sell, save.
+Dollar figures render through the `commas` filter and reformat on blur.
+
+**Grep.**
+```
+rg -n "monthly_price is not none|hosting_fee is not none" templates/
+rg -n 'name="monthly_price"' templates/pm/products/index.html
+```
+The first: any hit is the regression. The second: exactly one hit, in the
+sell dialog, never in the row.
