@@ -1447,10 +1447,25 @@ class Product(db.Model):
 
     __tablename__ = "products"
 
+    # Ordered the way a sale is discussed: the build itself, getting paid,
+    # reaching people, the paperwork, running the day, and their own site
+    # and systems. The products page groups by this.
+    CATEGORIES = (
+        ("build", "The build"),
+        ("money", "Getting paid"),
+        ("comms", "Reaching people"),
+        ("documents", "Paperwork"),
+        ("operations", "Running the day"),
+        ("connect", "Their site and their systems"),
+    )
+    CATEGORY_LABELS = dict(CATEGORIES)
+
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(60), unique=True, nullable=False)
     name = db.Column(db.String(120), nullable=False)
     summary = db.Column(db.Text, default="")
+    category = db.Column(db.String(20), nullable=False, default="operations",
+                         server_default="operations", index=True)
     price = db.Column(db.Float, nullable=True)
     monthly_price = db.Column(db.Float, nullable=True)
     # The runbook applied to the project when this sells. Held as a slug
@@ -1481,6 +1496,10 @@ class Product(db.Model):
 
     sales = db.relationship("ProductSale", back_populates="product",
                             cascade="all, delete-orphan", lazy="dynamic")
+
+    @property
+    def category_label(self):
+        return self.CATEGORY_LABELS.get(self.category, self.category)
 
     @property
     def price_label(self):

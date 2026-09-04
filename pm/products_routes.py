@@ -191,8 +191,19 @@ def products_index():
     # client, the project and what they agreed to.
     prompts = {sale.id: build_prompt(sale) for sale in sales}
 
+    # Grouped by category in CATEGORIES order, empty groups dropped, so the
+    # page reads the way a sale is discussed rather than in one long list.
+    groups = []
+    for key, label in Product.CATEGORIES:
+        members = [p for p in products if p.category == key]
+        if members:
+            groups.append({"key": key, "label": label, "products": members})
+    stray = [p for p in products if p.category not in Product.CATEGORY_LABELS]
+    if stray:
+        groups.append({"key": "other", "label": "Everything else", "products": stray})
+
     return render_template("pm/products/index.html",
-                           products=products, sales=sales, prompts=prompts,
+                           products=products, groups=groups, sales=sales, prompts=prompts,
                            clients=clients, projects=projects,
                            variants=variants, hosted=hosted, logos=logos,
                            default_hosting_fee=DEFAULT_HOSTING_FEE,

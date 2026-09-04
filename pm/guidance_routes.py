@@ -175,8 +175,8 @@ def products():
             .order_by(Product.sort_order, Product.name).all())
     return jsonify({"products": [
         {"slug": p.slug, "name": p.name, "summary": p.summary or "",
-         "price": p.price, "monthly_price": p.monthly_price,
-         "playbook": p.playbook_slug or ""}
+         "category": p.category, "price": p.price,
+         "monthly_price": p.monthly_price, "playbook": p.playbook_slug or ""}
         for p in rows]})
 
 
@@ -410,9 +410,12 @@ def _create_from(kind, payload, project):
             sort_order=last + 10,
         )
     elif kind == "product":
+        category = payload.get("category")
+        if category not in Product.CATEGORY_LABELS:
+            category = "operations"
         last = db.session.query(db.func.max(Product.sort_order)).scalar() or 0
         row = Product(
-            slug=slug, name=name,
+            slug=slug, name=name, category=category,
             summary=_cap(payload.get("summary"), 2000),
             price=_number(payload.get("price")),
             monthly_price=_number(payload.get("monthly_price")),
