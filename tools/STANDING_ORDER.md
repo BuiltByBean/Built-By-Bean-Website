@@ -4,6 +4,10 @@ This is the user-level instruction file for every Claude session on a
 machine that has the bridge registered. It lives in the repo so it can be
 put back on any machine in one copy:
 
+    .\tools\bootstrap_guidance.ps1 -Key <PM_GUIDANCE_KEY>
+
+which also registers the bridge. The order alone is one copy:
+
     Copy-Item tools\STANDING_ORDER.md $HOME\.claude\CLAUDE.md
 
 Every session on this machine carries the pm-guidance tools: get_rules,

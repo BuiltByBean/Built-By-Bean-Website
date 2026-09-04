@@ -224,6 +224,28 @@ def build_package_prompt(package):
                "over, anything waiting on the client.")
     out.append("  Never invent a credential, a phone number or an account "
                "id. Ask.")
+    # The loop, written into the prompt itself so it travels with the
+    # project rather than depending on which machine the session is on.
+    # On 2026-09-04 a laptop turned out to have neither the bridge nor the
+    # standing order, and nothing in the prompt said so; a session there
+    # would have built from this snapshot and filed nothing back.
+    out.append("  This prompt is a snapshot of the board. The board is live: "
+               "call get_rules before building, get_feature_guidance for "
+               "each feature as you reach it, and get_playbook before "
+               "touching a vendor. If the pm-guidance tools are not in this "
+               "session, stop and say so before anything else - the fix is "
+               "tools/bootstrap_guidance.ps1 in the Built-By-Bean-Website "
+               "repo, then a fresh session. Do not build from the snapshot "
+               "alone.")
+    out.append("  What this build teaches goes back the moment it is learned, "
+               "not at the end: report_lesson for a bug that cost time, "
+               "suggest_update for a runbook step that moved, a better file "
+               "to copy, a rule that reads badly, or a product that now "
+               "exists. Appends and creates apply at once; a rewrite waits "
+               "for Michael in the inbox.")
+    out.append("  File the work as it happens: upsert_project once, log_time "
+               "and log_expense as they occur, register_hosting_resource "
+               "for anything stood up.")
     out.append("  Where the guidance above disagrees with what you find, say "
                "so plainly instead of quietly deviating - the catalogue gets "
                "corrected, not ignored.")

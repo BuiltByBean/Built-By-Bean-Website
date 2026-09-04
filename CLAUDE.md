@@ -23,11 +23,14 @@ bridge that puts those four tools (`get_rules`, `get_feature_guidance`,
 `get_playbook`, `report_lesson`) into every session on this machine; it
 is registered at user scope in Claude Code with the deployed board's URL
 and key, and `~/.claude/CLAUDE.md` carries the standing order to use
-them. The text of that order is `tools/STANDING_ORDER.md`, with the one
-copy command that puts it in place on a new machine; on 2026-09-04
-neither the registration nor the order turned out to exist on the
-owner's machine, so check both before assuming any session can file
-anything. The write path appends with attribution and refuses duplicates,
+them. The text of that order is `tools/STANDING_ORDER.md`, and
+`tools/bootstrap_guidance.ps1 -Key <key>` puts both the order and the
+registration on a new machine in one command; on 2026-09-04 neither
+turned out to exist on the owner's laptop, so check both before
+assuming any session can file anything. Neither travels with a repo or
+an account, so the MVP build prompt now carries the loop itself: it
+tells the session to consult the live board, to stop and say so if the
+tools are missing, and to file what it learns as it goes. The write path appends with attribution and refuses duplicates,
 because reporting sessions retry like any other API client.
 
 The catalogue grows itself through the same door, with the policy set by
