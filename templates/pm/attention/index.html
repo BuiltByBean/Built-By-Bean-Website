@@ -134,7 +134,7 @@
             {% endif %}
 
             {% if s.proposals %}
-            {{ section_head('Catalogue rewrites waiting on a yes', s.proposals|length, 'amber') }}
+            {{ section_head('Catalogue changes waiting on a yes', s.proposals|length, 'amber') }}
             {% for p in s.proposals %}
             <div class="p-4 sm:p-5 space-y-2">
                 <div class="flex flex-wrap items-center gap-2 min-w-0">
@@ -143,7 +143,16 @@
                     <span class="text-xs text-surface-400">&middot; {{ p.verb|lower }} {{ p.field_label }} &middot; from {{ p.project or 'a session' }}</span>
                 </div>
                 {% if p.reason %}<p class="text-sm text-surface-300 break-words">{{ p.reason }}</p>{% endif %}
-                <div class="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3 text-sm text-surface-100 whitespace-pre-wrap break-words">{{ p.proposed }}</div>
+                {# A create carries its fields, not a single text: the name it
+                   would take and what it says went wrong, the way the sweeper
+                   found it in a repo. #}
+                <div class="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3 text-sm text-surface-100 whitespace-pre-wrap break-words">
+                    {%- if p.mode == 'create' -%}
+                    {{ p.create_text }}
+                    {%- else -%}
+                    {{ p.proposed }}
+                    {%- endif -%}
+                </div>
                 <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
                     <a href="{{ url_for('inbox.inbox_index') }}"
                        class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">See what it replaces</a>

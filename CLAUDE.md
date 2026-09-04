@@ -81,6 +81,33 @@ attention or messages page opens, at most every five minutes; "Check
 mail" is the synchronous version. Unanswered inbound mail is an attention
 signal; the messages page is the full history, linked from there.
 
+## The loop, enforced
+
+Telling a session to consult the board and file what it learns was a
+standing order, and a standing order is obeyed as well as it is
+remembered. `tools/hooks/` makes the harness do it instead: SessionStart
+fetches the rules brief and prints it, so every session on the machine
+opens already briefed (and says LOUDLY if the bridge is missing or the
+board answers 401); PostToolUse on Edit|Write notices a CLAUDE.md being
+written and leaves a marker; Stop refuses to end the turn (exit 2, reason
+on stderr) while that marker has no report_lesson or suggest_update
+after it in the transcript, at most twice, never when stop_hook_active.
+`tools/hooks/install.py` merges them into ~/.claude/settings.json without
+touching anything else; the bootstrap runs it. Hooks print UTF-8 on
+purpose - Windows hands them cp1252 and one minus sign in a rule killed
+the injection after its header.
+
+## The sweeper
+
+`sweep_repos.py` runs after `sync_costs.py` in the same nightly cost-sync
+service. It reads every repo on the GitHub account (GITHUB_TOKEN on that
+service for private ones; public without), splits each CLAUDE.md into
+headed sections, and proposes any heading the board has not seen for
+that repo - through `_propose(..., hold=True)`, so it lands PENDING on
+Needs attention rather than riding into every build prompt as repo
+prose. `RepoWatch` holds the blob sha and the headings seen; the first
+read of a repo only records, so nothing mined by hand comes back.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last

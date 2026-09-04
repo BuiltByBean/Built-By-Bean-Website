@@ -16,7 +16,10 @@ get_clients, upsert_project, log_expense, log_time and
 register_hosting_resource. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
 session agrees on. The bridge is registered at user scope and reads
-PM_GUIDANCE_KEY from the environment.
+PM_GUIDANCE_KEY from the environment. The bootstrap also installs three
+hooks: the rules brief is in context at session start, and a session
+cannot end a turn in which it wrote to a CLAUDE.md without filing the
+lesson. That is the harness enforcing this order, not a request.
 
 - Before building anything, call get_rules and follow the brief. When a
   feature is in play, call get_feature_guidance for it. Setting up a

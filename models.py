@@ -1793,6 +1793,28 @@ class Message(db.Model):
         return f"<Message {self.direction} {self.from_email} {self.status}>"
 
 
+class RepoWatch(db.Model):
+    """What the nightly sweep has already read of one repository's CLAUDE.md.
+
+    The blob sha means an unchanged file costs one request and no parsing;
+    the seen headings mean only what is new is proposed, and the first read
+    of a repo records everything without proposing any of it, so the lessons
+    already mined by hand never come back as duplicates.
+    """
+
+    __tablename__ = "repo_watches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    repo = db.Column(db.String(200), nullable=False, unique=True)
+    last_sha = db.Column(db.String(64), nullable=True)
+    seen_json = db.Column(db.Text, default="[]")
+    last_swept_at = db.Column(db.DateTime, nullable=True)
+    filed_count = db.Column(db.Integer, default=0)
+
+    def __repr__(self):
+        return f"<RepoWatch {self.repo}>"
+
+
 class CatalogueProposal(db.Model):
     """One change a session asked to make to the catalogue, and what became of it.
 

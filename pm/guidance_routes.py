@@ -503,8 +503,15 @@ def revert_proposal(proposal):
     return True, ""
 
 
-def _propose(*, kind, slug, field, mode, text, reason, project, payload=None):
-    """Validate, record, and either apply or park. Returns (dict, status)."""
+def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
+             hold=False):
+    """Validate, record, and either apply or park. Returns (dict, status).
+
+    `hold` parks a change that would otherwise apply on arrival. The repo
+    sweeper uses it: text mined from a CLAUDE.md was written for that
+    repo, and a create would otherwise ride into every build prompt
+    verbatim. Accepting it is one press on the attention page.
+    """
     if kind not in CatalogueProposal.KIND_LABELS:
         return {"error": "kind must be feature, rule, playbook or product"}, 400
     if mode not in ("append", "replace", "create"):
@@ -544,7 +551,7 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None):
         payload_json=json.dumps(payload) if keeps_payload else None,
     )
 
-    if _auto_applies(mode):
+    if _auto_applies(mode) and not hold:
         db.session.add(proposal)
         ok, message = apply_proposal(proposal)
         if not ok:
@@ -563,12 +570,15 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None):
 
     # A rewrite. Snapshot what it would replace so the inbox can show the
     # diff, and wait.
-    row = _target(kind, slug)
-    if field == STEP_FIELD:
-        proposal.previous = steps_text(steps_snapshot(row))
+    if mode == "create":
+        proposal.previous = None  # nothing to put back; a create is retired instead
     else:
-        current = getattr(row, field)
-        proposal.previous = "" if current is None else str(current)
+        row = _target(kind, slug)
+        if field == STEP_FIELD:
+            proposal.previous = steps_text(steps_snapshot(row))
+        else:
+            current = getattr(row, field)
+            proposal.previous = "" if current is None else str(current)
     proposal.status = "pending"
     db.session.add(proposal)
     db.session.commit()

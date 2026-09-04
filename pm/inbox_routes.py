@@ -64,6 +64,15 @@ def _decorate(rows):
         p.payload.pop("previous_steps", None)
         if isinstance(p.payload.get("steps"), list):
             p.payload["steps"] = steps_text(p.payload["steps"])
+        # What a create would put in the catalogue, as one readable text
+        # for the attention page: the name, the summary, the lesson.
+        parts = []
+        if p.mode == "create":
+            name = p.payload.get("name") or p.payload.get("display_name") or ""
+            wrong = str(p.payload.get("what_went_wrong") or p.payload.get("pitfalls_md") or "")
+            parts = [str(name), str(p.payload.get("summary") or ""),
+                     wrong[:600] + ("..." if len(wrong) > 600 else "")]
+        p.create_text = (chr(10) * 2).join(x for x in parts if x)
     return rows
 
 
