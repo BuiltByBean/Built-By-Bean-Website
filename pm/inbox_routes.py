@@ -15,7 +15,8 @@ from flask import Blueprint, render_template, redirect, url_for, flash, abort, r
 from flask_login import login_required
 
 from models import db, CatalogueProposal
-from pm.guidance_routes import apply_proposal, revert_proposal, target_label
+from pm.guidance_routes import (apply_proposal, revert_proposal, target_label,
+                                steps_text)
 
 inbox_bp = Blueprint("inbox", __name__, url_prefix="/admin/features/inbox")
 
@@ -39,6 +40,7 @@ FIELD_LABELS = {
     "traps_md": "the traps", "verify_md": "how to verify",
     "prompt_intro": "prompt intro", "playbook_slug": "runbook",
     "price": "price", "monthly_price": "monthly price", "*": "",
+    "steps": "the checklist",
 }
 
 MODE_VERBS = {"append": "Added to", "replace": "Rewrites", "create": "Created"}
@@ -57,6 +59,11 @@ def _decorate(rows):
                              if v not in (None, "", [])}
             except ValueError:
                 p.payload = {}
+        # The checklist reads as numbered lines here, and the snapshot kept
+        # for revert is not for display.
+        p.payload.pop("previous_steps", None)
+        if isinstance(p.payload.get("steps"), list):
+            p.payload["steps"] = steps_text(p.payload["steps"])
     return rows
 
 

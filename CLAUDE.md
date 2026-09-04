@@ -44,7 +44,12 @@ a call and it has to be caught in seconds.
 Sessions may also file operational records - `upsert_project`,
 `log_expense`, `log_time`, `register_hosting_resource` - and may NOT
 contact a client, resolve a ticket or send a contract: those are
-Michael's, and the API has no route for them on purpose.
+Michael's, and the API has no route for them on purpose. A playbook's
+checklist goes through the same door: `steps` is a structured field on
+kind playbook, a list in the payload rather than text. Append adds to
+the end on arrival, replace rewrites the list and waits in the inbox, a
+create may carry steps, and revert puts back the exact list that was
+there.
 
 ## Needs attention
 

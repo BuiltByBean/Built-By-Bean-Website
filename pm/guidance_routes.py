@@ -34,9 +34,9 @@ from datetime import date, datetime, timezone
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
-from models import (db, Feature, Playbook, Product, CatalogueProposal,
-                    Client, Project, Expense, TimeEntry, ServiceProvider,
-                    ServiceMapping)
+from models import (db, Feature, Playbook, PlaybookStep, Product,
+                    CatalogueProposal, Client, Project, Expense, TimeEntry,
+                    ServiceProvider, ServiceMapping)
 
 guidance_bp = Blueprint("guidance", __name__, url_prefix="/api/guidance")
 
@@ -195,24 +195,28 @@ def clients():
 # ── The inbox: how the catalogue changes ─────────────────
 
 # What a session may touch, per kind. Anything else is refused by name,
-# because a whitelist that grows by accident is not a whitelist.
+# because a whitelist that grows by accident is not a whitelist. `steps` on
+# a playbook is the one structured field: the checklist under the runbook,
+# carried as a list in the payload rather than as text.
 TEXT_FIELDS = {
     "feature": ("name", "summary", "gold_standard_md", "pitfalls_md",
                 "reference_project", "reference_path"),
     "rule": ("name", "summary", "gold_standard_md", "pitfalls_md",
              "reference_project", "reference_path"),
     "playbook": ("display_name", "one_liner", "vendor_url", "client_only_md",
-                 "access_grant_md", "your_steps_md", "traps_md", "verify_md"),
+                 "access_grant_md", "your_steps_md", "traps_md", "verify_md",
+                 "steps"),
     "product": ("name", "summary", "prompt_intro", "playbook_slug"),
 }
 NUMBER_FIELDS = {
     "feature": ("typical_value",),
     "product": ("price", "monthly_price"),
 }
-# Only prose takes an append. A name, a path or a price is replaced whole.
+# Only prose takes an append, and the checklist, which grows at the end. A
+# name, a path or a price is replaced whole.
 APPENDABLE = {"summary", "gold_standard_md", "pitfalls_md", "client_only_md",
               "access_grant_md", "your_steps_md", "traps_md", "verify_md",
-              "prompt_intro"}
+              "prompt_intro", "steps"}
 
 # Which prose field a bare lesson lands in when the entry already exists.
 LESSON_FIELD = {"feature": "pitfalls_md", "rule": "pitfalls_md",
@@ -247,6 +251,119 @@ def _stamp(project, text):
 def _auto_applies(mode):
     """The policy. Additive on arrival; a rewrite waits for a person."""
     return mode in ("append", "create")
+
+
+# ── The checklist ────────────────────────────────────────
+# A playbook's steps are rows, not prose, so they travel as a list in
+# payload["steps"]: {title, detail_md, client_channel (email or text),
+# client_message_subject, client_message_md}. A step with a client message
+# waits on the client. Append adds to the end and applies on arrival;
+# replace rewrites the list and waits in the inbox; a create may carry
+# them. The inbox reads the checklist as numbered lines, and revert puts
+# back the exact list that was there.
+STEP_FIELD = "steps"
+MAX_STEPS = 40
+
+
+def normalise_steps(raw):
+    """The steps a session sent, checked and trimmed. Returns (list, error)."""
+    if not isinstance(raw, list) or not raw:
+        return None, "steps must be a non-empty list"
+    if len(raw) > MAX_STEPS:
+        return None, f"at most {MAX_STEPS} steps at a time"
+    out = []
+    for i, item in enumerate(raw, 1):
+        if isinstance(item, str):
+            item = {"title": item}
+        if not isinstance(item, dict):
+            return None, f"step {i} must be an object with a title"
+        title = _cap(item.get("title"), 200)
+        if not title:
+            return None, f"step {i} needs a title"
+        channel = (item.get("client_channel") or "").strip().lower()
+        if channel not in ("", "email", "text"):
+            return None, f"step {i}: client_channel must be email or text"
+        message = _cap(item.get("client_message_md"), 4000)
+        if message and not channel:
+            channel = "email"
+        out.append({
+            "title": title,
+            "detail_md": _cap(item.get("detail_md"), 4000),
+            "client_channel": channel or None,
+            "client_message_subject": _cap(item.get("client_message_subject"), 200),
+            "client_message_md": message,
+        })
+    return out, None
+
+
+def steps_snapshot(playbook):
+    return [{"title": s.title, "detail_md": s.detail_md or "",
+             "client_channel": s.client_channel,
+             "client_message_subject": s.client_message_subject or "",
+             "client_message_md": s.client_message_md or ""}
+            for s in playbook.steps.all()]
+
+
+def steps_text(steps):
+    """The checklist as the inbox reads it: one numbered line per step."""
+    lines = []
+    for i, s in enumerate(steps or [], 1):
+        flag = "  [waits on the client]" if s.get("client_message_md") else ""
+        lines.append(f"{i}. {s.get('title', '')}{flag}")
+    return "\n".join(lines)
+
+
+def _write_steps(playbook, steps, start):
+    for offset, s in enumerate(steps):
+        db.session.add(PlaybookStep(
+            playbook_id=playbook.id, position=start + offset,
+            title=s["title"], detail_md=s["detail_md"],
+            client_channel=s["client_channel"],
+            client_message_subject=s["client_message_subject"],
+            client_message_md=s["client_message_md"]))
+
+
+def _clear_steps(playbook):
+    for s in playbook.steps.all():
+        db.session.delete(s)
+    db.session.flush()
+
+
+def _apply_steps(proposal, playbook):
+    """Append to or rewrite the checklist, snapshotting what was there."""
+    payload = json.loads(proposal.payload_json or "{}")
+    steps, err = normalise_steps(payload.get("steps"))
+    if err:
+        return False, err
+    current = steps_snapshot(playbook)
+    if proposal.mode == "append":
+        have = {s["title"].strip().lower() for s in current}
+        fresh = [s for s in steps if s["title"].strip().lower() not in have]
+        if not fresh:
+            return False, "already there"
+        last = max([s.position for s in playbook.steps.all()] or [0])
+        _write_steps(playbook, fresh, last + 1)
+    else:
+        _clear_steps(playbook)
+        _write_steps(playbook, steps, 1)
+    proposal.previous = steps_text(current)
+    payload["previous_steps"] = current
+    proposal.payload_json = json.dumps(payload)
+    return True, ""
+
+
+def _revert_steps(proposal, playbook):
+    payload = json.loads(proposal.payload_json or "{}")
+    previous = payload.get("previous_steps")
+    if previous is None:
+        return False, "nothing recorded to put back"
+    _clear_steps(playbook)
+    if previous:
+        steps, err = normalise_steps(previous)
+        if err:
+            return False, err
+        _write_steps(playbook, steps, 1)
+    return True, ""
 
 
 def _create_from(kind, payload, project):
@@ -307,6 +424,11 @@ def _create_from(kind, payload, project):
         return None, "unknown kind"
     db.session.add(row)
     db.session.flush()
+    if kind == "playbook" and payload.get("steps"):
+        steps, err = normalise_steps(payload.get("steps"))
+        if err:
+            return None, err
+        _write_steps(row, steps, 1)
     return row, None
 
 
@@ -332,6 +454,8 @@ def apply_proposal(proposal):
     field = proposal.field
     if field not in _fields_for(proposal.kind):
         return False, f"{field} is not a field a session may change"
+    if field == STEP_FIELD:
+        return _apply_steps(proposal, row)
     old = getattr(row, field)
 
     if proposal.mode == "append":
@@ -367,6 +491,8 @@ def revert_proposal(proposal):
     if row is None:
         return False, "no such entry"
     field = proposal.field
+    if field == STEP_FIELD:
+        return _revert_steps(proposal, row)
     if field in NUMBER_FIELDS.get(proposal.kind, ()):
         setattr(row, field, _number(proposal.previous))
     else:
@@ -399,13 +525,20 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None):
                              + ", ".join(_fields_for(kind))}, 400
         if mode == "append" and field not in APPENDABLE:
             return {"error": f"{field} is replaced whole, not appended to"}, 400
+        if field == STEP_FIELD:
+            steps, err = normalise_steps((payload or {}).get("steps"))
+            if err:
+                return {"error": err}, 400
+            payload = {"steps": steps}
+            text = text or steps_text(steps)
         if not text:
             return {"error": "text is required"}, 400
 
+    keeps_payload = mode == "create" or field == STEP_FIELD
     proposal = CatalogueProposal(
         kind=kind, target_slug=slug or None, field=field or "*", mode=mode,
         proposed=text or "", reason=reason, project=project,
-        payload_json=json.dumps(payload) if mode == "create" else None,
+        payload_json=json.dumps(payload) if keeps_payload else None,
     )
 
     if _auto_applies(mode):
@@ -428,8 +561,11 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None):
     # A rewrite. Snapshot what it would replace so the inbox can show the
     # diff, and wait.
     row = _target(kind, slug)
-    current = getattr(row, field)
-    proposal.previous = "" if current is None else str(current)
+    if field == STEP_FIELD:
+        proposal.previous = steps_text(steps_snapshot(row))
+    else:
+        current = getattr(row, field)
+        proposal.previous = "" if current is None else str(current)
     proposal.status = "pending"
     db.session.add(proposal)
     db.session.commit()

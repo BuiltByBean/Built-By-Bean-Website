@@ -136,10 +136,16 @@ TOOLS = [
             "gold_standard_md, pitfalls_md, reference_project, "
             "reference_path, typical_value (feature only). playbook: "
             "display_name, one_liner, vendor_url, client_only_md, "
-            "access_grant_md, your_steps_md, traps_md, verify_md. product: "
-            "name, summary, prompt_intro, playbook_slug, price, "
-            "monthly_price. For a create, put the new entry's fields in "
-            "payload (name plus any of the above)."),
+            "access_grant_md, your_steps_md, traps_md, verify_md, and "
+            "steps, the numbered checklist under the runbook: pass it as "
+            "payload.steps, a list of {title, detail_md, client_channel "
+            "(email or text), client_message_subject, client_message_md} "
+            "where a step with a client message is one that waits on the "
+            "client; append adds steps to the end, replace rewrites the "
+            "whole list. product: name, summary, prompt_intro, "
+            "playbook_slug, price, monthly_price. For a create, put the new "
+            "entry's fields in payload (name plus any of the above, steps "
+            "included for a playbook)."),
         "inputSchema": {
             "type": "object",
             "properties": {
