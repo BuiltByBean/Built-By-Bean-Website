@@ -399,6 +399,48 @@
     -->
     <script>
     document.addEventListener('alpine:init', () => {
+        /* A filter bar over a list the server filters. The pick is the
+           apply and the keystroke is the apply: the form's state is fetched
+           as the same page, and every [data-live] region in the answer
+           replaces its counterpart here - the rows, the counts, the clear
+           control - without a reload, so the search box keeps its focus.
+           The URL follows, so a link to the view still opens it. Alpine
+           initialises whatever the swap brings in; a failed fetch falls
+           back to plain navigation. */
+        Alpine.data('liveFilter', () => ({
+            timer: null,
+            serial: 0,
+            soon() {
+                clearTimeout(this.timer);
+                this.timer = setTimeout(() => this.apply(), 250);
+            },
+            apply() {
+                clearTimeout(this.timer);
+                const form = this.$el.tagName === 'FORM' ? this.$el : this.$el.closest('form');
+                const params = new URLSearchParams();
+                for (const [key, value] of new FormData(form)) {
+                    const text = String(value).trim();
+                    if (text !== '') params.set(key, text);
+                }
+                const query = params.toString();
+                const url = location.pathname + (query ? '?' + query : '');
+                const mine = ++this.serial;
+                fetch(url, { credentials: 'same-origin' })
+                    .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
+                    .then(html => {
+                        if (mine !== this.serial) return;
+                        const fresh = new DOMParser().parseFromString(html, 'text/html');
+                        fresh.querySelectorAll('[data-live]').forEach(node => {
+                            const key = node.getAttribute('data-live');
+                            const stale = document.querySelector('[data-live="' + key + '"]');
+                            if (stale) stale.replaceWith(document.adoptNode(node));
+                        });
+                        history.replaceState(null, '', url);
+                    })
+                    .catch(() => { location.assign(url); });
+            },
+        }));
+
         Alpine.data('bbbSelect', (config) => ({
             name: config.name,
             options: config.options,

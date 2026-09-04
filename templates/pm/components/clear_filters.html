@@ -1,0 +1,26 @@
+{#
+  The one button a filter bar may grow: clear, shown only while something
+  is active. An icon with a border, 44px square, on the trailing edge. A
+  link to the bare page when the list is filtered by the server (one
+  navigation resets every control at once), a button when the page filters
+  itself.
+
+    href    the unfiltered page, for server-filtered lists
+    click   an Alpine expression, for lists that filter in place
+    show    an Alpine expression deciding visibility; without it the caller
+            renders the macro only while something is active
+#}
+{% macro clear_filters(href='', click='', show='') %}
+{%- set cls = 'inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors' -%}
+{%- if click -%}
+<button type="button" @click="{{ click }}"{% if show %} x-show="{{ show }}" x-cloak{% endif %}
+        aria-label="Clear filters" title="Clear filters" class="{{ cls }}">
+{%- else -%}
+<a href="{{ href }}"{% if show %} x-show="{{ show }}" x-cloak{% endif %}
+   aria-label="Clear filters" title="Clear filters" class="{{ cls }}">
+{%- endif %}
+  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+{% if click %}</button>{% else %}</a>{% endif %}
+{% endmacro %}

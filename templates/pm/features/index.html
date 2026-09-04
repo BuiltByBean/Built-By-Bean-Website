@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
 
 {#
   The catalogue of what has been built before.
@@ -69,13 +70,7 @@
         {{ select_dropdown("status", [("all", "Built and not")] + statuses|list, status,
                            model="status", extra_class="max-w-[11rem]") }}
         <div class="ml-auto flex items-center gap-2">
-            <button type="button" x-show="active" x-cloak @click="clear()"
-                    aria-label="Clear filters" title="Clear filters"
-                    class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-            </button>
+            {{ clear_filters(click="clear()", show="active") }}
             {# Features get named on a call and caught in seconds. Rules are
                written by the sessions that learn them, through the door, so
                there is nothing to type in here. #}

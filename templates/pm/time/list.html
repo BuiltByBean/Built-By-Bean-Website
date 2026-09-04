@@ -2,6 +2,7 @@
 {% from "pm/components/status_badge.html" import badge %}
 {% from "pm/components/pagination.html" import render_pagination %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
 
 {% block page_title %}Time Tracking{% endblock %}
 {% block page_subtitle %}Log and manage work hours{% endblock %}
@@ -21,7 +22,9 @@
 
 {% block content %}
 <!-- Summary -->
-<div class="shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+{# data-live: the totals are of the filtered entries, so they swap in with
+   the rows when a filter changes. #}
+<div data-live="summary" class="shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
     <div class="glass-card p-4 flex items-center justify-between">
         <div>
             <p class="text-xs font-medium text-surface-400">Total Hours</p>
@@ -49,19 +52,24 @@
 <div class="glass-card p-6 flex flex-col min-h-0">
     <!-- Filters -->
     {# Standing still because the page stands still; relative z-30 per LM-1
-       so the filter panels paint over the rows. #}
-    <form method="GET" class="shrink-0 relative z-30 flex flex-wrap gap-3 mb-6">
+       so the filter panels paint over the rows. The pick is the apply
+       (liveFilter in base.html): the rows, the totals and the clear
+       control swap in from the server. #}
+    <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
+          class="shrink-0 relative z-30 flex flex-wrap items-center gap-3 mb-6">
         {% set ns = namespace(proj_opts=[["", "All Projects"]]) %}
         {% for p in projects %}{% set ns.proj_opts = ns.proj_opts + [[p.id, p.name]] %}{% endfor %}
-        {{ select_dropdown("project_id", ns.proj_opts, project_id) }}
+        {{ select_dropdown("project_id", ns.proj_opts, project_id, on_change="apply()") }}
         {% set rate_opts = [["", "All Rate Types"]] + rate_type_choices|list %}
-        {{ select_dropdown("rate_type", rate_opts, rate_type) }}
-        <button type="submit" class="px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">Filter</button>
-        {% if project_id or rate_type %}
-        <a href="{{ url_for('pm.time_list') }}" class="px-4 py-2.5 text-sm text-surface-500 hover:text-surface-300 rounded-xl transition-colors">Clear</a>
-        {% endif %}
+        {{ select_dropdown("rate_type", rate_opts, rate_type, on_change="apply()") }}
+        <span data-live="clear" class="ml-auto inline-flex items-center">
+            {% if project_id or rate_type %}{{ clear_filters(href=url_for('pm.time_list')) }}{% endif %}
+        </span>
     </form>
 
+    {# display: contents, so the scroller and the pagination stay flex
+       children of the card while the whole region swaps as one. #}
+    <div data-live="results" class="contents">
     {% if entries %}
     {# The scroller: rows scroll inside it, the scrollbar starts here. #}
     <div class="overflow-auto min-h-0">
@@ -138,5 +146,6 @@
         </a>
     </div>
     {% endif %}
+    </div>
 </div>
 {% endblock %}

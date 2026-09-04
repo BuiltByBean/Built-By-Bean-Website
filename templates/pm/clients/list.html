@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
 {% from "pm/components/pagination.html" import render_pagination %}
 {% from "pm/components/status_badge.html" import badge %}
 
@@ -20,23 +21,24 @@
 
 {% block content %}
 {% set channel_labels = dict(channel_choices) %}
-<div class="glass-card p-6 flex flex-col min-h-0" x-data="{ search: '{{ search }}' }">
+<div class="glass-card p-6 flex flex-col min-h-0">
     {# Search and filters are one form, so setting a stage does not throw away
        what was typed in the box. The two channel dropdowns are halves of one
        question: "emailed but not phoned yet" is a channel that has been used
-       and a channel that has not. #}
+       and a channel that has not. The form filters live (liveFilter in
+       base.html): the keystroke and the pick are the apply, and the rows,
+       the pagination and the clear control swap in from the server. #}
     {% set filtering = search or stage or tried or not_tried %}
     {# Standing still because the page stands still; relative z-30 per LM-1
        so the filter panels paint over the rows. #}
     <div class="shrink-0 mb-6 relative z-30">
-        <form method="GET" class="space-y-3">
+        <form method="GET" x-data="liveFilter()" @submit.prevent="apply()" class="space-y-3">
             <div class="flex gap-3">
-                <input type="text" name="search" x-model="search" placeholder="Search clients..."
-                       class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
-                <button type="submit" class="px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">Search</button>
-                {% if filtering %}
-                <a href="{{ url_for('pm.clients_list') }}" class="px-4 py-2.5 text-sm text-surface-500 hover:text-surface-300 rounded-xl transition-colors whitespace-nowrap">Clear all</a>
-                {% endif %}
+                <input type="text" name="search" value="{{ search }}" @input="soon()" placeholder="Search clients..."
+                       class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+                <span data-live="clear" class="inline-flex items-center">
+                    {% if filtering %}{{ clear_filters(href=url_for('pm.clients_list')) }}{% endif %}
+                </span>
             </div>
 
             <div class="flex flex-wrap gap-3">
@@ -47,7 +49,7 @@
                 <label class="flex items-center gap-2">
                     <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Stage</span>
                     {{ select_dropdown("stage", stage_opts, stage, "Any",
-                                       on_change="$el.closest('form').requestSubmit()",
+                                       on_change="apply()",
                                        extra_class="max-w-[14rem]") }}
                 </label>
 
@@ -55,7 +57,7 @@
                     <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Tried</span>
                     {{ select_dropdown("tried", [("", "Any"), ("none", "Never contacted")] + channel_choices|list,
                                        tried, "Any",
-                                       on_change="$el.closest('form').requestSubmit()",
+                                       on_change="apply()",
                                        extra_class="max-w-[13rem]") }}
                 </label>
 
@@ -63,13 +65,16 @@
                     <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Not tried</span>
                     {{ select_dropdown("not_tried", [("", "Any")] + channel_choices|list,
                                        not_tried, "Any",
-                                       on_change="$el.closest('form').requestSubmit()",
+                                       on_change="apply()",
                                        extra_class="max-w-[13rem]") }}
                 </label>
             </div>
         </form>
     </div>
 
+    {# display: contents, so the scroller and the pagination stay flex
+       children of the card while the whole region swaps as one. #}
+    <div data-live="results" class="contents">
     {% if clients %}
     <!-- Table -->
     {# The scroller: rows scroll inside it, the scrollbar starts here. #}
@@ -172,5 +177,6 @@
         {% endif %}
     </div>
     {% endif %}
+    </div>
 </div>
 {% endblock %}
