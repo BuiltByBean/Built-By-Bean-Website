@@ -96,6 +96,27 @@
            built to escape, on the one surface a component cannot replace. */
         :root { color-scheme: dark; }
 
+        /* Nothing highlights unless selecting it means something. Controls,
+           labels, navigation, tabs, chips and dropdown rows are not text a
+           person copies, so a double-click or a drag across them lights
+           nothing up; prose, table data and fields stay selectable, and
+           the selection that does appear wears the app's colour rather
+           than the OS blue. Declared once, by element and role, so a new
+           control inherits it. The span selectors are the chip shapes this
+           app uses: tiny type on a rounded pill or tag. */
+        button, [role="button"], [role="combobox"], [role="option"],
+        [role="tab"], nav a, aside a, a[class*="rounded-"], label, th,
+        .bb-check, span[class*="text-[11px]"], span[class*="text-[10px]"],
+        span[class*="rounded-full"][class*="text-xs"] {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        input, textarea {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+        ::selection { background: rgba(var(--primary-rgb), 0.4); color: #fff; }
+
         body { font-family: 'Inter', system-ui, sans-serif; }
 
         .mesh-bg {
