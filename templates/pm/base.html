@@ -259,12 +259,35 @@
             animation: slideUp 0.4s ease-out backwards;
         }
 
-        /* A filter bar pins FLUSH under the sticky header while the list it
-           filters scrolls - flush, because any gap between the two is a
-           window the rows scroll through in the clear. The offset is the
-           header's REAL height, measured into --pm-header-h by the script
-           under the header, because the header wraps on phones and a
-           hardcoded number drifts the moment a title grows a back link.
+        /* The shell. The banner stands still and the region under it is the
+           ONE scroller in the PM, so every scrollbar starts at the banner's
+           bottom edge and never runs up behind it; the window itself never
+           scrolls. Sized to the small viewport where dvh exists, so a
+           phone's toolbar cannot hide the last rows. overflow-x is hidden,
+           not auto: a sideways scrollbar is never the answer to a wide
+           element, and scrollWidth still reports the overflow for the 375px
+           sweep to catch. See CLAUDE.md LM-4. */
+        .pm-shell {
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+        }
+        .pm-scroll {
+            flex: 1 1 0%;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* A filter bar pins FLUSH at the top of the scroller, which is the
+           banner's bottom edge, while the list it filters scrolls - flush,
+           because any gap between the two is a window the rows scroll
+           through in the clear. Nothing to measure: the banner sits outside
+           the scroller, so the offset is simply zero, however tall the
+           banner wraps.
 
            The background is SOLID, overriding the glass-card alpha that
            normally sits on these containers: a translucent pinned bar is a
@@ -278,23 +301,21 @@
            stay under the drawer. See CLAUDE.md LM-4. */
         .sticky-filters {
             position: sticky;
-            top: var(--pm-header-h, 64px);
+            top: 0;
             z-index: 30;
             background: var(--surface);
         }
 
-        /* Contained scroll, for pages that ARE a filtered list: the main
-           area is sized to what is left under the header and clipped, so
-           the WINDOW never scrolls - the filter bar simply stands still,
-           and the results scroll inside their own container. The child
-           template makes its list region `flex-1 min-h-0 overflow-y-auto`,
-           which puts the scrollbar inside the results, starting below the
-           bar, instead of running the full height of the viewport. This is
-           the standard for every filter-over-list screen; sticky-filters
-           stays only for MIXED pages where content above the list must
-           itself scroll away. See CLAUDE.md LM-4. */
+        /* Contained scroll, for pages that ARE a filtered list: main fills
+           the scroller and clips, so nothing moves but the results region
+           the child template marks `flex-1 min-h-0 overflow-y-auto`. The
+           scrollbar then sits inside the results, starting below the filter
+           bar. This is the standard for every filter-over-list screen;
+           sticky-filters stays only for MIXED pages where content above the
+           list must itself scroll away. See CLAUDE.md LM-4. */
         .contained-scroll {
-            height: calc(100vh - var(--pm-header-h, 64px));
+            flex: 1 1 0%;
+            min-height: 0;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -729,9 +750,13 @@
     </aside>
 
     <!-- Main content -->
-    <div class="lg:ml-[260px] min-h-screen relative z-10">
+    {# pm-shell is viewport-high and clipped, so the window never scrolls:
+       the banner is a plain block at the top and #pm-scroll under it is
+       the one scroller. relative z-30 keeps the banner and anything that
+       drops out of it painting over what scrolls beneath. #}
+    <div class="lg:ml-[260px] pm-shell relative z-10">
         <!-- Top header -->
-        <header id="pm-topbar" class="glass sticky top-0 z-30 px-6 py-4">
+        <header id="pm-topbar" class="glass shrink-0 relative z-30 px-6 py-4">
             {# flex-wrap, because this row has no other guard: on a phone the
                title, the timer and any page actions all compete for one line,
                and without it the actions simply leave the screen. min-w-0 lets
@@ -760,21 +785,11 @@
                 </div>
             </div>
         </header>
-        <script>
-            /* Sticky filter bars offset themselves by the header's real
-               height. Observed, not measured once: the header wraps on
-               phones and grows a back link on detail pages, and a single
-               first reading would pin every bar against yesterday's
-               height. */
-            (() => {
-                const bar = document.getElementById('pm-topbar');
-                if (!bar) return;
-                const set = () => document.documentElement.style.setProperty(
-                    '--pm-header-h', bar.offsetHeight + 'px');
-                new ResizeObserver(set).observe(bar);
-                set();
-            })();
-        </script>
+
+        {# The one scroller. Everything under the banner scrolls in here, so
+           the scrollbar starts where the banner ends. Sticky filter bars
+           stick to this box; modals are fixed and never notice it. #}
+        <div id="pm-scroll" class="pm-scroll">
 
         <!-- Flash messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -804,13 +819,15 @@
 
         <!-- Page content -->
         {# A page that IS a filtered list opts into contained scroll by
-           filling this block with `contained-scroll`: the window then never
-           scrolls, the filter bar stands still, and the results scroll
-           inside their own container with the scrollbar starting below the
-           bar - never up the whole viewport. See CLAUDE.md LM-4. #}
+           filling this block with `contained-scroll`: main then fills the
+           scroller and clips, the filter bar stands still, and the results
+           scroll inside their own container with the scrollbar starting
+           below the bar. See CLAUDE.md LM-4. #}
         <main class="p-6 animate-fade-in {% block main_class %}{% endblock %}">
             {% block content %}{% endblock %}
         </main>
+
+        </div>
     </div>
 
 <!--
@@ -837,6 +854,12 @@
         return;  // private mode, or site data blocked. No memory, no errors.
     }
 
+    // The scroller is #pm-scroll, not the window, which is also why the
+    // browser's own restoration would put nothing back here even on its
+    // own back and forward.
+    var scroller = document.getElementById('pm-scroll');
+    if (!scroller) return;
+
     var INTENT = 'pm:return-to';
     var PREFIX = 'pm:scroll:';
 
@@ -846,7 +869,7 @@
     }
 
     function save() {
-        try { store.setItem(key(), String(Math.round(window.scrollY))); } catch (e) {}
+        try { store.setItem(key(), String(Math.round(scroller.scrollTop))); } catch (e) {}
     }
 
     // Record the position continuously rather than only on the way out.
@@ -859,7 +882,7 @@
     // stay off it.
     var last = 0;
     var timer = null;
-    window.addEventListener('scroll', function () {
+    scroller.addEventListener('scroll', function () {
         var now = Date.now();
         if (now - last > 100) { last = now; save(); return; }
         clearTimeout(timer);
@@ -919,8 +942,8 @@
 
     (function attempt() {
         if (abort) return;
-        window.scrollTo(0, target);
-        if (Math.abs(window.scrollY - target) < 2 || Date.now() > deadline) {
+        scroller.scrollTop = target;
+        if (Math.abs(scroller.scrollTop - target) < 2 || Date.now() > deadline) {
             ['wheel', 'touchstart', 'keydown'].forEach(function (evt) {
                 window.removeEventListener(evt, stop);
             });

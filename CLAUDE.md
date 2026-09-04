@@ -86,7 +86,10 @@ that one place, so no two documents can describe it differently.
   sideways, nothing overflows its card, every tap target is at least 44px.
   Verify with `getBoundingClientRect()`, not by looking. Sweep every route
   by loading it in a 375px-wide iframe and asserting
-  `documentElement.scrollWidth <= clientWidth` - and seed the fixtures with
+  `#pm-scroll.scrollWidth <= #pm-scroll.clientWidth` (the scroller clips
+  sideways overflow so nobody sees it, but scrollWidth still reports it;
+  `documentElement.scrollWidth` no longer tells you anything) - and seed
+  the fixtures with
   LONG strings and a long URL first, because short seed data hides all four
   of the causes found this way: a `flex-1` input with no `min-w-0` (its
   min-width is its placeholder's intrinsic width), a `truncate` span with no
@@ -95,6 +98,13 @@ that one place, so no two documents can describe it differently.
   as a TEXT node so every element box still measures inside the viewport. A
   wide table is fine inside its own `overflow-auto` container: the table
   scrolls, the page does not.
+- **The window never scrolls.** The banner is a plain block at the top of
+  `.pm-shell` and `#pm-scroll` under it is the one scroller, so every
+  scrollbar starts at the banner's bottom edge and never runs up behind
+  it. Anything that moves the page moves that box (`scroller.scrollTop`),
+  never `window.scrollTo`; sticky bars stick to it at `top: 0`. Verify on
+  every page: `documentElement.scrollHeight <= innerHeight`, and
+  `#pm-scroll.getBoundingClientRect().top` equal to the banner's bottom.
 - **No em dashes. Anywhere.** Not in product copy, not in commit messages.
 - **Text alone is never a button.** Anything that acts on press gets a border
   or a fill. Actions sit on the trailing edge.
@@ -253,7 +263,10 @@ fix made the bar sticky - and shipped twice wrong: once with a gap the
 rows scrolled through in the clear, once translucent with row text
 reading straight through it. The owner's verdict named the real design:
 the window should never have been scrolling at all. The scrollbar ran the
-full height of the viewport on a page that is one filtered list.
+full height of the viewport on a page that is one filtered list. Then the
+same tell showed on every other page: the window's scrollbar ran up
+behind the banner. The owner's second verdict, the same day, made it the
+house rule above: the scrollbar starts where the banner ends, everywhere.
 
 **Why it is easy to do.** A filter bar laid out above its list is correct
 in every screenshot, because screenshots are taken at the top of the
@@ -273,16 +286,18 @@ list page is the tell that it is built wrong. `relative z-30` stays on
 the bar per LM-1 so its panels paint over the list.
 
 A MIXED page - real content above the list that must itself scroll away,
-like the MVP builder - keeps page scroll, and its bar uses
-`.sticky-filters`: flush under the measured header (`--pm-header-h`, from
-the ResizeObserver - never hardcoded, headers wrap), backed SOLID by the
-class (`var(--surface)`), with no Tailwind bg utility beside it because
-the CDN sheet loads later and wins the cascade back to translucent.
+like the MVP builder - scrolls in `#pm-scroll` like every other page, and
+its bar uses `.sticky-filters`: `top: 0`, which is flush under the banner
+because the banner sits outside the scroller (nothing to measure, however
+tall it wraps), backed SOLID by the class (`var(--surface)`), with no
+Tailwind bg utility beside it because the CDN sheet loads later and wins
+the cascade back to translucent.
 
-Verify by scrolling, whichever tier: on contained pages
-`document.documentElement.scrollHeight <= innerHeight` while the inner
-scroller's `scrollHeight` exceeds its height; on sticky pages the bar's
-top equals the header's height exactly, and probes behind the bar
+Verify by scrolling, whichever tier: on every page
+`document.documentElement.scrollHeight <= innerHeight`; on contained pages
+the inner scroller's `scrollHeight` exceeds its height while
+`#pm-scroll`'s does not; on sticky pages the bar's top equals
+`#pm-scroll`'s top exactly once scrolled, and probes behind the bar
 hit-test as the bar, never as a row.
 
 **Grep.**
