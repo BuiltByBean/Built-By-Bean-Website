@@ -148,28 +148,9 @@ def playbooks_index():
                            playbooks=playbooks, groups=groups)
 
 
-# Declared before the slug rule. Werkzeug would sort a static rule ahead of a
-# converter anyway, but a route whose correctness rests on that is one refactor
-# away from /new opening a playbook called "new".
-@playbooks_bp.route("/new", methods=["GET", "POST"])
-@login_required
-def playbook_create():
-    playbook = Playbook()
-    if request.method == "POST":
-        error = _apply_form(playbook)
-        if error:
-            flash(error, "error")
-            return render_template("pm/playbooks/form.html", playbook=playbook,
-                                   providers=_providers(), categories=Playbook.CATEGORIES, editing=False)
-        db.session.add(playbook)
-        db.session.commit()
-        flash(f"{playbook.display_name} playbook created.", "success")
-        return redirect(url_for("playbooks.playbook_detail", slug=playbook.slug))
-
-    return render_template("pm/playbooks/form.html", playbook=playbook,
-                           providers=_providers(), categories=Playbook.CATEGORIES, editing=False)
-
-
+# No create route. A playbook is written by the session that set the vendor
+# up, through the guidance door (suggest_update, kind playbook), and adjusted
+# the same way; the form here only edits what a session already filed.
 @playbooks_bp.route("/<slug>")
 @login_required
 def playbook_detail(slug):

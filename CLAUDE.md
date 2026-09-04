@@ -37,6 +37,10 @@ sends becomes a `CatalogueProposal` (`pm/guidance_routes.py`, the
 be reverted from `/admin/features/inbox` in one press; a replace of
 existing words waits there as pending and touches no build prompt until
 accepted. `previous` is snapshotted at apply time so revert is exact.
+The Rules and Playbooks pages carry no add button on purpose: sessions
+write those through the door, and a hand-typed one is never written
+properly. Features keep their quick-add, because a client names one on
+a call and it has to be caught in seconds.
 Sessions may also file operational records - `upsert_project`,
 `log_expense`, `log_time`, `register_hosting_resource` - and may NOT
 contact a client, resolve a ticket or send a contract: those are
