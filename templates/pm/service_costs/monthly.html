@@ -39,7 +39,7 @@
                 <label class="text-xs text-surface-400">Other</label>
                 <input type="month" name="month" value="{{ month.strftime('%Y-%m') }}"
                        onchange="this.form.submit()"
-                       class="input-ring px-2 py-1 text-xs bg-surface-800 text-white rounded-lg">
+                       class="input-ring px-2 min-h-[44px] text-xs bg-surface-800 text-white rounded-lg">
             </form>
         </div>
     </div>
@@ -119,9 +119,7 @@
                        name that does not match, and the fix differs. #}
                     <p class="text-amber-400" x-show="report.unmatched.length">
                         No row here for <span x-text="report.unmatched.length"></span>:
-                        <span class="text-surface-400" x-text="report.unmatched.join(', ')"></span>.
-                        {{ provider.display_name }} did not list those, so either the names
-                        differ from what is shown above or the sync could not reach it.
+                        <span class="text-surface-400" x-text="report.unmatched.join(', ')"></span>
                     </p>
                     <p class="text-surface-400" x-show="report.untouched.length">
                         Left alone, not in what you pasted:
@@ -150,19 +148,10 @@
                 </span>
             </div>
 
-            {% if project_rows == 0 %}
-            {# Not an error state any more. A month before the per-project
-               breakdown was kept has no projects to list and is entered as one
-               figure on the catch-all row below, which is the whole reason
-               that row exists. #}
-            <div class="px-4 pt-4 -mb-2">
-                <p class="text-xs text-surface-400">
-                    {{ provider.display_name }} lists no projects for this month. Put the
-                    invoice total on the row below and it will be booked unallocated.
-                </p>
-            </div>
-            {% endif %}
-
+            {# A vendor listing no projects is not an error state. A month from
+               before the per-project breakdown was kept has nothing to list and
+               is entered as one figure on the catch-all row, which is the whole
+               reason that row exists, so the table draws either way. #}
             <div class="divide-y divide-surface-800">
                 {% for row in rows %}
                 <div class="p-4 flex flex-wrap items-center gap-3">
@@ -171,12 +160,14 @@
                     <div class="flex-1 min-w-0">
                         <div class="text-sm font-medium {{ 'text-surface-300' if row.is_other else 'text-white' }} truncate">{{ row.label }}</div>
                         <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            {# No Map link and no suggestion on the catch-all: the
+                               whole point of that row is the part of a month
+                               that has no owner - the plan fee, projects since
+                               deleted, and months with no breakdown at all - so
+                               offering to give it one would be wrong. #}
                             {% if row.is_other %}
-                            {# No Map link and no suggestion: the whole point of
-                               this row is the part that has no owner. #}
-                            <span class="text-surface-500">
-                                The plan fee, deleted projects, and any month with no per-project
-                                breakdown. Stays unallocated.
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400">
+                                Unallocated
                             </span>
                             {% else %}
                             {% if row.historical %}
@@ -263,7 +254,11 @@ function pasteFill() {
         // here might be "Built by Beans website"; refusing that match would
         // send somebody back to retype what they just pasted.
         key(s) {
-            return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+            // Apostrophes vanish rather than becoming a space, so "Kuper's
+            // Plumbing" and "Kupers Plumbing" are the same name. Everything
+            // else that is not a letter or digit separates words.
+            return (s || '').toLowerCase().replace(/['’]/g, '')
+                            .replace(/[^a-z0-9]+/g, ' ').trim();
         },
 
         // Deliberately forgiving about layout. A copied web page arrives as
