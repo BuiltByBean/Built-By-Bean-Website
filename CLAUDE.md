@@ -23,7 +23,11 @@ bridge that puts those four tools (`get_rules`, `get_feature_guidance`,
 `get_playbook`, `report_lesson`) into every session on this machine; it
 is registered at user scope in Claude Code with the deployed board's URL
 and key, and `~/.claude/CLAUDE.md` carries the standing order to use
-them. The write path appends with attribution and refuses duplicates,
+them. The text of that order is `tools/STANDING_ORDER.md`, with the one
+copy command that puts it in place on a new machine; on 2026-09-04
+neither the registration nor the order turned out to exist on the
+owner's machine, so check both before assuming any session can file
+anything. The write path appends with attribution and refuses duplicates,
 because reporting sessions retry like any other API client.
 
 The catalogue grows itself through the same door, with the policy set by
