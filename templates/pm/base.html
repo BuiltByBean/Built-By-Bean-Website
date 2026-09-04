@@ -396,6 +396,13 @@
         /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
+        /* The track is inset from both ends by more than any corner radius
+           here (12px), so the thumb stops where the edge is still straight.
+           A rounded parent clips its child's scrollbar to the curve
+           otherwise, and the thumb looks cut off or poking through the
+           corner of a dropdown panel, a list card or a modal. */
+        ::-webkit-scrollbar-track:vertical { margin-top: 16px; margin-bottom: 16px; }
+        ::-webkit-scrollbar-track:horizontal { margin-left: 16px; margin-right: 16px; }
         ::-webkit-scrollbar-thumb { background: rgba(var(--primary-rgb), 0.25); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary-rgb), 0.45); }
     </style>
