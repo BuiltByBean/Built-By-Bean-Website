@@ -202,7 +202,11 @@ TEXT_FIELDS = {
     "feature": ("name", "summary", "gold_standard_md", "pitfalls_md",
                 "reference_project", "reference_path"),
     "rule": ("name", "summary", "gold_standard_md", "pitfalls_md",
-             "reference_project", "reference_path"),
+             "reference_project", "reference_path",
+             # A scanner for the rule: a session that learns a lesson can
+             # also say how to catch it mechanically.
+             "check_pattern", "check_globs", "check_exclude", "check_unless",
+             "check_fixture"),
     "playbook": ("display_name", "one_liner", "vendor_url", "client_only_md",
                  "access_grant_md", "your_steps_md", "traps_md", "verify_md",
                  "steps"),

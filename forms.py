@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, SelectField, FloatField, DateField, PasswordField, DecimalField, BooleanField
-from wtforms.validators import DataRequired, Email, Optional, NumberRange
+from wtforms.validators import DataRequired, Email, Optional, NumberRange, Length
 
 # Where a build has got to. Nothing reaches this board before it is under
 # contract, so the old lead-chasing phases - discovery, proposal - were
@@ -160,6 +160,7 @@ class ProjectForm(FlaskForm):
     hosting_cycle = SelectField("Billing Cycle", choices=HOSTING_CYCLE_CHOICES,
                                 default="monthly", validators=[Optional()])
     status = SelectField("Status", choices=PROJECT_STATUS_CHOICES, default="active")
+    repo = StringField("GitHub repository", validators=[Optional(), Length(max=200)])
     notes = TextAreaField("Notes", validators=[Optional()])
 
 

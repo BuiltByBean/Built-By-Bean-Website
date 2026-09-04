@@ -1,0 +1,173 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  One matrix: projects down the side, the things picked from the catalogue
+  across the top, and in every cell whether that project has it - or, for a
+  rule, whether its code breaks it. The chips are the question; the view
+  toggles narrow the rows to the answer worth acting on.
+
+  Server-side state on purpose. Every chip and the view live in the query
+  string, so a question is a URL: it survives a reload, it can be sent, and
+  nothing on this page needs a script to remember what was asked.
+#}
+
+{% block title %}Cerebro - Built By Bean{% endblock %}
+{% block page_title %}Cerebro{% endblock %}
+{% block page_subtitle %}Every client, held against the catalogue{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0 gap-4 stagger-in">
+
+    {# The question. relative z-30 so the dropdown panels paint over the
+       matrix below them (CLAUDE.md LM-1). #}
+    <form method="GET" action="{{ url_for('cerebro.index') }}"
+          class="shrink-0 relative z-30 glass-card p-4 sm:p-5 space-y-3"
+          x-data='{ kind: "product", slug: "", options: {{ options | tojson }} }'
+          x-effect="const opts = (options[kind] || []).map(o => ({ v: o[0], l: o[1] }));
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('dropdown-set-options',
+                        { detail: { name: 'pick', options: opts } })), 0)">
+        {% for chip in chips %}<input type="hidden" name="c" value="{{ chip.kind }}:{{ chip.slug }}">{% endfor %}
+        <input type="hidden" name="view" value="{{ view }}">
+        <input type="hidden" name="c" :value="slug ? kind + ':' + slug : ''" :disabled="!slug">
+
+        <div class="flex flex-wrap items-center gap-2">
+            {{ select_dropdown("kind", [("product", "Product"), ("feature", "Feature"),
+                                        ("playbook", "Playbook"), ("rule", "Rule")], "product",
+                               model="kind", extra_class="w-36") }}
+            {{ select_dropdown("pick", [("", "Pick one")], "", "Pick one",
+                               model="slug", extra_class="min-w-0 flex-1 max-w-md") }}
+            <button type="submit" :disabled="!slug"
+                    class="min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all disabled:opacity-40">
+                Add</button>
+        </div>
+
+        {% if chips %}
+        <div class="flex flex-wrap items-center gap-2">
+            {% for chip in chips %}
+            <span class="inline-flex items-center gap-1.5 pl-3 pr-1 min-h-[36px] rounded-full text-xs font-medium border
+                         {% if chip.kind == 'rule' %}border-amber-500/30 bg-amber-500/10 text-amber-200
+                         {% else %}border-brand-500/30 bg-brand-500/10 text-brand-200{% endif %}">
+                <span class="uppercase tracking-wider text-[10px] opacity-70">{{ kind_labels[chip.kind] }}</span>
+                {{ chip.label }}
+                <a href="{{ chip.remove }}" aria-label="Remove {{ chip.label }}"
+                   class="inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 transition-colors">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </a>
+            </span>
+            {% endfor %}
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            {% for key, name in views %}
+            <a href="{{ link(None, key) }}"
+               class="inline-flex items-center min-h-[36px] px-3 rounded-full text-xs font-medium border transition-colors
+                      {% if view == key %}border-brand-500/40 bg-brand-500/20 text-white{% else %}border-white/10 text-surface-400 hover:text-white{% endif %}">
+                {{ name }}&nbsp;{% if key == 'has' %}{{ counts.has }}{% elif key == 'missing' %}{{ counts.missing }}{% elif key == 'breaking' %}{{ counts.breaking }}{% else %}{{ total }}{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </form>
+
+    {# What the scanners are worth. A count of zero hits means nothing
+       unless the scanner is known to fire, so the fixtures are run on
+       every load and any that fail are said here. #}
+    <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
+        <div class="glass-card p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Scanners</p>
+            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-red-400' if health.FAIL else 'text-white' }}">{{ health.PASS }}<span class="text-sm text-surface-500 font-medium"> of {{ scanners }}</span></p>
+            {% if health.FAIL %}<p class="text-xs text-red-400 mt-1">{{ health.FAIL }} not firing on its fixture</p>{% endif %}
+        </div>
+        <div class="glass-card p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Last audit</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{% if last_audit %}{{ last_audit.strftime('%b') }} {{ last_audit.day }}{% else %}Never{% endif %}</p>
+        </div>
+        <div class="glass-card p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Unlinked</p>
+            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-amber-400' if unlinked else 'text-white' }}">{{ unlinked | length }}</p>
+        </div>
+    </div>
+
+    {# One scroller for the matrix and the link list together, so the
+       matrix can never be squeezed out by what sits under it. #}
+    <div class="flex-1 min-h-0 overflow-y-auto space-y-4">
+    <div class="glass-card overflow-hidden">
+        {% if not chips %}
+        <div class="p-8 sm:p-12 text-center">
+            <p class="text-surface-400 mb-1">Pick something from the catalogue</p>
+            <p class="text-sm text-surface-500 max-w-md mx-auto">Who has it, who does not, and who is breaking it.</p>
+        </div>
+        {% elif not rows %}
+        <div class="p-8 sm:p-12 text-center">
+            <p class="text-surface-400">Nobody matches that view.</p>
+        </div>
+        {% else %}
+        {# The matrix scrolls inside its own box, sideways when the chips
+           outnumber the phone. The page never does. #}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-surface-900 z-10">
+                    <tr class="text-left text-xs uppercase tracking-wider text-surface-400 border-b border-white/5">
+                        <th class="py-3 px-4 sm:px-5 font-semibold min-w-[12rem]">Project</th>
+                        {% for chip in chips %}
+                        <th class="py-3 px-4 font-semibold whitespace-nowrap">{{ chip.label }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for r in rows %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="py-3 px-4 sm:px-5 min-w-[12rem]">
+                            <a href="{{ url_for('pm.project_detail', id=r.project.id) }}" class="block font-medium text-white hover:text-brand-300 transition-colors truncate max-w-[16rem]">{{ r.project.name }}</a>
+                            <p class="text-xs text-surface-400 truncate max-w-[16rem]">{{ r.project.client.name }}{% if r.project.repo %} &middot; {{ r.project.repo.split('/')[-1] }}{% endif %}</p>
+                        </td>
+                        {% for c in r.cells %}
+                        <td class="py-3 px-4 whitespace-nowrap">
+                            {% set tone = 'bg-emerald-500/10 text-emerald-300' if c.has is true else ('bg-red-500/10 text-red-300' if c.has is false else 'bg-white/5 text-surface-400') %}
+                            {% if c.href %}
+                            <a href="{{ c.href }}" class="inline-flex items-center min-h-[36px] px-2.5 rounded-lg text-xs font-medium {{ tone }} hover:brightness-125 transition">{{ c.label }}</a>
+                            {% else %}
+                            <span class="inline-flex items-center min-h-[36px] px-2.5 rounded-lg text-xs font-medium {{ tone }}">{{ c.label }}</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if unlinked %}
+    {# The one thing typed in here: which repository a project lives in,
+       so the audit's findings have a project to land on. Suggested from a
+       shared word in the names, confirmed with one press. relative z-20:
+       each row's dropdown panel must paint over the row below it. #}
+    <div class="glass-card overflow-hidden">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5">
+            <span class="text-xs font-semibold uppercase tracking-wider text-amber-300">Projects with no repository linked</span>
+        </div>
+        <div class="divide-y divide-white/5">
+            {% for p in unlinked %}
+            <form method="POST" action="{{ url_for('cerebro.link_repo') }}"
+                  class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 relative z-20">
+                <input type="hidden" name="project_id" value="{{ p.id }}">
+                <input type="hidden" name="next" value="{{ link() }}">
+                <div class="min-w-0 flex-1">
+                    <p class="font-medium text-white truncate">{{ p.name }}</p>
+                    <p class="text-xs text-surface-400 truncate">{{ p.client.name }}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    {{ select_dropdown("repo", repo_options, suggestions[p.id], "Choose a repository", extra_class="w-56") }}
+                    <button type="submit" class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Link</button>
+                </div>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    </div>
+</div>
+{% endblock %}

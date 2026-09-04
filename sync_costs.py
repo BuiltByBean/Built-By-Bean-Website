@@ -66,6 +66,9 @@ def _sweep():
         import sweep_repos
         print("sweeping repos for new lessons", flush=True)
         sweep_repos.main()
+        import audit_repos
+        print("auditing repos against the rules", flush=True)
+        audit_repos.main()
     except Exception as err:  # noqa: BLE001
         print(f"repo sweep failed: {str(err)[:200]}", flush=True)
 

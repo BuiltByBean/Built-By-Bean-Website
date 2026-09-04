@@ -108,6 +108,25 @@ Needs attention rather than riding into every build prompt as repo
 prose. `RepoWatch` holds the blob sha and the headings seen; the first
 read of a repo only records, so nothing mined by hand comes back.
 
+## Cerebro
+
+`pm/cerebro_routes.py` is every client held against the catalogue: chips
+picked from products, features, playbooks and rules become columns, the
+projects are rows, and a cell says who has it or who is breaking it. All
+state is the query string (`?c=kind:slug&view=`), so a question is a URL.
+Products come from sales, playbooks from ProjectPlaybook, features from
+the client's packages, rules from `RuleAudit`. Rules carry their scanner
+(`check_pattern`, `check_globs`, `check_exclude`, `check_unless`,
+`check_fixture`); `audit_repos.py` runs every scanner over every repo's
+tarball nightly, after the sweep, and upserts one row per (repo, rule).
+Data Dungeon's principle holds here: a scanner that does not fire on its
+own fixture is skipped and shown as failing, because zero hits from a
+broken scanner reads exactly like a clean repo - and the first seeded
+secrets scanner was exactly that until the fixture caught it. A project
+knows its repo through `Project.repo` (the edit form, or the link list at
+the bottom of Cerebro, which suggests from a shared word in the names).
+Sessions may propose scanners on rules through `suggest_update`.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last

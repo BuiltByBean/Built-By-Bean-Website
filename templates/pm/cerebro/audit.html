@@ -1,0 +1,54 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One repository against one rule: every place the scanner fired, as the
+  file and line a batch fix would open. The rule's own guidance sits above
+  the list so the fix and the reason travel together.
+#}
+
+{% block title %}{{ rule.name }} in {{ repo.split('/')[-1] }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('cerebro.index', c=['rule:' ~ rule.slug]), 'Cerebro') }}{% endblock %}
+{% block page_title %}{{ rule.name }}{% endblock %}
+{% block page_subtitle %}{{ repo }} &middot; {{ audit.violations }} hit{{ 's' if audit.violations != 1 }}{% if audit.sha %} at {{ audit.sha }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl space-y-4 stagger-in">
+
+    <div class="glass-card p-4 sm:p-5 space-y-3">
+        {% if rule.summary %}<p class="text-sm text-surface-200">{{ rule.summary }}</p>{% endif %}
+        {% if rule.gold_standard_md %}
+        <div>
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">How it should be</p>
+            <p class="text-sm text-surface-300 whitespace-pre-wrap break-words">{{ rule.gold_standard_md }}</p>
+        </div>
+        {% endif %}
+        <div>
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">The scanner</p>
+            <code class="block text-xs text-brand-200 bg-surface-900/60 border border-white/10 rounded-lg px-3 py-2 break-all">{{ rule.check_pattern }}</code>
+            <p class="text-xs text-surface-500 mt-1">in {{ rule.check_globs or 'every file' }}{% if rule.check_exclude %}, not {{ rule.check_exclude }}{% endif %}{% if rule.check_unless %}, unless the file mentions {{ rule.check_unless }}{% endif %}</p>
+        </div>
+    </div>
+
+    <div class="glass-card overflow-hidden">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Where it fires</span>
+            {% if audit.violations > samples | length %}<span class="text-xs text-surface-500">first {{ samples | length }} of {{ audit.violations }}</span>{% endif %}
+        </div>
+        <div class="divide-y divide-white/5">
+            {% for s in samples %}
+            <div class="px-4 sm:px-5 py-3">
+                <p class="text-xs font-medium text-brand-200 break-all">{{ s.path }}<span class="text-surface-500">:{{ s.line }}</span></p>
+                <code class="block text-xs text-surface-300 mt-1 whitespace-pre-wrap break-words">{{ s.text }}</code>
+            </div>
+            {% else %}
+            <p class="px-4 sm:px-5 py-6 text-sm text-surface-500">Nothing recorded.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if projects %}
+    <p class="text-xs text-surface-500">This repository is {% for p in projects %}<a href="{{ url_for('pm.project_detail', id=p.id) }}" class="text-brand-300 hover:text-brand-200">{{ p.name }}</a>{{ ', ' if not loop.last }}{% endfor %}.</p>
+    {% endif %}
+</div>
+{% endblock %}

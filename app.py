@@ -285,6 +285,10 @@ def create_app():
     from pm.messages_routes import messages_bp
     app.register_blueprint(messages_bp)
 
+    # ── Every client held against the catalogue ───────────
+    from pm.cerebro_routes import cerebro_bp
+    app.register_blueprint(cerebro_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)
@@ -1139,6 +1143,7 @@ def create_app():
                 phase=form.phase.data,
                 status=form.status.data,
                 budget=form.budget.data,
+                repo=(form.repo.data or '').strip() or None,
                 mvp_date=form.mvp_date.data,
                 go_live_date=form.go_live_date.data,
                 hosting_fee=form.hosting_fee.data,

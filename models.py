@@ -212,6 +212,10 @@ class Project(db.Model):
     # "nobody has set this", and only the second one is a thing to go and fix.
     hosting_fee = db.Column(db.Float, nullable=True)
     hosting_cycle = db.Column(db.String(20), nullable=True)
+    # The GitHub repository, as owner/name, so the nightly audit can hold
+    # this build's code against the catalogue's rules. Nullable: an app
+    # taken over without a repo is still a project.
+    repo = db.Column(db.String(200), nullable=True, index=True)
     # Set the moment a phase is changed by hand. mvp_date is a promise,
     # not a fact - a build running late would otherwise be marched to
     # Delivered by its own contract date and marched back every reload.
@@ -1684,6 +1688,20 @@ class Feature(db.Model):
     kind = db.Column(db.String(10), nullable=False, default="feature",
                      index=True)
 
+    # A rule that can check itself. Data Dungeon's Cerebro made every
+    # landmine a scanner with a fixture that proves the scanner fires;
+    # this is the same idea held on the rule, so the nightly audit can
+    # hold every client repo against it. A line matching check_pattern in
+    # a file matching check_globs is a hit, unless the file also matches
+    # check_unless. check_fixture is a line the pattern MUST match, run
+    # on every page load, because a scanner that finds nothing looks
+    # exactly like a scanner that is broken.
+    check_pattern = db.Column(db.Text, nullable=True)
+    check_globs = db.Column(db.String(300), nullable=True)
+    check_exclude = db.Column(db.String(300), nullable=True)
+    check_unless = db.Column(db.Text, nullable=True)
+    check_fixture = db.Column(db.Text, nullable=True)
+
     # `built` is something shipped at least once. `idea` is something a client
     # asked for that does not exist yet - captured on the call rather than
     # lost, which is half the point of having the page open during one.
@@ -1791,6 +1809,36 @@ class Message(db.Model):
 
     def __repr__(self):
         return f"<Message {self.direction} {self.from_email} {self.status}>"
+
+
+class RuleAudit(db.Model):
+    """One repository held against one rule, as of the last nightly audit.
+
+    Upserted on (repo, rule), so the table is always the current picture and
+    never a log. `violations` is the count; `sample_json` keeps the first
+    few as path, line and text, which is what a batch fix starts from.
+    """
+
+    __tablename__ = "rule_audits"
+    __table_args__ = (
+        db.UniqueConstraint("repo", "rule_id", name="uq_rule_audits_repo_rule"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    repo = db.Column(db.String(200), nullable=False, index=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey("features.id", ondelete="CASCADE",
+                                                  name="fk_rule_audits_rule_id"),
+                        nullable=False, index=True)
+    sha = db.Column(db.String(64), nullable=True)
+    violations = db.Column(db.Integer, nullable=False, default=0)
+    sample_json = db.Column(db.Text, default="[]")
+    checked_at = db.Column(db.DateTime, nullable=True)
+
+    rule = db.relationship("Feature", backref=db.backref("audits", lazy="dynamic",
+                                                         cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<RuleAudit {self.repo} rule={self.rule_id} {self.violations}>"
 
 
 class RepoWatch(db.Model):
