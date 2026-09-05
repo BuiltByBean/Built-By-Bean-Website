@@ -54,7 +54,10 @@
         <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
             {% for u in people %}
             <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 {{ 'opacity-60' if not u.is_active }}">
-                <div class="min-w-0 flex-1">
+                {# basis-full on a phone: with flex-1 alone the name block shrinks
+                   to whatever the buttons leave it, and a short row truncated the
+                   name to "Smoke ..." beside two buttons that happened to fit. #}
+                <div class="min-w-0 flex-1 basis-full sm:basis-0">
                     <div class="flex flex-wrap items-center gap-2 min-w-0">
                         <span class="font-medium text-white truncate max-w-full">{{ u.full_name }}</span>
                         <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider shrink-0
@@ -77,7 +80,7 @@
                    wider than a phone, and a shrink-0 wrap container is sized to
                    its max-content, so its children never wrap; it overflowed the
                    card and the card's overflow-hidden cut Cancel off the screen. #}
-                <div class="flex flex-wrap items-center gap-2 max-w-full">
+                <div class="flex flex-wrap items-center justify-end gap-2 max-w-full basis-full sm:basis-auto">
                     <a href="{{ url_for('users.edit', id=u.id) }}"
                        class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Edit</a>
                     <form method="POST" action="{{ url_for('users.reset', id=u.id) }}">
