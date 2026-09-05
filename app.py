@@ -90,7 +90,10 @@ def create_app():
         if uid.startswith("bs_"):
             from bible_study.bs_models import BibleStudyUser
             return db.session.get(BibleStudyUser, int(uid[3:]))
-        return db.session.get(User, int(user_id))
+        # A switched-off account ends here, not only at the login form: a
+        # session that was already open must not outlive the switch.
+        user = db.session.get(User, int(user_id))
+        return user if user is not None and user.is_active else None
 
     # ── S3 Client ─────────────────────────────────────────────
     _s3_bucket = os.environ.get("AWS_S3_BUCKET")
@@ -186,43 +189,15 @@ def create_app():
             if _dev_password and not User.query.filter(User.username.ilike("tlane")).first():
                 dev = User(
                     username="tlane",
-                    first_name="T",
+                    first_name="Ty",
                     last_name="Lane",
                     email="tlane@builtbybean.com",
-                    role="ceo",
+                    role="cto",
                     must_change_password=True,
                 )
                 dev.set_password(_dev_password)
                 db.session.add(dev)
                 db.session.commit()
-
-            # Ensure the Mbean admin exists. A password is set ONLY when the account
-            # is first created, and only from MBEAN_PASSWORD. Booting the app must
-            # never reset an existing account's password — the previous version did
-            # that on every boot with a hardcoded literal.
-            _mbean = User.query.filter(User.username.ilike("Mbean")).first()
-            if _mbean is None:
-                _mbean_by_email = User.query.filter(User.email.ilike("mbean@builtbybean.com")).first()
-                if _mbean_by_email is not None:
-                    # Same person under an older username: adopt it, leave the
-                    # password alone.
-                    _mbean_by_email.username = "Mbean"
-                    _mbean_by_email.role = "ceo"
-                    db.session.commit()
-                else:
-                    _mbean_password = os.environ.get("MBEAN_PASSWORD", "")
-                    if _mbean_password:
-                        _mbean = User(
-                            username="Mbean",
-                            first_name="Michael",
-                            last_name="Bean",
-                            email="mbean@builtbybean.com",
-                            role="ceo",
-                            must_change_password=False,
-                        )
-                        _mbean.set_password(_mbean_password)
-                        db.session.add(_mbean)
-                        db.session.commit()
 
         # Add stripe_customer_id column if it doesn't exist yet
         with db.engine.connect() as conn2:
