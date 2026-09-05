@@ -214,7 +214,7 @@ def create_app():
                     if _mbean_password:
                         _mbean = User(
                             username="Mbean",
-                            first_name="Matthew",
+                            first_name="Michael",
                             last_name="Bean",
                             email="mbean@builtbybean.com",
                             role="ceo",
