@@ -137,20 +137,20 @@ billed, and Cerebro asks the code first when the ledger is silent.
 
 ## Users
 
-`pm/users_routes.py`, officers only, guarded on the route by
-`officer_required` (one decorator per audience) and not merely hidden in
-the nav. Four titles: CEO, CTO and CMO are the officers, who run the board
-and its people; a member does the work. The old values "owner" and
-"admin" read as CEO (`User.is_officer`, `role_label`) and the migrations
+`pm/users_routes.py`, CEO only, guarded on the route by `ceo_required`
+(one decorator per audience) and not merely hidden in the nav. Four
+titles: the CEO runs the board and its people; CTO, CMO and member are
+titles with every other door and no Team section. The old values "owner"
+and "admin" read as CEO (`User.is_ceo`, `role_label`) and the migrations
 rewrote them, so nothing that existed lost a door. An account is switched
 off (`is_active`), never deleted, because time entries and timer rows
 point at it; a switched-off login gets the same "invalid" answer as a
 wrong password, so the door does not say which. Passwords are never typed
-here: a new account or a reset gets a temporary one, shown to the officer
+here: a new account or a reset gets a temporary one, shown to the CEO
 once (carried in the server session, popped on the next load, never a
 flash - the flash strip would print it too) and replaced on first sign-in
 by the existing must_change_password gate. You cannot switch off or take
-the title off yourself, nor the last active officer.
+CEO off yourself, nor the last active CEO.
 
 ## Hosting fees that raise themselves
 

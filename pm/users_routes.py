@@ -1,7 +1,7 @@
 """The people who may open this board.
 
-Four titles, one decorator. An officer (CEO, CTO or CMO) runs the board
-and its people; a member does the work and never sees this section. The guard sits on the
+Four titles, one decorator. The CEO runs the board and its people; CTO,
+CMO and member do the work and never see this section. The guard sits on the
 route, per the house rule, not in the template that hides the link.
 
 An account is never deleted: it is switched off. The time somebody logged
@@ -9,7 +9,7 @@ and the timer rows that point at them are theirs, and a row that vanishes
 under a foreign key is a worse day than a name that has gone quiet.
 
 Passwords are never chosen here. A new account or a reset gets a
-temporary one, shown to the officer exactly once and never stored in the
+temporary one, shown to the CEO exactly once and never stored in the
 clear, and the person is made to replace it on their first sign-in.
 """
 import secrets
@@ -28,12 +28,12 @@ users_bp = Blueprint("users", __name__, url_prefix="/admin/users")
 ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
-def officer_required(view):
+def ceo_required(view):
     @wraps(view)
     @login_required
     def wrapped(*args, **kwargs):
-        if not getattr(current_user, "is_officer", False):
-            flash("Officers only.", "warning")
+        if not getattr(current_user, "is_ceo", False):
+            flash("CEO only.", "warning")
             return redirect(url_for("pm.dashboard"))
         return view(*args, **kwargs)
     return wrapped
@@ -44,9 +44,9 @@ def temporary_password():
     return "-".join(parts)
 
 
-def _active_officers():
+def _active_ceos():
     return User.query.filter(User.is_active.is_(True),
-                             User.role.in_(User.OFFICER_ROLES + User.LEGACY_OFFICER_ROLES)).count()
+                             User.role.in_(("ceo",) + User.LEGACY_CEO_ROLES)).count()
 
 
 def _clean(form):
@@ -68,18 +68,17 @@ def _taken(field, value, exclude_id=None):
 
 
 @users_bp.route("/")
-@officer_required
+@ceo_required
 def index():
     people = User.query.order_by(User.is_active.desc(), User.role, User.username).all()
     # Set by create and reset, read here once, gone. Never a flash: the
     # generic flash strip would print it too.
     reveal = session.pop("user_reveal", None)
-    return render_template("pm/users/index.html", people=people, reveal=reveal,
-                           officers=_active_officers())
+    return render_template("pm/users/index.html", people=people, reveal=reveal)
 
 
 @users_bp.route("/new", methods=["GET", "POST"])
-@officer_required
+@ceo_required
 def create():
     if request.method == "GET":
         return render_template("pm/users/form.html", person=None, values={}, roles=User.ROLES)
@@ -107,14 +106,14 @@ def create():
 
 
 @users_bp.route("/<int:id>/edit", methods=["GET", "POST"])
-@officer_required
+@ceo_required
 def edit(id):
     person = db.session.get(User, id) or abort(404)
     if request.method == "GET":
         values = {"username": person.username, "first_name": person.first_name or "",
                   "last_name": person.last_name or "", "email": person.email,
                   "role": person.role if person.role in dict(User.ROLES)
-                          else ("ceo" if person.is_officer else "member")}
+                          else ("ceo" if person.is_ceo else "member")}
         return render_template("pm/users/form.html", person=person, values=values, roles=User.ROLES)
     values = _clean(request.form)
     problem = None
@@ -124,12 +123,12 @@ def edit(id):
         problem = "That username is already taken."
     elif _taken("email", values["email"], person.id):
         problem = "That email already has an account."
-    elif values["role"] not in User.OFFICER_ROLES and person.is_officer:
-        # Taking a title away: never your own, and never the last officer's.
+    elif values["role"] != "ceo" and person.is_ceo:
+        # Taking CEO away: never your own, and never the last one's.
         if person.id == current_user.id:
-            problem = "You cannot take the title off your own account."
-        elif person.is_active and _active_officers() <= 1:
-            problem = "That is the last officer. Give somebody else a title first."
+            problem = "You cannot take CEO off your own account."
+        elif person.is_active and _active_ceos() <= 1:
+            problem = "That is the last CEO. Make somebody else the CEO first."
     if problem:
         flash(problem, "warning")
         return render_template("pm/users/form.html", person=person, values=values, roles=User.ROLES)
@@ -141,7 +140,7 @@ def edit(id):
 
 
 @users_bp.route("/<int:id>/reset", methods=["POST"])
-@officer_required
+@ceo_required
 def reset(id):
     person = db.session.get(User, id) or abort(404)
     password = temporary_password()
@@ -153,14 +152,14 @@ def reset(id):
 
 
 @users_bp.route("/<int:id>/switch", methods=["POST"])
-@officer_required
+@ceo_required
 def switch(id):
     person = db.session.get(User, id) or abort(404)
     if person.id == current_user.id:
         flash("You cannot switch off your own account.", "warning")
         return redirect(url_for("users.index"))
-    if person.is_active and person.is_officer and _active_officers() <= 1:
-        flash("That is the last officer. Give somebody else a title first.", "warning")
+    if person.is_active and person.is_ceo and _active_ceos() <= 1:
+        flash("That is the last CEO. Make somebody else the CEO first.", "warning")
         return redirect(url_for("users.index"))
     person.is_active = not person.is_active
     db.session.commit()
