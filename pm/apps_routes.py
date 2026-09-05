@@ -74,8 +74,21 @@ def _refresh_icon(link):
 @apps_bp.route("/")
 @login_required
 def index():
-    return render_template("pm/apps/index.html",
-                           apps=AppLink.query.order_by(AppLink.id).all())
+    """The board, split by whose work it is.
+
+    An app belongs to a client engagement or it does not, and that is already
+    what project_id says — client work first, because that is the half with
+    somebody waiting on it. Ordering inside each group stays by id, so a tile
+    does not move under the cursor when a project is attached or detached.
+    """
+    apps = AppLink.query.order_by(AppLink.id).all()
+    return render_template(
+        "pm/apps/index.html",
+        groups=[
+            {"label": "Client work", "apps": [a for a in apps if a.project_id]},
+            {"label": "Mine", "apps": [a for a in apps if not a.project_id]},
+        ],
+        total=len(apps))
 
 
 def _store_upload(link, upload):
