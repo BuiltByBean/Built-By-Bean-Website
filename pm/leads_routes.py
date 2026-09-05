@@ -26,18 +26,15 @@ PER_PAGE = 25
 
 # The whole point of the list is deciding who to ring next, so the default
 # order puts the untouched first and, within those, the ones trading longest.
+# Every option says what it does. "Best bets" said nothing: it was a rule in
+# somebody's head about a list of strangers.
 SORTS = [
-    ("best", "Best bets"),
-    ("name", "Name"),
-    ("city", "City"),
+    ("best", "Untried, oldest first"),
+    ("name", "Name, A to Z"),
+    ("city", "Town, then name"),
     ("oldest", "Longest trading"),
-    ("touched", "Recently tried"),
+    ("touched", "Tried most recently"),
 ]
-
-# "Best bets" used to lead with businesses that had no website. Nothing ever
-# checked whether they had one, so that was sorting on an absence of data
-# dressed up as a finding. What is left is what the record actually knows:
-# nobody has tried them, and they have been trading a long time.
 
 
 def _clean(value, limit):
@@ -68,10 +65,13 @@ def index():
         query = query.filter(Lead.stage == stage)
     if industry:
         query = query.filter(Lead.industry == industry)
-    # Only the positive is a fact. There is no "no website" filter, because
-    # a blank means nobody looked.
+    # Both sides are facts now that check_websites.py goes and looks.
+    # "None found" means checked and nothing found, never merely blank.
     if website == "yes":
         query = query.filter(Lead.website.isnot(None), Lead.website != "")
+    elif website == "no":
+        query = query.filter(Lead.website_checked_at.isnot(None),
+                             or_(Lead.website.is_(None), Lead.website == ""))
     if untried:
         # Nobody has logged anything against it yet.
         query = query.filter(~Lead.touches.any())
@@ -93,19 +93,32 @@ def index():
 
     pagination = query.paginate(page=page, per_page=PER_PAGE, error_out=False)
 
-    cities = [row[0] for row in db.session.query(Lead.city)
-              .filter(Lead.city != "").group_by(Lead.city)
-              .order_by(func.count(Lead.id).desc()).limit(40).all()]
-    industries = [row[0] for row in db.session.query(Lead.industry)
-                  .filter(Lead.industry != "").group_by(Lead.industry)
-                  .order_by(func.count(Lead.id).desc()).limit(60).all()]
+    # A to Z, not by row count. Somebody hunting for Roxton knows the word
+    # and wants to jump to R; a frequency order only the database understands
+    # makes them scroll the whole list. Counts ride in the label instead.
+    cities = db.session.query(Lead.city, func.count(Lead.id)).filter(
+        Lead.city != "", Lead.city.isnot(None)).group_by(Lead.city).order_by(Lead.city).all()
+    industries = db.session.query(Lead.industry, func.count(Lead.id)).filter(
+        Lead.industry != "", Lead.industry.isnot(None)).group_by(
+        Lead.industry).order_by(Lead.industry).all()
 
+    # Counted over the FILTERED query, because a tile above a filtered list
+    # that reports the whole table answers a question nobody asked. Ordering
+    # is dropped first: a count does not care, and Postgres refuses some of
+    # these orderings under an aggregate.
+    scope = query.order_by(None)
+
+    def tally(*where):
+        return scope.filter(*where).count() if where else scope.count()
+
+    no_site = tally(Lead.website_checked_at.isnot(None),
+                    or_(Lead.website.is_(None), Lead.website == ""))
     counts = {
-        "total": Lead.query.count(),
-        "untried": Lead.query.filter(~Lead.touches.any()).count(),
-        "with_phone": Lead.query.filter(Lead.phone.isnot(None), Lead.phone != "").count(),
-        "talking": Lead.query.filter(Lead.stage.in_(("contacted", "in_conversation", "proposal_sent"))).count(),
-        "clients": Lead.query.filter(Lead.client_id.isnot(None)).count(),
+        "total": tally(),
+        "no_site": no_site,
+        "untried": tally(~Lead.touches.any()),
+        "talking": tally(Lead.stage.in_(("contacted", "in_conversation", "proposal_sent"))),
+        "unchecked": tally(Lead.website_checked_at.is_(None)),
     }
 
     return render_template(

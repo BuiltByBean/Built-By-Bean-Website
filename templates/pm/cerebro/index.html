@@ -63,7 +63,7 @@
             <a href="{{ link(None, key) }}"
                class="inline-flex items-center min-h-[36px] px-3 rounded-full text-xs font-medium border transition-colors
                       {% if view == key %}border-brand-500/40 bg-brand-500/20 text-white{% else %}border-white/10 text-surface-400 hover:text-white{% endif %}">
-                {{ name }}&nbsp;{% if key == 'has' %}{{ counts.has }}{% elif key == 'missing' %}{{ counts.missing }}{% elif key == 'breaking' %}{{ counts.breaking }}{% else %}{{ total }}{% endif %}
+                {{ name }}&nbsp;{% if key == 'has' %}{{ counts.has | commas }}{% elif key == 'missing' %}{{ counts.missing | commas }}{% elif key == 'breaking' %}{{ counts.breaking | commas }}{% else %}{{ total }}{% endif %}
             </a>
             {% endfor %}
         </div>
@@ -85,7 +85,7 @@
         </div>
         <div class="glass-card p-4">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Unlinked</p>
-            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-amber-400' if unlinked else 'text-white' }}">{{ unlinked | length }}</p>
+            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-amber-400' if unlinked else 'text-white' }}">{{ unlinked | length | commas }}</p>
         </div>
     </div>
 

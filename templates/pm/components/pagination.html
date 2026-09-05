@@ -8,9 +8,9 @@
 {% if pagination.pages > 1 %}
 <nav class="flex flex-wrap items-center justify-between gap-3 mt-6">
     <p class="text-sm text-surface-400">
-        Showing <span class="font-medium text-surface-200">{{ ((pagination.page - 1) * pagination.per_page) + 1 }}</span>
-        to <span class="font-medium text-surface-200">{{ [pagination.page * pagination.per_page, pagination.total] | min }}</span>
-        of <span class="font-medium text-surface-200">{{ pagination.total }}</span>
+        Showing <span class="font-medium text-surface-200">{{ (((pagination.page - 1) * pagination.per_page) + 1) | commas }}</span>
+        to <span class="font-medium text-surface-200">{{ [pagination.page * pagination.per_page, pagination.total] | min | commas }}</span>
+        of <span class="font-medium text-surface-200">{{ pagination.total | commas }}</span>
     </p>
     <div class="flex flex-wrap items-center gap-1 max-w-full">
         {% if pagination.has_prev %}

@@ -267,6 +267,72 @@ def trades_here(entry, towns, zips):
     return bool(entry.get("phone") or entry.get("website") or entry.get("email"))
 
 
+# The Comptroller files "we do not know" as the day the sales tax began.
+# A business is not 65 years old because nobody wrote down when it started.
+SALES_TAX_EPOCH = "1961-09-01"
+
+# One vocabulary for the trade. A map, a licence file and an industry code
+# name the same shop three ways, and three options in a filter that each hide
+# the other two is worse than one long list. The NAICS wording wins because
+# most rows come from there; anything not in here keeps its own words.
+TRADE_ALIASES = {
+    "restaurant": "Restaurants and cafes",
+    "fast food": "Restaurants and cafes",
+    "cafe": "Restaurants and cafes",
+    "food court": "Restaurants and cafes",
+    "ice cream": "Restaurants and cafes",
+    "restaurants and bars": "Restaurants and cafes",
+    "bar": "Bars", "pub": "Bars", "biergarten": "Bars",
+    "convenience": "Filling stations", "fuel": "Filling stations",
+    "supermarket": "Grocery stores", "greengrocer": "Grocery stores",
+    "butcher": "Grocery stores", "bakery": "Grocery stores",
+    "car repair": "Car repair", "car parts": "Auto parts and tyres",
+    "tyres": "Auto parts and tyres", "tires": "Auto parts and tyres",
+    "car": "Car and truck dealers", "car dealer": "Car and truck dealers",
+    "bank": "Banks and credit unions", "atm": "Banks and credit unions",
+    "money lender": "Lenders", "insurance": "Insurance agents",
+    "dentist": "Dentists", "doctors": "Doctors", "clinic": "Clinics",
+    "optometrist": "Other practitioners", "pharmacy": "Pharmacy and personal care",
+    "chemist": "Pharmacy and personal care", "veterinary": "Other practitioners",
+    "hairdresser": "Salons and barbers", "beauty": "Salons and barbers",
+    "barber": "Salons and barbers", "full service establishment": "Salons and barbers",
+    "mini establishment": "Salons and barbers",
+    "manicurist/esthetician establishment": "Salons and barbers",
+    "hardware": "Building materials", "doityourself": "Building materials",
+    "trade": "Building materials", "garden centre": "Lawn and garden",
+    "florist": "Florists", "funeral directors": "Funeral homes",
+    "laundry": "Dry cleaners and laundries", "dry cleaning": "Dry cleaners and laundries",
+    "a/c contractor": "Plumbing, heating and electrical",
+    "air conditioning contractor": "Plumbing, heating and electrical",
+    "electrical contractor": "Plumbing, heating and electrical",
+    "sign electrical contractor": "Plumbing, heating and electrical",
+    "plumber": "Plumbing, heating and electrical",
+    "electrician": "Plumbing, heating and electrical",
+    "hvac": "Plumbing, heating and electrical",
+    "place of worship": "Churches", "school": "Schools",
+    "kindergarten": "Child care", "childcare": "Child care",
+    "clothes": "Clothing", "shoes": "Shoes", "jewelry": "Jewellery",
+    "hotel": "Hotels and motels", "motel": "Hotels and motels",
+    "fitness centre": "Recreation", "sports centre": "Recreation",
+    "auctioneer": "Auctioneers", "licensed breeder": "Farming and forestry",
+    "vehicle storage facility": "Car repair", "tow company": "Trucking",
+    "water well driller": "Site preparation and other trades",
+    "elevator contractor": "Building trade contractors",
+    "used automotive parts recycler": "Auto parts and tyres",
+    "cosmetology private school": "Schools", "barber school": "Schools",
+    "booth rental": "Salons and barbers", "dual shop/salon": "Salons and barbers",
+    "barber shop": "Salons and barbers",
+}
+
+
+def trade(label):
+    """One name per trade, whichever source named it."""
+    text = re.sub(r"\s+", " ", (label or "").strip())
+    if not text:
+        return ""
+    return TRADE_ALIASES.get(text.lower(), text)
+
+
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 BAD_EMAIL = re.compile(r"(sentry|wixpress|example|\.png$|\.jpg$|\.gif$|\.webp$|@2x|domain\.com|email\.com|yourdomain)", re.I)
 
@@ -363,6 +429,9 @@ def owner_from_taxpayer(name, org_type):
 
 def parse_date(value):
     if not value:
+        return None
+    # The epoch is a filing convention for "unknown", not a date.
+    if str(value)[:10] == SALES_TAX_EPOCH:
         return None
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
@@ -626,7 +695,7 @@ def run(cache=None, enrich=True, verbose=True):
                 "zip_code": (row.get("outlet_zip_code") or "")[:5],
                 "county": COUNTIES.get(row.get("outlet_county_code"), ""),
                 "naics": (row.get("outlet_naics_code") or "")[:6],
-                "industry": naics_label(row.get("outlet_naics_code")),
+                "industry": trade(naics_label(row.get("outlet_naics_code"))),
                 "entity_type": ENTITY_TYPES.get(org, ""),
                 "started_on": parse_date(row.get("outlet_first_sales_date")),
                 "taxpayer_number": row.get("taxpayer_number") or "",
@@ -697,7 +766,7 @@ def run(cache=None, enrich=True, verbose=True):
                 kind = (tags.get("shop") or tags.get("amenity") or tags.get("office")
                         or tags.get("craft") or tags.get("healthcare") or "")
                 if kind and kind != "yes":
-                    entry["industry"] = kind.replace("_", " ").capitalize()
+                    entry["industry"] = trade(kind.replace("_", " ").capitalize())
             entry["osm_ref"] = f"{el.get('type')}/{el.get('id')}"
             if "openstreetmap" not in entry["sources"]:
                 entry["sources"].append("openstreetmap")
@@ -728,7 +797,7 @@ def run(cache=None, enrich=True, verbose=True):
                 entry.setdefault("address", pretty(street))
                 entry.setdefault("city", city)
                 entry.setdefault("zip_code", (practice.get("postal_code") or "")[:5])
-                entry.setdefault("industry", "Health practices")
+                entry.setdefault("industry", trade("Health practices"))
                 if phone:
                     entry.setdefault("phone", phone)
                 official = " ".join(part for part in (
@@ -786,7 +855,7 @@ def run(cache=None, enrich=True, verbose=True):
                 entry.setdefault("address", pretty(row.get("phy_street")))
                 entry.setdefault("city", city)
                 entry.setdefault("zip_code", (row.get("phy_zip") or "")[:5])
-                entry.setdefault("industry", "Trucking")
+                entry.setdefault("industry", trade("Trucking"))
                 entry.setdefault("county", "")
                 by_name[norm(name)] = entry
             phone = tidy_phone(row.get("phone"))
@@ -813,13 +882,13 @@ def run(cache=None, enrich=True, verbose=True):
             if str(row.get("license_type")) not in BUSINESS_LICENCES:
                 continue
             owner = person_name(row.get("owner_name")) or pretty(row.get("owner_name") or "")
-            trade = pretty(row.get("license_type") or "")
+            licence_trade = trade(pretty(row.get("license_type") or ""))
             display = person_name(business) or pretty(business)
             entry = by_name.get(norm(display))
             if entry is None:
                 entry = slot(display, "", "", extra_key=str(row.get("license_number")))
                 entry["name"] = display
-                entry.setdefault("industry", trade)
+                entry.setdefault("industry", licence_trade)
                 by_name[norm(display)] = entry
             # County comes from the query itself, so a licence row is known to
             # be in the trade area even without a town.
@@ -828,8 +897,8 @@ def run(cache=None, enrich=True, verbose=True):
                     (row.get("business_county") or "").upper(), ""), ""))
             if owner:
                 entry.setdefault("owner_name", owner)
-            if trade and not entry.get("industry"):
-                entry["industry"] = trade
+            if licence_trade and not entry.get("industry"):
+                entry["industry"] = licence_trade
             if "tdlr" not in entry["sources"]:
                 entry["sources"].append("tdlr")
 
@@ -849,7 +918,7 @@ def run(cache=None, enrich=True, verbose=True):
                 entry = slot(name, row.get("mailing_address_line1"), town_name)
                 entry.setdefault("address", pretty(row.get("mailing_address_line1")))
                 entry.setdefault("city", town_name)
-                entry.setdefault("industry", "Salons and barbers")
+                entry.setdefault("industry", trade("Salons and barbers"))
                 by_name[norm(name)] = entry
             entry.setdefault("phone", phone)
             if "tdlr" not in entry["sources"]:

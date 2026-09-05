@@ -14,13 +14,13 @@
 
 {% block title %}Needs attention - Built By Bean{% endblock %}
 {% block page_title %}Needs attention{% endblock %}
-{% block page_subtitle %}{% if total %}{{ total }} thing{{ 's' if total != 1 }} waiting on you{% else %}Nothing is waiting on you{% endif %}{% endblock %}
+{% block page_subtitle %}{% if total %}{{ total | commas }} thing{{ 's' if total != 1 }} waiting on you{% else %}Nothing is waiting on you{% endif %}{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
 
 {% macro section_head(label, count, tone='amber') %}
 <div class="px-4 sm:px-5 py-3 border-y border-white/5 first:border-t-0 flex items-center justify-between gap-3">
     <span class="text-xs font-semibold uppercase tracking-wider {{ 'text-red-300' if tone == 'red' else 'text-amber-300' if tone == 'amber' else 'text-surface-400' }}">{{ label }}</span>
-    <span class="text-xs font-medium text-surface-400">{{ count }}</span>
+    <span class="text-xs font-medium text-surface-400">{{ count | commas }}</span>
 </div>
 {% endmacro %}
 

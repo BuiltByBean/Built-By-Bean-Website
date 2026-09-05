@@ -11,7 +11,7 @@
 {% block title %}{{ title }} in {{ repo.split('/')[-1] }} - Built By Bean{% endblock %}
 {% block back %}{{ back_link(back, 'Cerebro') }}{% endblock %}
 {% block page_title %}{{ title }}{% endblock %}
-{% block page_subtitle %}{{ repo }} &middot; {{ count }} {{ 'sighting' if presence else 'hit' }}{{ 's' if count != 1 }}{% if sha %} at {{ sha }}{% endif %}{% endblock %}
+{% block page_subtitle %}{{ repo }} &middot; {{ count | commas }} {{ 'sighting' if presence else 'hit' }}{{ 's' if count != 1 }}{% if sha %} at {{ sha }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-4xl space-y-4 stagger-in">
@@ -34,7 +34,7 @@
     <div class="glass-card overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Where it {{ 'shows' if presence else 'fires' }}</span>
-            {% if count > samples | length %}<span class="text-xs text-surface-500">first {{ samples | length }} of {{ count }}</span>{% endif %}
+            {% if count > samples | length %}<span class="text-xs text-surface-500">first {{ samples | length | commas }} of {{ count | commas }}</span>{% endif %}
         </div>
         <div class="divide-y divide-white/5">
             {% for s in samples %}

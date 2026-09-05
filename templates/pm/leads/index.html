@@ -37,7 +37,7 @@
 
 {% block title %}Leads - Built By Bean{% endblock %}
 {% block page_title %}Leads{% endblock %}
-{% block page_subtitle %}{{ counts.total }} businesses{% endblock %}
+{% block page_subtitle %}{{ counts.total | commas }} businesses{% endblock %}
 
 {% macro filter_fields() %}
     <input type="hidden" name="f_q" value="{{ filters.q }}">
@@ -56,22 +56,27 @@
 
 <div class="space-y-4">
 
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {# Every tile counts what the filters are showing, not the whole table,
+       and every one is a number somebody would act on: the size of the
+       market, what is left to work, what is already moving. #}
+    <div data-live="tiles" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Businesses</p>
-            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.total }}</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.total | commas }}</p>
+        </div>
+        <div class="glass-card p-3 sm:p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">No site found</p>
+            <p class="text-xl sm:text-2xl font-bold text-amber-300 mt-1">{{ counts.no_site | commas }}</p>
+            <p class="text-[10px] text-surface-500 mt-0.5">{{ (counts.no_site * 100 // counts.total) if counts.total else 0 }}% of these
+                {%- if counts.unchecked %}, {{ counts.unchecked | commas }} not yet checked{% endif %}</p>
         </div>
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Never tried</p>
-            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.untried }}</p>
-        </div>
-        <div class="glass-card p-3 sm:p-4">
-            <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">With a phone</p>
-            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.with_phone }}</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.untried | commas }}</p>
         </div>
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">In play</p>
-            <p class="text-xl sm:text-2xl font-bold text-brand-300 mt-1">{{ counts.talking }}</p>
+            <p class="text-xl sm:text-2xl font-bold text-brand-300 mt-1">{{ counts.talking | commas }}</p>
         </div>
     </div>
 
@@ -91,31 +96,48 @@
                     </span>
                 </div>
 
-                <div class="flex flex-wrap gap-2 sm:gap-3">
-                    {% set city_opts = [("", "Every town")] %}
-                    {% for c in cities %}{% set _ = city_opts.append((c, c|title)) %}{% endfor %}
-                    {{ select_dropdown("city", city_opts, filters.city, "Every town",
-                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+                {# Each control says what it filters. Options are A to Z with
+                   their counts in the label, and the long ones carry a search
+                   box from the component. #}
+                <div class="flex flex-wrap items-end gap-2 sm:gap-3">
+                    {% set city_opts = [("", "All towns")] %}
+                    {% for c, n in cities %}{% set _ = city_opts.append((c, c ~ " (" ~ n|commas ~ ")")) %}{% endfor %}
+                    <label class="min-w-0">
+                        <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Town</span>
+                        {{ select_dropdown("city", city_opts, filters.city, "All towns",
+                                           on_change="apply()", extra_class="max-w-[11rem]") }}
+                    </label>
 
-                    {% set trade_opts = [("", "Every trade")] %}
-                    {% for i in industries %}{% set _ = trade_opts.append((i, i)) %}{% endfor %}
-                    {{ select_dropdown("industry", trade_opts, filters.industry, "Every trade",
-                                       on_change="apply()", extra_class="max-w-[13rem]") }}
+                    {% set trade_opts = [("", "All trades")] %}
+                    {% for i, n in industries %}{% set _ = trade_opts.append((i, i ~ " (" ~ n|commas ~ ")")) %}{% endfor %}
+                    <label class="min-w-0">
+                        <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Trade</span>
+                        {{ select_dropdown("industry", trade_opts, filters.industry, "All trades",
+                                           on_change="apply()", extra_class="max-w-[14rem]") }}
+                    </label>
 
-                    {% set stage_opts = [("", "Any stage")] + stage_choices %}
-                    {{ select_dropdown("stage", stage_opts, filters.stage, "Any stage",
-                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+                    {% set stage_opts = [("", "All stages")] + stage_choices %}
+                    <label class="min-w-0">
+                        <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Stage</span>
+                        {{ select_dropdown("stage", stage_opts, filters.stage, "All stages",
+                                           on_change="apply()", extra_class="max-w-[11rem]") }}
+                    </label>
 
-                    {# Only the positive is a fact: a blank website means
-                       nobody looked, not that they have none. #}
-                    {{ select_dropdown("website", [("", "Any"), ("yes", "Has a website")],
-                                       filters.website, "Any",
-                                       on_change="apply()", extra_class="max-w-[9rem]") }}
+                    <label class="min-w-0">
+                        <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Website</span>
+                        {{ select_dropdown("website",
+                                           [("", "Either"), ("no", "No site found"), ("yes", "Has a site")],
+                                           filters.website, "Either",
+                                           on_change="apply()", extra_class="max-w-[10rem]") }}
+                    </label>
 
-                    {{ select_dropdown("sort", sorts, filters.sort, "Best bets",
-                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+                    <label class="min-w-0">
+                        <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Sort by</span>
+                        {{ select_dropdown("sort", sorts, filters.sort, "Untried, oldest first",
+                                           on_change="apply()", extra_class="max-w-[13rem]") }}
+                    </label>
 
-                    <span class="inline-flex items-center" @change="apply()">
+                    <span class="inline-flex items-center min-h-[44px]" @change="apply()">
                         {{ checkbox("untried", checked=filters.untried, value="1",
                                     label="Never tried") }}
                     </span>

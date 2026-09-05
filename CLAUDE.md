@@ -190,14 +190,30 @@ than a figure. No free public source carries either for a private firm in
 a town this size, and a guessed number on a call sheet is worse than a
 blank: it gets repeated on the phone.
 
-**The board never says a business has no website.** Nothing checks. A
-website is recorded when a source happens to list one, and the sources
-that carry them cover this area thinly, so an empty field means nobody
-looked. That absence was once the headline count and the first key of the
-default sort, which is this repo's own Cerebro principle broken in its own
-words: zero hits from a check that never ran reads exactly like a clean
-result. The filter offers "has a website" and no opposite, and the default
-sort is never tried, then trading longest.
+**"No site found" is a checked fact, not a blank column.**
+`check_websites.py` goes and looks: for each business it builds the domains
+that business would plausibly own, resolves them, fetches what exists and
+reads the page to decide whether it is really theirs, refusing registrar
+holding pages. A hit is proof; a miss is recorded as `website_checked_at`
+with no website, which is why the tile says "no site found" rather than "no
+website". Of 3,746 businesses it found 1,046 sites nobody had listed, and
+2,591 have none to be found. Before it existed the board printed that
+absence straight off an empty column, which is this repo's own Cerebro
+principle broken in its own words: zero hits from a check that never ran
+reads exactly like a clean result.
+
+The tiles count the FILTERED query, not the table, and every number on the
+board wears its commas (catalogue rule "Numbers wear their commas"). The
+filter options are alphabetical with their counts in the label, each control
+is labelled with what it filters, and the long ones carry a search box from
+`select_dropdown` (catalogue rule "A long filter list is searchable and
+alphabetical"). The sort options say what they do; "Best bets" said nothing.
+One vocabulary names each trade, because a map, a licence file and an
+industry code called the same shop Restaurant, Restaurants and bars, and
+Restaurants and cafes, and filtering to one of the three silently hid the
+other two. The Comptroller files an unknown start date as 1961-09-01, the
+day the sales tax began, and that is stored as no date rather than rendered
+as sixty-five years of trading.
 
 `dedupe_key` (flattened trading name plus house number and street) is what
 makes the import re-runnable, and the loader never overwrites a phone,

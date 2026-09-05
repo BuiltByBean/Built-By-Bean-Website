@@ -2179,6 +2179,10 @@ class Lead(db.Model):
     osm_ref = db.Column(db.String(40), default="")
     npi = db.Column(db.String(20), default="")
     sources = db.Column(db.String(200), default="")
+    # When somebody last went looking for a website. Null means nobody has,
+    # and the board must not say "no website" about a row that is null: an
+    # empty column and an established absence are different facts.
+    website_checked_at = db.Column(db.DateTime, nullable=True)
     dedupe_key = db.Column(db.String(240), nullable=False, unique=True)
 
     stage = db.Column(db.String(30), default="lead", index=True)
@@ -2234,10 +2238,13 @@ class Lead(db.Model):
 
     @property
     def has_website(self):
-        """True when a website is KNOWN. False means nobody has looked, not
-        that there is none: the sources that carry a website cover this
-        area thinly, so the board never states the absence."""
         return bool((self.website or "").strip())
+
+    @property
+    def no_website(self):
+        """Somebody looked and found nothing. Not the same as a blank column,
+        which only means nobody has looked yet."""
+        return bool(self.website_checked_at) and not self.has_website
 
     @property
     def stage_label(self):

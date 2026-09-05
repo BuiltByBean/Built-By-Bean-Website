@@ -104,15 +104,15 @@
     <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
         <div class="glass-card p-4">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Waiting</p>
-            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-amber-400' if pending else 'text-white' }}">{{ pending|length }}</p>
+            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-amber-400' if pending else 'text-white' }}">{{ pending|length | commas }}</p>
         </div>
         <div class="glass-card p-4">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Live</p>
-            <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-1">{{ live|length }}</p>
+            <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-1">{{ live|length | commas }}</p>
         </div>
         <div class="glass-card p-4">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Declined</p>
-            <p class="text-xl sm:text-2xl font-bold text-surface-300 mt-1">{{ closed|length }}</p>
+            <p class="text-xl sm:text-2xl font-bold text-surface-300 mt-1">{{ closed|length | commas }}</p>
         </div>
     </div>
 

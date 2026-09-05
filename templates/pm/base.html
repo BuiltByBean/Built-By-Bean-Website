@@ -477,8 +477,22 @@
             open: false,
             active: -1,      // the row the keyboard is on, -1 when closed
             dropUp: false,
+            query: '',
             _typed: '',
             _typedAt: 0,
+
+            /* Past a dozen rows the panel carries a search box. Below that it
+               is clutter and the list is read faster whole. */
+            get searchable() { return this.options.length > 12; },
+
+            /* The rows to draw, each keeping the index it has in `options`, so
+               everything that addresses a row by index still addresses the
+               same row while a query is filtering them. */
+            get shown() {
+                const q = this.query.trim().toLowerCase();
+                const all = this.options.map((o, i) => ({ o, i }));
+                return q ? all.filter(x => x.o.l.toLowerCase().includes(q)) : all;
+            },
 
             get chosen() {
                 return this.options.find(o => o.v === this.value) || null;
@@ -498,9 +512,22 @@
             reveal() {
                 this.measure();
                 this.open = true;
+                this.query = '';
                 const i = this.options.findIndex(o => o.v === this.value);
                 this.active = i < 0 ? 0 : i;
-                this.$nextTick(() => this.scrollActiveIntoView());
+                this.$nextTick(() => {
+                    this.scrollActiveIntoView();
+                    /* Focus goes to the box, and STAYS there: the arrows move a
+                       highlighted index rather than the focus, or every press
+                       would leave the field.
+
+                       Not on a phone, though. Focusing a text field there
+                       raises the keyboard, which covers most of the panel the
+                       search was meant to help read. On a phone she taps the
+                       box when she wants it. */
+                    const roomy = window.matchMedia('(min-width: 640px)').matches;
+                    if (roomy && this.searchable && this.$refs.search) this.$refs.search.focus();
+                });
             },
 
             close(refocus = true) {
@@ -530,27 +557,57 @@
                 this.dropUp = (window.innerHeight - r.bottom) < need && (r.top - ceiling) > need;
             },
 
+            /* Moves through what is SHOWING. With a query on, the rows that
+               do not match are not there to walk past. */
             move(step) {
                 if (!this.open) return this.reveal();
-                const n = this.options.length;
-                if (!n) return;
-                this.active = (this.active + step + n) % n;
+                const rows = this.shown;
+                if (!rows.length) return;
+                const at = rows.findIndex(x => x.i === this.active);
+                const next = at < 0 ? (step > 0 ? 0 : rows.length - 1)
+                                    : (at + step + rows.length) % rows.length;
+                this.active = rows[next].i;
                 this.scrollActiveIntoView();
             },
 
             jump(where) {
                 if (!this.open) this.reveal();
-                this.active = where === 'first' ? 0 : this.options.length - 1;
+                const rows = this.shown;
+                if (!rows.length) return;
+                this.active = where === 'first' ? rows[0].i : rows[rows.length - 1].i;
                 this.scrollActiveIntoView();
+            },
+
+            /* Escape clears the search before it closes the panel, so one
+               press undoes the typing and the second one gets out. */
+            escape() {
+                if (this.query) {
+                    this.query = '';
+                    const rows = this.shown;
+                    if (rows.length) this.active = rows[0].i;
+                    return;
+                }
+                this.close();
+            },
+
+            /* Enter with a query on takes the first row that matches, which is
+               what somebody who typed three letters and pressed enter meant. */
+            take() {
+                const rows = this.shown;
+                if (!rows.length) return;
+                const on = rows.find(x => x.i === this.active) || rows[0];
+                this.pick(on.i);
             },
 
             /* By role, not by child index: the rows render from an x-for whose
                <template> element is also a child of the list, so children[i]
-               is off by one forever. */
+               is off by one forever. Addressed through `shown` because with a
+               query on, the drawn rows are a subset. */
             scrollActiveIntoView() {
                 const rows = this.$refs.list
                     ? this.$refs.list.querySelectorAll('[role="option"]') : [];
-                const row = rows[this.active];
+                const at = this.shown.findIndex(x => x.i === this.active);
+                const row = at >= 0 ? rows[at] : null;
                 if (row) row.scrollIntoView({ block: 'nearest' });
             },
 
@@ -570,6 +627,9 @@
                     if (this.$refs.input) this.$refs.input.value = '';
                 }
                 if (this.active >= this.options.length) this.active = -1;
+                /* A stale query would filter a brand new list down to nothing
+                   and look like an empty result. */
+                this.query = '';
             },
 
             /* Type-ahead, because a native select has it and a list of forty
@@ -656,7 +716,7 @@
                 </svg>
                 Needs attention
                 {% if attention_total %}
-                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ attention_total }}</span>
+                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ attention_total | commas }}</span>
                 {% endif %}
             </a>
             <div class="my-2 border-t border-white/10"></div>

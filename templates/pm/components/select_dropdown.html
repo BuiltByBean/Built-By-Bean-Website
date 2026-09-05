@@ -71,9 +71,9 @@
           @keydown.arrow-up.prevent="move(-1)"
           @keydown.home.prevent="jump('first')"
           @keydown.end.prevent="jump('last')"
-          @keydown.enter.prevent="open ? pick(active) : reveal()"
-          @keydown.space.prevent="open ? pick(active) : reveal()"
-          @keydown.escape.prevent.stop="close()"
+          @keydown.enter.prevent="open ? take() : reveal()"
+          @keydown.space.prevent="open ? take() : reveal()"
+          @keydown.escape.prevent.stop="escape()"
           @keydown.tab="close(false)"
           @keydown="if ($event.key.length === 1 && /\S/.test($event.key) && !$event.metaKey && !$event.ctrlKey && !$event.altKey) { $event.preventDefault(); seek($event.key) }"
           class="group flex items-center justify-between gap-1.5 w-full text-left
@@ -115,11 +115,31 @@
               max-h-64 overflow-y-auto overscroll-contain p-1.5
               bg-surface-800 border border-white/10
               rounded-xl shadow-xl shadow-black/50">
-    {#- Rendered by Alpine so setOptions can swap the list live. The key
-        carries the index as well as the value, because a caller-supplied list
-        is allowed to be momentarily imperfect and two rows sharing a value
-        must not blow up the render. -#}
-    <template x-for="(o, i) in options" :key="i + ':' + o.v">
+    {#- Past a dozen options the panel carries a search box (catalogue rule:
+        a long filter list is searchable and alphabetical). Focus stays in it
+        while the arrows move a highlighted index, so typing and stepping do
+        not fight. -#}
+    <template x-if="searchable">
+      <div class="sticky top-0 -mt-1.5 -mx-1.5 mb-1 px-1.5 pt-1.5 pb-1 bg-surface-800 border-b border-white/5">
+        <input x-ref="search" type="text" x-model="query" placeholder="Search"
+               autocomplete="off" spellcheck="false"
+               @click.stop @keydown.arrow-down.prevent="move(1)"
+               @keydown.arrow-up.prevent="move(-1)"
+               @keydown.enter.prevent="take()"
+               @keydown.escape.prevent.stop="escape()"
+               @keydown.tab="close(false)"
+               class="w-full min-w-0 px-2.5 py-2 text-xs rounded-lg bg-surface-900/70
+                      border border-white/10 text-surface-100 placeholder-surface-500
+                      focus:outline-none focus:border-brand-500">
+      </div>
+    </template>
+
+    {#- Rendered by Alpine so setOptions can swap the list live. `shown` keeps
+        each option's original index, so a filtered list still addresses the
+        same rows. The key carries the index as well as the value, because a
+        caller-supplied list is allowed to be momentarily imperfect and two
+        rows sharing a value must not blow up the render. -#}
+    <template x-for="({ o, i }) in shown" :key="i + ':' + o.v">
       <button type="button"
               :id="$id('bbbsel', i)"
               role="option"
@@ -146,6 +166,9 @@
         </svg>
       </button>
     </template>
+
+    <p x-show="searchable && !shown.length" x-cloak
+       class="px-3 py-2 text-xs text-surface-500">Nothing matches that</p>
   </div>
 
   <input type="hidden" name="{{ name }}" x-ref="input" value="{{ sel_str }}" :value="value">
