@@ -34,7 +34,8 @@ import re
 import sys
 
 from _common import (
-    utf8_streams, marker_path, read_stdin_json, transcript_lines, work_marker_path,
+    utf8_streams, marker_path, read_stdin_json, transcript_lines,
+    vendors_path, work_marker_path,
 )
 
 # ── the migration linter ──────────────────────────────────────────────
@@ -130,7 +131,7 @@ def _read(path):
 
 def _work_marker(data):
     path = work_marker_path(data.get("session_id"))
-    marker = {"commits": 0, "features": [], "blocks": 0,
+    marker = {"commits": 0, "features": [], "vendors": [], "blocks": 0,
               "line": len(transcript_lines(data.get("transcript_path") or ""))}
     if os.path.exists(path):
         try:
@@ -151,6 +152,40 @@ def mark_work_done(data, command):
         return
     path, marker = _work_marker(data)
     marker["commits"] = int(marker.get("commits") or 0) + 1
+    _save(path, marker)
+
+
+def _vendors():
+    try:
+        with open(vendors_path(), encoding="utf-8") as fh:
+            return json.load(fh) or {}
+    except Exception:  # noqa: BLE001 - no cache is no check
+        return {}
+
+
+def mark_vendor_touched(data, command):
+    """A command that names a vendor the board has a runbook for.
+
+    Short slugs are skipped: a three-letter token matches half of everything
+    and a nudge that cries wolf is worse than no nudge. `aws` and `gmail-smtp`
+    are the two that lose out, and both come with credentials that get noticed
+    another way.
+    """
+    known = _vendors()
+    if not known:
+        return
+    low = command.lower()
+    hits = [slug for slug in known
+            if len(slug) >= 5
+            and re.search(r"\b" + re.escape(slug.split("-")[0]) + r"\b", low)]
+    if not hits:
+        return
+    path, marker = _work_marker(data)
+    seen = list(marker.get("vendors") or [])
+    for slug in hits:
+        if slug not in seen:
+            seen.append(slug)
+    marker["vendors"] = seen[:8]
     _save(path, marker)
 
 
@@ -180,6 +215,7 @@ def main():
 
     if command:
         mark_work_done(data, command)
+        mark_vendor_touched(data, command)
         return 0
 
     if not file_path:

@@ -9,9 +9,33 @@ LOUDLY here instead of discovered three files in.
 Always exits 0: a hook that fails at session start would only add noise,
 and the words below are the whole point.
 """
+import json
 import sys
 
-from _common import utf8_streams, board_get, board_key
+from _common import utf8_streams, board_get, board_key, vendors_path
+
+
+def cache_vendors(key):
+    """Write the board's playbook list to disk for the PostToolUse hook.
+
+    Fetched once here rather than per command: the Stop hook wants to know
+    whether a vendor was touched without its runbook being read, and a
+    network call on every shell command would be intolerable. A failure is
+    silent — the vendor check is a nicety and the brief is the point.
+    """
+    text, err = board_get("/api/guidance/playbooks", key)
+    if err or not text:
+        return
+    try:
+        rows = (json.loads(text) or {}).get("playbooks") or []
+        slugs = {r["slug"]: r.get("name") or r["slug"] for r in rows if r.get("slug")}
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        with open(vendors_path(), "w", encoding="utf-8") as fh:
+            json.dump(slugs, fh)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def main():
@@ -24,6 +48,7 @@ def main():
               "tools/bootstrap_guidance.ps1 -Key <key> in the "
               "Built-By-Bean-Website repo and start a fresh session.")
         return 0
+    cache_vendors(key)
     text, err = board_get("/api/guidance/brief", key)
     if err:
         print(f"PM-GUIDANCE: {err}. The rules brief could not be fetched at "

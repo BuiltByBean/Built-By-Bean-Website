@@ -23,7 +23,8 @@ import os
 import sys
 
 from _common import (
-    utf8_streams, GUIDANCE_TOOL, LESSON_TOOLS, TIME_TOOLS, marker_path, read_stdin_json,
+    utf8_streams, GUIDANCE_TOOL, LESSON_TOOLS, PLAYBOOK_TOOL, TIME_TOOLS,
+    marker_path, read_stdin_json,
     transcript_lines, work_marker_path,
 )
 
@@ -85,17 +86,21 @@ def check_work(data, lines):
     marker = _load(path)
     if marker is None:
         return 0
-    after = "\n".join(lines[int(marker.get("line") or 0):])
     whole = "\n".join(lines)
     n = int(marker.get("commits") or 0)
     features = list(marker.get("features") or [])
 
-    # Time is owed from the commit onward; guidance was owed BEFORE the
-    # feature was written, so that one is looked for across the whole
-    # transcript rather than after the marker.
-    owes_time = n and not any(tool in after for tool in TIME_TOOLS)
+    # All three look at the WHOLE transcript, not at what followed the mark.
+    # Guidance and a runbook are owed BEFORE the thing that needs them, so
+    # "after" would be wrong by construction. Time reads the same way for a
+    # duller reason: a session that logs its hours and then keeps working
+    # has engaged with the obligation, and nudging it again teaches it to
+    # ignore the nudge. This is a floor, not an accountant.
+    owes_time = n and not any(tool in whole for tool in TIME_TOOLS)
     owes_guidance = features and GUIDANCE_TOOL not in whole
-    if not (owes_time or owes_guidance):
+    vendors = list(marker.get("vendors") or [])
+    owes_playbook = vendors and PLAYBOOK_TOOL not in whole
+    if not (owes_time or owes_guidance or owes_playbook):
         os.remove(path)
         return 0
     if not _bump(path, marker):
@@ -122,6 +127,15 @@ def check_work(data, lines):
             "re-derived, with its landmines, from scratch. If any of these is "
             "worth the next build knowing about, file it with report_lesson "
             "now.")
+    if owes_playbook:
+        parts.append(
+            f"{', '.join(vendors)} {'was' if len(vendors) == 1 else 'were'} "
+            "used this session and get_playbook was never called. Each of "
+            "those has a runbook holding what only the client can do, the "
+            "access to ask for, and the traps — the Robinson & Co. build lost "
+            "an afternoon to a Railway config file that had been deprecated "
+            "for a year and was silently ignored. If you learned anything "
+            "about one of them today, file it.")
     parts.append(
         "If this was your own repo, a spike, or the board's own tooling, say "
         "so in one line and stop again.")

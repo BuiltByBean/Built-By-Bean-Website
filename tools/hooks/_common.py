@@ -17,6 +17,8 @@ TIME_TOOLS = ("mcp__pm-guidance__log_time", "mcp__pm-guidance__log_expense")
 # Consulting the catalogue before building. Owed BEFORE a feature is written,
 # so the Stop hook looks for it across the whole transcript, not after a mark.
 GUIDANCE_TOOL = "mcp__pm-guidance__get_feature_guidance"
+# Reading a vendor's runbook before setting the vendor up.
+PLAYBOOK_TOOL = "mcp__pm-guidance__get_playbook"
 
 
 def utf8_streams():
@@ -78,6 +80,12 @@ def _safe(session_id):
 
 def marker_path(session_id):
     return os.path.join(marker_dir(), f"lesson-pending-{_safe(session_id)}.json")
+
+
+def vendors_path():
+    """The board's playbook list, cached at session start so the PostToolUse
+    hook can recognise a vendor without a network call per command."""
+    return os.path.join(marker_dir(), "playbooks.json")
 
 
 def work_marker_path(session_id):
