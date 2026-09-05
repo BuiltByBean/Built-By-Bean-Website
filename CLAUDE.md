@@ -166,25 +166,38 @@ only one built for somebody other than Michael: Hannah Bean is the CMO and
 lives in it. Signed in is the whole guard, because a call list nobody can
 open is a call list nobody works.
 
-The list is every business in the Paris trade area, built by
-`import_leads.py` out of public records: the Comptroller's Active Sales Tax
-Permit Holders (the spine, with trading name, street, NAICS, and the date
-they started selling), Active Franchise Taxpayers (the registered entities
-that never needed a permit, which is where the contractors are),
-OpenStreetMap (where the phone numbers and websites live), the CMS provider
-registry (healthcare, with the authorised official as the owner and
-individual providers attached as named contacts by street), and the
-businesses' own homepages, asked once each for a published email. Lamar,
-Red River, Delta and Fannin counties.
+The list is every business in the Paris trade area with EVIDENCE OF
+TRADING, built by `import_leads.py` out of public records: the
+Comptroller's Active Sales Tax Permit Holders (the spine, with trading
+name, street, NAICS, and the date they started selling), the FMCSA motor
+carrier census, the CMS provider registry, OpenStreetMap, and the business
+licences from TDLR. Active Franchise Taxpayers ENRICH and never create,
+because a registration proves an entity exists and nothing more. Lamar,
+Red River and Delta counties plus the eastern edge of Fannin; Bonham,
+Leonard, Trenton, Savoy and Whitewright are forty to sixty miles out
+toward Sherman and belong to a different town's list.
 
-Employees and revenue are columns that the import deliberately leaves
-empty, and the page prints "not published" rather than a figure. No free
-public source carries either for a private firm in a town this size, and a
-guessed number on a call sheet is worse than a blank: it gets repeated on
-the phone. What the record does give is the better signal anyway, and the
-default sort is built from it - never tried, then no website, then trading
-longest. A twenty-year-old business with a sales tax permit and no website
-is the call to make.
+Two counts were wrong on the first build and are worth remembering. Every
+individual worker licence in the state file - 586 cosmetology operators,
+560 apprentice electricians - became a "business", and every franchise
+registration became one too: 12,334 rows where about 2,300 businesses
+trade. A licence held by a PERSON is a qualification; only the
+establishment and contractor licences are businesses.
+
+Employees and revenue are columns the import leaves empty except where a
+haulier files a driver count, and the page prints "not published" rather
+than a figure. No free public source carries either for a private firm in
+a town this size, and a guessed number on a call sheet is worse than a
+blank: it gets repeated on the phone.
+
+**The board never says a business has no website.** Nothing checks. A
+website is recorded when a source happens to list one, and the sources
+that carry them cover this area thinly, so an empty field means nobody
+looked. That absence was once the headline count and the first key of the
+default sort, which is this repo's own Cerebro principle broken in its own
+words: zero hits from a check that never ran reads exactly like a clean
+result. The filter offers "has a website" and no opposite, and the default
+sort is never tried, then trading longest.
 
 `dedupe_key` (flattened trading name plus house number and street) is what
 makes the import re-runnable, and the loader never overwrites a phone,

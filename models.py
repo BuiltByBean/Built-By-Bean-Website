@@ -2234,6 +2234,9 @@ class Lead(db.Model):
 
     @property
     def has_website(self):
+        """True when a website is KNOWN. False means nobody has looked, not
+        that there is none: the sources that carry a website cover this
+        area thinly, so the board never states the absence."""
         return bool((self.website or "").strip())
 
     @property

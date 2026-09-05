@@ -13,8 +13,11 @@ The sources, all free, all public:
       industry code, the date it started selling, and the legal entity behind
       it. This is the spine of the list.
   Texas Comptroller, Active Franchise Taxpayers (9cir-efmm)
-      The registered entities, which catches the service firms that never
-      needed a sales tax permit: contractors, agencies, consultancies.
+      The registered entities. This one ENRICHES and never creates: a
+      registration proves a company exists, not that it trades or wants
+      customers, and the file is full of holding entities, dormant shells and
+      single-property LLCs. It supplies the legal name, the entity type and
+      the charter date for a business some other source already found.
   OpenStreetMap, via Overpass
       Where the phone numbers, the websites and some of the emails live.
   CMS National Provider Identifier registry
@@ -26,8 +29,12 @@ The sources, all free, all public:
       headcount in any of this, because a carrier files its driver count.
       Rural Texas runs on trucks, so this is a big slice of the area.
   Texas Department of Licensing and Regulation, all licences (7358-krk7)
-      Who holds the licence: the air conditioning technicians, electricians,
-      tow operators and salons, with the owner named. County-filtered.
+      The salons, the air conditioning and electrical contractors, the tow
+      companies: BUSINESS licences only, with the owner named. The same file
+      lists every cosmetology operator and apprentice electrician in the
+      county and those are employees at somebody else's shop, not businesses;
+      counting them was how one list grew by two thousand names that could
+      not be rung.
   The businesses' own websites
       Fetched once each, homepage and contact page, for a published email.
 
@@ -55,6 +62,34 @@ UA = {"User-Agent": "BuiltByBean-Leads/1.0 (michael@builtbybean.com)"}
 # Comptroller county codes: Lamar, Red River, Delta, Fannin.
 COUNTIES = {"139": "Lamar", "194": "Red River", "060": "Delta", "074": "Fannin"}
 
+# Lamar is Paris and its towns, Red River and Delta are half an hour out.
+# Fannin is only in the list for its eastern edge: Bonham is forty miles from
+# Paris and Whitewright sixty, which is Sherman's trade area, not this one.
+HOME_COUNTIES = ("139", "194", "060")
+NEAR_FANNIN = {"HONEY GROVE", "WINDOM", "LADONIA", "DODD CITY", "ECTOR",
+               "TELEPHONE", "RAVENNA", "IVANHOE", "BAILEY"}
+
+
+def in_orbit(city, county_code):
+    """Close enough to Paris to be worth the drive."""
+    if county_code in HOME_COUNTIES:
+        return True
+    return str(city or "").strip().upper() in NEAR_FANNIN
+
+
+# A licence held by a PERSON is a qualification; a licence held by a BUSINESS
+# is a business. Only these are the second kind. Everything else in that file
+# is somebody's employee.
+BUSINESS_LICENCES = {
+    "Full Service Establishment", "Mini Establishment",
+    "Manicurist/Esthetician Establishment", "Barber Shop", "Dual Shop/Salon",
+    "Cosmetology Private School", "Barber School", "Booth Rental",
+    "A/C Contractor", "Electrical Contractor", "Sign Electrical Contractor",
+    "Elevator Contractor", "Water Well Driller", "Auctioneer",
+    "Licensed Breeder", "Vehicle Storage Facility", "Tow Company",
+    "Used Automotive Parts Recycler", "Air Conditioning Contractor",
+}
+
 # Paris sits at 33.66 / -95.55. The box reaches Bonham in the west and
 # Clarksville in the east.
 BBOX = (33.10, -96.30, 34.05, -94.90)
@@ -64,9 +99,20 @@ NPI_CITIES = [
     "Roxton", "Pattonville", "Arthur City", "Petty", "Toco", "Chicota",
     "Clarksville", "Bogata", "Avery", "Detroit", "Annona", "Bagwell",
     "Cooper", "Klondike", "Pecan Gap", "Ben Franklin",
-    "Bonham", "Honey Grove", "Leonard", "Trenton", "Savoy", "Dodd City",
-    "Ector", "Ladonia", "Windom", "Ravenna", "Telephone", "Ivanhoe",
+    "Honey Grove", "Ladonia", "Windom", "Dodd City", "Ector", "Telephone",
+    "Ravenna", "Ivanhoe", "Bailey",
 ]
+
+# Towns the orbit excludes on purpose. Named, so that a mistyped city can
+# never be one of them, and checked even when the postcode looks local:
+# Commerce sits on the Delta county line and its postcode is in the trade
+# area, which let ninety Hunt County businesses in behind it.
+FAR_TOWNS = {
+    "BONHAM", "LEONARD", "TRENTON", "SAVOY", "WHITEWRIGHT", "WOLFE CITY",
+    "BLUE RIDGE", "RANDOLPH", "GOBER", "COMMERCE", "CELESTE", "CAMPBELL",
+    "GREENVILLE", "SULPHUR SPRINGS", "MOUNT PLEASANT", "CUMBY", "DE KALB",
+    "CUNNINGHAM", "HUGO", "WINFIELD",
+}
 
 # NAICS, most specific first. Sector names are the official ones; the
 # subsector names are the plain-English half of them, because "2382" on a
@@ -206,10 +252,12 @@ def trades_here(entry, towns, zips):
         return False
     if entry.get("entity_type") in PAPER_ONLY_TYPES:
         return False
+    city = (entry.get("city") or "").strip()
+    if city.upper() in FAR_TOWNS:
+        return False
     postcode = (entry.get("zip_code") or "").strip()[:5]
     if postcode:
         return postcode in zips
-    city = (entry.get("city") or "").strip()
     if city:
         return city.lower() in towns
     # A licence is pulled by county, so its county is proof enough of where
@@ -270,6 +318,14 @@ def pretty(text):
     joined = " ".join(out)
     # An apostrophe should not start a new word: BOB'S becomes Bob's.
     return re.sub(r"'(\w)", lambda m: "'" + m.group(1).lower(), joined)
+
+
+def town(name):
+    """One spelling per town. pretty() leaves already-mixed text alone, so a
+    source that files "paris" in lower case would sit beside "Paris" as a
+    second town in the filter."""
+    text = pretty(name)
+    return text.title() if text and (text.islower() or text.isupper()) else text
 
 
 def norm(text):
@@ -452,9 +508,16 @@ def get_carriers(cache, towns_upper):
 
 
 def get_licences(cache):
-    counties = ",".join(f"'{c.upper()}'" for c in COUNTIES.values())
-    return load(cache, "licences", lambda: socrata(
+    # Home counties only: a Fannin licence is almost always a Bonham one.
+    counties = ",".join(f"'{COUNTIES[c].upper()}'" for c in HOME_COUNTIES)
+    return load(cache, "licences_home", lambda: socrata(
         "7358-krk7", f"business_county in({counties})", "license_number"))
+
+
+def get_salons(cache):
+    """The one state licence file that carries a telephone number."""
+    return load(cache, "salons", lambda: socrata(
+        "9d9z-ebct", "mailing_address_city_state_zip is not null", "license_number"))
 
 
 def person_name(filed):
@@ -515,19 +578,24 @@ def run(cache=None, enrich=True, verbose=True):
         # town that holds more than one of them. More than one, because a
         # town appearing exactly once is as likely to be a typing mistake as
         # a hamlet, and the postcode covers the real hamlets anyway.
+        permits = [p for p in permits
+                   if in_orbit(p.get("outlet_city"), str(p.get("outlet_county_code")))]
+        print(f"  {len(permits)} sales tax permits inside the Paris orbit")
         zips = {(p.get("outlet_zip_code") or "")[:5] for p in permits
                 if (p.get("outlet_zip_code") or "").strip()}
         zips.discard("")
         town_counts = {}
         for p in permits:
-            town = pretty(p.get("outlet_city") or "").lower()
-            if town:
-                town_counts[town] = town_counts.get(town, 0) + 1
+            # not `town`: that is the function that spells one consistently.
+            seen_town = pretty(p.get("outlet_city") or "").lower()
+            if seen_town:
+                town_counts[seen_town] = town_counts.get(seen_town, 0) + 1
         towns = {t for t, n in town_counts.items() if n > 1}
         print(f"  {len(zips)} postcodes and {len(towns)} towns in the trade area")
 
         carriers = get_carriers(cache, {t.upper() for t in town_counts})
         licences = get_licences(cache)
+        salons = get_salons(cache)
 
         print("Statewide location counts...")
         locations = statewide_locations({p.get("taxpayer_number") for p in permits})
@@ -553,7 +621,7 @@ def run(cache=None, enrich=True, verbose=True):
             entry.update({
                 "legal_name": pretty(row.get("taxpayer_name")),
                 "address": pretty(row.get("outlet_address")),
-                "city": pretty(row.get("outlet_city")),
+                "city": town(row.get("outlet_city")),
                 "state": row.get("outlet_state") or "TX",
                 "zip_code": (row.get("outlet_zip_code") or "")[:5],
                 "county": COUNTIES.get(row.get("outlet_county_code"), ""),
@@ -570,30 +638,29 @@ def run(cache=None, enrich=True, verbose=True):
             if "comptroller" not in entry["sources"]:
                 entry["sources"].append("comptroller")
 
-        # 2. Franchise taxpayers: the registered entities that never needed a
-        #    permit. Only added where the name is new, since a permit row is
-        #    always the better record of a trading business.
+        # 2. Franchise taxpayers. ENRICH ONLY, never create. A registration
+        #    says a company exists at the Secretary of State; it says nothing
+        #    about whether anybody trades under it or would take a call, and
+        #    the file is mostly holding entities, dormant shells and LLCs that
+        #    exist to own one field. Creating a lead from one put five
+        #    thousand uncallable names on a call sheet.
         by_name = {}
         for entry in book.values():
             by_name.setdefault(norm(entry["name"]), entry)
         for row in franchise:
             name = row.get("taxpayer_name") or ""
-            if not name.strip() or norm(name) in by_name:
+            entry = by_name.get(norm(name))
+            if not name.strip() or entry is None:
                 continue
             org = (row.get("taxpayer_organizational_type") or "").strip().upper()
-            entry = slot(name, row.get("taxpayer_address"), row.get("taxpayer_city"))
             entry.setdefault("legal_name", pretty(name))
-            entry.setdefault("address", pretty(row.get("taxpayer_address")))
-            entry.setdefault("city", pretty(row.get("taxpayer_city")))
-            entry.setdefault("zip_code", (row.get("taxpayer_zip") or "")[:5])
-            entry.setdefault("county", COUNTIES.get(row.get("taxpayer_county_code"), ""))
-            entry.setdefault("entity_type", ENTITY_TYPES.get(org, ""))
-            entry.setdefault("started_on", parse_date(row.get("sos_charter_date")))
+            if not entry.get("entity_type"):
+                entry["entity_type"] = ENTITY_TYPES.get(org, "")
+            if not entry.get("started_on"):
+                entry["started_on"] = parse_date(row.get("sos_charter_date"))
             entry.setdefault("taxpayer_number", row.get("taxpayer_number") or "")
-            entry["state"] = row.get("taxpayer_state") or "TX"
             if "franchise" not in entry["sources"]:
                 entry["sources"].append("franchise")
-            by_name[norm(name)] = entry
 
         # 3. OpenStreetMap: the contact details.
         by_name = {}
@@ -609,7 +676,7 @@ def run(cache=None, enrich=True, verbose=True):
             entry = by_name.get(norm(name))
             if entry is None:
                 entry = slot(name, street, tags.get("addr:city"), extra_key=str(el.get("id")))
-                entry.setdefault("city", pretty(tags.get("addr:city") or ""))
+                entry.setdefault("city", town(tags.get("addr:city") or ""))
                 entry.setdefault("address", pretty(street))
                 entry.setdefault("zip_code", (tags.get("addr:postcode") or "")[:5])
                 by_name[norm(name)] = entry
@@ -649,7 +716,7 @@ def run(cache=None, enrich=True, verbose=True):
                              if a.get("address_purpose") == "LOCATION"), None)
             if not practice or (practice.get("state") or "") != "TX":
                 continue
-            city = pretty(practice.get("city") or "")
+            city = town(practice.get("city") or "")
             street = practice.get("address_1") or ""
             phone = tidy_phone(practice.get("telephone_number"))
             if row.get("enumeration_type") == "NPI-2":
@@ -707,9 +774,12 @@ def run(cache=None, enrich=True, verbose=True):
             # which is not somebody to ring.
             if str(row.get("phy_zip") or "")[:5] not in zips:
                 continue
+            if not in_orbit(row.get("phy_city"), ""):
+                if str(row.get("phy_city") or "").strip().upper() not in {t.upper() for t in towns}:
+                    continue
             if row.get("status_code") not in ("A", "P"):
                 continue
-            city = pretty(row.get("phy_city") or "")
+            city = town(row.get("phy_city") or "")
             entry = by_name.get(norm(name))
             if entry is None:
                 entry = slot(name, row.get("phy_street"), city, extra_key=str(row.get("dot_number")))
@@ -739,6 +809,9 @@ def run(cache=None, enrich=True, verbose=True):
             business = row.get("business_name") or ""
             if not business.strip():
                 continue
+            # The employees in this file are qualifications, not businesses.
+            if str(row.get("license_type")) not in BUSINESS_LICENCES:
+                continue
             owner = person_name(row.get("owner_name")) or pretty(row.get("owner_name") or "")
             trade = pretty(row.get("license_type") or "")
             display = person_name(business) or pretty(business)
@@ -757,6 +830,28 @@ def run(cache=None, enrich=True, verbose=True):
                 entry.setdefault("owner_name", owner)
             if trade and not entry.get("industry"):
                 entry["industry"] = trade
+            if "tdlr" not in entry["sources"]:
+                entry["sources"].append("tdlr")
+
+        # 7. Salons, for their telephone numbers.
+        for row in salons:
+            name = row.get("business_name") or ""
+            phone = tidy_phone(row.get("owner_telephone"))
+            where = str(row.get("mailing_address_city_state_zip") or "").upper()
+            if not name.strip() or not phone:
+                continue
+            entry = by_name.get(norm(name))
+            if entry is None:
+                match = next((t for t in towns if t.upper() + " TX" in where), None)
+                if not match:
+                    continue
+                town_name = town(match)
+                entry = slot(name, row.get("mailing_address_line1"), town_name)
+                entry.setdefault("address", pretty(row.get("mailing_address_line1")))
+                entry.setdefault("city", town_name)
+                entry.setdefault("industry", "Salons and barbers")
+                by_name[norm(name)] = entry
+            entry.setdefault("phone", phone)
             if "tdlr" not in entry["sources"]:
                 entry["sources"].append("tdlr")
 
@@ -841,9 +936,16 @@ def run(cache=None, enrich=True, verbose=True):
         print(f"\n{made} new, {updated} updated. {total} businesses on the board.")
         with_owner = Lead.query.filter(Lead.owner_name != "", Lead.owner_name.isnot(None)).count()
         with_staff = Lead.query.filter(Lead.employees.isnot(None)).count()
-        print(f"  phone {with_phone} | email {with_email} | website {with_site} "
-              f"| no website {total - with_site} | named contacts {people}")
+        # No "without a website" figure here either. Nothing checked, so the
+        # only honest statement is how many are KNOWN to have one.
+        print(f"  phone {with_phone} | email {with_email} | website known {with_site} "
+              f"| named contacts {people}")
         print(f"  owner named {with_owner} | headcount filed {with_staff}")
+        by_source = {}
+        for lead in Lead.query.all():
+            by_source[lead.sources] = by_source.get(lead.sources, 0) + 1
+        for src, n in sorted(by_source.items(), key=lambda x: -x[1])[:8]:
+            print(f"    {src or '(none)':34} {n}")
 
 
 if __name__ == "__main__":

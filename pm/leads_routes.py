@@ -25,8 +25,7 @@ leads_bp = Blueprint("leads", __name__, url_prefix="/admin/leads")
 PER_PAGE = 25
 
 # The whole point of the list is deciding who to ring next, so the default
-# order puts the untouched first and, within those, the ones the public
-# record says are most worth a call: no website, then longest trading.
+# order puts the untouched first and, within those, the ones trading longest.
 SORTS = [
     ("best", "Best bets"),
     ("name", "Name"),
@@ -34,6 +33,11 @@ SORTS = [
     ("oldest", "Longest trading"),
     ("touched", "Recently tried"),
 ]
+
+# "Best bets" used to lead with businesses that had no website. Nothing ever
+# checked whether they had one, so that was sorting on an absence of data
+# dressed up as a finding. What is left is what the record actually knows:
+# nobody has tried them, and they have been trading a long time.
 
 
 def _clean(value, limit):
@@ -64,17 +68,14 @@ def index():
         query = query.filter(Lead.stage == stage)
     if industry:
         query = query.filter(Lead.industry == industry)
-    if website == "no":
-        query = query.filter(or_(Lead.website.is_(None), Lead.website == ""))
-    elif website == "yes":
+    # Only the positive is a fact. There is no "no website" filter, because
+    # a blank means nobody looked.
+    if website == "yes":
         query = query.filter(Lead.website.isnot(None), Lead.website != "")
     if untried:
         # Nobody has logged anything against it yet.
         query = query.filter(~Lead.touches.any())
 
-    # case() rather than a bare comparison: a NULL website sorts unpredictably
-    # otherwise, and "no website" is the whole point of the default order.
-    no_site = case((or_(Lead.website.is_(None), Lead.website == ""), 0), else_=1)
     no_start = case((Lead.started_on.is_(None), 1), else_=0)
 
     if sort == "name":
@@ -86,8 +87,8 @@ def index():
     elif sort == "touched":
         query = query.order_by(Lead.updated_at.desc())
     else:
-        # Best bets: never tried, then no website, then trading longest.
-        query = query.order_by(Lead.touches.any(), no_site, no_start,
+        # Best bets: never tried, then trading longest.
+        query = query.order_by(Lead.touches.any(), no_start,
                                Lead.started_on, Lead.name)
 
     pagination = query.paginate(page=page, per_page=PER_PAGE, error_out=False)
@@ -102,7 +103,7 @@ def index():
     counts = {
         "total": Lead.query.count(),
         "untried": Lead.query.filter(~Lead.touches.any()).count(),
-        "no_website": Lead.query.filter(or_(Lead.website.is_(None), Lead.website == "")).count(),
+        "with_phone": Lead.query.filter(Lead.phone.isnot(None), Lead.phone != "").count(),
         "talking": Lead.query.filter(Lead.stage.in_(("contacted", "in_conversation", "proposal_sent"))).count(),
         "clients": Lead.query.filter(Lead.client_id.isnot(None)).count(),
     }
@@ -209,7 +210,7 @@ def convert(id):
         notes="\n".join(part for part in (
             f"From the leads list. {lead.industry}" if lead.industry else "From the leads list.",
             f"Trading since {lead.started_on.year}." if lead.started_on else "",
-            f"Website: {lead.website}" if lead.website else "No website.",
+            f"Website: {lead.website}" if lead.website else "",
             lead.notes or "",
         ) if part),
         stage="in_conversation",
