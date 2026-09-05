@@ -819,6 +819,21 @@
                 </svg>
                 Invoices
             </a>
+            {# Who may open this board. Owners only: a member has no
+               business in the list of people, so the section is not
+               drawn for them rather than drawn and refused. #}
+            {% if current_user.is_authenticated and (current_user.is_owner | default(false)) %}
+            <div class="my-2 border-t border-white/10"></div>
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Team</p>
+            <a href="{{ url_for('users.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('users.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+                </svg>
+                Users
+            </a>
+            {% endif %}
         </nav>
 
         <!-- Footer -->

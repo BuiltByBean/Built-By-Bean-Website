@@ -1,0 +1,100 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+
+{#
+  Everyone who may open this board, the switched-off ones last.
+
+  A temporary password appears here exactly once, straight after an
+  account is made or reset, and is gone on the next load. It is the only
+  time the board ever shows one, and it is never stored in the clear.
+#}
+
+{% block title %}Users - Built By Bean{% endblock %}
+{% block page_title %}Users{% endblock %}
+{% block page_subtitle %}Who can open this board{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('users.create') }}"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    Add someone
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0 gap-4 stagger-in">
+
+    {% if reveal %}
+    <div class="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5">
+        <p class="text-sm font-semibold text-amber-300">
+            {{ 'Temporary password for' if reveal.why == 'reset' else 'Account made for' }} {{ reveal.username }}
+        </p>
+        <p class="mt-2 font-mono text-lg text-white tracking-wider select-all">{{ reveal.password }}</p>
+        <p class="mt-1.5 text-xs text-surface-400">Shown once</p>
+    </div>
+    {% endif %}
+
+    <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
+        <div class="glass-card p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">People</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ people | selectattr('is_active') | list | length }}</p>
+        </div>
+        <div class="glass-card p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Owners</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ owners }}</p>
+        </div>
+        <div class="glass-card p-4">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Switched off</p>
+            <p class="text-xl sm:text-2xl font-bold mt-1 text-surface-300">{{ people | rejectattr('is_active') | list | length }}</p>
+        </div>
+    </div>
+
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
+            {% for u in people %}
+            <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 {{ 'opacity-60' if not u.is_active }}">
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <span class="font-medium text-white truncate max-w-full">{{ u.full_name }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider shrink-0
+                                     {{ 'bg-brand-500/10 text-brand-300' if u.is_owner else 'bg-white/5 text-surface-300' }}">{{ u.role_label }}</span>
+                        {% if not u.is_active %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-red-500/10 text-red-300 shrink-0">Off</span>
+                        {% elif u.must_change_password %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-300 shrink-0">Temporary password</span>
+                        {% endif %}
+                        {% if u.id == current_user.id %}
+                        <span class="text-[10px] uppercase tracking-wider text-surface-500 shrink-0">you</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-surface-400 truncate">
+                        {{ u.username }} &middot; {{ u.email }}
+                        &middot; {% if u.last_login_at %}signed in {{ u.last_login_at.strftime('%b') }} {{ u.last_login_at.day }}{% else %}never signed in{% endif %}
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <a href="{{ url_for('users.edit', id=u.id) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Edit</a>
+                    <form method="POST" action="{{ url_for('users.reset', id=u.id) }}">
+                        {{ confirm_button('Reset password', 'New temporary password?', tone='brand',
+                                          btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors') }}
+                    </form>
+                    {% if u.id != current_user.id %}
+                    <form method="POST" action="{{ url_for('users.switch', id=u.id) }}">
+                        {% if u.is_active %}
+                        {{ confirm_button('Switch off', 'Lock them out?',
+                                          btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                        {% else %}
+                        <button type="submit"
+                                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-emerald-500/40 hover:text-emerald-300 transition-colors">Switch on</button>
+                        {% endif %}
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

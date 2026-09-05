@@ -16,9 +16,26 @@ class User(UserMixin, db.Model):
     last_name = db.Column(db.String(100), default="")
     email = db.Column(db.String(200), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), default="")
-    role = db.Column(db.String(20), default="admin")
+    # owner runs the board and its people; member does the work. "admin"
+    # is the value every account carried before there were two, and it
+    # reads as owner so nothing that existed loses a door.
+    role = db.Column(db.String(20), default="member")
     must_change_password = db.Column(db.Boolean, default=False)
+    # Switched off rather than deleted: a person who has left still owns
+    # the time they logged and the timer rows that point at them.
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    last_login_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    ROLES = (("owner", "Owner"), ("member", "Member"))
+
+    @property
+    def is_owner(self):
+        return self.role in ("owner", "admin")
+
+    @property
+    def role_label(self):
+        return "Owner" if self.is_owner else "Member"
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

@@ -135,6 +135,21 @@ was built into them before the catalogue existed - the code is the
 truth about what a site has, the ledger is the truth about what was
 billed, and Cerebro asks the code first when the ledger is silent.
 
+## Users
+
+`pm/users_routes.py`, owners only, guarded on the route by `owner_required`
+(one decorator per audience) and not merely hidden in the nav. Two roles:
+owner runs the board and its people, member does the work; the old value
+"admin" reads as owner (`User.is_owner`) and the migration rewrote it. An
+account is switched off (`is_active`), never deleted, because time entries
+and timer rows point at it; a switched-off login gets the same "invalid"
+answer as a wrong password, so the door does not say which. Passwords are
+never typed here: a new account or a reset gets a temporary one, shown to
+the owner once (carried in the server session, popped on the next load,
+never a flash - the flash strip would print it too) and replaced on first
+sign-in by the existing must_change_password gate. You cannot switch off
+or demote yourself, nor the last active owner.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last

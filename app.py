@@ -150,65 +150,79 @@ def create_app():
             ))
             conn.commit()
 
-        # Seed default users if they don't exist
+        # Seed default users if they don't exist - but only once the users
+        # table carries every column the model knows. `flask db upgrade`
+        # imports this app, so on a deploy that adds a column to users this
+        # block runs BEFORE the migration, and a query here would die on the
+        # missing column and take the deploy down with it. The seeding then
+        # waits for the next boot, which is gunicorn's, after the upgrade.
         from models import User
-        _admin_password = os.environ.get("ADMIN_PASSWORD", "")
-        if _admin_password and not User.query.filter(User.username.ilike("Michael.Bean")).first():
-            admin = User(
-                username="Michael.Bean",
-                first_name="Michael",
-                last_name="Bean",
-                email="michael@builtbybean.com",
-                role="admin",
-                must_change_password=False,
-            )
-            admin.set_password(_admin_password)
-            db.session.add(admin)
-            db.session.commit()
-
-        # Seeded only when an explicit password is supplied. This repo is
-        # public, so a literal password here is a published admin credential.
-        _dev_password = os.environ.get("DEV_PASSWORD", "")
-        if _dev_password and not User.query.filter(User.username.ilike("tlane")).first():
-            dev = User(
-                username="tlane",
-                first_name="T",
-                last_name="Lane",
-                email="tlane@builtbybean.com",
-                role="admin",
-                must_change_password=True,
-            )
-            dev.set_password(_dev_password)
-            db.session.add(dev)
-            db.session.commit()
-
-        # Ensure the Mbean admin exists. A password is set ONLY when the account
-        # is first created, and only from MBEAN_PASSWORD. Booting the app must
-        # never reset an existing account's password — the previous version did
-        # that on every boot with a hardcoded literal.
-        _mbean = User.query.filter(User.username.ilike("Mbean")).first()
-        if _mbean is None:
-            _mbean_by_email = User.query.filter(User.email.ilike("mbean@builtbybean.com")).first()
-            if _mbean_by_email is not None:
-                # Same person under an older username: adopt it, leave the
-                # password alone.
-                _mbean_by_email.username = "Mbean"
-                _mbean_by_email.role = "admin"
+        from sqlalchemy import inspect as _inspect
+        _insp = _inspect(db.engine)
+        _user_cols = ({c['name'] for c in _insp.get_columns('users')}
+                      if _insp.has_table('users') else set())
+        _model_cols = {c.name for c in User.__table__.columns}
+        if not _model_cols <= _user_cols:
+            print('users table is behind the model; user seeding waits for the migration')
+        else:
+            from models import User
+            _admin_password = os.environ.get("ADMIN_PASSWORD", "")
+            if _admin_password and not User.query.filter(User.username.ilike("Michael.Bean")).first():
+                admin = User(
+                    username="Michael.Bean",
+                    first_name="Michael",
+                    last_name="Bean",
+                    email="michael@builtbybean.com",
+                    role="owner",
+                    must_change_password=False,
+                )
+                admin.set_password(_admin_password)
+                db.session.add(admin)
                 db.session.commit()
-            else:
-                _mbean_password = os.environ.get("MBEAN_PASSWORD", "")
-                if _mbean_password:
-                    _mbean = User(
-                        username="Mbean",
-                        first_name="Matthew",
-                        last_name="Bean",
-                        email="mbean@builtbybean.com",
-                        role="admin",
-                        must_change_password=False,
-                    )
-                    _mbean.set_password(_mbean_password)
-                    db.session.add(_mbean)
+
+            # Seeded only when an explicit password is supplied. This repo is
+            # public, so a literal password here is a published admin credential.
+            _dev_password = os.environ.get("DEV_PASSWORD", "")
+            if _dev_password and not User.query.filter(User.username.ilike("tlane")).first():
+                dev = User(
+                    username="tlane",
+                    first_name="T",
+                    last_name="Lane",
+                    email="tlane@builtbybean.com",
+                    role="owner",
+                    must_change_password=True,
+                )
+                dev.set_password(_dev_password)
+                db.session.add(dev)
+                db.session.commit()
+
+            # Ensure the Mbean admin exists. A password is set ONLY when the account
+            # is first created, and only from MBEAN_PASSWORD. Booting the app must
+            # never reset an existing account's password — the previous version did
+            # that on every boot with a hardcoded literal.
+            _mbean = User.query.filter(User.username.ilike("Mbean")).first()
+            if _mbean is None:
+                _mbean_by_email = User.query.filter(User.email.ilike("mbean@builtbybean.com")).first()
+                if _mbean_by_email is not None:
+                    # Same person under an older username: adopt it, leave the
+                    # password alone.
+                    _mbean_by_email.username = "Mbean"
+                    _mbean_by_email.role = "owner"
                     db.session.commit()
+                else:
+                    _mbean_password = os.environ.get("MBEAN_PASSWORD", "")
+                    if _mbean_password:
+                        _mbean = User(
+                            username="Mbean",
+                            first_name="Matthew",
+                            last_name="Bean",
+                            email="mbean@builtbybean.com",
+                            role="owner",
+                            must_change_password=False,
+                        )
+                        _mbean.set_password(_mbean_password)
+                        db.session.add(_mbean)
+                        db.session.commit()
 
         # Add stripe_customer_id column if it doesn't exist yet
         with db.engine.connect() as conn2:
@@ -288,6 +302,10 @@ def create_app():
     # ── Every client held against the catalogue ───────────
     from pm.cerebro_routes import cerebro_bp
     app.register_blueprint(cerebro_bp)
+
+    # ── The people who may open this board ─────────────────
+    from pm.users_routes import users_bp
+    app.register_blueprint(users_bp)
 
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
@@ -608,8 +626,16 @@ def create_app():
         if form.validate_on_submit():
             user = User.query.filter(User.username.ilike(form.username.data)).first()
             if user and user.check_password(form.password.data):
+                # A switched-off account keeps its password and gets the
+                # same answer as a wrong one: the door does not say which.
+                if not user.is_active:
+                    flash("Invalid username or password.", "error")
+                    return render_template("login.html", form=form)
                 login_user(user)
-                return redirect(request.args.get("next") or url_for("pm.dashboard"))
+                user.last_login_at = datetime.now(timezone.utc)
+                db.session.commit()
+                nxt = request.args.get("next") or ""
+                return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("pm.dashboard"))
             flash("Invalid username or password.", "error")
         return render_template("login.html", form=form)
 
