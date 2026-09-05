@@ -435,3 +435,48 @@ rg -n 'name="monthly_price"' templates/pm/products/index.html
 ```
 The first: any hit is the regression. The second: exactly one hit, in the
 sell dialog, never in the row.
+
+### LM-6 - the merge kept the wrong row, and the seed that fixed it took the site down
+
+**What happened.** The owner had two accounts for one person: `Mbean`,
+which he had signed in with for as long as the board existed, and
+`Michael.Bean`, which the `ADMIN_PASSWORD` seed had made and he had never
+used. Asked to leave one, a migration kept `Michael.Bean` and deleted
+`Mbean` - so the surviving account answered to a username he does not type
+and a password he does not know, and he was locked out of his own board.
+The repair renamed the survivor back to `Mbean`, which handed it the email
+`michael@builtbybean.com`. The boot seed still asked only whether that
+USERNAME existed. It did not, so every boot inserted a second row on an
+email column that is unique, every gunicorn worker died on the
+IntegrityError, and builtbybeans.com served 502 for nine minutes.
+
+**Why it is easy to do.** A user row looks like a record to tidy, and the
+merge reads correctly in every way except the one that matters: identity
+is the username AND the credential together, and the migration moved
+neither with the person. The test database made both faults invisible -
+it has no seeded accounts and no email collision, so the migration passed
+on data that could not reproduce production. And the second failure was
+introduced BY the fix for the first, at the moment attention was on
+getting the owner back in.
+
+**The rule.** A migration that renames, merges or deletes a row somebody
+signs in with carries their username and their password hash forward, or
+it has locked them out; before writing it, name every row a human
+authenticates as and say which survives and which credential it keeps. A
+boot seed is idempotent on EVERY unique column, not the one it happens to
+query: `username ILIKE x OR email ILIKE y` before any insert. The whole
+seeding block is wrapped so nothing in it escapes the boot - a seed that
+cannot run is a missing convenience, a seed that raises is a site that
+will not start. And the way back in is built before it is needed:
+`RECOVERY_USERNAME` with `RECOVERY_PASSWORD` on the service sets that
+account's password on the next boot, says so in the log and is then
+removed, and the login form takes an email as well as a username, so one
+renamed account is never a closed door.
+
+**Grep.**
+```
+rg -n "User\(" app.py
+rg -n "username.ilike" app.py
+```
+Every seeding insert must be guarded by a query that ORs username with
+email, and the block that holds them must sit inside its try.
