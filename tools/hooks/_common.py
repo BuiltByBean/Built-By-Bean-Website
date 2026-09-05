@@ -14,6 +14,9 @@ BOARD = os.environ.get("PM_GUIDANCE_URL", "https://builtbybeans.com").rstrip("/"
 LESSON_TOOLS = ("mcp__pm-guidance__report_lesson", "mcp__pm-guidance__suggest_update")
 # Recording work against a client. A commit means one of these is owed.
 TIME_TOOLS = ("mcp__pm-guidance__log_time", "mcp__pm-guidance__log_expense")
+# Consulting the catalogue before building. Owed BEFORE a feature is written,
+# so the Stop hook looks for it across the whole transcript, not after a mark.
+GUIDANCE_TOOL = "mcp__pm-guidance__get_feature_guidance"
 
 
 def utf8_streams():

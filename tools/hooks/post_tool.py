@@ -112,11 +112,25 @@ HOUSEKEEPING = re.compile(
     re.I)
 
 
-def mark_work_done(data, command):
-    if not COMMIT.search(command) or HOUSEKEEPING.search(command):
-        return
+# A feature module. Not every file in these directories — one that declares a
+# blueprint or registers itself is a FEATURE, and a feature is the thing the
+# catalogue has an opinion about. Robinson & Co. called get_feature_guidance
+# four times while building thirty-odd of these.
+FEATURE_DIR = re.compile(r"/(blueprints|routes|features|apps)/[a-z0-9_]+\.py$")
+FEATURE_BODY = re.compile(r"\bBlueprint\(|\bregister\(\s*(bp|blueprint)\b|@app\.route")
+
+
+def _read(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _work_marker(data):
     path = work_marker_path(data.get("session_id"))
-    marker = {"commits": 0, "blocks": 0,
+    marker = {"commits": 0, "features": [], "blocks": 0,
               "line": len(transcript_lines(data.get("transcript_path") or ""))}
     if os.path.exists(path):
         try:
@@ -124,9 +138,37 @@ def mark_work_done(data, command):
                 marker.update(json.load(fh))
         except Exception:  # noqa: BLE001
             pass
-    marker["commits"] = int(marker.get("commits") or 0) + 1
+    return path, marker
+
+
+def _save(path, marker):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(marker, fh)
+
+
+def mark_work_done(data, command):
+    if not COMMIT.search(command) or HOUSEKEEPING.search(command):
+        return
+    path, marker = _work_marker(data)
+    marker["commits"] = int(marker.get("commits") or 0) + 1
+    _save(path, marker)
+
+
+def mark_feature_built(data, file_path):
+    """A feature module written. Recorded so the Stop hook can ask whether the
+    catalogue was consulted before it — which is the whole point of having a
+    catalogue, and the thing the Robinson & Co. audit found was skipped."""
+    if not FEATURE_DIR.search(file_path.replace("\\", "/")):
+        return
+    if not FEATURE_BODY.search(_read(file_path)):
+        return
+    path, marker = _work_marker(data)
+    name = os.path.basename(file_path)
+    features = list(marker.get("features") or [])
+    if name not in features:
+        features.append(name)
+    marker["features"] = features[:12]
+    _save(path, marker)
 
 
 def main():
@@ -146,6 +188,8 @@ def main():
     if os.path.basename(file_path).lower() == "claude.md":
         mark_lesson_owed(data, file_path)
         return 0
+
+    mark_feature_built(data, file_path)
 
     if is_migration(file_path):
         problems = lint_migration(file_path)

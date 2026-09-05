@@ -23,7 +23,7 @@ import os
 import sys
 
 from _common import (
-    utf8_streams, LESSON_TOOLS, TIME_TOOLS, marker_path, read_stdin_json,
+    utf8_streams, GUIDANCE_TOOL, LESSON_TOOLS, TIME_TOOLS, marker_path, read_stdin_json,
     transcript_lines, work_marker_path,
 )
 
@@ -86,21 +86,46 @@ def check_work(data, lines):
     if marker is None:
         return 0
     after = "\n".join(lines[int(marker.get("line") or 0):])
-    if any(tool in after for tool in TIME_TOOLS):
+    whole = "\n".join(lines)
+    n = int(marker.get("commits") or 0)
+    features = list(marker.get("features") or [])
+
+    # Time is owed from the commit onward; guidance was owed BEFORE the
+    # feature was written, so that one is looked for across the whole
+    # transcript rather than after the marker.
+    owes_time = n and not any(tool in after for tool in TIME_TOOLS)
+    owes_guidance = features and GUIDANCE_TOOL not in whole
+    if not (owes_time or owes_guidance):
         os.remove(path)
         return 0
     if not _bump(path, marker):
         return 0
-    n = int(marker.get("commits") or 0)
-    sys.stderr.write(
-        f"{n} commit{'' if n == 1 else 's'} landed this session and no time "
-        "was logged. If this was work on a client's project, call log_time "
-        "now with the client, the project, the hours and what was built — "
-        "and log_expense for anything bought. Measure the hours rather than "
-        "estimating them: the session transcript has timestamps, and summing "
-        "the gaps under fifteen minutes is closer than memory.\n\n"
+
+    # One message, however many parts. Two separate nudges is how a hook
+    # gets ignored.
+    parts = []
+    if owes_time:
+        parts.append(
+            f"{n} commit{'' if n == 1 else 's'} landed this session and no "
+            "time was logged. If this was work on a client's project, call "
+            "log_time with the client, the project, the hours and what was "
+            "built — and log_expense for anything bought. Measure the hours "
+            "rather than estimating them: the transcript has timestamps, and "
+            "summing the gaps under fifteen minutes is closer than memory.")
+    if owes_guidance:
+        shown = ", ".join(features[:4]) + ("…" if len(features) > 4 else "")
+        parts.append(
+            f"{len(features)} feature module{'' if len(features) == 1 else 's'} "
+            f"{'was' if len(features) == 1 else 'were'} written ({shown}) and "
+            "get_feature_guidance was never called. "
+            "The catalogue exists so a feature built before does not get "
+            "re-derived, with its landmines, from scratch. If any of these is "
+            "worth the next build knowing about, file it with report_lesson "
+            "now.")
+    parts.append(
         "If this was your own repo, a spike, or the board's own tooling, say "
-        "so in one line and stop again.\n")
+        "so in one line and stop again.")
+    sys.stderr.write("\n\n".join(parts) + "\n")
     return 2
 
 
