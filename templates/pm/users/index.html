@@ -73,7 +73,11 @@
                         &middot; {% if u.last_login_at %}signed in {{ u.last_login_at.strftime('%b') }} {{ u.last_login_at.day }}{% else %}never signed in{% endif %}
                     </p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                {# max-w-full and no shrink-0: an armed confirm makes this group
+                   wider than a phone, and a shrink-0 wrap container is sized to
+                   its max-content, so its children never wrap; it overflowed the
+                   card and the card's overflow-hidden cut Cancel off the screen. #}
+                <div class="flex flex-wrap items-center gap-2 max-w-full">
                     <a href="{{ url_for('users.edit', id=u.id) }}"
                        class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Edit</a>
                     <form method="POST" action="{{ url_for('users.reset', id=u.id) }}">
