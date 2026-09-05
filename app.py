@@ -199,6 +199,28 @@ def create_app():
                 db.session.add(dev)
                 db.session.commit()
 
+            # Break glass. RECOVERY_USERNAME and RECOVERY_PASSWORD on the
+            # service set that account's password on the next boot and say so
+            # in the log; remove them straight after. Anyone who can set them
+            # can already read DATABASE_URL, so this opens no door that was
+            # not open. It exists because an account merge once left the owner
+            # with a username he did not type and a password he did not know,
+            # and the only way back in was a hand-written migration.
+            _rec_user = os.environ.get("RECOVERY_USERNAME", "").strip()
+            _rec_pass = os.environ.get("RECOVERY_PASSWORD", "")
+            if _rec_user and _rec_pass:
+                _rec = User.query.filter((User.username.ilike(_rec_user))
+                                         | (User.email.ilike(_rec_user))).first()
+                if _rec is not None:
+                    _rec.set_password(_rec_pass)
+                    _rec.must_change_password = False
+                    _rec.is_active = True
+                    db.session.commit()
+                    print("RECOVERY applied to " + _rec.username
+                          + ": remove RECOVERY_USERNAME and RECOVERY_PASSWORD from the service now")
+                else:
+                    print("RECOVERY_USERNAME matches no account; nothing changed")
+
         # Add stripe_customer_id column if it doesn't exist yet
         with db.engine.connect() as conn2:
             try:
@@ -599,7 +621,9 @@ def create_app():
             return redirect(url_for("pm.dashboard"))
         form = LoginForm()
         if form.validate_on_submit():
-            user = User.query.filter(User.username.ilike(form.username.data)).first()
+            typed = (form.username.data or "").strip()
+            user = User.query.filter((User.username.ilike(typed))
+                                     | (User.email.ilike(typed))).first()
             if user and user.check_password(form.password.data):
                 # A switched-off account keeps its password and gets the
                 # same answer as a wrong one: the door does not say which.

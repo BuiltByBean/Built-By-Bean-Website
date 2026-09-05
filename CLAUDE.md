@@ -150,7 +150,14 @@ here: a new account or a reset gets a temporary one, shown to the CEO
 once (carried in the server session, popped on the next load, never a
 flash - the flash strip would print it too) and replaced on first sign-in
 by the existing must_change_password gate. You cannot switch off or take
-CEO off yourself, nor the last active CEO.
+CEO off yourself, nor the last active CEO. The login takes a username or
+an email, either case. Locked out entirely: set `RECOVERY_USERNAME` and
+`RECOVERY_PASSWORD` on the web service, the boot after the restart sets
+that password and says so in the log, then remove both. Michael's one
+account is `Mbean`; on 2026-09-05 a merge of his two rows kept the other
+one and dropped the password he knew, which is what that door is for. A
+migration that touches the row somebody signs in with carries the
+password forward or it has locked him out.
 
 ## Hosting fees that raise themselves
 
