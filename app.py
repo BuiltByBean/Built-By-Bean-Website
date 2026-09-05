@@ -168,58 +168,71 @@ def create_app():
         if not _model_cols <= _user_cols:
             print('users table is behind the model; user seeding waits for the migration')
         else:
-            from models import User
-            _admin_password = os.environ.get("ADMIN_PASSWORD", "")
-            if _admin_password and not User.query.filter(User.username.ilike("Michael.Bean")).first():
-                admin = User(
-                    username="Michael.Bean",
-                    first_name="Michael",
-                    last_name="Bean",
-                    email="michael@builtbybean.com",
-                    role="ceo",
-                    must_change_password=False,
-                )
-                admin.set_password(_admin_password)
-                db.session.add(admin)
-                db.session.commit()
+          try:
+              from models import User
+              _admin_password = os.environ.get("ADMIN_PASSWORD", "")
+              _admin_exists = User.query.filter(
+                  (User.username.ilike("Michael.Bean"))
+                  | (User.email.ilike("michael@builtbybean.com"))).first()
+              if _admin_password and _admin_exists is None:
+                  admin = User(
+                      username="Michael.Bean",
+                      first_name="Michael",
+                      last_name="Bean",
+                      email="michael@builtbybean.com",
+                      role="ceo",
+                      must_change_password=False,
+                  )
+                  admin.set_password(_admin_password)
+                  db.session.add(admin)
+                  db.session.commit()
 
-            # Seeded only when an explicit password is supplied. This repo is
-            # public, so a literal password here is a published admin credential.
-            _dev_password = os.environ.get("DEV_PASSWORD", "")
-            if _dev_password and not User.query.filter(User.username.ilike("tlane")).first():
-                dev = User(
-                    username="tlane",
-                    first_name="Ty",
-                    last_name="Lane",
-                    email="tlane@builtbybean.com",
-                    role="cto",
-                    must_change_password=True,
-                )
-                dev.set_password(_dev_password)
-                db.session.add(dev)
-                db.session.commit()
+              # Seeded only when an explicit password is supplied. This repo is
+              # public, so a literal password here is a published admin credential.
+              _dev_password = os.environ.get("DEV_PASSWORD", "")
+              _dev_exists = User.query.filter(
+                  (User.username.ilike("tlane"))
+                  | (User.email.ilike("tlane@builtbybean.com"))).first()
+              if _dev_password and _dev_exists is None:
+                  dev = User(
+                      username="tlane",
+                      first_name="Ty",
+                      last_name="Lane",
+                      email="tlane@builtbybean.com",
+                      role="cto",
+                      must_change_password=True,
+                  )
+                  dev.set_password(_dev_password)
+                  db.session.add(dev)
+                  db.session.commit()
 
-            # Break glass. RECOVERY_USERNAME and RECOVERY_PASSWORD on the
-            # service set that account's password on the next boot and say so
-            # in the log; remove them straight after. Anyone who can set them
-            # can already read DATABASE_URL, so this opens no door that was
-            # not open. It exists because an account merge once left the owner
-            # with a username he did not type and a password he did not know,
-            # and the only way back in was a hand-written migration.
-            _rec_user = os.environ.get("RECOVERY_USERNAME", "").strip()
-            _rec_pass = os.environ.get("RECOVERY_PASSWORD", "")
-            if _rec_user and _rec_pass:
-                _rec = User.query.filter((User.username.ilike(_rec_user))
-                                         | (User.email.ilike(_rec_user))).first()
-                if _rec is not None:
-                    _rec.set_password(_rec_pass)
-                    _rec.must_change_password = False
-                    _rec.is_active = True
-                    db.session.commit()
-                    print("RECOVERY applied to " + _rec.username
-                          + ": remove RECOVERY_USERNAME and RECOVERY_PASSWORD from the service now")
-                else:
-                    print("RECOVERY_USERNAME matches no account; nothing changed")
+              # Break glass. RECOVERY_USERNAME and RECOVERY_PASSWORD on the
+              # service set that account's password on the next boot and say so
+              # in the log; remove them straight after. Anyone who can set them
+              # can already read DATABASE_URL, so this opens no door that was
+              # not open. It exists because an account merge once left the owner
+              # with a username he did not type and a password he did not know,
+              # and the only way back in was a hand-written migration.
+              _rec_user = os.environ.get("RECOVERY_USERNAME", "").strip()
+              _rec_pass = os.environ.get("RECOVERY_PASSWORD", "")
+              if _rec_user and _rec_pass:
+                  _rec = User.query.filter((User.username.ilike(_rec_user))
+                                           | (User.email.ilike(_rec_user))).first()
+                  if _rec is not None:
+                      _rec.set_password(_rec_pass)
+                      _rec.must_change_password = False
+                      _rec.is_active = True
+                      db.session.commit()
+                      print("RECOVERY applied to " + _rec.username
+                            + ": remove RECOVERY_USERNAME and RECOVERY_PASSWORD from the service now")
+                  else:
+                      print("RECOVERY_USERNAME matches no account; nothing changed")
+
+          except Exception as seed_error:
+              # Never fatal. A seed that cannot run is a missing convenience;
+              # a seed that raises here is a site that will not start.
+              db.session.rollback()
+              print("user seeding skipped: " + str(seed_error)[:200])
 
         # Add stripe_customer_id column if it doesn't exist yet
         with db.engine.connect() as conn2:
