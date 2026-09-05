@@ -1,12 +1,18 @@
+{#
+  Page controls. Every target is 44px, and the row WRAPS: with five hundred
+  pages the number buttons plus Prev and Next are wider than a phone, and a
+  row that cannot wrap drags the whole page sideways (LM: phone first). The
+  count and the buttons are two lines at 375px and one line from sm up.
+#}
 {% macro render_pagination(pagination, endpoint, extra_args={}) %}
 {% if pagination.pages > 1 %}
-<nav class="flex items-center justify-between mt-6">
+<nav class="flex flex-wrap items-center justify-between gap-3 mt-6">
     <p class="text-sm text-surface-400">
         Showing <span class="font-medium text-surface-200">{{ ((pagination.page - 1) * pagination.per_page) + 1 }}</span>
         to <span class="font-medium text-surface-200">{{ [pagination.page * pagination.per_page, pagination.total] | min }}</span>
         of <span class="font-medium text-surface-200">{{ pagination.total }}</span>
     </p>
-    <div class="flex items-center gap-1">
+    <div class="flex flex-wrap items-center gap-1 max-w-full">
         {% if pagination.has_prev %}
         <a href="{{ url_for(endpoint, page=pagination.prev_num, **extra_args) }}"
            class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 text-sm rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-300 transition-colors">
@@ -16,14 +22,18 @@
 
         {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
             {% if page_num %}
+                {# The far edges are useful on a big screen and are the first
+                   thing to go on a small one. #}
+                {% set near = (page_num - pagination.page) | abs <= 1
+                              or page_num in (1, pagination.pages) %}
                 <a href="{{ url_for(endpoint, page=page_num, **extra_args) }}"
-                   class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 text-sm rounded-lg transition-colors
+                   class="{{ 'inline-flex' if near else 'hidden sm:inline-flex' }} items-center justify-center min-w-[44px] min-h-[44px] px-3 text-sm rounded-lg transition-colors
                           {% if page_num == pagination.page %}bg-brand-600 text-white shadow-sm
                           {% else %}bg-surface-800 hover:bg-surface-700 text-surface-300{% endif %}">
                     {{ page_num }}
                 </a>
             {% else %}
-                <span class="px-2 text-surface-400">...</span>
+                <span class="hidden sm:inline px-2 text-surface-400">...</span>
             {% endif %}
         {% endfor %}
 

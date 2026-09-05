@@ -159,6 +159,52 @@ one and dropped the password he knew, which is what that door is for. A
 migration that touches the row somebody signs in with carries the
 password forward or it has locked him out.
 
+## Leads
+
+`pm/leads_routes.py` at `/admin/leads`, the marketing seat's page and the
+only one built for somebody other than Michael: Hannah Bean is the CMO and
+lives in it. Signed in is the whole guard, because a call list nobody can
+open is a call list nobody works.
+
+The list is every business in the Paris trade area, built by
+`import_leads.py` out of public records: the Comptroller's Active Sales Tax
+Permit Holders (the spine, with trading name, street, NAICS, and the date
+they started selling), Active Franchise Taxpayers (the registered entities
+that never needed a permit, which is where the contractors are),
+OpenStreetMap (where the phone numbers and websites live), the CMS provider
+registry (healthcare, with the authorised official as the owner and
+individual providers attached as named contacts by street), and the
+businesses' own homepages, asked once each for a published email. Lamar,
+Red River, Delta and Fannin counties.
+
+Employees and revenue are columns that the import deliberately leaves
+empty, and the page prints "not published" rather than a figure. No free
+public source carries either for a private firm in a town this size, and a
+guessed number on a call sheet is worse than a blank: it gets repeated on
+the phone. What the record does give is the better signal anyway, and the
+default sort is built from it - never tried, then no website, then trading
+longest. A twenty-year-old business with a sales tax permit and no website
+is the call to make.
+
+`dedupe_key` (flattened trading name plus house number and street) is what
+makes the import re-runnable, and the loader never overwrites a phone,
+email, website or owner that somebody typed over it, nor any stage, note or
+person added on the board. Re-run it with
+`python import_leads.py --cache <dir>` to reuse a pull rather than ask the
+same APIs again.
+
+A row opens on press and only one opens at a time. That is LM-1 avoidance
+rather than taste: the open row carries `select_dropdown` panels, so it
+alone takes `relative z-30` while every other row sits at `z-0`, and a
+later sibling card cannot paint over the panel. Logging an attempt moves
+the stage as far as the outcome warrants and no further, so a call logged
+against a lead already at "proposal sent" does not walk it backwards; the
+filters ride in each row form as `f_*` fields so a press returns to the same
+page of the same list, and the prefix is load bearing because the stage form
+posts `stage` as the new stage. "Make them a client" writes a `Client`
+carrying the address, the contact and everything learned, and links the two
+rows.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last

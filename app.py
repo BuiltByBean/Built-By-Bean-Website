@@ -317,6 +317,10 @@ def create_app():
     from pm.users_routes import users_bp
     app.register_blueprint(users_bp)
 
+    # ── Every business in the trade area ───────────────────
+    from pm.leads_routes import leads_bp
+    app.register_blueprint(leads_bp)
+
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)

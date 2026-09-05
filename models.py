@@ -92,6 +92,34 @@ CONTACT_CHANNEL_CHOICES = [
     ("other", "Other"),
 ]
 
+# What came of one attempt. A channel alone says somebody was rung; this
+# says whether anyone picked up, which is the only thing that decides
+# whether to ring again on Monday or leave them alone until spring.
+LEAD_OUTCOME_CHOICES = [
+    ("no_answer", "No answer"),
+    ("left_message", "Left a message"),
+    ("no_reply", "No reply yet"),
+    ("spoke", "Spoke to them"),
+    ("meeting", "Meeting booked"),
+    ("not_now", "Not right now"),
+    ("no", "Not interested"),
+    ("bad_number", "Wrong number"),
+]
+
+# Outcomes that mean a person was actually on the other end. Only these
+# make "how did it go" worth asking.
+LEAD_OUTCOMES_REACHED = ("spoke", "meeting", "not_now", "no")
+
+# How it went, asked only when somebody was reached. Three words, because
+# the fourth would be a paragraph and that is what the note is for.
+LEAD_WENT_CHOICES = [
+    ("", "Not said"),
+    ("good", "Went well"),
+    ("mixed", "Mixed"),
+    ("poor", "Went badly"),
+]
+
+
 
 class Client(db.Model):
     __tablename__ = "clients"
@@ -2091,3 +2119,203 @@ class MvpPackageItem(db.Model):
 
     def __repr__(self):
         return f"<MvpPackageItem {self.kind} {self.name!r}>"
+
+
+class Lead(db.Model):
+    """A business in the trade area that has not bought anything yet.
+
+    Every column here came out of a public record, and the ones that stay
+    empty are as honest as the ones that fill: no free source publishes the
+    revenue or the headcount of a private firm in a town of 25,000, so those
+    two are hand-typed when somebody learns them on a call and are never
+    guessed. What IS public turns out to be the better signal anyway - a
+    business with a sales tax permit, no website and eleven years of trading
+    is a better call than a guessed dollar figure ever was.
+
+    `dedupe_key` is what makes the import re-runnable: it is the trading name
+    and the street, flattened, so the same shop arriving from the Comptroller
+    and from OpenStreetMap lands on one row and the second source only fills
+    the gaps the first left.
+    """
+
+    __tablename__ = "leads"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # What it trades as, which is what she will say on the phone, and the
+    # entity behind it, which is what the state calls it. For a sole trader
+    # the second is usually a person's name, and that is the owner.
+    name = db.Column(db.String(200), nullable=False, index=True)
+    legal_name = db.Column(db.String(200), default="")
+    owner_name = db.Column(db.String(160), default="")
+
+    address = db.Column(db.String(240), default="")
+    city = db.Column(db.String(80), default="", index=True)
+    state = db.Column(db.String(10), default="TX")
+    zip_code = db.Column(db.String(12), default="")
+    county = db.Column(db.String(60), default="")
+    lat = db.Column(db.Float, nullable=True)
+    lon = db.Column(db.Float, nullable=True)
+
+    phone = db.Column(db.String(40), default="")
+    email = db.Column(db.String(200), default="")
+    website = db.Column(db.String(300), default="")
+
+    industry = db.Column(db.String(120), default="")
+    naics = db.Column(db.String(10), default="")
+    entity_type = db.Column(db.String(60), default="")
+    # When the state first saw them selling. The age of a business is public
+    # where its size is not, and it says plenty.
+    started_on = db.Column(db.Date, nullable=True)
+    # How many outlets the same taxpayer runs statewide. One is a shop; nine
+    # is a chain, and that is a size signal nobody had to publish.
+    locations = db.Column(db.Integer, default=1)
+
+    # Left empty by the import on purpose. See the class note.
+    employees = db.Column(db.Integer, nullable=True)
+    revenue = db.Column(db.Float, nullable=True)
+
+    taxpayer_number = db.Column(db.String(40), default="", index=True)
+    osm_ref = db.Column(db.String(40), default="")
+    npi = db.Column(db.String(20), default="")
+    sources = db.Column(db.String(200), default="")
+    dedupe_key = db.Column(db.String(240), nullable=False, unique=True)
+
+    stage = db.Column(db.String(30), default="lead", index=True)
+    stage_changed_at = db.Column(db.DateTime, nullable=True)
+    notes = db.Column(db.Text, default="")
+
+    # Set when she converts one. SET NULL rather than CASCADE: deleting a
+    # client must not erase the record of where they came from.
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"),
+                          nullable=True, index=True)
+    converted_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    client = db.relationship("Client")
+    people = db.relationship("LeadPerson", back_populates="lead",
+                             cascade="all, delete-orphan",
+                             order_by="LeadPerson.sort_order, LeadPerson.id")
+    # Newest first: the only question asked of this list is "when did we last
+    # try them, and what happened".
+    touches = db.relationship("LeadTouch", back_populates="lead",
+                              cascade="all, delete-orphan",
+                              order_by="LeadTouch.occurred_on.desc(), LeadTouch.id.desc()")
+
+    @property
+    def last_touch(self):
+        return self.touches[0] if self.touches else None
+
+    @property
+    def days_since_touch(self):
+        last = self.last_touch
+        if not last or not last.occurred_on:
+            return None
+        return (date.today() - last.occurred_on).days
+
+    @property
+    def channels_tried(self):
+        used = {t.channel for t in self.touches}
+        return [key for key, _ in CONTACT_CHANNEL_CHOICES if key in used]
+
+    @property
+    def reached(self):
+        """Has anybody ever actually got a person on the other end."""
+        return any(t.outcome in LEAD_OUTCOMES_REACHED for t in self.touches)
+
+    @property
+    def years_trading(self):
+        if not self.started_on:
+            return None
+        return max(0, (date.today() - self.started_on).days // 365)
+
+    @property
+    def has_website(self):
+        return bool((self.website or "").strip())
+
+    @property
+    def stage_label(self):
+        return dict(CLIENT_STAGE_CHOICES).get(self.stage, self.stage)
+
+    @property
+    def primary_person(self):
+        return self.people[0] if self.people else None
+
+    def __repr__(self):
+        return f"<Lead {self.name!r} {self.city}>"
+
+
+class LeadPerson(db.Model):
+    """Somebody to ask for by name at that business.
+
+    Separate rows rather than columns on the lead, because the owner, the
+    manager and the person who answers the phone are three different calls
+    and the one who is worth ringing changes.
+    """
+
+    __tablename__ = "lead_people"
+
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey("leads.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    name = db.Column(db.String(160), nullable=False)
+    role = db.Column(db.String(120), default="")
+    email = db.Column(db.String(200), default="")
+    phone = db.Column(db.String(40), default="")
+    source = db.Column(db.String(60), default="")
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    lead = db.relationship("Lead", back_populates="people")
+
+    def __repr__(self):
+        return f"<LeadPerson {self.name!r}>"
+
+
+class LeadTouch(db.Model):
+    """One attempt to reach a lead, and what came of it.
+
+    ClientContact is the same idea one stage later and this deliberately
+    speaks its vocabulary (CONTACT_CHANNEL_CHOICES, a date rather than a
+    timestamp). The column it adds is `outcome`: cold calling a town, the
+    difference between "rang them" and "rang them, wrong number" is the
+    difference between a list that gets better and a list that gets rung
+    twice.
+    """
+
+    __tablename__ = "lead_touches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey("leads.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    # Who did it. SET NULL: switching an account off must not delete the
+    # history of the calls that person made.
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+                        nullable=True, index=True)
+    channel = db.Column(db.String(20), nullable=False, default="phone")
+    outcome = db.Column(db.String(20), nullable=False, default="no_answer")
+    went = db.Column(db.String(10), default="")
+    occurred_on = db.Column(db.Date, nullable=False, default=lambda: date.today())
+    note = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    lead = db.relationship("Lead", back_populates="touches")
+    user = db.relationship("User")
+
+    @property
+    def channel_label(self):
+        return dict(CONTACT_CHANNEL_CHOICES).get(self.channel, self.channel)
+
+    @property
+    def outcome_label(self):
+        return dict(LEAD_OUTCOME_CHOICES).get(self.outcome, self.outcome)
+
+    @property
+    def went_label(self):
+        return dict(LEAD_WENT_CHOICES).get(self.went or "", "")
+
+    def __repr__(self):
+        return f"<LeadTouch {self.channel} {self.outcome} {self.occurred_on}>"

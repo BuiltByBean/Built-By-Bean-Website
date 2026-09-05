@@ -1,0 +1,343 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+{% from "pm/components/pagination.html" import render_pagination %}
+{% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/status_badge.html" import badge %}
+
+{#
+  Every business in the trade area, worst-contacted first.
+
+  One row opens at a time (openId on the list, not a flag per row). That is
+  not tidiness: an open row carries a select_dropdown panel, and LM-1 says a
+  panel is scoped inside its own card's stacking context, so a later sibling
+  card would paint over it. With one row open it alone takes z-20 and every
+  other row sits at z-0, which makes the overlap impossible rather than
+  unlikely. z-20 and not z-30, because z-30 is the sticky bar's and a tie
+  goes to whoever is later in the DOM, which is the row.
+
+  This page is the MIXED tier of LM-4, not contained scroll, and that is
+  deliberate. An inner `overflow-y-auto` clips absolutely positioned
+  descendants, so the outcome panel was cut off by the list it sat in: at
+  375px the scroller was 167px tall and the panel wanted 256, which put "Not
+  interested" outside the clip and made it unpickable. The tiles above the
+  list are content that can scroll away, so the page scrolls in `#pm-scroll`
+  and the bar is `.sticky-filters`.
+
+  The outcome is a row of buttons for the same reason and one better: it is
+  the press she makes a hundred times a week, and a button is one press where
+  a dropdown is two.
+
+  The filter bar carries the same filters as hidden f_* fields inside each
+  row form, so a logged call comes back to the same page of the same list.
+  The prefix matters: the stage form posts `stage` as the new stage, and an
+  unprefixed filter of the same name would be read back as the filter.
+#}
+
+{% block title %}Leads - Built By Bean{% endblock %}
+{% block page_title %}Leads{% endblock %}
+{% block page_subtitle %}{{ counts.total }} businesses{% endblock %}
+
+{% macro filter_fields() %}
+    <input type="hidden" name="f_q" value="{{ filters.q }}">
+    <input type="hidden" name="f_city" value="{{ filters.city }}">
+    <input type="hidden" name="f_stage" value="{{ filters.stage }}">
+    <input type="hidden" name="f_industry" value="{{ filters.industry }}">
+    <input type="hidden" name="f_website" value="{{ filters.website }}">
+    <input type="hidden" name="f_untried" value="{{ '1' if filters.untried else '' }}">
+    <input type="hidden" name="f_sort" value="{{ filters.sort }}">
+    <input type="hidden" name="f_page" value="{{ pagination.page }}">
+{% endmacro %}
+
+{% block content %}
+{% set channel_labels = dict(channel_choices) %}
+{% set filtering = filters.q or filters.city or filters.stage or filters.industry or filters.website or filters.untried %}
+
+<div class="space-y-4">
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="glass-card p-3 sm:p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Businesses</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.total }}</p>
+        </div>
+        <div class="glass-card p-3 sm:p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Never tried</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.untried }}</p>
+        </div>
+        <div class="glass-card p-3 sm:p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">No website</p>
+            <p class="text-xl sm:text-2xl font-bold text-amber-300 mt-1">{{ counts.no_website }}</p>
+        </div>
+        <div class="glass-card p-3 sm:p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">In play</p>
+            <p class="text-xl sm:text-2xl font-bold text-brand-300 mt-1">{{ counts.talking }}</p>
+        </div>
+    </div>
+
+    <div class="glass-card p-3 sm:p-6">
+
+        {# Solid and sticky at the top of the scroller (LM-4 mixed tier), and
+           z-30 per LM-1 so its panels paint over the rows. The negative
+           margin lets the solid backing reach the card's edges. #}
+        <div class="sticky-filters rounded-xl p-3 -mx-3 -mt-3 mb-4">
+            <form method="GET" x-data="liveFilter()" @submit.prevent="apply()" class="space-y-3">
+                <div class="flex gap-3">
+                    <input type="text" name="q" value="{{ filters.q }}" @input="soon()"
+                           placeholder="Name, owner, street, phone"
+                           class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+                    <span data-live="clear" class="inline-flex items-center">
+                        {% if filtering %}{{ clear_filters(href=url_for('leads.index')) }}{% endif %}
+                    </span>
+                </div>
+
+                <div class="flex flex-wrap gap-2 sm:gap-3">
+                    {% set city_opts = [("", "Every town")] %}
+                    {% for c in cities %}{% set _ = city_opts.append((c, c|title)) %}{% endfor %}
+                    {{ select_dropdown("city", city_opts, filters.city, "Every town",
+                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+
+                    {% set trade_opts = [("", "Every trade")] %}
+                    {% for i in industries %}{% set _ = trade_opts.append((i, i)) %}{% endfor %}
+                    {{ select_dropdown("industry", trade_opts, filters.industry, "Every trade",
+                                       on_change="apply()", extra_class="max-w-[13rem]") }}
+
+                    {% set stage_opts = [("", "Any stage")] + stage_choices %}
+                    {{ select_dropdown("stage", stage_opts, filters.stage, "Any stage",
+                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+
+                    {{ select_dropdown("website", [("", "Site or not"), ("no", "No website"), ("yes", "Has a website")],
+                                       filters.website, "Site or not",
+                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+
+                    {{ select_dropdown("sort", sorts, filters.sort, "Best bets",
+                                       on_change="apply()", extra_class="max-w-[11rem]") }}
+
+                    <span class="inline-flex items-center" @change="apply()">
+                        {{ checkbox("untried", checked=filters.untried, value="1",
+                                    label="Never tried") }}
+                    </span>
+                </div>
+            </form>
+        </div>
+
+        <div data-live="results" class="contents">
+        {% if leads %}
+        {# One open row at a time. See the note at the top of this file. No
+           overflow container here on purpose: it would clip the panels. #}
+        <div class="space-y-2" x-data="{ openId: null }">
+            {% for l in leads %}
+            <div id="lead-{{ l.id }}"
+                 {# z-20, not z-30: the sticky bar is z-30 and comes first in
+                    the DOM, so a row at the same level wins on order and its
+                    text reads straight through the filters. That is the exact
+                    failure LM-4 names. Below the bar, above its neighbours. #}
+                 :class="openId === {{ l.id }} ? 'relative z-20' : 'relative z-0'"
+                 class="rounded-xl border border-white/10 bg-surface-900/40">
+
+                <button type="button" @click="openId = (openId === {{ l.id }} ? null : {{ l.id }})"
+                        class="w-full min-h-[44px] px-3 sm:px-4 py-3 text-left">
+                    <div class="flex items-start gap-3 min-w-0">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                                <span class="font-medium text-white truncate max-w-full">{{ l.name }}</span>
+                                {% if not l.has_website %}
+                                <span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-300">No website</span>
+                                {% endif %}
+                                {% if l.client_id %}
+                                <span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-300">Client</span>
+                                {% elif l.stage and l.stage != 'lead' %}
+                                <span class="shrink-0">{{ badge(l.stage) }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="mt-0.5 text-xs text-surface-400 truncate">
+                                {{ l.city|title if l.city }}{% if l.industry %} &middot; {{ l.industry }}{% endif %}
+                                {%- if l.phone %} &middot; {{ l.phone|format_phone }}{% endif %}
+                            </p>
+                            <p class="mt-0.5 text-[11px] text-surface-500 truncate">
+                                {% set days = l.days_since_touch %}
+                                {% if days is none %}Never tried
+                                {% elif days == 0 %}Tried today
+                                {% elif days == 1 %}Tried yesterday
+                                {% else %}Tried {{ days }} days ago{% endif %}
+                                {%- if l.last_touch %} &middot; {{ l.last_touch.outcome_label|lower }}{% endif %}
+                                {%- if l.years_trading is not none %} &middot; {{ l.years_trading }} yr{{ 's' if l.years_trading != 1 }} trading{% endif %}
+                            </p>
+                        </div>
+                        <svg class="w-4 h-4 shrink-0 mt-1 text-surface-500 transition-transform duration-200"
+                             :class="openId === {{ l.id }} ? 'rotate-180' : ''"
+                             fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <div x-show="openId === {{ l.id }}" x-cloak
+                     class="border-t border-white/5 p-2.5 sm:p-4 space-y-4">
+
+                    {# What the public record knows. Blanks stay blank. #}
+                    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 text-sm">
+                        {% if l.legal_name and l.legal_name != l.name %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Registered as</dt>
+                            <dd class="text-surface-200 break-words">{{ l.legal_name }}</dd></div>
+                        {% endif %}
+                        {% if l.owner_name %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Owner</dt>
+                            <dd class="text-surface-200 break-words">{{ l.owner_name }}</dd></div>
+                        {% endif %}
+                        {% if l.entity_type %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Type</dt>
+                            <dd class="text-surface-200 break-words">{{ l.entity_type }}</dd></div>
+                        {% endif %}
+                        {% if l.started_on %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Trading since</dt>
+                            <dd class="text-surface-200">{{ l.started_on.year }}</dd></div>
+                        {% endif %}
+                        {% if l.locations and l.locations > 1 %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Locations</dt>
+                            <dd class="text-surface-200">{{ l.locations }}</dd></div>
+                        {% endif %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Employees</dt>
+                            <dd class="{{ 'text-surface-200' if l.employees else 'text-surface-600' }}">{{ l.employees or 'not published' }}</dd></div>
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">Revenue</dt>
+                            <dd class="{{ 'text-surface-200' if l.revenue else 'text-surface-600' }}">{{ ('$' ~ (l.revenue|commas)) if l.revenue else 'not published' }}</dd></div>
+                        {% if l.naics %}
+                        <div class="min-w-0"><dt class="text-[11px] uppercase tracking-wider text-surface-500">NAICS</dt>
+                            <dd class="text-surface-200">{{ l.naics }}</dd></div>
+                        {% endif %}
+                    </dl>
+
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm min-w-0">
+                        {% if l.address %}<span class="text-surface-300 break-words">{{ l.address }}{% if l.city %}, {{ l.city|title }}{% endif %}{% if l.zip_code %} {{ l.zip_code }}{% endif %}</span>{% endif %}
+                        {% if l.phone %}<a href="tel:{{ l.phone }}" class="text-brand-300 hover:text-brand-200 whitespace-nowrap">{{ l.phone|format_phone }}</a>{% endif %}
+                        {% if l.email %}<a href="mailto:{{ l.email }}" class="text-brand-300 hover:text-brand-200 break-all">{{ l.email }}</a>{% endif %}
+                        {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener noreferrer" class="text-brand-300 hover:text-brand-200 break-all">{{ l.website|replace('https://', '')|replace('http://', '') }}</a>{% endif %}
+                    </div>
+
+                    {% if l.people %}
+                    <div class="space-y-1.5">
+                        {% for p in l.people %}
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm min-w-0">
+                            <span class="text-white break-words">{{ p.name }}</span>
+                            {% if p.role %}<span class="text-xs text-surface-400 break-words">{{ p.role }}</span>{% endif %}
+                            {% if p.phone %}<a href="tel:{{ p.phone }}" class="text-brand-300 whitespace-nowrap">{{ p.phone|format_phone }}</a>{% endif %}
+                            {% if p.email %}<a href="mailto:{{ p.email }}" class="text-brand-300 break-all">{{ p.email }}</a>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {# Log an attempt. The channel buttons also set the outcome
+                       the channel usually has, so the common case is two
+                       presses: the channel, then Log it. #}
+                    <form method="POST" action="{{ url_for('leads.touch', id=l.id) }}"
+                          x-data="{ channel: 'phone', outcome: 'no_answer', went: '' }"
+                          class="rounded-xl border border-white/10 bg-surface-900/40 p-2.5 sm:p-3 space-y-3">
+                        {{ filter_fields() }}
+                        <input type="hidden" name="channel" :value="channel">
+
+                        <div class="flex flex-wrap gap-2">
+                            {% for key, label in channel_choices %}
+                            <button type="button"
+                                    @click="channel = '{{ key }}'; outcome = {{ "'no_reply'" if key in ('email', 'text') else ("'spoke'" if key == 'in_person' else "'no_answer'") }}"
+                                    :class="channel === '{{ key }}'
+                                            ? 'border-brand-500/60 bg-brand-500/15 text-brand-200'
+                                            : 'border-white/10 text-surface-300 hover:text-white'"
+                                    class="min-h-[44px] px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl border transition-colors">{{ label }}</button>
+                            {% endfor %}
+                        </div>
+
+                        <input type="hidden" name="outcome" :value="outcome">
+                        <div class="flex flex-wrap gap-2">
+                            {% for key, label in outcome_choices %}
+                            <button type="button" @click="outcome = '{{ key }}'"
+                                    :class="outcome === '{{ key }}'
+                                            ? '{{ 'border-emerald-500/60 bg-emerald-500/15 text-emerald-200' if key in reached_outcomes else 'border-white/25 bg-white/10 text-white' }}'
+                                            : 'border-white/10 text-surface-400 hover:text-white'"
+                                    class="min-h-[44px] px-2.5 sm:px-3 py-2 text-xs sm:text-sm rounded-xl border transition-colors">{{ label }}</button>
+                            {% endfor %}
+                        </div>
+
+                        <div class="flex flex-wrap gap-2" x-cloak
+                             x-show="{{ reached_outcomes|tojson }}.includes(outcome)">
+                            <input type="hidden" name="went" :value="went">
+                            {% for key, label in went_choices %}{% if key %}
+                            <button type="button" @click="went = (went === '{{ key }}' ? '' : '{{ key }}')"
+                                    :class="went === '{{ key }}'
+                                            ? 'border-brand-500/60 bg-brand-500/15 text-brand-200'
+                                            : 'border-white/10 text-surface-400 hover:text-white'"
+                                    class="min-h-[44px] px-2.5 sm:px-3 py-2 text-xs sm:text-sm rounded-xl border transition-colors">{{ label }}</button>
+                            {% endif %}{% endfor %}
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <input type="text" name="note" placeholder="What was said"
+                                   class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+                            <button type="submit"
+                                    class="min-h-[44px] px-5 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">Log it</button>
+                        </div>
+                    </form>
+
+                    {% if l.touches %}
+                    <div class="space-y-1">
+                        {% for t in l.touches[:6] %}
+                        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs min-w-0">
+                            <span class="text-surface-400 whitespace-nowrap">{{ t.occurred_on.strftime('%b') }} {{ t.occurred_on.day }}</span>
+                            <span class="text-surface-300 whitespace-nowrap">{{ t.channel_label }}</span>
+                            <span class="{{ 'text-emerald-300' if t.outcome in reached_outcomes else 'text-surface-500' }} whitespace-nowrap">{{ t.outcome_label }}</span>
+                            {% if t.went %}<span class="text-surface-400 whitespace-nowrap">{{ t.went_label|lower }}</span>{% endif %}
+                            {% if t.note %}<span class="text-surface-400 break-words">{{ t.note }}</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-3 pt-1">
+                        <form method="POST" action="{{ url_for('leads.stage', id=l.id) }}"
+                              x-data class="w-full sm:w-auto sm:min-w-[13rem]">
+                            {{ filter_fields() }}
+                            {{ select_dropdown("stage", stage_choices, l.stage or 'lead', "Lead",
+                                               on_change="$el.closest('form').submit()", full_width=true) }}
+                        </form>
+
+                        <div class="flex flex-wrap items-center gap-2 max-w-full sm:ml-auto">
+                            {% if l.client_id %}
+                            <a href="{{ url_for('pm.client_detail', id=l.client_id) }}"
+                               class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-emerald-500/30 text-emerald-300 hover:border-emerald-500/60 transition-colors">Open the client</a>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('leads.convert', id=l.id) }}">
+                                {{ filter_fields() }}
+                                {{ confirm_button('Make them a client', 'Create the client?', tone='brand',
+                                                  btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors') }}
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('leads.note', id=l.id) }}" class="flex flex-wrap gap-2">
+                        {{ filter_fields() }}
+                        <input type="text" name="notes" value="{{ l.notes or '' }}" placeholder="Anything worth remembering"
+                               class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+                        <button type="submit"
+                                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Save</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div>
+            {{ render_pagination(pagination, 'leads.index', extra_args={
+                'q': filters.q, 'city': filters.city, 'stage': filters.stage,
+                'industry': filters.industry, 'website': filters.website,
+                'untried': '1' if filters.untried else '', 'sort': filters.sort}) }}
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <p class="text-surface-400 text-sm">Nothing matches that.</p>
+        </div>
+        {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
