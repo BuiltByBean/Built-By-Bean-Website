@@ -12,6 +12,8 @@ import urllib.request
 
 BOARD = os.environ.get("PM_GUIDANCE_URL", "https://builtbybeans.com").rstrip("/")
 LESSON_TOOLS = ("mcp__pm-guidance__report_lesson", "mcp__pm-guidance__suggest_update")
+# Recording work against a client. A commit means one of these is owed.
+TIME_TOOLS = ("mcp__pm-guidance__log_time", "mcp__pm-guidance__log_expense")
 
 
 def utf8_streams():
@@ -67,9 +69,18 @@ def marker_dir():
     return path
 
 
+def _safe(session_id):
+    return "".join(ch for ch in str(session_id or "unknown") if ch.isalnum() or ch in "-_")[:80]
+
+
 def marker_path(session_id):
-    safe = "".join(ch for ch in str(session_id or "unknown") if ch.isalnum() or ch in "-_")[:80]
-    return os.path.join(marker_dir(), f"lesson-pending-{safe}.json")
+    return os.path.join(marker_dir(), f"lesson-pending-{_safe(session_id)}.json")
+
+
+def work_marker_path(session_id):
+    """Commits made this session. A separate file from the lesson marker so
+    the two nudges cannot cancel each other out."""
+    return os.path.join(marker_dir(), f"work-done-{_safe(session_id)}.json")
 
 
 def transcript_lines(path):

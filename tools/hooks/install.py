@@ -14,7 +14,9 @@ MARK = "tools/hooks/"  # every command we install carries this; nothing else doe
 
 EVENTS = {
     "SessionStart": (None, "session_start.py", 20),
-    "PostToolUse": ("Edit|Write", "post_tool.py", 10),
+    # Bash and PowerShell too, since 2026-09-05: a commit is the moment
+    # work is owed to the board, and it arrives as a shell command.
+    "PostToolUse": ("Edit|Write|Bash|PowerShell", "post_tool.py", 10),
     "Stop": (None, "stop.py", 10),
 }
 

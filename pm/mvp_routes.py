@@ -124,9 +124,21 @@ def _house_rules():
     out = ["THE HOUSE RULES"]
     out.append("  Learned across every build so far. They apply here whether "
                "or not the feature they were learned on is in this package.")
+    # The slug, because until 2026-09-05 this printed only the name and
+    # `suggest_update` takes a slug. Nothing published the mapping, and it is
+    # not derivable — "Migrations beside create_all" is `migrations-with-
+    # create-all` and "Sends that survive the request" is `queue-first-
+    # sending`. So every precise append 404'd, sessions fell back to
+    # `report_lesson`'s forgiving name match, and the same lesson got filed
+    # three and four times over. Auditing Robinson & Co. found exactly that.
+    out.append("  Each rule's slug is in brackets. That is what suggest_update "
+               "takes when you want to change one field of an existing rule, "
+               "or propose its scanner. report_lesson matches on the NAME and "
+               "appends prose; use it when you have a lesson rather than an "
+               "edit, and it will tell you the slug it appended to.")
     out.append("")
     for feature in rows:
-        out.append(f"- {feature.name}")
+        out.append(f"- {feature.name}  [{feature.slug}]")
         if (feature.gold_standard_md or "").strip():
             out.extend("    " + line
                        for line in feature.gold_standard_md.strip().splitlines())
