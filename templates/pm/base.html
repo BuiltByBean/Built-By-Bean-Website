@@ -822,7 +822,7 @@
             {# Who may open this board. Owners only: a member has no
                business in the list of people, so the section is not
                drawn for them rather than drawn and refused. #}
-            {% if current_user.is_authenticated and (current_user.is_owner | default(false)) %}
+            {% if current_user.is_authenticated and (current_user.is_officer | default(false)) %}
             <div class="my-2 border-t border-white/10"></div>
             <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
                 Team</p>

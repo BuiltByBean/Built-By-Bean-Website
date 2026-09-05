@@ -16,9 +16,10 @@ class User(UserMixin, db.Model):
     last_name = db.Column(db.String(100), default="")
     email = db.Column(db.String(200), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), default="")
-    # owner runs the board and its people; member does the work. "admin"
-    # is the value every account carried before there were two, and it
-    # reads as owner so nothing that existed loses a door.
+    # Titles, not permissions: the officers (CEO, CTO, CMO) run the board
+    # and its people; a member does the work. "owner" and "admin" are the
+    # values accounts carried before there were titles, and they read as
+    # CEO so nothing that existed loses a door.
     role = db.Column(db.String(20), default="member")
     must_change_password = db.Column(db.Boolean, default=False)
     # Switched off rather than deleted: a person who has left still owns
@@ -27,15 +28,19 @@ class User(UserMixin, db.Model):
     last_login_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    ROLES = (("owner", "Owner"), ("member", "Member"))
+    ROLES = (("ceo", "CEO"), ("cto", "CTO"), ("cmo", "CMO"), ("member", "Member"))
+    OFFICER_ROLES = ("ceo", "cto", "cmo")
+    LEGACY_OFFICER_ROLES = ("owner", "admin")
 
     @property
-    def is_owner(self):
-        return self.role in ("owner", "admin")
+    def is_officer(self):
+        return self.role in self.OFFICER_ROLES or self.role in self.LEGACY_OFFICER_ROLES
 
     @property
     def role_label(self):
-        return "Owner" if self.is_owner else "Member"
+        if self.role in self.LEGACY_OFFICER_ROLES:
+            return "CEO"
+        return dict(self.ROLES).get(self.role, "Member")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

@@ -41,8 +41,8 @@
             <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ people | selectattr('is_active') | list | length }}</p>
         </div>
         <div class="glass-card p-4">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Owners</p>
-            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ owners }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Officers</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ officers }}</p>
         </div>
         <div class="glass-card p-4">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Switched off</p>
@@ -58,7 +58,7 @@
                     <div class="flex flex-wrap items-center gap-2 min-w-0">
                         <span class="font-medium text-white truncate max-w-full">{{ u.full_name }}</span>
                         <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider shrink-0
-                                     {{ 'bg-brand-500/10 text-brand-300' if u.is_owner else 'bg-white/5 text-surface-300' }}">{{ u.role_label }}</span>
+                                     {{ 'bg-brand-500/10 text-brand-300' if u.is_officer else 'bg-white/5 text-surface-300' }}">{{ u.role_label }}</span>
                         {% if not u.is_active %}
                         <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-red-500/10 text-red-300 shrink-0">Off</span>
                         {% elif u.must_change_password %}

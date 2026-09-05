@@ -173,7 +173,7 @@ def create_app():
                     first_name="Michael",
                     last_name="Bean",
                     email="michael@builtbybean.com",
-                    role="owner",
+                    role="ceo",
                     must_change_password=False,
                 )
                 admin.set_password(_admin_password)
@@ -189,7 +189,7 @@ def create_app():
                     first_name="T",
                     last_name="Lane",
                     email="tlane@builtbybean.com",
-                    role="owner",
+                    role="ceo",
                     must_change_password=True,
                 )
                 dev.set_password(_dev_password)
@@ -207,7 +207,7 @@ def create_app():
                     # Same person under an older username: adopt it, leave the
                     # password alone.
                     _mbean_by_email.username = "Mbean"
-                    _mbean_by_email.role = "owner"
+                    _mbean_by_email.role = "ceo"
                     db.session.commit()
                 else:
                     _mbean_password = os.environ.get("MBEAN_PASSWORD", "")
@@ -217,7 +217,7 @@ def create_app():
                             first_name="Matthew",
                             last_name="Bean",
                             email="mbean@builtbybean.com",
-                            role="owner",
+                            role="ceo",
                             must_change_password=False,
                         )
                         _mbean.set_password(_mbean_password)
