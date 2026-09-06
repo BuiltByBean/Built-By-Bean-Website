@@ -758,7 +758,10 @@ def get_overture(cache):
         got = con.execute(f"""
             SELECT id, names.primary AS name, categories.primary AS category,
                    taxonomy.hierarchy AS hierarchy,
-                   confidence, phones, websites, emails, socials, addresses,
+                   confidence, phones, websites, emails, socials,
+                   addresses[1].freeform AS street,
+                   addresses[1].locality AS locality,
+                   addresses[1].postcode AS postcode,
                    bbox.xmin AS lon, bbox.ymin AS lat
             FROM read_parquet('{src}', hive_partitioning=1)
             WHERE bbox.xmin BETWEEN {w} AND {e} AND bbox.ymin BETWEEN {s_} AND {n}
@@ -773,8 +776,17 @@ def get_overture(cache):
         row = dict(zip(cols, raw))
         for key in ("phones", "websites", "emails", "socials", "hierarchy"):
             row[key] = list(row.get(key) or [])
-        addr = row.get("addresses")
-        row["addresses"] = dict(addr) if hasattr(addr, "keys") else None
+        # The street, town and postcode are selected as their own columns
+        # rather than as one nested value. `addresses` is a LIST of structs,
+        # not a struct, so a `.keys()` test on it failed, every address
+        # silently became None for all 4,640 places, and the trade-area
+        # filter then judged three thousand of them out of the area and
+        # deleted them. Never guess how a driver shapes a nested type: ask
+        # for the fields, and let the query fail loudly if the shape is
+        # wrong. DuckDB lists are 1-indexed.
+        row["addresses"] = {"freeform": row.pop("street", None),
+                            "locality": row.pop("locality", None),
+                            "postcode": row.pop("postcode", None)}
         rows.append(row)
     print(f"  overture: {len(rows)} fetched")
     if cached:
