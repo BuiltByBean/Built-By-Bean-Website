@@ -65,6 +65,48 @@ TITLE_RE = re.compile("(" + "|".join(re.escape(t) for t in TITLES) + ")", re.I)
 # initial. Deliberately narrow.
 NAME_RE = re.compile(r"\b([A-Z][a-z'\-]{1,15}(?: [A-Z]\.?)? [A-Z][a-z'\-]{1,20})\b")
 
+# Forenames people are actually given. The surname can be anything, but the
+# first word has to be a name, or "Featured There" and "Founding Member"
+# become contacts. See the note at the top of the file.
+FORENAMES = set("""
+james robert john michael david william richard joseph thomas charles
+christopher daniel matthew anthony mark donald steven paul andrew joshua
+kenneth kevin brian george timothy ronald jason edward jeffrey ryan jacob
+gary nicholas eric jonathan stephen larry justin scott brandon benjamin
+samuel gregory alexander patrick frank raymond jack dennis jerry tyler
+aaron jose adam nathan henry zachary douglas peter kyle noah ethan jeremy
+walter christian keith roger terry austin sean gerald carl harold dylan
+arthur lawrence jordan jesse bryan billy bruce gabriel joe logan alan juan
+albert willie elijah wayne randy vincent mason roy ralph bobby russell
+bradley philip eugene shawn louis jeffery jimmy craig cody johnny luke
+ricky martin marcus danny dale curtis lee travis clarence chris tony jared
+mike glenn allen dean cameron jonathon derek warren barry alexis lonnie
+rodney bill jim tom dan bob ron rick steve dave mike ricardo
+mary patricia jennifer linda elizabeth barbara susan jessica sarah karen
+lisa nancy betty margaret sandra ashley kimberly emily donna michelle
+carol amanda dorothy melissa deborah stephanie rebecca sharon laura cynthia
+kathleen amy angela shirley anna brenda pamela emma nicole helen samantha
+katherine christine debra rachel carolyn janet catherine maria heather
+diane ruth julie olivia joyce virginia victoria kelly lauren christina joan
+evelyn judith megan andrea cheryl hannah jacqueline martha gloria teresa
+ann sara madison frances kathryn janice jean abigail alice julia judy
+sophia grace denise amber doris marilyn danielle beverly isabella theresa
+diana natalie brittany charlotte marie kayla alexis lori tammy tracy holly
+crystal robin jane brandi misty kandace kandice regina wanda tina dana
+leslie erin stacy monica jill cassandra sherry connie april tonya renee
+kristen lindsay whitney courtney kristin allison vicki bonnie shannon
+marla marsha marcia darlene charlene arlene earlene maxine geraldine
+bernice lorraine yolanda gwendolyn rosalind clarice bobbie billie jodie
+jodi jaime jamie kerry kelli kellie staci stacie traci tracie terri terrie
+sherri sheri cheri jeri gerri toni roni dee della nadine claudine
+kathi cathy kathie kate katie kim kimberley tammi tami pam pammy peg peggy
+sue susie suzy liz lizzie beth bethany becky becki jen jenny jenna
+abby gail gayle joann joanne jolene marlene charlie chuck hank hal
+gus otis clyde earl floyd wilbur delbert dewayne dwayne duane lyle merle
+orville virgil vernon marvin melvin alvin calvin elmer homer roscoe
+buster junior sonny cotton rusty dusty shorty jd tj cj rj bj
+""".split())
+
 # Words that mean the capitalised pair is a business, not a person.
 NOT_A_PERSON = re.compile(
     r"\b(llc|inc|company|corp|service|services|solutions|group|center|centre|"
@@ -73,7 +115,18 @@ NOT_A_PERSON = re.compile(
     r"wednesday|thursday|friday|saturday|sunday|january|february|march|april|"
     r"june|july|august|september|october|november|december|privacy|policy|"
     r"terms|contact|about|home|our|the|we|you|your|all rights|read more|"
-    r"learn more|get started|customer|reviews?|google|facebook|website)\b", re.I)
+    r"learn more|get started|customer|reviews?|google|facebook|website|"
+    # The words businesses end in. A forename plus one of these is a trading
+    # name, not a person: Christian Ministries, Russell Cellular.
+    r"ministries|ministry|cellular|department|distributing|distributors|"
+    r"industries|industrial|equipment|rentals|rental|systems|technologies|"
+    r"technology|associates|partners|brands|holdings|motors|foods|farms|"
+    r"ranch|chapel|temple|tabernacle|fellowship|outreach|assembly|"
+    r"enterprises|properties|investments|construction|plumbing|electric|"
+    r"heating|cooling|roofing|flooring|landscaping|trucking|transport|"
+    r"logistics|storage|wireless|communications|financial|mortgage|"
+    r"agency|studios|salon|barbers|bakery|grill|cafe|diner|pizza|"
+    r"chevrolet|ford|toyota|honda|dodge|nissan)\b", re.I)
 
 HEADCOUNT_RE = re.compile(
     r"(?:team of|staff of|employs|employing|workforce of|family of)\s+"
@@ -190,6 +243,13 @@ def name_from_email(mail):
         return ""
     if any(len(p) > 18 for p in parts):
         return ""
+    # prmc.gme@ and credit_department@ are shaped exactly like
+    # firstname.lastname@, so a mailbox has to pass the same forename test
+    # as a name read off a page.
+    if parts[0].lower() not in FORENAMES:
+        return ""
+    if NOT_A_PERSON.search(" ".join(parts)):
+        return ""
     return " ".join(p.capitalize() for p in parts)
 
 
@@ -219,7 +279,8 @@ def people_from(html):
     masked = "".join(masked)
 
     names = [(m.start(), m.end(), m.group(1)) for m in NAME_RE.finditer(masked)
-             if not NOT_A_PERSON.search(m.group(1))]
+             if not NOT_A_PERSON.search(m.group(1))
+             and m.group(1).split()[0].lower() in FORENAMES]
     if not names:
         return []
 
@@ -277,7 +338,15 @@ def revenue_from(text):
     return amount if 1000 <= amount <= 10_000_000_000 else None
 
 
-def read_site(site):
+def _own_name(business, person):
+    """A business is never its own contact."""
+    if not business:
+        return False
+    words = {w for w in re.findall(r"[a-z]{3,}", business.lower())}
+    return all(w in words for w in re.findall(r"[a-z]{3,}", person.lower()))
+
+
+def read_site(site, business=""):
     """Everything one business publishes about how to reach it."""
     host = urllib.parse.urlparse(site).netloc.lower()
     home = fetch(site)
@@ -300,6 +369,7 @@ def read_site(site):
     for person in people_from(blob):
         if not any(p["name"].lower() == person["name"].lower() for p in people):
             people.append({"name": person["name"], "role": person["role"], "email": ""})
+    people = [p for p in people if not _own_name(business, p["name"])]
 
     return {
         "emails": mails,
@@ -325,11 +395,12 @@ def run(recheck=False, workers=20, limit=None):
             leads = leads[:limit]
         print(f"{len(leads)} websites to read")
 
-        jobs = [(l.id, l.website) for l in leads]
+        jobs = [(l.id, l.website, l.name) for l in leads]
         got = {"email": 0, "phone": 0, "people": 0, "staff": 0, "revenue": 0}
         done = 0
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for (lead_id, _), found in zip(jobs, pool.map(lambda j: read_site(j[1]), jobs)):
+            for (lead_id, _, _n), found in zip(
+                    jobs, pool.map(lambda j: read_site(j[1], j[2]), jobs)):
                 done += 1
                 if not found:
                     continue

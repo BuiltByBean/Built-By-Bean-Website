@@ -49,6 +49,18 @@ PARKED = re.compile(
 
 TLDS = ("com", "net", "org")
 
+# Names that resolve to something famous rather than the shop down the road.
+NEVER_THEIRS = {
+    "whitehouse.com", "whitehouse.net", "whitehouse.org", "google.com",
+    "facebook.com", "amazon.com", "wikipedia.org", "youtube.com", "apple.com",
+    "microsoft.com", "walmart.com", "target.com", "yelp.com", "ebay.com",
+    "craigslist.org", "linkedin.com", "twitter.com", "instagram.com",
+    "pinterest.com", "reddit.com", "netflix.com", "paypal.com", "ups.com",
+    "fedex.com", "usps.com", "irs.gov", "texas.gov", "weather.com",
+    "mapquest.com", "tripadvisor.com", "booking.com", "expedia.com",
+    "homedepot.com", "lowes.com", "bestbuy.com", "costco.com", "kroger.com",
+}
+
 
 def tokens(name):
     bare = re.sub(r"[^a-z0-9 ]+", " ", (name or "").lower())
@@ -119,15 +131,27 @@ def theirs(html, name, city):
     words = [w for w in tokens(name) if len(w) > 3]
     hits = sum(1 for w in words if w in text)
     town = (city or "").strip().lower()
-    # Their own name in their own words, or the name plus the town they are in.
+    local = (town and len(town) > 3 and town in text) or " texas" in text or " tx " in text
+
+    # A name made of ordinary words - The White House, Main Street Market -
+    # proves nothing by appearing on a page. It has to be somewhere near home.
+    ordinary = {"white", "house", "main", "street", "corner", "star", "sun",
+                "moon", "river", "lake", "hill", "park", "green", "blue",
+                "red", "gold", "silver", "north", "south", "east", "west",
+                "first", "best", "good", "great", "little", "big", "new",
+                "old", "family", "home", "city", "town", "country", "farm",
+                "quality", "service", "center", "central"}
+    if words and all(w in ordinary for w in words):
+        return bool(hits >= 2 and local)
+
     if hits >= 2:
         return True
-    return bool(hits >= 1 and town and len(town) > 3 and town in text)
+    return bool(hits >= 1 and local)
 
 
 def look(name, city):
     for domain in candidates(name):
-        if not resolves(domain):
+        if domain in NEVER_THEIRS or not resolves(domain):
             continue
         for scheme in ("https", "http"):
             final, html = fetch(f"{scheme}://{domain}")
@@ -138,17 +162,33 @@ def look(name, city):
     return ""
 
 
-def run(recheck=False, workers=32, limit=None):
+def run(recheck=False, workers=32, limit=None, reguess=False):
     from app import create_app
     from models import db, Lead
 
     app = create_app()
     with app.app_context():
-        query = Lead.query if recheck else Lead.query.filter(Lead.website_checked_at.is_(None))
+        if reguess:
+            # Only the ones this file guessed. A website that came from a
+            # places dataset was published by somebody who knows the
+            # business, and is better evidence than a guess.
+            query = Lead.query.filter(
+                Lead.website.isnot(None), Lead.website != "",
+                ~Lead.sources.like("%overture%"), ~Lead.sources.like("%openstreetmap%"))
+        elif recheck:
+            query = Lead.query
+        else:
+            query = Lead.query.filter(Lead.website_checked_at.is_(None))
         leads = query.all()
         if limit:
             leads = leads[:limit]
         # One that a source already handed us is checked and found.
+        if reguess:
+            # Every one of them is re-tested from scratch, so the website
+            # comes off first and only goes back if it still proves out.
+            for lead in leads:
+                lead.website = ""
+            db.session.commit()
         known = [l for l in leads if (l.website or "").strip()]
         hunt = [l for l in leads if not (l.website or "").strip()]
         print(f"{len(leads)} to check: {len(known)} already have one on file, "
@@ -186,4 +226,4 @@ if __name__ == "__main__":
     cap = None
     if "--limit" in args:
         cap = int(args[args.index("--limit") + 1])
-    run(recheck="--recheck" in args, limit=cap)
+    run(recheck="--recheck" in args, limit=cap, reguess="--reguess" in args)

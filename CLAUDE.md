@@ -198,7 +198,11 @@ blank: it gets repeated on the phone.
 `check_websites.py` goes and looks: for each business it builds the domains
 that business would plausibly own, resolves them, fetches what exists and
 reads the page to decide whether it is really theirs, refusing registrar
-holding pages. A hit is proof; a miss is recorded as `website_checked_at`
+holding pages. A name made only of ordinary words has to see its own town or
+its state on the page as well, and a short list of famous domains is never
+anybody's: a shop called The White House was matched to whitehouse.com,
+which then supplied a contact named Donald Trump. `--reguess` re-tests only
+the websites this file guessed, never one a places dataset published. A hit is proof; a miss is recorded as `website_checked_at`
 with no website, which is why the tile says "no site found" rather than "no
 website". Of 3,746 businesses it found 1,046 sites nobody had listed, and
 2,591 have none to be found. Before it existed the board printed that
@@ -227,13 +231,29 @@ day the sales tax began, and that is stored as no date rather than rendered
 as sixty-five years of trading.
 
 `enrich_sites.py` then reads each business's own website: the emails and
-telephone numbers on its contact page, and the PEOPLE - a name off a
-personal mailbox (john.smith@ is close to certain), then names sitting
-beside a job title in the page's own words. Titles are masked out of the
-text before names are looked for, because a non-overlapping scan reads
-"Owner Marla" as a name and, having eaten it, never offers "Marla Quinn".
-A headcount is taken only where the business states one itself ("a team of
-fourteen"); nothing is estimated, ever, for the reason above.
+telephone numbers on its contact page, and the PEOPLE. A headcount is taken
+only where the business states one itself ("a team of fourteen"); nothing is
+estimated, ever, for the reason above.
+
+Getting a NAME right is harder than it looks and the first two attempts both
+shipped rubbish onto a live call sheet. "Featured There", "Founding Member"
+and "Athletics Athletics" all arrived as contacts, because any two
+capitalised words beside a job title look like a person and page headings
+are exactly that shape. Then "Prmc Gme" and "Credit Department" arrived from
+mailboxes shaped like firstname.lastname@, and "Christian Ministries" and
+"Russell Cellular" from business names whose first word happens to be a
+forename. Four rules now, and they cost recall on purpose:
+
+  - titles are MASKED out of the text before names are looked for, because a
+    non-overlapping scan reads "Owner Marla" as a name and, having eaten it,
+    never offers "Marla Quinn";
+  - the first word must be a forename people are actually given, from a
+    list, and that applies to mailbox-derived names too;
+  - the second word must not be a word businesses end in (ministries,
+    cellular, distributing, roofing);
+  - and a name wholly inside the business's own name is the business.
+
+A wrong name is worse than a blank one, because somebody reads it out.
 
 `dedupe_key` (flattened trading name plus house number and street) is what
 makes the import re-runnable, and the loader never overwrites a phone,
