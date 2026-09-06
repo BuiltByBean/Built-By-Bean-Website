@@ -143,16 +143,29 @@
     {% if unlinked %}
     {# The one thing typed in here: which repository a project lives in,
        so the audit's findings have a project to land on. Suggested from a
-       shared word in the names, confirmed with one press. relative z-20:
-       each row's dropdown panel must paint over the row below it. #}
-    <div class="glass-card overflow-hidden">
+       shared word in the names, confirmed with one press.
+
+       Every row used to carry `relative z-20`, which is a TIE, and a tie in
+       the stacking order goes to whoever is later in the DOM - so each row's
+       panel was painted over by the row beneath it, exactly the LM-1 failure
+       the class was added to prevent. Ordering the rows top to bottom only
+       moves the problem: the last row's panel opens UPWARD and is then
+       painted over by the row above it.
+
+       Whichever way the panel goes, the row that has the open dropdown is
+       the one that has to be on top, and the browser already knows which one
+       that is. `focus-within:z-30` raises it and nothing else, with no state
+       to keep. And no `overflow-hidden` on the card: an upward panel from the
+       first row reaches past its top edge and a clipping ancestor eats it. #}
+    <div class="glass-card">
         <div class="px-4 sm:px-5 py-3 border-b border-white/5">
             <span class="text-xs font-semibold uppercase tracking-wider text-amber-300">Projects with no repository linked</span>
         </div>
         <div class="divide-y divide-white/5">
             {% for p in unlinked %}
             <form method="POST" action="{{ url_for('cerebro.link_repo') }}"
-                  class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 relative z-20">
+                  class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3
+                         relative focus-within:z-30">
                 <input type="hidden" name="project_id" value="{{ p.id }}">
                 <input type="hidden" name="next" value="{{ link() }}">
                 <div class="min-w-0 flex-1">

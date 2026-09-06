@@ -57,6 +57,7 @@
      {% if model %}x-modelable="value" x-model="{{ model }}"{% endif %}
      {% if reaction %}@dropdown-change="{{ reaction|join('; ') }}"{% endif %}
      @dropdown-set-options.window="setOptions($event.detail)"
+     @dropdown-set-options="setOptions($event.detail)"
      @click.outside="close(false)">
 
   <button type="button"
@@ -97,13 +98,24 @@
     </svg>
   </button>
 
-  {#- w-max over min-w-full: in a five-column triage grid the column is
-      narrower than "Not classified", and a panel pinned to the trigger's width
-      wraps every row onto three lines. -#}
+  {#- `w-full`, and nothing else that touches width: the panel is the control
+      continued, so its left and right edges are the trigger's (catalogue rule
+      "A dropdown panel is exactly as wide as its control"). This used to be
+      `w-max` with a max-width cap, on the argument that a tight triage column
+      is narrower than "Not classified" - and it opened 90px wider than the
+      button it belonged to, hanging over the filter beside it. A long label
+      wraps instead, which is the price and it is the right one.
+
+      Two boxes, not one: this outer box owns the height and hides overflow,
+      the search header stands still because it is NOT in the scroller, and
+      the rows below are the only thing that scrolls. Sticky was tried and
+      leaves a gap - a sticky child is clamped to its containing block, the
+      scroller's CONTENT box, while it is offset against the padding box, so
+      rows scrolled up through the top 6px of padding and read in the clear
+      above the search box. Catalogue rule "A filter box never scrolls with
+      what it filters". -#}
   <div x-show="open" x-cloak
        x-ref="list"
-       role="listbox"
-       :aria-label="'{{ name }}'"
        x-transition:enter="transition ease-out duration-150"
        x-transition:enter-start="opacity-0 scale-95"
        x-transition:enter-end="opacity-100 scale-100"
@@ -111,8 +123,7 @@
        x-transition:leave-start="opacity-100 scale-100"
        x-transition:leave-end="opacity-0 scale-95"
        :class="dropUp ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'"
-       class="absolute z-50 left-0 min-w-full w-max max-w-[min(20rem,calc(100vw-3rem))]
-              max-h-64 overflow-y-auto overscroll-contain p-1.5
+       class="absolute z-50 left-0 w-full flex flex-col max-h-64 overflow-hidden
               bg-surface-800 border border-white/10
               rounded-xl shadow-xl shadow-black/50">
     {#- Past a dozen options the panel carries a search box (catalogue rule:
@@ -120,7 +131,7 @@
         while the arrows move a highlighted index, so typing and stepping do
         not fight. -#}
     <template x-if="searchable">
-      <div class="sticky top-0 -mt-1.5 -mx-1.5 mb-1 px-1.5 pt-1.5 pb-1 bg-surface-800 border-b border-white/5">
+      <div class="shrink-0 p-1.5 border-b border-white/5">
         <input x-ref="search" type="text" x-model="query" placeholder="Search"
                autocomplete="off" spellcheck="false"
                @click.stop @keydown.arrow-down.prevent="move(1)"
@@ -134,41 +145,45 @@
       </div>
     </template>
 
-    {#- Rendered by Alpine so setOptions can swap the list live. `shown` keeps
-        each option's original index, so a filtered list still addresses the
-        same rows. The key carries the index as well as the value, because a
-        caller-supplied list is allowed to be momentarily imperfect and two
-        rows sharing a value must not blow up the render. -#}
-    <template x-for="({ o, i }) in shown" :key="i + ':' + o.v">
-      <button type="button"
-              :id="$id('bbbsel', i)"
-              role="option"
-              :aria-selected="isPicked(i)"
-              tabindex="-1"
-              @click="pick(i)"
-              @mouseenter="active = i"
-              class="flex items-center gap-2 w-full text-left rounded-xl transition-colors duration-100
-                     {% if sm %}px-2.5 py-1.5 text-xs{% else %}px-3 py-2 text-sm{% endif %}"
-              :class="isPicked(i)
-                        ? 'bg-brand-500/15 text-brand-300 font-semibold'
-                        : (active === i
-                            ? 'bg-white/[0.07] text-surface-100'
-                            : 'text-surface-300')">
-        <span class="flex-1 truncate" x-text="o.l"></span>
-        {#- A tick as well as the colour, so "which one is set" survives being
-            read by someone who cannot see the tint. Toggled by class, never
-            x-show: a descendant x-show inside this x-for makes the panel's
-            own x-show transition wait on it forever (the cascade), and the
-            panel then never opens. See CLAUDE.md LM-4. -#}
-        <svg :class="isPicked(i) ? '' : 'hidden'" class="w-3.5 h-3.5 shrink-0 text-brand-400"
-             fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-        </svg>
-      </button>
-    </template>
+    <div x-ref="rows" role="listbox" :aria-label="'{{ name }}'"
+         class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5">
 
-    <p x-show="searchable && !shown.length" x-cloak
-       class="px-3 py-2 text-xs text-surface-500">Nothing matches that</p>
+      {#- Rendered by Alpine so setOptions can swap the list live. `shown` keeps
+          each option's original index, so a filtered list still addresses the
+          same rows. The key carries the index as well as the value, because a
+          caller-supplied list is allowed to be momentarily imperfect and two
+          rows sharing a value must not blow up the render. -#}
+      <template x-for="({ o, i }) in shown" :key="i + ':' + o.v">
+        <button type="button"
+                :id="$id('bbbsel', i)"
+                role="option"
+                :aria-selected="isPicked(i)"
+                tabindex="-1"
+                @click="pick(i)"
+                @mouseenter="active = i"
+                class="flex items-center gap-2 w-full text-left rounded-xl transition-colors duration-100
+                       {% if sm %}px-2.5 py-1.5 text-xs{% else %}px-3 py-2 text-sm{% endif %}"
+                :class="isPicked(i)
+                          ? 'bg-brand-500/15 text-brand-300 font-semibold'
+                          : (active === i
+                              ? 'bg-white/[0.07] text-surface-100'
+                              : 'text-surface-300')">
+          <span class="flex-1 min-w-0 break-words" x-text="o.l"></span>
+          {#- A tick as well as the colour, so "which one is set" survives being
+              read by someone who cannot see the tint. Toggled by class, never
+              x-show: a descendant x-show inside this x-for makes the panel's
+              own x-show transition wait on it forever (the cascade), and the
+              panel then never opens. See CLAUDE.md LM-4. -#}
+          <svg :class="isPicked(i) ? '' : 'hidden'" class="w-3.5 h-3.5 shrink-0 text-brand-400"
+               fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </button>
+      </template>
+
+      <p x-show="searchable && !shown.length" x-cloak
+         class="px-3 py-2 text-xs text-surface-500">Nothing matches that</p>
+    </div>
   </div>
 
   <input type="hidden" name="{{ name }}" x-ref="input" value="{{ sel_str }}" :value="value">

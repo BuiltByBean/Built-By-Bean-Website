@@ -463,9 +463,46 @@
                             const stale = document.querySelector('[data-live="' + key + '"]');
                             if (stale) stale.replaceWith(document.adoptNode(node));
                         });
+                        this.recount(fresh);
                         history.replaceState(null, '', url);
                     })
                     .catch(() => { location.assign(url); });
+            },
+
+            /* The counts beside each filter option describe the list under
+               the OTHER filters, so picking a town changes every trade's
+               count. The server computes them per request; without this they
+               would sit at whatever the last full page load said, and picking
+               "Pet grooming (1)" after picking Paris would land on an empty
+               page again - the exact dead end the faceted counts were built
+               to close.
+
+               Handed to each control rather than swapped as DOM: a swap
+               would drop keyboard focus and re-initialise the component that
+               was just used. And dispatched at the ELEMENT, not the window,
+               because a page legitimately has two dropdowns of one name - the
+               stage filter in the bar and the stage picker in every open row
+               - and only the one in the bar is being recounted. */
+            recount(fresh) {
+                const box = fresh.querySelector('[data-live-filters]');
+                const here = document.querySelector('[data-live-filters]');
+                if (!box || !here) return;
+                box.querySelectorAll('[x-data^="bbbSelect("]').forEach(node => {
+                    let config;
+                    try {
+                        /* x-data='bbbSelect({...})' - the ten characters of
+                           the call and its closing bracket come off, and what
+                           is left is the |tojson the macro wrote. */
+                        config = JSON.parse(node.getAttribute('x-data').slice(10, -1));
+                    } catch (e) { return; }
+                    const mine = here.querySelector(
+                        'input[type="hidden"][name="' + config.name + '"]');
+                    const target = mine ? mine.closest('[x-data^="bbbSelect("]') : null;
+                    if (!target) return;
+                    target.dispatchEvent(new CustomEvent('dropdown-set-options', {
+                        detail: { name: config.name, options: config.options },
+                    }));
+                });
             },
         }));
 

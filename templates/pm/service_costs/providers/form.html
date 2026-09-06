@@ -150,7 +150,9 @@
                        class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
             </div>
 
-            <div x-show="{{ manual_monthly|tojson }}.includes(providerType)">
+            {#- Single quotes: |tojson writes double ones and they would end
+                the attribute at the first provider name. -#}
+            <div x-show='{{ manual_monthly|tojson }}.includes(providerType)'>
                 <p class="text-sm font-medium text-surface-300">Costs are entered per project</p>
                 {% if editing %}
                 <a href="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"

@@ -45,6 +45,7 @@
     <input type="hidden" name="f_stage" value="{{ filters.stage }}">
     <input type="hidden" name="f_industry" value="{{ filters.industry }}">
     <input type="hidden" name="f_website" value="{{ filters.website }}">
+    <input type="hidden" name="f_age" value="{{ filters.age }}">
     <input type="hidden" name="f_untried" value="{{ '1' if filters.untried else '' }}">
     <input type="hidden" name="f_sort" value="{{ filters.sort }}">
     <input type="hidden" name="f_page" value="{{ pagination.page }}">
@@ -52,7 +53,7 @@
 
 {% block content %}
 {% set channel_labels = dict(channel_choices) %}
-{% set filtering = filters.q or filters.city or filters.stage or filters.industry or filters.website or filters.untried %}
+{% set filtering = filters.q or filters.city or filters.stage or filters.industry or filters.website or filters.age or filters.untried %}
 
 <div class="space-y-4">
 
@@ -63,6 +64,7 @@
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Businesses</p>
             <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ counts.total | commas }}</p>
+            <p class="text-[10px] text-surface-500 mt-0.5">{{ counts.new_year | commas }} opened in the last year</p>
         </div>
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">No site found</p>
@@ -100,40 +102,46 @@
                 {# Each control says what it filters. Options are A to Z with
                    their counts in the label, and the long ones carry a search
                    box from the component. #}
-                <div class="flex flex-wrap items-end gap-2 sm:gap-3">
+                <div data-live-filters class="flex flex-wrap items-end gap-2 sm:gap-3">
                     {% set city_opts = [("", "All towns")] %}
                     {% for c, n in cities %}{% set _ = city_opts.append((c, c ~ " (" ~ n|commas ~ ")")) %}{% endfor %}
-                    <label class="min-w-0">
+                    <label class="min-w-0 w-[calc(50%-0.25rem)] sm:w-[13rem]">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Town</span>
                         {{ select_dropdown("city", city_opts, filters.city, "All towns",
-                                           on_change="apply()", extra_class="max-w-[11rem]") }}
+                                           on_change="apply()") }}
                     </label>
 
                     {% set trade_opts = [("", "All trades")] %}
                     {% for i, n in industries %}{% set _ = trade_opts.append((i, i ~ " (" ~ n|commas ~ ")")) %}{% endfor %}
-                    <label class="min-w-0">
+                    <label class="min-w-0 w-[calc(50%-0.25rem)] sm:w-[16rem]">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Trade</span>
                         {{ select_dropdown("industry", trade_opts, filters.industry, "All trades",
-                                           on_change="apply()", extra_class="max-w-[14rem]") }}
+                                           on_change="apply()") }}
                     </label>
 
-                    <label class="min-w-0">
+                    <label class="min-w-0 w-[calc(50%-0.25rem)] sm:w-[13rem]">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Stage</span>
                         {{ select_dropdown("stage", [("", "All stages")] + stage_opts, filters.stage, "All stages",
-                                           on_change="apply()", extra_class="max-w-[13rem]") }}
+                                           on_change="apply()") }}
                     </label>
 
-                    <label class="min-w-0">
+                    <label class="min-w-0 w-[calc(50%-0.25rem)] sm:w-[14rem]">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Website</span>
                         {{ select_dropdown("website", [("", "Either")] + site_opts,
                                            filters.website, "Either",
-                                           on_change="apply()", extra_class="max-w-[13rem]") }}
+                                           on_change="apply()") }}
                     </label>
 
-                    <label class="min-w-0">
+                    <label class="min-w-0 w-[calc(50%-0.25rem)] sm:w-[13rem]">
+                        <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Started</span>
+                        {{ select_dropdown("age", [("", "Any age")] + age_opts, filters.age, "Any age",
+                                           on_change="apply()") }}
+                    </label>
+
+                    <label class="min-w-0 w-[calc(50%-0.25rem)] sm:w-[14rem]">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Sort by</span>
                         {{ select_dropdown("sort", sorts, filters.sort, "Untried, oldest first",
-                                           on_change="apply()", extra_class="max-w-[13rem]") }}
+                                           on_change="apply()") }}
                     </label>
 
                     <span class="inline-flex items-center min-h-[44px]" @change="apply()">
@@ -283,8 +291,14 @@
                             {% endfor %}
                         </div>
 
+                        {#- Single quotes on the attribute, because |tojson writes
+                            DOUBLE ones and a double-quoted attribute ends at the
+                            first of them: this shipped as x-show="[" and Alpine
+                            threw on every row, so the buttons that record how a
+                            call went never appeared at all. Catalogue rule "Data
+                            into an HTML attribute". -#}
                         <div class="flex flex-wrap gap-2" x-cloak
-                             x-show="{{ reached_outcomes|tojson }}.includes(outcome)">
+                             x-show='{{ reached_outcomes|tojson }}.includes(outcome)'>
                             <input type="hidden" name="went" :value="went">
                             {% for key, label in went_choices %}{% if key %}
                             <button type="button" @click="went = (went === '{{ key }}' ? '' : '{{ key }}')"

@@ -8,7 +8,7 @@ survive a round trip per call.
 Nothing here is officer-only: this is the marketing seat's page, and the
 CMO is who lives in it.
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, abort)
@@ -30,10 +30,22 @@ PER_PAGE = 25
 # somebody's head about a list of strangers.
 SORTS = [
     ("best", "Untried, oldest first"),
+    ("newest", "Newest business first"),
     ("name", "Name, A to Z"),
     ("city", "Town, then name"),
     ("oldest", "Longest trading"),
     ("touched", "Tried most recently"),
+]
+
+# A business that opened in the last year is the one that needs a website and
+# has not settled on anybody yet, so it is a filter of its own rather than
+# something to find by sorting. Counted in days, not calendar months: the
+# Comptroller files a start date and nobody is served by an argument over
+# whether the 29th of February exists this year.
+AGES = [
+    ("12m", "Last 12 months", 365),
+    ("24m", "Last 2 years", 730),
+    ("5y", "Last 5 years", 1826),
 ]
 
 
@@ -49,6 +61,7 @@ def index():
     stage = _clean(request.args.get("stage"), 30)
     industry = _clean(request.args.get("industry"), 120)
     website = _clean(request.args.get("website"), 10)
+    age = _clean(request.args.get("age"), 10)
     untried = request.args.get("untried") == "1"
     sort = _clean(request.args.get("sort"), 20) or "best"
     page = max(1, request.args.get("page", type=int) or 1)
@@ -57,6 +70,18 @@ def index():
     # "None found" means checked and nothing found, never merely blank.
     no_site_yet = and_(Lead.website_checked_at.isnot(None),
                        or_(Lead.website.is_(None), Lead.website == ""))
+
+    ages = dict((key, days) for key, _label, days in AGES)
+
+    def started_since(days):
+        """Trading for less than this long, as far as the record shows.
+
+        A blank start date is not young: two thirds of the list has no date
+        on file, and sweeping those in would turn "new business" into
+        "business we know least about".
+        """
+        return and_(Lead.started_on.isnot(None),
+                    Lead.started_on >= date.today() - timedelta(days=days))
 
     def narrowed(skip=""):
         """The list under every filter except one.
@@ -85,6 +110,8 @@ def index():
             elif website == "social":
                 # A page on somebody else's platform and nothing of their own.
                 q = q.filter(no_site_yet, Lead.social.isnot(None), Lead.social != "")
+        if age in ages and skip != "age":
+            q = q.filter(started_since(ages[age]))
         if untried and skip != "untried":
             # Nobody has logged anything against it yet.
             q = q.filter(~Lead.touches.any())
@@ -94,7 +121,10 @@ def index():
 
     no_start = case((Lead.started_on.is_(None), 1), else_=0)
 
-    if sort == "name":
+    if sort == "newest":
+        # Newest first, and the undated at the back: no date is not new.
+        query = query.order_by(no_start, Lead.started_on.desc(), Lead.name)
+    elif sort == "name":
         query = query.order_by(Lead.name)
     elif sort == "city":
         query = query.order_by(Lead.city, Lead.name)
@@ -139,6 +169,13 @@ def index():
                   for key, label in CLIENT_STAGE_CHOICES
                   if stage_rows.get(key) or key == stage]
 
+    age_scope = narrowed("age").order_by(None)
+    age_opts = []
+    for key, label, days in AGES:
+        n = age_scope.filter(started_since(days)).count()
+        if n or key == age:
+            age_opts.append((key, f"{label} ({n:,})"))
+
     site_scope = narrowed("website").order_by(None)
     site_opts = []
     for key, label, where in (
@@ -171,18 +208,21 @@ def index():
         "untried": tally(~Lead.touches.any()),
         "talking": tally(Lead.stage.in_(("contacted", "in_conversation", "proposal_sent"))),
         "unchecked": tally(Lead.website_checked_at.is_(None)),
+        # The target market for this business: opened inside a year and
+        # therefore has not bought a website from anybody yet.
+        "new_year": tally(started_since(365)),
     }
 
     return render_template(
         "pm/leads/index.html",
         leads=pagination.items, pagination=pagination, counts=counts,
-        cities=cities, industries=industries, sorts=SORTS,
+        cities=cities, industries=industries, sorts=SORTS, age_opts=age_opts,
         stage_choices=CLIENT_STAGE_CHOICES, stage_opts=stage_opts, site_opts=site_opts,
         channel_choices=CONTACT_CHANNEL_CHOICES,
         outcome_choices=LEAD_OUTCOME_CHOICES, went_choices=LEAD_WENT_CHOICES,
         reached_outcomes=list(LEAD_OUTCOMES_REACHED),
         filters={"q": search, "city": city, "stage": stage, "industry": industry,
-                 "website": website, "untried": untried, "sort": sort})
+                 "website": website, "age": age, "untried": untried, "sort": sort})
 
 
 def _back(lead_id=None):
@@ -194,7 +234,8 @@ def _back(lead_id=None):
     the list under her.
     """
     args = {}
-    for key in ("q", "city", "stage", "industry", "website", "untried", "sort", "page"):
+    for key in ("q", "city", "stage", "industry", "website", "age", "untried",
+                "sort", "page"):
         value = request.form.get("f_" + key) or request.args.get(key)
         if value:
             args[key] = value

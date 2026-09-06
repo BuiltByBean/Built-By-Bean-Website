@@ -210,6 +210,14 @@ absence straight off an empty column, which is this repo's own Cerebro
 principle broken in its own words: zero hits from a check that never ran
 reads exactly like a clean result.
 
+A business that opened in the last twelve months is the one that has not
+bought a website from anybody yet, so "Started" is a filter of its own rather
+than something to reach by sorting: three windows (12 months, 2 years, 5
+years) counted in days against `started_on`, with a blank start date counted
+as no answer rather than as young. 342 of the 5,740 opened in the last year
+and 252 of those have no site found, which is the call list this page exists
+to produce.
+
 The tiles count the FILTERED query, not the table, and every number on the
 board wears its commas (catalogue rule "Numbers wear their commas"). The
 filter options are alphabetical, each control is labelled with what it
@@ -333,6 +341,12 @@ that one place, so no two documents can describe it differently.
 - **A pushed commit is not a deployed commit.** Check
   `railway deployment list` for SUCCESS on the new deploy, then verify
   against the public URL, never the container.
+- **An expression built from `|tojson` goes in a SINGLE-quoted attribute.**
+  `|tojson` escapes `<`, `>`, `&` and `'` and leaves `"` alone, so
+  `x-show="{{ list|tojson }}.includes(x)"` ends at the first double quote it
+  writes. It shipped as `x-show="["`, Alpine threw on every row, and the
+  buttons that record how a call went were never once on the screen. Grep:
+  `rg -n 'x-[a-z]+="\{\{[^"]*tojson' templates/`.
 - **PowerShell mangles UTF-8.** Never round-trip a template through
   `Get-Content | Set-Content` - the box-drawing and arrow characters in
   comments come out as mojibake. Use targeted editing tools.
@@ -555,6 +569,56 @@ rg -n 'name="monthly_price"' templates/pm/products/index.html
 ```
 The first: any hit is the regression. The second: exactly one hit, in the
 sell dialog, never in the row.
+
+### LM-7 - the panel was wider than the button, and the rows read over the search box
+
+**What happened.** The owner photographed the town filter on the leads page:
+the open panel stood 90px wider than the button that opened it and hung over
+the filter beside it, and the option rows scrolled up through a strip above
+the search box and read in the clear. Both faults were in the shared
+`select_dropdown`, so both were on every picker in the product.
+
+The width was deliberate and wrong. `min-w-full w-max max-w-[20rem]` was
+written because a five-column triage grid is narrower than "Not classified"
+and a panel pinned to the trigger wraps rows onto three lines. Wrapped rows
+are the correct outcome; a panel that does not belong to its button is not.
+
+The bleed was `position: sticky; top: 0` on the search header inside the
+scrolling panel. A sticky child is clamped to its CONTAINING BLOCK, the
+scroller's content box, while it is offset against the scrollport, the
+padding box: with `p-1.5` on the scroller the header could never rise into
+the top 6px, and rows scrolled up through it. Measured: panel top 394,
+header top 401.
+
+**Why it is easy to do.** Both are invisible in a screenshot of a closed
+control, and the bleed needs more rows than fit before it exists at all.
+Sticky reads as the one-line fix for a header that must stay put, and it is
+correct everywhere except inside a box with padding, which is every panel in
+this app.
+
+**The rule.** The panel is `w-full` of the trigger's wrapper and carries
+nothing else that touches width; a long label wraps (`break-words`, never
+`truncate`, because the panel is no longer allowed to grow to fit it). The
+search box is a `shrink-0` SIBLING of the rows, which are the only scroller,
+inside a `flex flex-col overflow-hidden` panel - nothing sticks to anything.
+Both are catalogue rules now: "A dropdown panel is exactly as wide as its
+control" and "A filter box never scrolls with what it filters".
+
+And the row that holds an open dropdown is the row that paints on top,
+whichever way the panel opened. Cerebro's repo list gave every row `relative
+z-20`, which is a TIE that the later sibling wins, so each panel was covered
+by the row below it; ordering the rows top to bottom only moved the fault to
+the last row, whose panel opens UPWARD into the row above. `focus-within:z-30`
+on the row is the whole fix, with no state to keep, because the browser
+already knows which row is being used.
+
+**Grep.**
+```
+rg -n "w-max|max-w-\[min\(" templates/pm/components/select_dropdown.html
+rg -n "sticky top-0" templates/pm
+```
+Any hit in the first is the width regression. The second: a filter box inside
+the thing it filters.
 
 ### LM-6 - the merge kept the wrong row, and the seed that fixed it took the site down
 
