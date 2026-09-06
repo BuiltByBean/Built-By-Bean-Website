@@ -169,9 +169,13 @@ open is a call list nobody works.
 The list is every business in the Paris trade area with EVIDENCE OF
 TRADING, built by `import_leads.py` out of public records: the
 Comptroller's Active Sales Tax Permit Holders (the spine, with trading
-name, street, NAICS, and the date they started selling), the FMCSA motor
-carrier census, the CMS provider registry, OpenStreetMap, and the business
-licences from TDLR. Active Franchise Taxpayers ENRICH and never create,
+name, street, NAICS, and the date they started selling), **Overture Maps
+places** (the only source that carries contact details at scale - four
+thousand places for this area with telephone numbers, emails, websites and
+social pages; read straight off its public parquet with DuckDB over S3, and
+skipped with a message if DuckDB is missing), the FMCSA motor carrier
+census, the CMS provider registry, OpenStreetMap, and the business licences
+from TDLR. Active Franchise Taxpayers ENRICH and never create,
 because a registration proves an entity exists and nothing more. Lamar,
 Red River and Delta counties plus the eastern edge of Fannin; Bonham,
 Leonard, Trenton, Savoy and Whitewright are forty to sixty miles out
@@ -204,10 +208,17 @@ reads exactly like a clean result.
 
 The tiles count the FILTERED query, not the table, and every number on the
 board wears its commas (catalogue rule "Numbers wear their commas"). The
-filter options are alphabetical with their counts in the label, each control
-is labelled with what it filters, and the long ones carry a search box from
-`select_dropdown` (catalogue rule "A long filter list is searchable and
-alphabetical"). The sort options say what they do; "Best bets" said nothing.
+filter options are alphabetical, each control is labelled with what it
+filters, and the long ones carry a search box from `select_dropdown`
+(catalogue rule "A long filter list is searchable and alphabetical").
+
+Every filter's counts are FACETED: `narrowed(skip=...)` builds the list
+under all the filters except one, so a trade's count means "how many of what
+you are looking at", and an option that would return nothing is not offered.
+Picking Paris and then "Pet grooming (1)" used to return an empty page,
+because the 1 was counted over the whole table and that groomer is in
+Blossom. Whatever is already chosen stays in its own list even at zero, or
+the control cannot show its own value. The sort options say what they do; "Best bets" said nothing.
 One vocabulary names each trade, because a map, a licence file and an
 industry code called the same shop Restaurant, Restaurants and bars, and
 Restaurants and cafes, and filtering to one of the three silently hid the
@@ -215,10 +226,24 @@ other two. The Comptroller files an unknown start date as 1961-09-01, the
 day the sales tax began, and that is stored as no date rather than rendered
 as sixty-five years of trading.
 
+`enrich_sites.py` then reads each business's own website: the emails and
+telephone numbers on its contact page, and the PEOPLE - a name off a
+personal mailbox (john.smith@ is close to certain), then names sitting
+beside a job title in the page's own words. Titles are masked out of the
+text before names are looked for, because a non-overlapping scan reads
+"Owner Marla" as a name and, having eaten it, never offers "Marla Quinn".
+A headcount is taken only where the business states one itself ("a team of
+fourteen"); nothing is estimated, ever, for the reason above.
+
 `dedupe_key` (flattened trading name plus house number and street) is what
 makes the import re-runnable, and the loader never overwrites a phone,
 email, website or owner that somebody typed over it, nor any stage, note or
-person added on the board. Re-run it with
+person added on the board. `norm()` folds "and" into "&", because that is
+the commonest way one business is spelled two ways between a tax roll and a
+map, and a merge pass at the end of the import folds any that still arrive
+twice into the row that knows most - never one somebody has worked. The
+`sources` column keeps marks the import does not own, so a re-import does
+not make `enrich_sites.py` redo every site. Re-run it with
 `python import_leads.py --cache <dir>` to reuse a pull rather than ask the
 same APIs again.
 

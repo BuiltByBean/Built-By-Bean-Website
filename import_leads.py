@@ -18,8 +18,13 @@ The sources, all free, all public:
       customers, and the file is full of holding entities, dormant shells and
       single-property LLCs. It supplies the legal name, the entity type and
       the charter date for a business some other source already found.
+  Overture Maps places (open data, read with DuckDB over S3)
+      The one source that carries contact details at scale: phone numbers,
+      emails, websites and social pages for four thousand places in this
+      trade area. Optional - if DuckDB or the network is missing the import
+      says so and carries on without it.
   OpenStreetMap, via Overpass
-      Where the phone numbers, the websites and some of the emails live.
+      Where a place is, and occasionally how to reach it.
   CMS National Provider Identifier registry
       Every healthcare provider, with a phone and the name of the authorised
       official, who at a clinic this size is usually the owner. Individual
@@ -93,6 +98,26 @@ BUSINESS_LICENCES = {
 # Paris sits at 33.66 / -95.55. The box reaches Bonham in the west and
 # Clarksville in the east.
 BBOX = (33.10, -96.30, 34.05, -94.90)
+
+# Tighter, for Overture: the orbit only, west to east.
+ORBIT_BOX = (-96.15, 33.25, -94.85, 33.98)
+
+# Overture knows about lakes and picnic areas as well as businesses. These
+# categories are places, not somebody to ring.
+# The marks this file writes. Anything else on a row was put there by a
+# later pass and is not the import's to remove.
+KNOWN_SOURCES = {"comptroller", "franchise", "openstreetmap", "overture",
+                 "npi", "fmcsa", "tdlr"}
+
+NOT_A_TRADER = {
+    "park", "lake", "river", "stream", "forest", "trail", "beach", "island",
+    "mountain", "dam", "bridge", "monument", "landmark_and_historical_building",
+    "cemetery", "playground", "picnic_area", "rest_area", "scenic_point",
+    "bus_stop", "parking", "parking_lot", "atm", "post_office",
+    "fire_department", "police_department", "public_restroom", "campground",
+    "hiking_trail", "fishing", "boat_ramp", "airport_terminal", "harbor",
+    "historical_landmark", "tourist_information", "water_tower",
+}
 
 NPI_CITIES = [
     "Paris", "Blossom", "Reno", "Powderly", "Sumner", "Brookston", "Deport",
@@ -325,6 +350,129 @@ TRADE_ALIASES = {
 }
 
 
+# Overture's second-level categories, folded into the words the tax roll
+# already uses. A place keeps the trade its industry code would have given
+# it, whichever file found it first.
+OVERTURE_TRADES = {
+    "agricultural_service": "Farming and forestry",
+    "air_transport_facility_or_service": "Transport",
+    "alcoholic_beverage_venue": "Bars",
+    "amusement_attraction": "Recreation",
+    "animal_attraction": "Recreation",
+    "animal_or_pet_service": "Pet services",
+    "arts_and_crafts_space": "Arts and recreation",
+    "arts_and_entertainment": "Arts and recreation",
+    "b2b_service": "Business services",
+    "bed_and_breakfast": "Hotels and motels",
+    "building_or_construction_service": "Building trade contractors",
+    "campground": "Campsites and RV parks",
+    "casual_eatery": "Restaurants and cafes",
+    "civic_organization": "Churches and associations",
+    "community_and_government": "Public bodies",
+    "convenience_store": "Filling stations",
+    "corporate_or_business_office": "Business services",
+    "department_store": "General merchandise",
+    "design_service": "Design services",
+    "discount_store": "General merchandise",
+    "education": "Schools", "educational_service": "Schools",
+    "emergency_or_urgent_care_facility": "Clinics",
+    "environmental_or_ecological_service": "Waste services",
+    "event_or_party_service": "Events and catering",
+    "event_venue": "Events and catering",
+    "family_service": "Social services",
+    "fashion_and_apparel_store": "Clothing",
+    "festival_venue": "Events and catering",
+    "financial_service": "Finance and insurance",
+    "food_and_beverage_store": "Grocery stores",
+    "food_and_drink": "Restaurants and cafes",
+    "food_service": "Restaurants and cafes",
+    "fueling_station": "Filling stations",
+    "gaming_venue": "Recreation",
+    "government_office": "Public bodies",
+    "ground_transport_facility_or_service": "Transport",
+    "health_care": "Health practices",
+    "historic_site": "Arts and recreation",
+    "home_service": "Home services",
+    "hospital": "Hospitals",
+    "hotel": "Hotels and motels", "inn": "Hotels and motels",
+    "lodge": "Hotels and motels", "lodging": "Hotels and motels",
+    "private_lodging": "Hotels and motels", "resort": "Hotels and motels",
+    "housing_or_property_service": "Property",
+    "industrial_facility_or_service": "Manufacturing",
+    "laundry_service": "Dry cleaners and laundries",
+    "legal_service": "Solicitors",
+    "library": "Schools",
+    "market": "Grocery stores",
+    "media_service": "Advertising and marketing",
+    "medical_service": "Health practices",
+    "movie_theater": "Arts and recreation",
+    "museum": "Arts and recreation",
+    "nightlife_venue": "Bars",
+    "non_alcoholic_beverage_venue": "Restaurants and cafes",
+    "outpatient_care_facility": "Health practices",
+    "performing_arts_venue": "Arts and recreation",
+    "personal_or_beauty_service": "Salons and barbers",
+    "place_of_learning": "Schools",
+    "place_of_worship": "Churches",
+    "printing_service": "Printing and signs",
+    "professional_service": "Professional services",
+    "public_facility": "Public bodies",
+    "public_safety_service": "Public bodies",
+    "public_utility": "Utilities",
+    "real_estate_service": "Property",
+    "religious_organization": "Churches",
+    "rental_service": "Hire and leasing",
+    "restaurant": "Restaurants and cafes",
+    "rv_park": "Campsites and RV parks",
+    "second_hand_store": "Other retail",
+    "shipping_or_delivery_service": "Couriers",
+    "shopping": "Other retail",
+    "shopping_mall": "Other retail",
+    "social_or_community_service": "Social services",
+    "specialized_medical_facility": "Health practices",
+    "specialty_store": "Other retail",
+    "sport_or_fitness_facility": "Recreation",
+    "sport_or_recreation_club": "Recreation",
+    "sports_and_recreation": "Recreation",
+    "stadium_arena": "Recreation",
+    "storage_facility": "Storage",
+    "technical_service": "Computer services",
+    "telecommunications_service": "Telecoms",
+    "travel_and_transportation": "Transport",
+    "travel_service": "Travel agents",
+    "vehicle_dealer": "Car and truck dealers",
+    "vehicle_service": "Car repair",
+    "warehouse_club_store": "General merchandise",
+    "wellness_service": "Health practices",
+}
+
+# Places that are not businesses even at the group level.
+NOT_A_TRADE_GROUP = {
+    "park", "water_feature", "land_feature", "built_feature",
+    "geographic_entities", "recreational_trail_or_path", "memorial_site",
+    "military_site", "rural_attraction",
+}
+
+
+def overture_trade(hierarchy):
+    """The group a place belongs to, in the words the rest of the list uses.
+
+    Overture's leaf is too fine for a call sheet: Academic bookstore and
+    Antique store are both somewhere to ring about a website, and 587
+    options is a filter nobody opens twice.
+    """
+    levels = [str(x) for x in (hierarchy or []) if x]
+    if not levels:
+        return ""
+    group = levels[1] if len(levels) > 1 else levels[0]
+    if group in NOT_A_TRADE_GROUP:
+        return ""
+    known = OVERTURE_TRADES.get(group)
+    if known:
+        return known
+    return group.replace("_", " ").capitalize()
+
+
 def trade(label):
     """One name per trade, whichever source named it."""
     text = re.sub(r"\s+", " ", (label or "").strip())
@@ -395,9 +543,13 @@ def town(name):
 
 
 def norm(text):
-    """Flattened for matching: letters and digits only."""
-    text = (text or "").lower()
-    text = re.sub(r"\b(llc|inc|l l c|ltd|lp|llp|pllc|pc|co|company|corp|the)\b", " ", text)
+    """Flattened for matching: letters and digits only.
+
+    "and" goes with the ampersand it stands for. Dropping punctuation alone
+    left Paris Jewelry & Loan and Paris Jewelry and Loan as two businesses.
+    """
+    text = (text or "").lower().replace("&", " and ")
+    text = re.sub(r"\b(llc|inc|l l c|ltd|lp|llp|pllc|pc|co|company|corp|the|and)\b", " ", text)
     return re.sub(r"[^a-z0-9]+", "", text)
 
 
@@ -576,6 +728,73 @@ def get_carriers(cache, towns_upper):
     return load(cache, "carriers", build)
 
 
+def get_overture(cache):
+    """Places for the orbit, read straight off Overture's public parquet.
+
+    DuckDB is an optional dependency. If it or the network is not there the
+    import says so and goes on: everything else still works, there are just
+    fewer telephone numbers.
+    """
+    cached = os.path.join(cache, "raw_overture.json") if cache else None
+    if cached and os.path.exists(cached):
+        with open(cached, encoding="utf-8") as handle:
+            rows = json.load(handle)
+        print(f"  overture: {len(rows)} from cache")
+        return rows
+    try:
+        import duckdb
+    except ImportError:
+        print("  overture: duckdb is not installed, skipping (pip install duckdb)")
+        return []
+    try:
+        con = duckdb.connect()
+        con.execute("INSTALL httpfs; LOAD httpfs; SET s3_region='us-west-2';")
+        release = _overture_release()
+        if not release:
+            print("  overture: no release found, skipping")
+            return []
+        w, s_, e, n = ORBIT_BOX
+        src = f"s3://overturemaps-us-west-2/release/{release}/theme=places/type=place/*"
+        got = con.execute(f"""
+            SELECT id, names.primary AS name, categories.primary AS category,
+                   taxonomy.hierarchy AS hierarchy,
+                   confidence, phones, websites, emails, socials, addresses,
+                   bbox.xmin AS lon, bbox.ymin AS lat
+            FROM read_parquet('{src}', hive_partitioning=1)
+            WHERE bbox.xmin BETWEEN {w} AND {e} AND bbox.ymin BETWEEN {s_} AND {n}
+        """).fetchall()
+        cols = [d[0] for d in con.description]
+    except Exception as exc:
+        print(f"  overture: {str(exc)[:120]}, skipping")
+        return []
+
+    rows = []
+    for raw in got:
+        row = dict(zip(cols, raw))
+        for key in ("phones", "websites", "emails", "socials", "hierarchy"):
+            row[key] = list(row.get(key) or [])
+        addr = row.get("addresses")
+        row["addresses"] = dict(addr) if hasattr(addr, "keys") else None
+        rows.append(row)
+    print(f"  overture: {len(rows)} fetched")
+    if cached:
+        with open(cached, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, default=str)
+    return rows
+
+
+def _overture_release():
+    """The newest release in the public bucket."""
+    try:
+        url = ("https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/"
+               "?list-type=2&delimiter=/&prefix=release/")
+        xml = fetch(url, timeout=90).decode()
+        found = sorted(set(re.findall(r"<Prefix>release/([^<]+)/</Prefix>", xml)))
+        return found[-1] if found else ""
+    except Exception:
+        return ""
+
+
 def get_licences(cache):
     # Home counties only: a Fannin licence is almost always a Bonham one.
     counties = ",".join(f"'{COUNTIES[c].upper()}'" for c in HOME_COUNTIES)
@@ -630,6 +849,58 @@ def scrape_email(site):
 
 # ── the build ───────────────────────────────────────────────
 
+def _merge_duplicates(db, Lead, LeadPerson):
+    """One row per business per town. See the note on norm()."""
+    groups = {}
+    for lead in Lead.query.all():
+        key = (norm(lead.name), (lead.city or "").strip().lower())
+        if key[0]:
+            groups.setdefault(key, []).append(lead)
+
+    # Everything a person might have put on a row. A row carrying any of it
+    # is never the one that gets deleted, and never deleted at all.
+    def worked(lead):
+        return bool(lead.touches or (lead.notes or "").strip() or lead.client_id
+                    or any(p.source == "typed" for p in lead.people))
+
+    def richness(lead):
+        return sum(1 for f in ("phone", "email", "website", "owner_name", "social",
+                               "address", "industry", "started_on", "employees")
+                   if getattr(lead, f))
+
+    removed = 0
+    for rows in groups.values():
+        if len(rows) < 2:
+            continue
+        keep = max(rows, key=lambda l: (worked(l), richness(l), -l.id))
+        for other in rows:
+            if other is keep or worked(other):
+                continue
+            for field in ("phone", "email", "website", "social", "owner_name",
+                          "legal_name", "address", "zip_code", "county", "industry",
+                          "naics", "entity_type", "started_on", "employees",
+                          "revenue", "lat", "lon", "taxpayer_number", "osm_ref",
+                          "overture_id", "npi", "website_checked_at"):
+                if not getattr(keep, field) and getattr(other, field):
+                    setattr(keep, field, getattr(other, field))
+            marks = [m for m in (keep.sources or "").split(",") if m]
+            for mark in (other.sources or "").split(","):
+                if mark and mark not in marks:
+                    marks.append(mark)
+            keep.sources = ",".join(marks)[:200]
+            have = {(p.name or "").lower() for p in keep.people}
+            for person in list(other.people):
+                if (person.name or "").lower() in have:
+                    continue
+                have.add((person.name or "").lower())
+                person.lead_id = keep.id
+            db.session.delete(other)
+            removed += 1
+    if removed:
+        db.session.commit()
+    return removed
+
+
 def run(cache=None, enrich=True, verbose=True):
     from app import create_app
     from models import db, Lead, LeadPerson
@@ -662,6 +933,7 @@ def run(cache=None, enrich=True, verbose=True):
         towns = {t for t, n in town_counts.items() if n > 1}
         print(f"  {len(zips)} postcodes and {len(towns)} towns in the trade area")
 
+        places = get_overture(cache)
         carriers = get_carriers(cache, {t.upper() for t in town_counts})
         licences = get_licences(cache)
         salons = get_salons(cache)
@@ -770,6 +1042,71 @@ def run(cache=None, enrich=True, verbose=True):
             entry["osm_ref"] = f"{el.get('type')}/{el.get('id')}"
             if "openstreetmap" not in entry["sources"]:
                 entry["sources"].append("openstreetmap")
+
+        # 3b. Overture places. Enriches by name first; creates only where a
+        #     place has a way of being reached and a category that trades.
+        by_name = {}
+        for entry in book.values():
+            by_name.setdefault(norm(entry["name"]), entry)
+        made_here = 0
+        for place in places:
+            name = (place.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                if float(place.get("confidence") or 0) < 0.5:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            category = (place.get("category") or "").strip().lower()
+            if category in NOT_A_TRADER:
+                continue
+            group = overture_trade(place.get("hierarchy"))
+            if not group and not category:
+                continue
+            addr = place.get("addresses") or {}
+            city = town(addr.get("locality") or "")
+            postcode = str(addr.get("postcode") or "")[:5]
+            phone = next((p for p in (tidy_phone(x) for x in place.get("phones") or []) if p), "")
+            site = next((s for s in (tidy_site(x) for x in place.get("websites") or []) if s), "")
+            mail = next((m.strip().lower() for m in place.get("emails") or []
+                         if m and EMAIL_RE.fullmatch(m.strip())), "")
+            social = next((str(x) for x in place.get("socials") or [] if x), "")
+
+            entry = by_name.get(norm(name))
+            if entry is None:
+                # A place with no way to reach it adds a name and nothing else.
+                if not (phone or site or mail):
+                    continue
+                if city.upper() in FAR_TOWNS:
+                    continue
+                if postcode and postcode not in zips:
+                    continue
+                if not postcode and city.lower() not in towns:
+                    continue
+                entry = slot(name, addr.get("freeform"), city, extra_key=str(place.get("id")))
+                entry.setdefault("address", pretty(addr.get("freeform") or ""))
+                entry.setdefault("city", city)
+                entry.setdefault("zip_code", postcode)
+                entry.setdefault("industry", group or trade(
+                    category.replace("_", " ").capitalize()))
+                by_name[norm(name)] = entry
+                made_here += 1
+            if phone:
+                entry.setdefault("phone", phone)
+            if site:
+                entry.setdefault("website", site)
+            if mail:
+                entry.setdefault("email", mail)
+            if social:
+                entry.setdefault("social", social[:300])
+            if place.get("lat"):
+                entry.setdefault("lat", place.get("lat"))
+                entry.setdefault("lon", place.get("lon"))
+            entry["overture_id"] = str(place.get("id") or "")[:60]
+            if "overture" not in entry["sources"]:
+                entry["sources"].append("overture")
+        print(f"  overture: {made_here} new, the rest enriched what was there")
 
         # 4. Healthcare. Organisations become leads with the authorised
         #    official as the owner; individual providers become named people
@@ -950,7 +1287,8 @@ def run(cache=None, enrich=True, verbose=True):
         owned = ("name", "legal_name", "owner_name", "address", "city", "state",
                  "zip_code", "county", "lat", "lon", "phone", "email", "website",
                  "industry", "naics", "entity_type", "started_on", "locations",
-                 "employees", "taxpayer_number", "osm_ref", "npi")
+                 "employees", "social", "taxpayer_number", "osm_ref",
+                 "overture_id", "npi")
 
         for key, entry in book.items():
             lead = existing.get(key)
@@ -965,10 +1303,16 @@ def run(cache=None, enrich=True, verbose=True):
                 if value in (None, "", []):
                     continue
                 # Never overwrite something a person typed over the import.
-                if field in ("phone", "email", "website", "owner_name", "employees") and getattr(lead, field):
+                if (field in ("phone", "email", "website", "owner_name", "employees", "social")
+                        and getattr(lead, field)):
                     continue
                 setattr(lead, field, value)
-            lead.sources = ",".join(entry["sources"])[:200]
+            # Marks the import does not own - "site", left by enrich_sites.py
+            # when it read the business's own pages - survive a re-run. An
+            # overwrite here would make every later pass redo its work.
+            keep = [m for m in (lead.sources or "").split(",")
+                    if m and m not in KNOWN_SOURCES]
+            lead.sources = ",".join(entry["sources"] + keep)[:200]
 
             if entry["people"]:
                 db.session.flush()
@@ -984,6 +1328,10 @@ def run(cache=None, enrich=True, verbose=True):
             if (made + updated) % 500 == 0:
                 db.session.commit()
         db.session.commit()
+
+        merged = _merge_duplicates(db, Lead, LeadPerson)
+        if merged:
+            print(f"  {merged} duplicate rows merged into the row that knew most")
 
         # A row that no longer belongs, and that nobody has worked, goes.
         # One that has been rung, noted or converted stays whatever the
@@ -1009,7 +1357,9 @@ def run(cache=None, enrich=True, verbose=True):
         # only honest statement is how many are KNOWN to have one.
         print(f"  phone {with_phone} | email {with_email} | website known {with_site} "
               f"| named contacts {people}")
-        print(f"  owner named {with_owner} | headcount filed {with_staff}")
+        with_social = Lead.query.filter(Lead.social.isnot(None), Lead.social != "").count()
+        print(f"  owner named {with_owner} | headcount filed {with_staff} "
+              f"| social page {with_social}")
         by_source = {}
         for lead in Lead.query.all():
             by_source[lead.sources] = by_source.get(lead.sources, 0) + 1

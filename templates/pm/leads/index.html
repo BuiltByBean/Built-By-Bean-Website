@@ -67,8 +67,9 @@
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">No site found</p>
             <p class="text-xl sm:text-2xl font-bold text-amber-300 mt-1">{{ counts.no_site | commas }}</p>
-            <p class="text-[10px] text-surface-500 mt-0.5">{{ (counts.no_site * 100 // counts.total) if counts.total else 0 }}% of these
-                {%- if counts.unchecked %}, {{ counts.unchecked | commas }} not yet checked{% endif %}</p>
+            <p class="text-[10px] text-surface-500 mt-0.5">{{ counts.no_site_reachable | commas }} of them reachable
+                {%- if counts.social_only %}, {{ counts.social_only | commas }} on social only{% endif %}
+                {%- if counts.unchecked %}, {{ counts.unchecked | commas }} unchecked{% endif %}</p>
         </div>
         <div class="glass-card p-3 sm:p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-surface-400">Never tried</p>
@@ -116,19 +117,17 @@
                                            on_change="apply()", extra_class="max-w-[14rem]") }}
                     </label>
 
-                    {% set stage_opts = [("", "All stages")] + stage_choices %}
                     <label class="min-w-0">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Stage</span>
-                        {{ select_dropdown("stage", stage_opts, filters.stage, "All stages",
-                                           on_change="apply()", extra_class="max-w-[11rem]") }}
+                        {{ select_dropdown("stage", [("", "All stages")] + stage_opts, filters.stage, "All stages",
+                                           on_change="apply()", extra_class="max-w-[13rem]") }}
                     </label>
 
                     <label class="min-w-0">
                         <span class="block text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-1">Website</span>
-                        {{ select_dropdown("website",
-                                           [("", "Either"), ("no", "No site found"), ("yes", "Has a site")],
+                        {{ select_dropdown("website", [("", "Either")] + site_opts,
                                            filters.website, "Either",
-                                           on_change="apply()", extra_class="max-w-[10rem]") }}
+                                           on_change="apply()", extra_class="max-w-[13rem]") }}
                     </label>
 
                     <label class="min-w-0">
@@ -165,6 +164,9 @@
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2 min-w-0">
                                 <span class="font-medium text-white truncate max-w-full">{{ l.name }}</span>
+                                {% if l.social_only %}
+                                <span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-300">Social only</span>
+                                {% endif %}
                                 {% if l.client_id %}
                                 <span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-300">Client</span>
                                 {% elif l.stage and l.stage != 'lead' %}
@@ -233,10 +235,12 @@
                         {% if l.phone %}<a href="tel:{{ l.phone }}" class="text-brand-300 hover:text-brand-200 whitespace-nowrap">{{ l.phone|format_phone }}</a>{% endif %}
                         {% if l.email %}<a href="mailto:{{ l.email }}" class="text-brand-300 hover:text-brand-200 break-all">{{ l.email }}</a>{% endif %}
                         {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener noreferrer" class="text-brand-300 hover:text-brand-200 break-all">{{ l.website|replace('https://', '')|replace('http://', '') }}</a>{% endif %}
+                        {% if l.social %}<a href="{{ l.social }}" target="_blank" rel="noopener noreferrer" class="text-surface-400 hover:text-surface-200 break-all">{{ l.social|replace('https://', '')|replace('http://', '')|replace('www.', '')|truncate(38, true) }}</a>{% endif %}
                     </div>
 
                     {% if l.people %}
                     <div class="space-y-1.5">
+                        <p class="text-[11px] uppercase tracking-wider text-surface-500">Who to ask for</p>
                         {% for p in l.people %}
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm min-w-0">
                             <span class="text-white break-words">{{ p.name }}</span>

@@ -13,7 +13,7 @@ from datetime import date, datetime, timezone
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, abort)
 from flask_login import login_required, current_user
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 
 from models import (db, Lead, LeadPerson, LeadTouch, Client,
                     CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES,
@@ -53,28 +53,44 @@ def index():
     sort = _clean(request.args.get("sort"), 20) or "best"
     page = max(1, request.args.get("page", type=int) or 1)
 
-    query = Lead.query
-    if search:
-        like = f"%{search}%"
-        query = query.filter(or_(Lead.name.ilike(like), Lead.legal_name.ilike(like),
-                                 Lead.owner_name.ilike(like), Lead.address.ilike(like),
-                                 Lead.industry.ilike(like), Lead.phone.ilike(like)))
-    if city:
-        query = query.filter(Lead.city == city)
-    if stage:
-        query = query.filter(Lead.stage == stage)
-    if industry:
-        query = query.filter(Lead.industry == industry)
     # Both sides are facts now that check_websites.py goes and looks.
     # "None found" means checked and nothing found, never merely blank.
-    if website == "yes":
-        query = query.filter(Lead.website.isnot(None), Lead.website != "")
-    elif website == "no":
-        query = query.filter(Lead.website_checked_at.isnot(None),
-                             or_(Lead.website.is_(None), Lead.website == ""))
-    if untried:
-        # Nobody has logged anything against it yet.
-        query = query.filter(~Lead.touches.any())
+    no_site_yet = and_(Lead.website_checked_at.isnot(None),
+                       or_(Lead.website.is_(None), Lead.website == ""))
+
+    def narrowed(skip=""):
+        """The list under every filter except one.
+
+        Leaving one out is what lets its own options be counted against the
+        rest of the bar, so a town and a trade that share nobody is never
+        offered as a pair.
+        """
+        q = Lead.query
+        if search and skip != "q":
+            like = f"%{search}%"
+            q = q.filter(or_(Lead.name.ilike(like), Lead.legal_name.ilike(like),
+                             Lead.owner_name.ilike(like), Lead.address.ilike(like),
+                             Lead.industry.ilike(like), Lead.phone.ilike(like)))
+        if city and skip != "city":
+            q = q.filter(Lead.city == city)
+        if stage and skip != "stage":
+            q = q.filter(Lead.stage == stage)
+        if industry and skip != "industry":
+            q = q.filter(Lead.industry == industry)
+        if skip != "website":
+            if website == "yes":
+                q = q.filter(Lead.website.isnot(None), Lead.website != "")
+            elif website == "no":
+                q = q.filter(no_site_yet)
+            elif website == "social":
+                # A page on somebody else's platform and nothing of their own.
+                q = q.filter(no_site_yet, Lead.social.isnot(None), Lead.social != "")
+        if untried and skip != "untried":
+            # Nobody has logged anything against it yet.
+            q = q.filter(~Lead.touches.any())
+        return q
+
+    query = narrowed()
 
     no_start = case((Lead.started_on.is_(None), 1), else_=0)
 
@@ -93,14 +109,46 @@ def index():
 
     pagination = query.paginate(page=page, per_page=PER_PAGE, error_out=False)
 
-    # A to Z, not by row count. Somebody hunting for Roxton knows the word
-    # and wants to jump to R; a frequency order only the database understands
-    # makes them scroll the whole list. Counts ride in the label instead.
-    cities = db.session.query(Lead.city, func.count(Lead.id)).filter(
-        Lead.city != "", Lead.city.isnot(None)).group_by(Lead.city).order_by(Lead.city).all()
-    industries = db.session.query(Lead.industry, func.count(Lead.id)).filter(
-        Lead.industry != "", Lead.industry.isnot(None)).group_by(
-        Lead.industry).order_by(Lead.industry).all()
+    def options(column, skip, chosen):
+        """The values still worth offering for one filter, A to Z with the
+        count each would give. A to Z, not by row count: somebody hunting for
+        Roxton knows the word and wants to jump to R, and a frequency order
+        only the database understands makes them scroll the lot.
+        """
+        rows = (narrowed(skip).order_by(None)
+                .with_entities(column, func.count(Lead.id))
+                .filter(column.isnot(None), column != "")
+                .group_by(column).order_by(column).all())
+        found = [(value, n) for value, n in rows if n]
+        # Whatever is already picked stays, even at zero, or the control
+        # cannot show its own value.
+        if chosen and not any(value == chosen for value, _ in found):
+            found.append((chosen, 0))
+            found.sort()
+        return found
+
+    cities = options(Lead.city, "city", city)
+    industries = options(Lead.industry, "industry", industry)
+
+    # The stage and website pickers get the same treatment, so their counts
+    # answer "how many of what I am looking at" too.
+    stage_rows = dict((narrowed("stage").order_by(None)
+                       .with_entities(Lead.stage, func.count(Lead.id))
+                       .group_by(Lead.stage).all()))
+    stage_opts = [(key, f"{label} ({stage_rows.get(key, 0):,})")
+                  for key, label in CLIENT_STAGE_CHOICES
+                  if stage_rows.get(key) or key == stage]
+
+    site_scope = narrowed("website").order_by(None)
+    site_opts = []
+    for key, label, where in (
+            ("no", "No site found", (no_site_yet,)),
+            ("social", "Social page only",
+             (no_site_yet, Lead.social.isnot(None), Lead.social != "")),
+            ("yes", "Has a site", (Lead.website.isnot(None), Lead.website != ""))):
+        n = site_scope.filter(*where).count()
+        if n or key == website:
+            site_opts.append((key, f"{label} ({n:,})"))
 
     # Counted over the FILTERED query, because a tile above a filtered list
     # that reports the whole table answers a question nobody asked. Ordering
@@ -111,11 +159,15 @@ def index():
     def tally(*where):
         return scope.filter(*where).count() if where else scope.count()
 
-    no_site = tally(Lead.website_checked_at.isnot(None),
-                    or_(Lead.website.is_(None), Lead.website == ""))
     counts = {
         "total": tally(),
-        "no_site": no_site,
+        "no_site": tally(no_site_yet),
+        # The market that can actually be worked: no site of their own AND
+        # a phone or an email to open the conversation with.
+        "no_site_reachable": tally(no_site_yet, or_(
+            and_(Lead.phone.isnot(None), Lead.phone != ""),
+            and_(Lead.email.isnot(None), Lead.email != ""))),
+        "social_only": tally(no_site_yet, Lead.social.isnot(None), Lead.social != ""),
         "untried": tally(~Lead.touches.any()),
         "talking": tally(Lead.stage.in_(("contacted", "in_conversation", "proposal_sent"))),
         "unchecked": tally(Lead.website_checked_at.is_(None)),
@@ -125,7 +177,8 @@ def index():
         "pm/leads/index.html",
         leads=pagination.items, pagination=pagination, counts=counts,
         cities=cities, industries=industries, sorts=SORTS,
-        stage_choices=CLIENT_STAGE_CHOICES, channel_choices=CONTACT_CHANNEL_CHOICES,
+        stage_choices=CLIENT_STAGE_CHOICES, stage_opts=stage_opts, site_opts=site_opts,
+        channel_choices=CONTACT_CHANNEL_CHOICES,
         outcome_choices=LEAD_OUTCOME_CHOICES, went_choices=LEAD_WENT_CHOICES,
         reached_outcomes=list(LEAD_OUTCOMES_REACHED),
         filters={"q": search, "city": city, "stage": stage, "industry": industry,

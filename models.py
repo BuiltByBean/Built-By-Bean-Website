@@ -2175,8 +2175,14 @@ class Lead(db.Model):
     employees = db.Column(db.Integer, nullable=True)
     revenue = db.Column(db.Float, nullable=True)
 
+    # A page on somebody else's platform is not a website, and the gap
+    # between the two is the pitch: a business with 4,000 followers and
+    # nowhere to send them is the easiest call on the list.
+    social = db.Column(db.String(300), default="")
+
     taxpayer_number = db.Column(db.String(40), default="", index=True)
     osm_ref = db.Column(db.String(40), default="")
+    overture_id = db.Column(db.String(60), default="")
     npi = db.Column(db.String(20), default="")
     sources = db.Column(db.String(200), default="")
     # When somebody last went looking for a website. Null means nobody has,
@@ -2239,6 +2245,11 @@ class Lead(db.Model):
     @property
     def has_website(self):
         return bool((self.website or "").strip())
+
+    @property
+    def social_only(self):
+        """A page on a platform and nowhere of their own."""
+        return bool((self.social or "").strip()) and not self.has_website
 
     @property
     def no_website(self):
