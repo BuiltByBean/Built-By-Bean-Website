@@ -12,3 +12,7 @@ static/images/*.bak
 
 # Contract previews live on the volume, not in the repo.
 data/uploads/previews/
+
+# Resets an admin password against whatever DATABASE_URL is set, which in
+# practice is production through `railway run`. Local only, on purpose.
+reset_admin.py
