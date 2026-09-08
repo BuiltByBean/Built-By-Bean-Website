@@ -78,6 +78,25 @@ document.addEventListener('alpine:init', () => {
             }
         },
     });
+
+    /* Re-read the state after a live action, because the script that seeded
+       this store does not run again when the panel is swapped in. Adding a
+       playbook without this leaves the store holding only the ones that were
+       here at page load, so the first tick on the new one is a tick against
+       an undefined book. The listener is on the document, which is why it
+       survives the swap that its own <script> does not.
+
+       Idempotent and cheap, so it does not matter that other actions on the
+       project page fire the same event. */
+    document.addEventListener('bbb:live-action', () => {
+        const host = document.querySelector('[data-playbook-state]');
+        if (!host) return;
+        try {
+            Alpine.store('pb').books = JSON.parse(host.dataset.playbookState);
+        } catch (err) {
+            console.error('playbook state would not re-read', err);
+        }
+    });
 });
 
 function playbookPanel(ids, preferred) {
@@ -89,6 +108,13 @@ function playbookPanel(ids, preferred) {
             // actually here.
             const m = location.hash.match(/^#pb-(\d+)$/);
             this.sel = (m && ids.includes(m[1])) ? m[1] : preferred;
+            // Removing the playbook you were reading leaves the hash naming a
+            // playbook that is gone. The fallback above copes, but the URL
+            // would keep saying otherwise and the NEXT action would fall back
+            // again rather than staying where this one landed.
+            if (location.hash !== '#pb-' + this.sel) {
+                history.replaceState(null, '', '#pb-' + this.sel);
+            }
         },
         pick(id) {
             this.sel = id;
@@ -101,11 +127,24 @@ function playbookPanel(ids, preferred) {
 }
 </script>
 
+{#
+  data-live: adding or removing a playbook was a POST and a redirect, which
+  reloaded the page and reopened the panel on whichever playbook the server
+  thinks is preferred, from the top. Ticking a step was fixed years before
+  this by intercepting it; these two were the last full reloads on the page.
+
+  data-playbook-state carries the store's data as an attribute as well as in
+  the script, because a script swapped into the DOM never runs again. Without
+  it the store would still hold the playbooks from page load: a playbook added
+  live would have no entry, and the first tick on it would be a tick against
+  undefined. Single-quoted per the house rule, since tojson escapes ' and not ".
+#}
+<div data-live="playbooks" data-playbook-state='{{ playbook_state | tojson }}'>
 {% if unplaybooked %}
 {# Billing this project, with no runbook for it here. #}
 <div class="mb-4 flex flex-wrap gap-2">
     {% for pb in unplaybooked %}
-    <form method="POST" action="{{ url_for('pm.project_playbook_add', id=project.id) }}">
+    <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_add', id=project.id) }}">
         <input type="hidden" name="playbook_id" value="{{ pb.id }}">
         <button type="submit"
                 class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium
@@ -231,7 +270,7 @@ function playbookPanel(ids, preferred) {
                     </a>
                     {# What has been ticked goes with it, so it asks - in
                        place, where the row is. #}
-                    <form method="POST" action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}">
+                    <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}">
                         {% call confirm_button(question='Remove it and the ticks?',
                                                btn_class='p-2 rounded-lg text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors') %}
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -386,7 +425,7 @@ function playbookPanel(ids, preferred) {
                     <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">{{ label }}</p>
                     <div class="space-y-1">
                         {% for pb in group %}
-                        <form method="POST" action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
+                        <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
                               x-show="'{{ pb.display_name | lower }}'.includes(q.toLowerCase())">
                             <input type="hidden" name="playbook_id" value="{{ pb.id }}">
                             <button type="submit"
@@ -415,7 +454,7 @@ function playbookPanel(ids, preferred) {
                     <p class="text-[11px] font-semibold text-surface-500 uppercase tracking-wider px-1 mb-1.5">Other</p>
                     <div class="space-y-1">
                         {% for pb in uncategorised %}
-                        <form method="POST" action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
+                        <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
                               x-show="'{{ pb.display_name | lower }}'.includes(q.toLowerCase())">
                             <input type="hidden" name="playbook_id" value="{{ pb.id }}">
                             <button type="submit" class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
@@ -435,3 +474,4 @@ function playbookPanel(ids, preferred) {
     </div>
 </div>
 {% endif %}
+</div>
