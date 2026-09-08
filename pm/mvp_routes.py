@@ -15,6 +15,8 @@ should be built, what went wrong last time, which file is worth copying -
 so the session that builds it starts off knowing what every project before
 it had to learn the hard way.
 """
+from datetime import date
+
 from flask import (Blueprint, render_template, redirect, url_for, flash,
                    request, abort)
 from flask_login import login_required
@@ -460,6 +462,57 @@ def package_prompt(id):
     package = db.session.get(MvpPackage, id) or abort(404)
     return render_template("pm/mvp/prompt.html", package=package,
                            prompt=build_package_prompt(package))
+
+
+@mvp_bp.route("/<int:id>/summary")
+@login_required
+def package_summary(id):
+    """The package as the client reads it.
+
+    The builder is a working surface: catalogue names, what is built and what
+    is only an idea, what each part is worth. A statement of work is the other
+    end, and it is a contract - you do not open a call with one. This is the
+    thing in between, which did not exist: what they would get and what it
+    costs, on one page, in the words a person uses.
+
+    Grouped by what each part is FOR rather than by whether it came from the
+    products table or the features table, because that distinction is an
+    accident of how this board stores things and means nothing to the person
+    reading.
+
+    Deliberately not shown: which parts have been built before and which are
+    new. That is a fact about my risk, not about their quote, and a client
+    reading "not built yet" beside a line they are paying for asks a question
+    the line does not deserve.
+    """
+    package = db.session.get(MvpPackage, id) or abort(404)
+
+    labels = dict(Feature.CATEGORIES)
+    order = {key: i for i, (key, _) in enumerate(Feature.CATEGORIES)}
+
+    groups = {}
+    for item in package.items:
+        if item.kind == "product":
+            # A product is a named thing somebody asked for by name, so it
+            # keeps its own heading rather than being filed under an area.
+            key, label = "_products", "What it will do"
+        else:
+            key = item.feature.category if item.feature else "_extra"
+            label = labels.get(key, "Also included")
+        groups.setdefault(key, {"label": label, "items": []})["items"].append({
+            "name": item.name,
+            # The note was written for this client, so it wins over the
+            # catalogue's general line about what the thing does.
+            "blurb": (item.notes
+                      or (item.feature.summary if item.feature else "")
+                      or (item.product.summary if item.product else "")),
+        })
+
+    sections = [groups[k] for k in sorted(
+        groups, key=lambda k: -1 if k == "_products" else order.get(k, len(order)))]
+
+    return render_template("pm/mvp/summary.html", package=package,
+                           sections=sections, today=date.today())
 
 
 @mvp_bp.route("/<int:id>/sow")

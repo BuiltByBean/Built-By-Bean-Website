@@ -1,0 +1,176 @@
+{#
+  The package as the client reads it.
+
+  Standalone rather than extending the admin base, because the sidebar, the
+  badges and the nav are mine and this is theirs. It is still behind the login:
+  it gets shown on a screen share or printed to a PDF and sent, and neither
+  needs a public URL.
+
+  Dark on screen so it matches everything else while it is being talked over,
+  white on paper because a dark page prints as a sheet of ink. The controls are
+  the only thing print drops.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ package.client.name }} - Built by Bean</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #f4f4f5;
+            --muted: #a1a1aa;
+            --line: #2a2a32;
+            --bg: #0a0a0b;
+            --card: #14141a;
+            --brand: #c084fc;
+            color-scheme: dark;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: Inter, system-ui, sans-serif;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+        }
+        .sheet { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+
+        .bar {
+            display: flex; flex-wrap: wrap; gap: .75rem; align-items: center;
+            justify-content: space-between;
+            max-width: 46rem; margin: 0 auto; padding: 1rem 1.5rem 0;
+        }
+        .btn {
+            display: inline-flex; align-items: center; gap: .5rem;
+            min-height: 44px; padding: 0 1rem;
+            border: 1px solid var(--line); border-radius: .75rem;
+            color: var(--muted); text-decoration: none;
+            font-size: .875rem; font-weight: 500; background: none;
+            cursor: pointer; font-family: inherit;
+        }
+        .btn:hover { color: var(--ink); border-color: #3f3f46; }
+        .btn-go { border-color: rgba(192,132,252,.4); color: var(--brand); }
+
+        .eyebrow {
+            font-size: .6875rem; font-weight: 700; letter-spacing: .14em;
+            text-transform: uppercase; color: var(--brand); margin: 0 0 .35rem;
+        }
+        h1 { font-size: 1.9rem; font-weight: 800; margin: 0 0 .25rem; letter-spacing: -.02em; }
+        .dateline { color: var(--muted); font-size: .875rem; margin: 0 0 2.5rem; }
+
+        h2 {
+            font-size: .6875rem; font-weight: 700; letter-spacing: .14em;
+            text-transform: uppercase; color: var(--muted);
+            margin: 2.25rem 0 .85rem; padding-bottom: .5rem;
+            border-bottom: 1px solid var(--line);
+        }
+        .lead { font-size: 1.05rem; margin: 0; }
+
+        .group { margin-bottom: 1.5rem; }
+        .group-name {
+            font-size: .8125rem; font-weight: 700; color: var(--brand);
+            margin: 0 0 .6rem;
+        }
+        ul { list-style: none; margin: 0; padding: 0; }
+        li { margin-bottom: .85rem; }
+        .item { font-weight: 600; font-size: .9375rem; }
+        .blurb { color: var(--muted); font-size: .875rem; margin-top: .1rem; }
+
+        .price {
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: .9rem; padding: 1.25rem 1.5rem; margin-top: .5rem;
+        }
+        .price-now { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; }
+        .price-then { color: var(--muted); font-size: .9375rem; margin-top: .2rem; }
+        .price-note { color: var(--muted); font-size: .8125rem; margin-top: .75rem; }
+
+        footer {
+            margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
+            color: var(--muted); font-size: .8125rem;
+        }
+
+        /* On paper: ink on white, no controls, and nothing split across a
+           page break in the middle of a line. */
+        @media print {
+            :root { --ink: #18181b; --muted: #52525b; --line: #d4d4d8;
+                    --bg: #fff; --card: #fafafa; --brand: #7e22ce;
+                    color-scheme: light; }
+            .no-print { display: none !important; }
+            .sheet { padding: 0; max-width: none; }
+            body { font-size: 11pt; }
+            li, .group, .price { break-inside: avoid; }
+            h2 { break-after: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="bar no-print">
+    <a class="btn" href="{{ url_for('mvp.package_detail', id=package.id) }}">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back to the builder
+    </a>
+    <button type="button" class="btn btn-go" onclick="window.print()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+        Print or save as PDF
+    </button>
+</div>
+
+<div class="sheet">
+
+    <p class="eyebrow">Built by Bean</p>
+    <h1>{{ package.client.name }}</h1>
+    <p class="dateline">{{ today.strftime('%B %d, %Y') }}</p>
+
+    {% if package.summary %}
+    <h2>What you asked for</h2>
+    <p class="lead">{{ package.summary }}</p>
+    {% endif %}
+
+    {% if sections %}
+    <h2>What you would get</h2>
+    {% for section in sections %}
+    <div class="group">
+        <p class="group-name">{{ section.label }}</p>
+        <ul>
+            {% for item in section['items'] %}
+            <li>
+                <div class="item">{{ item.name }}</div>
+                {% if item.blurb %}<div class="blurb">{{ item.blurb }}</div>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if package.estimate or package.monthly_estimate %}
+    <h2>What it costs</h2>
+    <div class="price">
+        {% if package.estimate %}
+        <div class="price-now">{{ package.estimate | format_currency }}</div>
+        {% endif %}
+        {% if package.monthly_estimate %}
+        <div class="price-then">
+            then {{ package.monthly_estimate | format_currency }} a month to host it and keep it running
+        </div>
+        {% endif %}
+        <div class="price-note">
+            Everything above is included. Anything not listed is quoted separately
+            before any work on it starts.
+        </div>
+    </div>
+    {% endif %}
+
+    <footer>
+        Built by Bean LLC{% if package.client.email %} &middot; {{ package.client.email }}{% endif %}
+    </footer>
+</div>
+
+</body>
+</html>
