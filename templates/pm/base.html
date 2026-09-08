@@ -563,6 +563,15 @@
                 } else {
                     window.bbbSwapLive(html);
                 }
+                /* A form that sits OUTSIDE every swapped region is never
+                   rebuilt, so last press's words stay in its boxes. Only the
+                   typed fields clear: a picker keeps what was chosen, because
+                   its visible label belongs to Alpine and not to the input,
+                   and reset() would put the two out of step. */
+                if (form.hasAttribute('data-live-reset')) {
+                    form.querySelectorAll('input:not([type=hidden]), textarea')
+                        .forEach(el => { el.value = ''; });
+                }
                 delete form.dataset.busy;
                 document.dispatchEvent(new CustomEvent('bbb:live-action', { detail: { form } }));
             })

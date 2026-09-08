@@ -16,7 +16,7 @@
 {% block page_subtitle %}{{ package.client.name }}{% endblock %}
 
 {% block content %}
-<div class="space-y-5 stagger-in" x-data='{ q: "", cat: "all" }'>
+<div class="space-y-5 stagger-in" x-data='{ q: "", cat: "all", adding: false }'>
 
     {# ── the package ─────────────────────────────────────── #}
     {# relative z-30 per CLAUDE.md LM-1: the status dropdown opens over the
@@ -220,8 +220,14 @@
            them - mid-call, the box the thumb is headed for must not leave
            (LM-4). The class backs it solid; rows vanish under it. #}
         <div class="sticky-filters rounded-xl p-3 -mx-3 space-y-3">
-        <input type="text" x-model="q" placeholder="Search the catalogue"
-               class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        <div class="flex gap-2">
+            <input type="text" x-model="q" placeholder="Search the catalogue"
+                   class="input-ring flex-1 min-w-0 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            <button type="button" @click="adding = !adding"
+                    class="shrink-0 min-h-[44px] px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors"
+                    :class="adding ? 'border-brand-500/40 text-brand-300 bg-brand-500/10' : 'border-white/10 text-surface-400 hover:text-surface-200'">
+                Not on the list</button>
+        </div>
         <div class="flex gap-1.5 overflow-x-auto pb-1 -mb-1">
             <button type="button" @click="cat = 'all'"
                     class="shrink-0 min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
@@ -234,6 +240,33 @@
                 {{ label }} ({{ counts[key] }})</button>
             {% endif %}{% endfor %}
         </div>
+
+        {# The client just named something the catalogue has never heard of.
+           Inside the pinned bar, not past a hundred rows: it was 8,800px down
+           this page at real catalogue size, which is not an action anybody
+           takes while somebody is still talking. Closed until asked for, so
+           the bar stays one line the rest of the time. #}
+        <form method="POST" data-live-action data-live-reset x-show="adding" x-cloak
+              action="{{ url_for('mvp.item_add', id=package.id) }}"
+              class="pt-3 border-t border-white/5 flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[180px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    What they asked for</label>
+                <input type="text" name="new_name"
+                       class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div class="w-48">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Area</label>
+                {{ select_dropdown("new_category", categories, "records", full_width=true) }}
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
+                <input type="text" name="new_value" placeholder="later"
+                       class="input-ring w-24 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <button type="submit" class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+                Add it</button>
+        </form>
         </div>
 
         <div data-live="pick-products" x-show="cat === 'all'" class="space-y-1.5">
@@ -313,29 +346,6 @@
             {% endfor %}
         </div>
 
-        {# The client just named something the catalogue has never heard of.
-           Five seconds, or it goes unrecorded: it lands as an idea in the
-           catalogue and straight onto this package in one move. #}
-        <form method="POST" data-live-action action="{{ url_for('mvp.item_add', id=package.id) }}"
-              class="pt-3 border-t border-white/5 flex flex-wrap items-end gap-3">
-            <div class="flex-1 min-w-[180px]">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    They asked for something not on the list</label>
-                <input type="text" name="new_name"
-                       class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
-            </div>
-            <div class="w-48">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Area</label>
-                {{ select_dropdown("new_category", categories, "records", full_width=true) }}
-            </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
-                <input type="text" name="new_value" placeholder="later"
-                       class="input-ring w-24 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
-            </div>
-            <button type="submit" class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
-                Add it</button>
-        </form>
     </div>
 
 </div>
