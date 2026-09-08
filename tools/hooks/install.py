@@ -9,6 +9,11 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import (  # noqa: E402 - path has to be set first
+    clear_installed_version, ecosystem_version, stamp_installed_version,
+)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 MARK = "tools/hooks/"  # every command we install carries this; nothing else does
 
@@ -63,6 +68,18 @@ def main(remove=False):
     if not remove:
         for event, (matcher, script, _) in EVENTS.items():
             print(f"  {event:13} {('on ' + matcher + ' ') if matcher else ''}-> {script}")
+
+    # The stamp is what tells the NEXT session this machine is current. Written
+    # only here: the installer is the one thing that actually applies a
+    # machine-side change, so it is the only thing entitled to say it was
+    # applied. A hook that stamped itself would clear the notice it exists to
+    # raise, and the machine would look up to date for ever.
+    if remove:
+        clear_installed_version()
+    else:
+        version = ecosystem_version()
+        if stamp_installed_version(version):
+            print(f"  ecosystem     -> v{version} recorded for this machine")
     return 0
 
 

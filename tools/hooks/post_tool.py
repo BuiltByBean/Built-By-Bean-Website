@@ -163,6 +163,24 @@ def _vendors():
         return {}
 
 
+def _vendor_token(slug):
+    """What to actually look for in a command.
+
+    The slug's first segment when that segment is distinctive on its own
+    (`gmail-smtp` -> `gmail`), and the whole slug when it is not.
+
+    Fixed 2026-09-07. The rule used to be "always the first segment", which
+    turned `app-store` into `app` — and `\\bapp\\b` matches `python app.py`,
+    so every session in every Flask repo on earth marked a vendor as touched
+    and the playbook nudge fired on essentially all of them. This file's own
+    docstring says a nudge that cries wolf is worse than no nudge; that is
+    what had happened, and a nudge nobody reads is a large part of why a day
+    of vendor work could end with both runbooks un-updated.
+    """
+    head = slug.split("-")[0]
+    return head if len(head) >= 5 else slug
+
+
 def mark_vendor_touched(data, command):
     """A command that names a vendor the board has a runbook for.
 
@@ -177,7 +195,7 @@ def mark_vendor_touched(data, command):
     low = command.lower()
     hits = [slug for slug in known
             if len(slug) >= 5
-            and re.search(r"\b" + re.escape(slug.split("-")[0]) + r"\b", low)]
+            and re.search(r"\b" + re.escape(_vendor_token(slug)) + r"\b", low)]
     if not hits:
         return
     path, marker = _work_marker(data)
@@ -187,6 +205,34 @@ def mark_vendor_touched(data, command):
             seen.append(slug)
     marker["vendors"] = seen[:8]
     _save(path, marker)
+
+
+def is_vendor_module(file_path):
+    """A source file named after a vendor the board has a runbook for —
+    tripleseat.py, stripe.py, twilio.py.
+
+    Added 2026-09-07, after a day of Tripleseat and Twilio work ended with
+    both runbooks un-updated and nothing having asked. The lesson marker
+    armed on exactly one thing, a CLAUDE.md edit, so vendor work done in
+    ordinary application code armed nothing at all — and the playbook nudge
+    only ever asked whether a runbook had been READ, never whether anything
+    was written back to it.
+
+    The vendor's own module is the narrow, high-signal half of that gap:
+    nobody edits tripleseat.py casually, and when they do it is nearly
+    always because the vendor did something worth writing down. The wider
+    half — a vendor lesson learned while editing app code, which is what
+    actually happened that day — has no honest mechanical signal, and
+    pretending otherwise would mean nudging every session until the nudge
+    was ignored. That one still depends on somebody noticing.
+
+    Slugs under five characters are skipped, exactly as in
+    mark_vendor_touched: `aws.py` should not arm a blocking marker.
+    """
+    stem = os.path.splitext(os.path.basename(file_path))[0].lower()
+    if len(stem) < 5:
+        return False
+    return stem in {str(slug).lower() for slug in _vendors()}
 
 
 def mark_feature_built(data, file_path):
@@ -224,6 +270,12 @@ def main():
     if os.path.basename(file_path).lower() == "claude.md":
         mark_lesson_owed(data, file_path)
         return 0
+
+    # A vendor's own module arms the same marker a CLAUDE.md does, and
+    # deliberately does NOT return early: the file may be a feature module or
+    # a migration as well, and both of those still want their own check.
+    if is_vendor_module(file_path):
+        mark_lesson_owed(data, file_path)
 
     mark_feature_built(data, file_path)
 

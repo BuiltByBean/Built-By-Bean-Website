@@ -94,6 +94,80 @@ def work_marker_path(session_id):
     return os.path.join(marker_dir(), f"work-done-{_safe(session_id)}.json")
 
 
+# ── which fixes need the MACHINE, and which do not ────────────────────
+#
+# Two kinds of gap, and only one of them is anybody's problem twice.
+#
+# A BOARD-side fix — a playbook trap, a rule, a feature's gold standard —
+# is written once through suggest_update and is live for every machine and
+# every session immediately, because the board is the one copy they all
+# read. Nothing to install, nothing to remember, nothing to note.
+#
+# A MACHINE-side fix is not. The hooks, the standing order in
+# ~/.claude/CLAUDE.md and the bridge registration live on each machine and
+# travel only by pulling this repo and re-running the bootstrap. On
+# 2026-09-04 a laptop had none of the three and nothing said so; the
+# bootstrap fixed that machine, and nothing told the OTHER machine it was
+# now behind.
+#
+# So: bump ECOSYSTEM_VERSION whenever a change here wants a bootstrap —
+# any hook, the installer, or the standing order. The bootstrap stamps the
+# number it installed, session_start compares the two, and a machine that
+# is behind says so on every session until it is not.
+#
+# The one boundary, stated because it is real: this compares the CHECKOUT
+# against what is installed FROM it. A checkout nobody has pulled cannot
+# know a newer version exists — it is not stale from its own point of
+# view. Keeping this repo pulled is the standing order's job; this is what
+# catches the far more common half, where the pull happened and the
+# bootstrap did not.
+
+def ecosystem_version():
+    """The tooling version in THIS checkout. 0 when the file predates the
+    mechanism, which reads as "nothing to say" rather than as an error."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "ECOSYSTEM_VERSION")
+        with open(path, encoding="utf-8") as fh:
+            return int((fh.read() or "0").strip() or 0)
+    except Exception:  # noqa: BLE001 - unreadable is 0, never a crash
+        return 0
+
+
+def installed_version_path():
+    return os.path.join(marker_dir(), "ecosystem-installed")
+
+
+def installed_version():
+    """What the last bootstrap on this machine installed. 0 when it has
+    never run, or ran before this mechanism existed — both of which mean
+    the same thing to the caller: behind."""
+    try:
+        with open(installed_version_path(), encoding="utf-8") as fh:
+            return int((fh.read() or "0").strip() or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def stamp_installed_version(version):
+    """Record what the bootstrap just installed. Only the installer calls
+    this — a hook that stamped its own version would clear the very notice
+    it exists to raise."""
+    try:
+        with open(installed_version_path(), "w", encoding="utf-8") as fh:
+            fh.write(str(int(version)))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def clear_installed_version():
+    try:
+        os.remove(installed_version_path())
+    except OSError:
+        pass
+
+
 def transcript_lines(path):
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
