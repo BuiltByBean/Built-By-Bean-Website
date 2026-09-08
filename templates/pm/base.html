@@ -1126,16 +1126,27 @@
                         </svg>
                     </button>
                     <div class="min-w-0">
-                        {# Above the title rather than beside it. The row already
-                           holds the mobile menu button, the timer and the page
-                           actions, and a fourth thing competing on one line is
-                           how the actions left the screen the last time. #}
-                        {% block back %}{% endblock %}
                         <h2 class="text-lg font-bold text-white">{% block page_title %}Dashboard{% endblock %}</h2>
                         <p class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-3 flex-shrink-0">
+                {#
+                  One side of this bar says where you are; this side is the side
+                  you press, and back is a press. It sat above the title, on the
+                  leading edge, which put the two controls a thumb reaches for at
+                  opposite ends of the same row - and on a phone the left edge is
+                  the worst place a control can be.
+
+                  It was moved there because a fourth item on one line pushed the
+                  actions off the screen. The answer to that is the wrapping this
+                  row already does, not the far side of the header.
+
+                  Order is back, then anything else, then the page's own action
+                  last, so the primary sits hard against the trailing edge and
+                  back does not take the spot the most-used control wants.
+                #}
+                <div class="flex items-center gap-3 flex-wrap justify-end">
+                    {% block back %}{% endblock %}
                     {% if time_tracking %}{% include "pm/components/timer_widget.html" %}{% endif %}
                     {% block header_actions %}{% endblock %}
                 </div>

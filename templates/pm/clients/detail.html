@@ -11,12 +11,12 @@
 {% block header_actions %}
 <div class="flex items-center gap-2">
     <a href="{{ url_for('pm.project_create', client_id=client.id) }}"
-       class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
+       class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Project
     </a>
     <a href="{{ url_for('pm.client_edit', id=client.id) }}"
-       class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
+       class="px-4 py-2 min-h-[44px] bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Edit
     </a>
 </div>

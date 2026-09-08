@@ -13,16 +13,16 @@
 <div class="flex items-center gap-2">
     {% if time_tracking %}
     <a href="{{ url_for('pm.time_create', project_id=ticket.project_id, ticket_id=ticket.id) }}"
-       class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
+       class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
         Log Time
     </a>
     {% endif %}
     <a href="{{ url_for('pm.expense_create', ticket_id=ticket.id) }}"
-       class="px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
+       class="px-3 py-2 min-h-[44px] bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Add Expense
     </a>
     <a href="{{ url_for('pm.ticket_edit', id=ticket.id) }}"
-       class="px-3 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
+       class="px-3 py-2 min-h-[44px] bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Edit
     </a>
 </div>

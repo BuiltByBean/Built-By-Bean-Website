@@ -27,21 +27,21 @@
 
     <form method="POST" action="{{ url_for('stripe.invoice_sync', id=invoice.id) }}">
 
-        <button type="submit" class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
+        <button type="submit" class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
             Sync
         </button>
     </form>
 
     {% if invoice.stripe_invoice_url %}
     <a href="{{ invoice.stripe_invoice_url }}" target="_blank"
-       class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
+       class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
         View on Stripe
     </a>
     {% endif %}
 
     {% if invoice.stripe_pdf_url %}
     <a href="{{ invoice.stripe_pdf_url }}" target="_blank"
-       class="px-4 py-2 text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
+       class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl bg-surface-700 text-surface-200 hover:bg-surface-600 transition-colors">
         PDF
     </a>
     {% endif %}
