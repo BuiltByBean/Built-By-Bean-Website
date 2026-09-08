@@ -288,7 +288,31 @@ def costs():
                           "note": i.note or ""} for i in invoices],
         })
 
-    return jsonify({"providers": out})
+    # Money IN, per client, off the same local invoice rows every page on the
+    # board reads. Here for the same reason the costs are: a session reported
+    # $0.00 revenue against $3,500 collected and had no way to see it, because
+    # the invoices page needs a login. `invoices` is the count of local rows,
+    # and a client with money at Stripe and no rows here is the shape of that
+    # bug: the board only ever wrote a row for an invoice it raised itself.
+    clients = []
+    for client in Client.query.order_by(Client.name).all():
+        rows = list(client.invoices)
+        if not rows and not client.stripe_customer_id:
+            continue
+        clients.append({
+            "name": client.name,
+            "stripe_customer_id": client.stripe_customer_id or "",
+            "invoices": len(rows),
+            "billed": round(sum(i.total or 0.0 for i in rows), 2),
+            "paid": round(client.total_revenue, 2),
+            "outstanding": round(sum(i.amount_due or 0.0 for i in rows), 2),
+            "by_status": {
+                s: sum(1 for i in rows if (i.status or "") == s)
+                for s in sorted({(i.status or "") for i in rows})
+            },
+        })
+
+    return jsonify({"providers": out, "clients": clients})
 
 
 # ── The inbox: how the catalogue changes ─────────────────
