@@ -413,6 +413,15 @@ def _create_from(kind, payload, project):
             verify_md=_cap(payload.get("verify_md"), 6000),
             sort_order=last + 10,
         )
+        # Give it the vendor's own mark on the way in, or it lands as a
+        # monogram and stays one until somebody notices. Never fatal: the
+        # runbook is the point, the picture is not, and a vendor's site being
+        # down must not fail the write.
+        try:
+            from pm.playbooks_routes import refresh_playbook_icon
+            refresh_playbook_icon(row)
+        except Exception:
+            pass
     elif kind == "product":
         category = payload.get("category")
         if category not in Product.CATEGORY_LABELS:

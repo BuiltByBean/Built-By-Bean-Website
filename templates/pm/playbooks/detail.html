@@ -108,6 +108,12 @@
             <img src="{{ url_for('static', filename=playbook.logo_path) }}?v={{ asset_version }}"
                  alt="" aria-hidden="true"
                  class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-2 object-contain">
+            {% elif playbook.icon_file %}
+            {# Fetched off the vendor's own site, because a runbook filed
+               through the door arrives without a picture. #}
+            <img src="{{ url_for('playbooks.icon', slug=playbook.slug) }}"
+                 alt="" aria-hidden="true"
+                 class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-2 object-contain">
             {% else %}
             <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
                 <span class="text-base font-bold text-brand-300">{{ playbook.initials }}</span>

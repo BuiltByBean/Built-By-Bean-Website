@@ -21,8 +21,27 @@
    same way when a screen moves; one typed in here from memory is never
    written properly. #}
 
+{# Only when something is missing one. The fetch is a network call per
+   vendor, so it is a press rather than something the page does on its own. #}
+{% block header_actions %}
+{% if missing %}
+<form method="POST" data-live-action action="{{ url_for('playbooks.marks_refresh') }}">
+    <button type="submit"
+            class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 14.25h.008v.008H18v-.008zM2.25 6.75v10.5a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25h-15A2.25 2.25 0 002.25 6.75z"/>
+        </svg>
+        Get {{ missing | commas }} missing mark{{ '' if missing == 1 else 's' }}
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="space-y-6 stagger-in">
+    {# The grid is the region a fetch swaps, so the marks arrive without the
+       page reloading and without the grid jumping back to the top. #}
+    <div data-live="runbooks" class="space-y-6">
 
     {% if playbooks %}
     {# Grouped by what kind of thing it is, in CATEGORIES order, so the page
@@ -46,8 +65,15 @@
            class="glass-card card-hover p-4 sm:p-5 flex flex-col gap-3 min-w-0 {% if not playbook.is_active %}opacity-60{% endif %}">
 
             <div class="flex items-start gap-3 min-w-0">
+                {# A chosen SVG first, then the mark fetched off the vendor's own
+                   site, then the monogram. object-contain, not cover: cropping
+                   a logo to fill a square cuts somebody's name off. #}
                 {% if playbook.logo_path %}
                 <img src="{{ url_for('static', filename=playbook.logo_path) }}?v={{ asset_version }}"
+                     alt="" aria-hidden="true"
+                     class="w-11 h-11 flex-shrink-0 rounded-xl bg-white/5 p-1.5 object-contain">
+                {% elif playbook.icon_file %}
+                <img src="{{ url_for('playbooks.icon', slug=playbook.slug) }}"
                      alt="" aria-hidden="true"
                      class="w-11 h-11 flex-shrink-0 rounded-xl bg-white/5 p-1.5 object-contain">
                 {% else %}
@@ -96,5 +122,6 @@
     </div>
     {% endif %}
 
+    </div>
 </div>
 {% endblock %}

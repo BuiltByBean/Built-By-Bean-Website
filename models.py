@@ -943,6 +943,16 @@ class Playbook(db.Model):
     display_name = db.Column(db.String(100), nullable=False)
     logo_path = db.Column(db.String(300), default="")
     vendor_url = db.Column(db.String(300), default="")
+    # The vendor's own mark, fetched off vendor_url the way an app tile gets
+    # its icon (app_icon_service). The seeded runbooks carry hand-picked SVGs
+    # in logo_path; one written through the door carries none and never could,
+    # because the door takes JSON and a picture is not JSON, so every runbook
+    # a session filed was a monogram forever. logo_path still wins where
+    # somebody chose a mark: a chosen one beats a scraped favicon. Null means
+    # none found or none fetched yet.
+    icon_file = db.Column(db.String(120), nullable=True)
+    icon_source = db.Column(db.String(500), nullable=True)
+    icon_fetched_at = db.Column(db.DateTime, nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     # Applied to every new project without being asked for. GitHub and Railway
     # are on every build, so making somebody tick them each time is a step
@@ -1045,6 +1055,27 @@ class Playbook(db.Model):
         if len(parts) >= 2:
             return (parts[0][0] + parts[1][0]).upper()
         return (parts[0][:2] if parts else "?").upper()
+
+    @property
+    def has_mark(self):
+        """Whether there is a picture to show in place of the monogram."""
+        return bool(self.logo_path or self.icon_file)
+
+    @property
+    def wants_mark(self):
+        """Whether going and looking for one is worth a network call.
+
+        Somewhere to look, nothing found yet, and not asked recently: a vendor
+        that offers no icon must not be re-asked on every press.
+        """
+        if self.has_mark or not self.vendor_url:
+            return False
+        if self.icon_fetched_at is None:
+            return True
+        asked = self.icon_fetched_at
+        if asked.tzinfo is None:
+            asked = asked.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - asked) > timedelta(days=7)
 
     def __repr__(self):
         return f"<Playbook {self.slug}>"

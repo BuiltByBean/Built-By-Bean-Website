@@ -6,18 +6,72 @@ from each other, and `/admin/playbooks/twilio` survives a reseed while
 posted against a name is the request most likely to be aimed at the wrong row
 after somebody renames one.
 """
+import os
 import re
+from datetime import datetime, timezone
 
 import markdown
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, abort,
+    current_app, send_from_directory,
 )
 from flask_login import login_required
 from markupsafe import Markup
 
+import app_icon_service
 from models import db, Playbook, ServiceProvider
 
 playbooks_bp = Blueprint("playbooks", __name__, url_prefix="/admin/playbooks")
+
+# Kept apart from the app icons: the two are fetched the same way but belong
+# to different rows, and one board clearing its cache must not blank the other.
+ICON_DIR = "playbook_icons"
+
+# A press asks a handful of other people's servers, each with its own timeout.
+# Capped so the answer arrives while somebody is still looking at the page.
+MARK_BATCH = 8
+
+
+def _icon_folder():
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], ICON_DIR)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def refresh_playbook_icon(playbook):
+    """Fetch and store this vendor's mark. Returns whether one was found.
+
+    Best effort by design, exactly as the app board's is: a vendor that is
+    down, slow or offers nothing leaves the runbook on its monogram, which is
+    a page that renders rather than a page that hangs.
+    """
+    url = (playbook.vendor_url or "").strip()
+    if not url:
+        return False
+    # A vendor_url filed through the door is whatever the session typed, and
+    # a bare domain is the common case. fetch refuses anything without a
+    # scheme, so it would have silently found nothing.
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        got = app_icon_service.fetch(url)
+    except Exception:
+        got = None
+    # Stamped either way, so a vendor with no icon is not asked again on the
+    # next press.
+    playbook.icon_fetched_at = datetime.now(timezone.utc)
+    if not got:
+        return False
+    data, ext, source = got
+    old = playbook.icon_file
+    playbook.icon_file = app_icon_service.store(data, ext, _icon_folder())
+    playbook.icon_source = (source or "")[:500]
+    if old and old != playbook.icon_file:
+        try:
+            os.remove(os.path.join(_icon_folder(), old))
+        except OSError:
+            pass  # a missing file is already the state we wanted
+    return True
 
 
 # ── Markdown ────────────────────────────────────────────────
@@ -144,8 +198,50 @@ def playbooks_index():
     if orphans:
         groups.append({"label": "Uncategorised", "blurb": "", "playbooks": orphans})
 
+    # Counted so the page can offer the fetch only when there is something
+    # to fetch. A button that can only tell you it did nothing is furniture.
     return render_template("pm/playbooks/index.html",
-                           playbooks=playbooks, groups=groups)
+                           playbooks=playbooks, groups=groups,
+                           missing=sum(1 for p in playbooks if p.wants_mark))
+
+
+@playbooks_bp.route("/<slug>/icon")
+@login_required
+def icon(slug):
+    playbook = Playbook.query.filter_by(slug=slug).first() or abort(404)
+    if not playbook.icon_file:
+        abort(404)
+    resp = send_from_directory(_icon_folder(), playbook.icon_file, max_age=86400)
+    # Fetched from other people's servers, and an SVG is a document that can
+    # carry script. Nothing here loads or runs anything, so say so.
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@playbooks_bp.route("/marks", methods=["POST"])
+@login_required
+def marks_refresh():
+    """Go and get the marks for the runbooks still showing a monogram.
+
+    Not on page render: this is a network call to somebody else's server, and
+    a board that hangs waiting for a picture is worse than one without it.
+    """
+    waiting = [p for p in Playbook.query.order_by(Playbook.sort_order).all()
+               if p.wants_mark]
+    found = sum(1 for p in waiting[:MARK_BATCH] if refresh_playbook_icon(p))
+    db.session.commit()
+    asked = min(len(waiting), MARK_BATCH)
+    if not asked:
+        flash("Every runbook already has its mark.", "info")
+    elif found:
+        flash(f"Found {found} of {asked}." +
+              (f" {len(waiting) - asked} still to ask." if len(waiting) > asked else ""),
+              "success")
+    else:
+        flash(f"Asked {asked}, none published a mark. Set one by hand on the runbook.",
+              "warning")
+    return redirect(url_for("playbooks.playbooks_index"))
 
 
 # No create route. A playbook is written by the session that set the vendor
