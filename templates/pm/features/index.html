@@ -87,7 +87,9 @@
        seconds, or it does not get caught. #}
     {# z-20: above the list its dropdown opens over, under the filter card's
        z-30 so the filter panels stay on top of this card too. #}
-    <form method="POST" action="{{ url_for('features.feature_create') }}"
+    {# Outside the swapped region, so nothing rebuilds it: data-live-reset
+       empties what was typed once the row is in the list. #}
+    <form method="POST" data-live-action data-live-reset action="{{ url_for('features.feature_create') }}"
           x-show="adding" style="display: none"
           class="shrink-0 relative z-20 glass-card p-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="kind" value="{{ page_kind }}">
@@ -128,11 +130,16 @@
             {% endif %}
         </div>
 
-        <div class="divide-y divide-white/5 min-h-0 overflow-y-auto">
+        {# The scroller is the region, so its offset carries across a save
+           and row sixty stays where it was. One region rather than one per
+           row, because an edit can move a row between categories and the list
+           has to be rebuilt; data-live-key keeps whatever was open open. #}
+        <div data-live="results" class="divide-y divide-white/5 min-h-0 overflow-y-auto">
         {% for f in features %}
         {# The searchable text rides on the row, so the bar can test every
            row without a request: name, summary, guidance, traps, source. #}
         <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }"
+             data-live-key="feature-{{ f.id }}"
              data-row data-category="{{ f.category }}" data-status="{{ f.status }}"
              data-value="{{ f.typical_value or 0 }}"
              data-search="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ (f.gold_standard_md or '') ~ ' ' ~ (f.pitfalls_md or '') ~ ' ' ~ (f.reference_project or ''))|lower }}">
@@ -178,7 +185,7 @@
                 </p>
                 {% endif %}
 
-                <form method="POST" action="{{ url_for('features.feature_edit', id=f.id) }}"
+                <form method="POST" data-live-action action="{{ url_for('features.feature_edit', id=f.id) }}"
                       class="space-y-3">
                     <input type="hidden" name="return_category" :value="category">
                     <input type="hidden" name="return_status" :value="status">

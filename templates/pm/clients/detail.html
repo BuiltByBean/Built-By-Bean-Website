@@ -25,7 +25,7 @@
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Client Info -->
-    <div class="glass-card p-6">
+    <div data-live="client-info" class="glass-card p-6">
         <h3 class="text-sm font-semibold text-white mb-4 uppercase tracking-wider">Contact Info</h3>
         <div class="space-y-3">
             {% if client.email %}
@@ -62,7 +62,7 @@
            to change it is why it never got changed. #}
         <div class="mt-6 pt-4 border-t border-surface-700">
             <p class="text-xs text-surface-400 mb-2">Stage</p>
-            <form method="POST" action="{{ url_for('pm.client_stage_update', id=client.id) }}">
+            <form method="POST" data-live-action action="{{ url_for('pm.client_stage_update', id=client.id) }}">
                 {{ select_dropdown("stage", stage_choices, client.stage or 'lead', full_width=true,
                                    on_change="$el.closest('form').requestSubmit()") }}
             </form>
@@ -111,7 +111,7 @@
         {# Every attempt to reach them, newest first, with the box to add one
            at the top. Above the money, because for most of the rows on the
            clients page there is no money yet and this is the whole record. #}
-        <div class="glass-card p-6" x-data="{ adding: false }">
+        <div data-live="contacts" class="glass-card p-6" x-data="{ adding: false }">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-semibold text-white uppercase tracking-wider">
                     Contact log
@@ -133,7 +133,7 @@
                 </button>
             </div>
 
-            <form x-show="adding" x-cloak method="POST"
+            <form x-show="adding" x-cloak method="POST" data-live-action
                   action="{{ url_for('pm.client_contact_add', id=client.id) }}"
                   class="mb-5 p-4 rounded-xl bg-surface-800/40 space-y-3">
                 {{ contact_form.hidden_tag() }}
@@ -170,7 +170,7 @@
                         <p class="text-sm text-white whitespace-pre-line mt-0.5">{{ c.note }}</p>
                         {% endif %}
                     </div>
-                    <form method="POST" action="{{ url_for('pm.client_contact_delete', id=c.id) }}">
+                    <form method="POST" data-live-action action="{{ url_for('pm.client_contact_delete', id=c.id) }}">
                         {% call confirm_button(question='Remove it?',
                                                btn_class='p-1.5 rounded-lg text-surface-600 hover:text-red-400 hover:bg-white/5 transition-colors') %}
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -247,13 +247,13 @@
         </div>
 
         <!-- Documents -->
-        <div class="glass-card p-6">
+        <div data-live="client-documents" class="glass-card p-6">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Documents ({{ documents | length | commas }})</h3>
             </div>
 
             <!-- Upload Form -->
-            <form method="POST" action="{{ url_for('pm.client_upload_document', id=client.id) }}" enctype="multipart/form-data" class="mb-4">
+            <form method="POST" data-live-action action="{{ url_for('pm.client_upload_document', id=client.id) }}" enctype="multipart/form-data" class="mb-4">
                 <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
                     <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
@@ -285,7 +285,7 @@
                         <a href="{{ url_for('contracts.send_document', document_id=doc.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Sign</a>
                         {% endif %}
                         <button type="button" @click="confirm = true" x-show="!confirm" class="text-xs text-red-500 hover:text-red-600 font-medium">Del</button>
-                        <form x-show="confirm" method="POST" action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline-flex items-center gap-1">
+                        <form x-show="confirm" method="POST" data-live-action action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline-flex items-center gap-1">
                             <button type="submit" class="px-2 py-0.5 text-xs bg-red-500 text-white rounded">Yes</button>
                             <button type="button" @click="confirm = false" class="text-xs text-surface-500">No</button>
                         </form>

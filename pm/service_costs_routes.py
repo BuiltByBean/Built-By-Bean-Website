@@ -462,6 +462,10 @@ def mapping_delete(id):
     db.session.delete(mapping)
     db.session.commit()
     flash("Mapping deleted.", "success")
+    # Back to the filtered page it was pressed on, not every provider.
+    nxt = request.form.get("next") or ""
+    if nxt.startswith("/") and not nxt.startswith("//"):
+        return redirect(nxt)
     return redirect(url_for("service_costs.mappings_list"))
 
 

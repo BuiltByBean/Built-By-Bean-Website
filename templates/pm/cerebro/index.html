@@ -91,7 +91,9 @@
 
     {# One scroller for the matrix and the link list together, so the
        matrix can never be squeezed out by what sits under it. #}
-    <div class="flex-1 min-h-0 overflow-y-auto space-y-4">
+    {# Linking a repo redraws the matrix and drops that row out of the list
+       below it. Both live in here; the chips above do not move. #}
+    <div data-live="cerebro" class="flex-1 min-h-0 overflow-y-auto space-y-4">
     <div class="glass-card overflow-hidden">
         {% if not chips %}
         <div class="p-8 sm:p-12 text-center">
@@ -163,7 +165,7 @@
         </div>
         <div class="divide-y divide-white/5">
             {% for p in unlinked %}
-            <form method="POST" action="{{ url_for('cerebro.link_repo') }}"
+            <form method="POST" data-live-action action="{{ url_for('cerebro.link_repo') }}"
                   class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3
                          relative focus-within:z-30">
                 <input type="hidden" name="project_id" value="{{ p.id }}">

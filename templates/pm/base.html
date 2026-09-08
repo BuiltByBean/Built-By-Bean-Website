@@ -901,9 +901,14 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
                 </svg>
                 Needs attention
-                {% if attention_total %}
-                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ attention_total | commas }}</span>
-                {% endif %}
+                {# Always rendered, count or no count. A live region that is
+                   absent cannot be swapped, so dismissing the last mail would
+                   leave the badge showing the number it had before. #}
+                <span data-live="nav-attention" class="ml-auto">
+                    {%- if attention_total %}
+                    <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ attention_total | commas }}</span>
+                    {%- endif %}
+                </span>
             </a>
             <div class="my-2 border-t border-white/10"></div>
 

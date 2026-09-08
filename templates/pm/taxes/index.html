@@ -50,7 +50,9 @@
     <!-- Your situation -->
     <div class="glass-card p-5 sm:p-6 min-w-0">
         <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-1">Your situation</h3>
-        <form method="POST" class="tax-form space-y-4">
+        {# Recalculate swaps the answer below and leaves this form alone, so
+           the figures just typed are still on screen to check it against. #}
+        <form method="POST" data-live-action class="tax-form space-y-4">
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Filing status</label>
                 {{ select_dropdown("filing_status", filing_statuses, settings.filing_status,
@@ -115,6 +117,7 @@
     </div>
 
     <!-- The answer -->
+    <div data-live="answer">
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="glass-card p-5 sm:p-6 min-w-0">
             <span class="text-sm font-medium text-surface-400">Business profit</span>
@@ -347,6 +350,7 @@
         {{ calc.ss_wage_base | format_currency }}. Verify against the IRS Revenue Procedure
         for the year before filing.
     </p>
+    </div>
 
 </div>
 {% endblock %}

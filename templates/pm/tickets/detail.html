@@ -39,7 +39,9 @@
 
 {% block content %}
 <!-- Ticket Info -->
-<div class="glass-card p-6 mb-6">
+{# Status, the thread and the reply box are one region: a triage press and a
+   reply each change this card and nothing else on the page. #}
+<div data-live="ticket" class="glass-card p-6 mb-6">
     <div class="flex flex-wrap items-center gap-3 mb-4">
         {{ badge(ticket.status) }}
         {{ badge(ticket.priority) }}
@@ -55,7 +57,8 @@
     <div class="flex flex-wrap items-center gap-2 mb-4">
         <span class="text-xs font-medium text-surface-400">Status:</span>
         {% for val, label in ticket_status_choices %}
-        <form method="POST" action="{{ url_for('pm.ticket_triage', id=ticket.id) }}" class="inline">
+        <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=ticket.id) }}" class="inline">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
             <input type="hidden" name="status" value="{{ val }}">
             <button type="submit"
                     class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg transition-colors
@@ -120,7 +123,7 @@
         {% endfor %}
         </div>
 
-        <form method="POST" action="{{ url_for('pm.ticket_reply', id=ticket.id) }}" class="flex gap-2 mt-3">
+        <form method="POST" data-live-action action="{{ url_for('pm.ticket_reply', id=ticket.id) }}" class="flex gap-2 mt-3">
             <input type="text" name="body" required placeholder="Reply to {{ ticket.reporter_name or 'them' }}"
                    class="input-ring flex-1 min-w-0 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
             <button type="submit" class="shrink-0 px-4 py-2.5 min-h-[44px] bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
@@ -156,18 +159,18 @@
 </div>
 
 <!-- Documents Section -->
-<div class="glass-card p-6 mb-6">
+<div data-live="documents" class="glass-card p-6 mb-6">
     <h3 class="text-sm font-semibold text-white mb-4 uppercase tracking-wider">Documents</h3>
 
     <!-- Upload Form -->
-    <form method="POST" action="{{ url_for('pm.ticket_upload_document', id=ticket.id) }}" enctype="multipart/form-data" class="mb-4">
+    <form method="POST" data-live-action action="{{ url_for('pm.ticket_upload_document', id=ticket.id) }}" enctype="multipart/form-data" class="mb-4">
         <div class="flex items-center gap-3">
             <label class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
                 <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                 </svg>
                 <span class="text-sm text-surface-400">Choose files to upload</span>
-                <input type="file" name="documents" multiple class="hidden" onchange="this.form.submit()">
+                <input type="file" name="documents" multiple class="hidden" onchange="this.form.requestSubmit()">
             </label>
         </div>
     </form>
@@ -191,7 +194,7 @@
                 {% if doc.original_name.lower().endswith('.pdf') %}
                 <a href="{{ url_for('contracts.send_document', document_id=doc.id) }}" class="px-2 py-1 text-xs text-brand-500 hover:text-brand-600 font-medium">Sign</a>
                 {% endif %}
-                <form method="POST" action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline" x-data="{ confirm: false }">
+                <form method="POST" data-live-action action="{{ url_for('pm.document_delete', id=doc.id) }}" class="inline" x-data="{ confirm: false }">
                     <button type="button" @click="confirm = true" x-show="!confirm" class="px-2 py-1 text-xs text-red-500 hover:text-red-600 font-medium">Delete</button>
                     <div x-show="confirm" class="flex items-center gap-1">
                         <button type="submit" class="px-2 py-1 text-xs bg-red-500 text-white rounded-lg">Yes</button>

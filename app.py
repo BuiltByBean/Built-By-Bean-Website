@@ -51,6 +51,23 @@ from forms import (
 SIGN_FIELD_X, SIGN_FIELD_W, SIGN_FIELD_H = 61.0, 86.0, 6.0
 
 
+def _safe_next(fallback):
+    """Where a POST should land, when the page asked to be returned to.
+
+    A live action swaps regions out of whatever comes back, so the answer has
+    to be the page the button sits on. request.referrer usually is, and is
+    also a header the browser is free not to send: when it is missing the
+    press lands somewhere with no matching region and silently does nothing.
+    The form says where it came from instead, and the header is the fallback
+    rather than the plan. Relative paths only, so an open redirect cannot be
+    posted in.
+    """
+    nxt = request.form.get("next") or ""
+    if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+        return nxt
+    return fallback
+
+
 def _billable_hours_from_seconds(seconds):
     """Convert elapsed seconds to billable hours, rounded UP to the nearest 15 min
     (0.25h), with a minimum of one quarter-hour for any tracked time."""
@@ -1873,7 +1890,7 @@ def create_app():
         if "billed_minutes" in request.form:
             ticket.billed_minutes = max(0, request.form.get("billed_minutes", type=int) or 0)
         db.session.commit()
-        return redirect(request.referrer or url_for("pm.tickets_list"))
+        return redirect(_safe_next(request.referrer or url_for("pm.tickets_list")))
 
     @pm_bp.route("/tickets/<int:id>/flag", methods=["POST"])
     @login_required
@@ -1883,7 +1900,7 @@ def create_app():
         ticket.followup_flagged = not ticket.followup_flagged
         ticket.updated_at = datetime.now(timezone.utc)
         db.session.commit()
-        return redirect(request.referrer or url_for("pm.tickets_list"))
+        return redirect(_safe_next(request.referrer or url_for("pm.tickets_list")))
 
     @pm_bp.route("/tickets/<int:id>/scope", methods=["POST"])
     @login_required
@@ -3786,7 +3803,8 @@ def create_app():
         db.session.delete(expense)
         db.session.commit()
         flash("Expense deleted.", "success")
-        return redirect(url_for("pm.expenses_list"))
+        # Back to the filtered page it was pressed on, not the whole ledger.
+        return redirect(_safe_next(url_for("pm.expenses_list")))
 
     @pm_bp.route("/expenses/<int:id>/receipt")
     @login_required

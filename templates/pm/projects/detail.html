@@ -46,7 +46,9 @@
 {% set phases = phase_choices %}
 {% set phase_keys = phases | map(attribute='0') | list %}
 {% set current_idx = phase_keys.index(project.phase) if project.phase in phase_keys else 0 %}
-<div class="glass-card p-6 mb-6">
+{# The phase bar and the note under it are one region: pressing a phase
+   changes both and nothing else on the page. #}
+<div data-live="phase" class="glass-card p-6 mb-6">
     <div class="relative mb-6">
         <!-- Connector lines (behind circles) -->
         <div class="absolute top-[18px] left-0 right-0 px-[10%]">
@@ -63,7 +65,7 @@
         <div class="relative grid grid-cols-5 gap-0">
             {% for val, label in phases %}
             {% set idx = loop.index0 %}
-            <form method="POST" action="{{ url_for('pm.project_phase_update', id=project.id) }}" class="flex flex-col items-center">
+            <form method="POST" data-live-action action="{{ url_for('pm.project_phase_update', id=project.id) }}" class="flex flex-col items-center">
                 <input type="hidden" name="phase" value="{{ val }}">
                 <button type="submit" class="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer
                     {% if idx < current_idx %}bg-brand-600 text-white shadow-md shadow-brand-500/30 hover:bg-brand-700
@@ -124,7 +126,7 @@
             <p class="text-sm {{ 'text-amber-300' if project.phase_locked else 'text-surface-400' }}">{{ phase_note }}</p>
         </div>
         {% if project.phase_locked %}
-        <form method="POST" action="{{ url_for('pm.project_phase_auto', id=project.id) }}">
+        <form method="POST" data-live-action action="{{ url_for('pm.project_phase_auto', id=project.id) }}">
             <button type="submit"
                     class="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-surface-300 hover:text-brand-300 hover:border-brand-500/40 transition-colors whitespace-nowrap">
                 Follow the dates again
