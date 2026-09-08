@@ -3,6 +3,7 @@
 {% from "pm/components/pagination.html" import render_pagination %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/clear_filters.html" import clear_filters %}
+{% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
 
 {% block page_title %}Time Tracking{% endblock %}
 {% block page_subtitle %}Log and manage work hours{% endblock %}
@@ -118,9 +119,11 @@
                     </td>
                     <td class="py-3 px-4 text-right">
                         <div class="flex items-center justify-end gap-2">
-                            <a href="{{ url_for('pm.time_edit', id=entry.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Edit</a>
+                            {{ icon_button('edit', 'Edit this entry',
+                                           href=url_for('pm.time_edit', id=entry.id)) }}
                             <form method="POST" data-live-action action="{{ url_for('pm.time_delete', id=entry.id) }}" class="inline" x-data="{ confirm: false }">
-                                <button type="button" @click="confirm = true" x-show="!confirm" class="text-xs text-red-500 hover:text-red-600 font-medium">Del</button>
+                                {{ icon_button('delete', 'Delete this entry', tone='danger',
+                                               attrs='@click="confirm = true" x-show="!confirm"') }}
                                 <div x-show="confirm" class="flex items-center gap-1">
                                     <button type="submit" class="px-2 py-0.5 text-xs bg-red-500 text-white rounded">Yes</button>
                                     <button type="button" @click="confirm = false" class="text-xs text-surface-500">No</button>

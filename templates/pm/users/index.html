@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
 
 {#
   Everyone who may open this board, the switched-off ones last.
@@ -77,8 +78,8 @@
                    its max-content, so its children never wrap; it overflowed the
                    card and the card's overflow-hidden cut Cancel off the screen. #}
                 <div class="flex flex-wrap items-center justify-end gap-2 max-w-full basis-full sm:basis-auto">
-                    <a href="{{ url_for('users.edit', id=u.id) }}"
-                       class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Edit</a>
+                    {{ icon_button('edit', 'Edit ' ~ u.username,
+                                   href=url_for('users.edit', id=u.id)) }}
                     <form method="POST" data-live-action action="{{ url_for('users.reset', id=u.id) }}">
                         {{ confirm_button('Reset password', 'New temporary password?', tone='brand',
                                           btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors') }}

@@ -2,6 +2,7 @@
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/brand_icons.html" import launch, railway, github %}
 {% from "pm/components/status_badge.html" import badge %}
+{% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
 
 {% block back %}{{ back_link(url_for('pm.projects_list'), 'Projects') }}{% endblock %}
 {% block page_title %}{{ project.name }}{% endblock %}
@@ -12,15 +13,14 @@
     {# Raising a ticket and logging time both happen on their own pages, which
        is where they are looked for. What is left here is what only this page
        can do. #}
-    <a href="{{ url_for('pm.project_edit', id=project.id) }}"
-       class="px-3 py-2 min-h-[44px] bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
-        Edit
-    </a>
-    <div x-show="!confirmDelete">
-        <button @click="confirmDelete = true"
-                class="px-3 py-2 min-h-[44px] bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-600 text-sm font-medium rounded-xl transition-colors">
-            Delete
-        </button>
+    {# Glyphs, not words. Catalogue rule "Sign out is an icon, never a
+       label", which names edit and delete: a bordered text button looks
+       deliberate rather than unstyled, which is why these two survived so
+       long. The bin keeps its margin and stays last. #}
+    {{ icon_button('edit', 'Edit project', href=url_for('pm.project_edit', id=project.id)) }}
+    <div x-show="!confirmDelete" class="ml-2">
+        {{ icon_button('delete', 'Delete project', tone='danger',
+                       attrs='@click="confirmDelete = true"') }}
     </div>
     {# Deleting used to fail outright on a project with logged time, so the
        confirmation never had to say what it destroys. It does now. #}

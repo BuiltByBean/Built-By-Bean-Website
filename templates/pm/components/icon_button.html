@@ -1,0 +1,87 @@
+{#
+  An action whose glyph carries the meaning, as one control.
+
+  Catalogue rule "Sign out is an icon, never a label". Edit and delete are the
+  two most common actions in an admin and the two most universal glyphs after
+  close, and they kept shipping as the words "Edit" and "Delete" because a
+  bordered text button looks deliberate rather than unstyled. This exists so
+  the fix lives in one place: the rule that gets forgotten at a call site is
+  never the geometry, it is the accessible name, so the macro refuses to
+  render without one.
+
+  Not for a form's submit. The button that commits fields says what it does in
+  words ("Add a note", "Save Aug 2026"); this is for the action slot on a row
+  or a header, where the buttons sit side by side and position already says
+  what they are.
+
+    name     a key from GLYPHS below
+    label    what a screen reader and a hover say. Required.
+    href     renders an anchor; omit for a button
+    tone     'quiet' (default), 'brand' for the primary, 'danger' for destructive
+    type     submit or button, when it is a button
+    target   for an anchor that leaves the app
+    attrs    anything else, dropped on the element verbatim
+
+  44px square, the house control size, and the same rounded-xl every other
+  control in a bar uses (catalogue rule "One shape for every control in a
+  bar"). The svg is aria-hidden so the name is read once, not twice.
+#}
+
+{% set GLYPHS = {
+  'edit':     'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
+  'delete':   'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+  'download': 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4',
+  'add':      'M12 4v16m8-8H4',
+  'close':    'M6 18L18 6M6 6l12 12',
+  'copy':     'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z',
+  'external': 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14'
+} %}
+
+{% set TONES = {
+  'quiet':  'border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300',
+  'brand':  'btn-brand text-white',
+  'danger': 'border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300'
+} %}
+
+{% macro icon_glyph(name, size='w-5 h-5') %}
+<svg class="{{ size }} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ GLYPHS.get(name, GLYPHS['close']) }}"/>
+</svg>
+{%- endmacro %}
+
+{% macro icon_button(name, label, href='', tone='quiet', type='button', target='', attrs='') %}
+{#- An unnamed control is a worse bug than the caption was, so it is not
+    optional: with no label the button is not drawn at all, which shows up
+    the moment the page is opened rather than silently on a screen reader. -#}
+{%- if not label -%}
+{%- else -%}
+{%- set shape = 'inline-flex items-center justify-center w-11 h-11 rounded-xl transition-colors shrink-0' -%}
+{%- if href -%}
+<a href="{{ href }}" aria-label="{{ label }}" title="{{ label }}"
+   {% if target %}target="{{ target }}" rel="noopener"{% endif %}
+   class="{{ shape }} {{ TONES.get(tone, TONES['quiet']) }}" {{ attrs|safe }}>{{ icon_glyph(name) }}</a>
+{%- else -%}
+<button type="{{ type }}" aria-label="{{ label }}" title="{{ label }}"
+        class="{{ shape }} {{ TONES.get(tone, TONES['quiet']) }}" {{ attrs|safe }}>{{ icon_glyph(name) }}</button>
+{%- endif -%}
+{%- endif -%}
+{% endmacro %}
+
+{#
+  The destructive one, which is the same glyph plus the in-place question
+  (LM-2: never confirm()). Last in a row and with a margin, because a bin one
+  press away from the button used most often is a mis-tap that cannot be
+  undone.
+#}
+{% macro delete_icon(question='Delete it?', label='Delete') %}
+{%- from "pm/components/confirm_button.html" import confirm_button with context -%}
+{#- The name goes on the button, not inside it as hidden text: a span the
+    screen reader can see is still text the page contains, and every check
+    that asks "is this control just the word Delete" would find it. -#}
+{%- call confirm_button(question=question,
+                        btn_class='inline-flex items-center justify-center w-11 h-11 rounded-xl transition-colors shrink-0 ' ~ TONES['danger'],
+                        btn_attrs='aria-label="' ~ label ~ '" title="' ~ label ~ '"',
+                        wrap_class='ml-2') -%}
+{{ icon_glyph('delete') }}
+{%- endcall -%}
+{% endmacro %}
