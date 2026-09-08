@@ -1092,12 +1092,20 @@ def create_app():
         client = db.session.get(Client, id) or abort(404)
         projects = client.projects.order_by(Project.created_at.desc()).all()
         total_hours = client.total_hours
+        # What they were billed, what arrived, what it cost, what is left.
+        # Invoiced and revenue both come off the invoices tied to this client,
+        # which is the source the invoices page reads and has always had right.
+        total_invoiced = client.total_invoiced
         total_revenue = client.total_revenue
         total_expenses = sum(p.total_expenses for p in projects)
+        # Subtracted from the two figures on the screen, so the four tiles add
+        # up in front of him rather than nearly adding up.
+        total_profit = total_revenue - total_expenses
         documents = client.documents.order_by(Document.uploaded_at.desc()).all()
         return render_template("pm/clients/detail.html",
             client=client, projects=projects, documents=documents,
             total_hours=total_hours, total_revenue=total_revenue, total_expenses=total_expenses,
+            total_invoiced=total_invoiced, total_profit=total_profit,
             contact_form=ContactLogForm(), stage_choices=CLIENT_STAGE_CHOICES,
             today_iso=date.today().isoformat())
 

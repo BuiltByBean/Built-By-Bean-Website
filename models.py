@@ -200,8 +200,25 @@ class Client(db.Model):
         return self.projects.filter_by(status="active").count()
 
     @property
+    def total_invoiced(self):
+        """Everything raised against them, paid included.
+
+        Void excluded, because a voided invoice was cancelled and was never
+        money. The same rule the invoices page uses for its Total Billed tile,
+        copied rather than reinvented so the two cannot disagree.
+        """
+        return sum(inv.total or 0.0 for inv in self.invoices
+                   if (inv.status or "") != "void")
+
+    @property
     def total_revenue(self):
         return sum(inv.amount_paid for inv in self.invoices if inv.status == "paid")
+
+    # No total_profit here on purpose. Client.total_expenses and the sum of
+    # the projects' expenses are not the same number, so a profit property on
+    # the model and a profit tile on the page would disagree the moment an
+    # expense was booked against the client rather than a project. The page
+    # subtracts the expense figure it is itself showing.
 
     @property
     def total_hours(self):
