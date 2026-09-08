@@ -26,9 +26,9 @@
         <div class="flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    Working name</label>
+                    Call it</label>
                 <input type="text" name="name" value="{{ package.name }}" required
-                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+                       class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
             <div>
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
@@ -37,18 +37,18 @@
             </div>
             <div>
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    Quoted $</label>
+                    Price you quoted</label>
                 <input type="text" name="price_override"
                        value="{{ '%g'|format(package.price_override) if package.price_override is not none else '' }}"
-                       placeholder="sum"
-                       class="input-ring w-28 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+                       placeholder="adds up"
+                       class="input-ring w-28 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
         </div>
         <div>
             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
                 What they are trying to do</label>
             <textarea name="summary" rows="3" placeholder="In their words, while they say it"
-                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-surface-200 text-sm rounded-xl">{{ package.summary }}</textarea>
+                      class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-surface-200 text-sm rounded-xl">{{ package.summary }}</textarea>
         </div>
         <div class="flex items-center gap-3">
             <button type="submit"
@@ -84,7 +84,7 @@
     <div data-live="chosen" class="glass-card overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-baseline gap-x-3">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
-                {{ package.items|length }} on it</span>
+                {{ package.items|length }} in the package</span>
             <span class="ml-auto text-sm tabular-nums text-white">
                 {{ package.estimate|format_currency if package.estimate else '—' }}{% if package.monthly_estimate %}
                 <span class="text-xs text-surface-500">+{{ package.monthly_estimate|format_currency }}/mo</span>{% endif %}
@@ -113,8 +113,14 @@
                             {% endif %}
                             {% endif %}
                         </span>
-                        {% if item.notes %}
-                        <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ item.notes }}</span>
+                        {# The catalogue's own line about what it does, so the
+                           package reads as sentences rather than as a list of
+                           names. A note typed on the item wins, because it was
+                           written for this client. #}
+                        {% set blurb = item.notes or (item.feature.summary if item.feature else None)
+                                       or (item.product.summary if item.product else None) %}
+                        {% if blurb %}
+                        <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ blurb }}</span>
                         {% endif %}
                     </span>
                     <span class="shrink-0 text-right">
@@ -197,7 +203,7 @@
            (LM-4). The class backs it solid; rows vanish under it. #}
         <div class="sticky-filters rounded-xl p-3 -mx-3 space-y-3">
         <input type="text" x-model="q" placeholder="Search the catalogue"
-               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+               class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
         <div class="flex gap-1.5 overflow-x-auto pb-1 -mb-1">
             <button type="button" @click="cat = 'all'"
                     class="shrink-0 min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
@@ -233,6 +239,9 @@
                         class="group flex w-full min-h-[44px] items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 hover:border-brand-500/40 text-left transition-colors">
                     <span class="min-w-0 flex-1">
                         <span class="block text-sm text-surface-200 group-hover:text-brand-300 transition-colors">{{ p.name }}</span>
+                        {% if p.summary %}
+                        <span class="block text-[11px] leading-snug text-surface-500">{{ p.summary }}</span>
+                        {% endif %}
                     </span>
                     <span class="shrink-0 text-xs tabular-nums text-surface-400">{{ p.price_label }}</span>
                     <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-brand-300 transition-colors"
@@ -269,7 +278,10 @@
                         class="group flex w-full min-h-[44px] items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 hover:border-brand-500/40 text-left transition-colors">
                     <span class="min-w-0 flex-1">
                         <span class="block text-sm text-surface-200 group-hover:text-brand-300 transition-colors">{{ f.name }}</span>
-                        <span class="block text-[11px] text-surface-500">{{ f.category_label }}{% if f.status == 'idea' %} &middot; not built yet{% endif %}</span>
+                        {% if f.summary %}
+                        <span class="block text-[11px] leading-snug text-surface-500">{{ f.summary }}</span>
+                        {% endif %}
+                        <span class="block text-[11px] text-surface-600">{{ f.category_label }}{% if f.status == 'idea' %} &middot; not built yet{% endif %}</span>
                     </span>
                     <span class="shrink-0 text-xs tabular-nums text-surface-400">
                         {{ f.typical_value|format_currency if f.typical_value else '' }}</span>
@@ -290,9 +302,9 @@
               class="pt-3 border-t border-white/5 flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-[180px]">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    They named something new</label>
+                    They asked for something not on the list</label>
                 <input type="text" name="new_name"
-                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+                       class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
             <div class="w-48">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Area</label>
@@ -301,7 +313,7 @@
             <div>
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
                 <input type="text" name="new_value" placeholder="later"
-                       class="input-ring w-24 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+                       class="input-ring w-24 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
             <button type="submit" class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
                 Add it</button>
