@@ -2281,6 +2281,57 @@ def create_app():
 
     _start_ticket_puller()
 
+    def _start_invoice_importer():
+        """Write Stripe's invoices down on a schedule, starting shortly after
+        boot, so a DEPLOY is the catch-up.
+
+        This is the piece that was missing. The importer shipped wired to the
+        nightly cost sync and to a button, and neither had run, so the client
+        page went on reading $0.00 against $3,500 collected while the invoices
+        page, which reads Stripe live, was correct the whole time. Building
+        the mechanism and not running it is not shipping the fix.
+
+        Same shape as the ticket puller above: one thread per process, guarded
+        on a flag, first pass a minute in rather than on the boot itself,
+        because a worker spending its first seconds on HTTP is a worker not
+        answering the health check. Every write is keyed on
+        stripe_invoice_id, so several gunicorn workers each running this is
+        harmless: they correct the same rows rather than duplicating them.
+        """
+        import threading
+
+        interval = int(os.environ.get("STRIPE_IMPORT_INTERVAL_SECONDS",
+                                      str(6 * 60 * 60)))
+        if interval <= 0 or os.environ.get("STRIPE_IMPORT_DISABLED") == "1":
+            return
+        if getattr(app, "_invoice_importer_started", False):
+            return
+        app._invoice_importer_started = True
+
+        first_delay = int(os.environ.get("STRIPE_IMPORT_FIRST_DELAY_SECONDS", "60"))
+
+        def loop():
+            time.sleep(first_delay)
+            while True:
+                try:
+                    from stripe_service import import_invoices_from_stripe
+                    with app.app_context():
+                        made, updated, orphans = import_invoices_from_stripe()
+                    if made or orphans:
+                        app.logger.info(
+                            "stripe: %d invoices written down, %d updated, "
+                            "%d with no client here%s",
+                            made, updated, len(orphans),
+                            (": " + ", ".join(orphans[:6])) if orphans else "")
+                except Exception as exc:                # noqa: BLE001
+                    app.logger.warning("stripe: invoice import failed: %s", exc)
+                time.sleep(interval)
+
+        threading.Thread(target=loop, daemon=True,
+                         name="stripe-invoice-importer").start()
+
+    _start_invoice_importer()
+
     def _start_reply_sender():
         """Drain the queue on a timer, in the background.
 
