@@ -294,19 +294,27 @@ function playbookPanel(ids, preferred) {
                         <form method="POST"
                               action="{{ url_for('pm.project_playbook_step', applied_id=applied.id, step_id=step.id) }}"
                               @submit.prevent="$store.pb.toggle('{{ book }}', '{{ sid }}', $el.action)"
-                              class="flex-shrink-0 pt-0.5">
+                              class="flex-shrink-0 pt-3">
+                            {# The BUTTON is 44px and the tick inside it stays
+                               20px. Negative margins pull the extra 12px a side
+                               back out of the flow, so the target grew and
+                               nothing on the row moved: 44 minus 24 is the 20px
+                               footprint it always had. It was a 20px square,
+                               which is not a thumb. #}
                             <button type="submit"
                                     aria-label="Toggle: {{ step.title }}"
                                     :aria-pressed="$store.pb.isDone('{{ book }}', '{{ sid }}')"
                                     :disabled="$store.pb.isBusy('{{ book }}', '{{ sid }}')"
-                                    class="w-5 h-5 rounded-md border flex items-center justify-center transition-colors"
-                                    :class="$store.pb.isDone('{{ book }}', '{{ sid }}')
-                                            ? 'bg-emerald-500 border-emerald-500'
-                                            : 'border-white/25 hover:border-brand-400'">
-                                <svg x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
-                                     class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-                                </svg>
+                                    class="w-11 h-11 -m-3 flex items-center justify-center group">
+                                <span class="w-5 h-5 rounded-md border flex items-center justify-center transition-colors"
+                                      :class="$store.pb.isDone('{{ book }}', '{{ sid }}')
+                                              ? 'bg-emerald-500 border-emerald-500'
+                                              : 'border-white/25 group-hover:border-brand-400'">
+                                    <svg x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
+                                         class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </span>
                             </button>
                         </form>
 
