@@ -322,6 +322,10 @@ def create_app():
     from pm.attention_routes import attention_bp
     app.register_blueprint(attention_bp)
 
+    # ── The to-do list for what no other page owns ─────────
+    from pm.notes_routes import notes_bp
+    app.register_blueprint(notes_bp)
+
     # ── What clients and leads write ───────────────────────
     from pm.messages_routes import messages_bp
     app.register_blueprint(messages_bp)
@@ -623,9 +627,25 @@ def create_app():
                 attention = attention_counts()
             except Exception:
                 db.session.rollback()
+        # The to-do count, and whether any of it has gone by. Two cheap
+        # counts rather than the is_overdue property, which would have to
+        # load every open note to answer the same question.
+        notes_open = notes_late = 0
+        if current_user.is_authenticated and not str(current_user.get_id()).startswith("bs_"):
+            try:
+                from models import Note
+                notes_open = Note.query.filter(Note.done_at.is_(None)).count()
+                notes_late = Note.query.filter(
+                    Note.done_at.is_(None),
+                    Note.due_on.isnot(None),
+                    Note.due_on < date.today()).count()
+            except Exception:
+                db.session.rollback()
         return {
             "attention_total": attention.get("total", 0),
             "hosting_due": attention.get("hosting", 0),
+            "notes_open": notes_open,
+            "notes_late": notes_late,
             "now": datetime.now(timezone.utc),
             "asset_version": _asset_version,
             "phase_choices": PHASE_CHOICES,

@@ -12,7 +12,7 @@
 #}
 
 {% for provider, missing_month in pending_manual %}
-<div class="glass-card p-4 flex flex-wrap items-center gap-3 border-l-4 border-amber-500">
+<div class="glass-card p-4 flex flex-wrap items-center gap-3 border-amber-500/40">
     <div class="w-full sm:flex-1 sm:min-w-0">
         <p class="text-sm font-semibold text-white">
             {{ provider.display_name }}: no costs recorded for {{ missing_month.strftime('%B %Y') }}

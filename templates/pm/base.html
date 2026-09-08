@@ -371,7 +371,27 @@
             pointer-events: none;
         }
         .flash-strip-inner > * { pointer-events: auto; }
-        .flash-strip-inner .glass-card { background: var(--surface); }
+
+        /* Catalogue rule "No Claude classics".
+
+           This wore a four pixel coloured bar down its left edge and an x in
+           its corner, which is the shape a model reaches for first and the
+           reason a product looks generated. Both are gone. The card is the
+           app's own surface and its own one pixel border, tinted when the
+           news is bad, and the whole thing is the dismiss target so there is
+           nothing in the corner to aim at.
+
+           Colour is never the only carrier: every message says its outcome
+           in words, so the tint is emphasis rather than information. */
+        .flash-msg {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+            cursor: pointer;
+        }
+        .flash-msg[data-tone="error"] { border-color: rgba(239, 68, 68, .55); }
+        .flash-msg[data-tone="warning"] { border-color: rgba(245, 158, 11, .55); }
+        .flash-msg[data-tone="success"] { border-color: rgba(16, 185, 129, .40); }
 
         /* Contained scroll, for pages that ARE a filtered list: main fills
            the scroller and clips, so nothing moves but the results region
@@ -936,11 +956,9 @@
 
         <!-- Navigation -->
         <nav class="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
-            {# Before anything else: what is waiting on him. Every page below
-               is where work happens; this is the one where the board says
-               what it has noticed, and the badge is the count. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Attention</p>
+            {# Before anything else: what is waiting on him. No heading over
+               it, because one item under a word is a label, not a section,
+               and the badge already says what it is. #}
             <a href="{{ url_for('attention.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('attention.') %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -958,80 +976,31 @@
             </a>
             <div class="my-2 border-t border-white/10"></div>
 
-            {# The catalogue, ahead of the day-to-day: the apps that exist,
-               what is sold, what has been built before, how the vendors get
-               set up, and the builder that spends it all. These are the
-               pages a phone call is answered from. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Catalogue</p>
-            <a href="{{ url_for('apps.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                </svg>
-                My Apps
-            </a>
-            <a href="{{ url_for('products.products_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('products.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                </svg>
-                Products
-            </a>
-            <a href="{{ url_for('features.features_index') }}"
-               class="sidebar-link {% if request.endpoint == 'features.features_index' %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                </svg>
-                Features
-            </a>
-            {# The layer under the features: ways of building that hold no
-               matter what was bought. Every one rides into every build
-               prompt. #}
-            <a href="{{ url_for('features.rules_index') }}"
-               class="sidebar-link {% if request.endpoint == 'features.rules_index' %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
-                </svg>
-                Rules
-            </a>
-            <a href="{{ url_for('playbooks.playbooks_index') }}"
-               class="sidebar-link {% if request.endpoint and 'playbook' in request.endpoint %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                </svg>
-                Playbooks
-            </a>
-            {# The builder closes the catalogue: a client's build, assembled
-               from everything above it on the call, priced as it grows. #}
-            <a href="{{ url_for('mvp.mvp_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('mvp.') %}active{% endif %}">
-                {# One wrench, not the crossed wrench-and-driver pair - two
-                   overlapping tools collapse into scribble at this size. #}
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.276a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z"/>
-                </svg>
-                MVP Builder
-            </a>
-            {# Every client held against the catalogue: who has what, and
-               who is breaking which rule. #}
-            <a href="{{ url_for('cerebro.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('cerebro.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                Cerebro
-            </a>
-            {# The catalogue's inbox has no entry of its own: what waits
-               there is on the attention page, and its history is a link
-               from that page. #}
-            <div class="my-2 border-t border-white/10"></div>
-
-            {# The working stack: who the work is for, the work itself, the
-               paper behind it, and what gets raised about it. #}
+            {# The work, first, because it is what the day is. The list of
+               things to do, then who the work is for, the work itself, what
+               gets raised about it, the paper behind it, and the builder
+               that starts the next one. #}
             <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
                 Work</p>
+            {# The to-do list leads: it is the page the day opens on, and
+               everything under it is a place work already lives. #}
+            <a href="{{ url_for('notes.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('notes.') %}active{% endif %}">
+                {# A bulleted list. Nothing else in the sidebar is one, and
+                   the clipboard-with-tick is already Tickets. #}
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M4.5 6.75h.008v.008H4.5V6.75zm0 5.25h.008v.008H4.5V12zm0 5.25h.008v.008H4.5v-.008z"/>
+                </svg>
+                Notes
+                {# Always rendered, and its own region: ticking a note off is
+                   a live action, so a badge that is not swapped sits there
+                   showing the number from the last page load. #}
+                <span data-live="nav-notes" class="ml-auto">
+                    {%- if notes_open %}
+                    <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full {{ 'bg-red-500 text-white' if notes_late else 'bg-white/10 text-surface-300' }} text-[10px] font-bold">{{ notes_open | commas }}</span>
+                    {%- endif %}
+                </span>
+            </a>
             <a href="{{ url_for('leads.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('leads.') %}active{% endif %}">
                 {# A megaphone: nothing else in the sidebar is one. #}
@@ -1055,6 +1024,13 @@
                 </svg>
                 Projects
             </a>
+            <a href="{{ url_for('pm.tickets_list') }}"
+               class="sidebar-link {% if request.endpoint and 'task' in request.endpoint %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+                Tickets
+            </a>
             <a href="{{ url_for('contracts.contracts_index') }}"
                class="sidebar-link {% if request.endpoint and ('contract' in request.endpoint or request.endpoint in ('pm.engagement_letter_form', 'pm.generate_engagement_letter', 'pm.sow_form', 'pm.generate_sow')) %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1062,12 +1038,18 @@
                 </svg>
                 Contracts
             </a>
-            <a href="{{ url_for('pm.tickets_list') }}"
-               class="sidebar-link {% if request.endpoint and 'task' in request.endpoint %}active{% endif %}">
+            {# The builder closes the work block: a client's build, assembled
+               on the call from the catalogue below, priced as it grows. It
+               sat under Catalogue once, which is where its parts live, not
+               where the job of using it does. #}
+            <a href="{{ url_for('mvp.mvp_index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('mvp.') %}active{% endif %}">
+                {# One wrench, not the crossed wrench-and-driver pair - two
+                   overlapping tools collapse into scribble at this size. #}
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.276a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z"/>
                 </svg>
-                Tickets
+                MVP Builder
             </a>
             {% if time_tracking %}
             <a href="{{ url_for('pm.time_list') }}"
@@ -1135,9 +1117,68 @@
                 </svg>
                 Invoices
             </a>
-            {# Who may open this board. Owners only: a member has no
-               business in the list of people, so the section is not
-               drawn for them rather than drawn and refused. #}
+            <div class="my-2 border-t border-white/10"></div>
+
+            {# What the work is made of: the apps that exist, what is sold,
+               what has been built before, the ways of building that hold
+               whatever was bought, and how the vendors get set up. #}
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Catalogue</p>
+            <a href="{{ url_for('apps.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                </svg>
+                My Apps
+            </a>
+            <a href="{{ url_for('products.products_index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('products.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                Products
+            </a>
+            <a href="{{ url_for('features.features_index') }}"
+               class="sidebar-link {% if request.endpoint == 'features.features_index' %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+                Features
+            </a>
+            {# The layer under the features: ways of building that hold no
+               matter what was bought. Every one rides into every build
+               prompt. #}
+            <a href="{{ url_for('features.rules_index') }}"
+               class="sidebar-link {% if request.endpoint == 'features.rules_index' %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+                </svg>
+                Rules
+            </a>
+            <a href="{{ url_for('playbooks.playbooks_index') }}"
+               class="sidebar-link {% if request.endpoint and 'playbook' in request.endpoint %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+                Playbooks
+            </a>
+            {# Every client held against the catalogue: who has what, and
+               who is breaking which rule. #}
+            <a href="{{ url_for('cerebro.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('cerebro.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Cerebro
+            </a>
+            {# The catalogue's inbox has no entry of its own: what waits
+               there is on the attention page, and its history is a link
+               from that page. #}
+
+            {# Who may open this board. CEO only: a member has no business
+               in the list of people, so the section is not drawn for them
+               rather than drawn and refused. #}
             {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
             <div class="my-2 border-t border-white/10"></div>
             <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
@@ -1237,22 +1278,17 @@
             {% if messages %}
             <div class="flash-strip-inner space-y-2">
                 {% for category, message in messages %}
+                {# Press it anywhere to be rid of it, or leave it and it goes
+                   on its own. See the note on .flash-msg for what is NOT
+                   here and why. #}
                 <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"
+                     @click="show = false"
                      x-transition:leave="transition ease-in duration-300"
                      x-transition:leave-start="opacity-100 translate-y-0"
                      x-transition:leave-end="opacity-0 -translate-y-2"
-                     class="glass-card px-4 py-3 flex items-center gap-3 justify-between
-                            {% if category == 'success' %}border-l-4 border-l-emerald-500
-                            {% elif category == 'error' %}border-l-4 border-l-red-500
-                            {% elif category == 'warning' %}border-l-4 border-l-amber-500
-                            {% else %}border-l-4 border-l-brand-500{% endif %}">
+                     role="status" data-tone="{{ category }}"
+                     class="flash-msg rounded-xl px-4 py-3">
                     <p class="min-w-0 text-sm text-surface-200">{{ message }}</p>
-                    <button @click="show = false" aria-label="Dismiss"
-                            class="shrink-0 text-surface-400 hover:text-surface-200">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
                 </div>
                 {% endfor %}
             </div>

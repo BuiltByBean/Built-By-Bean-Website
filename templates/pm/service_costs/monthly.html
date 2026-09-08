@@ -52,7 +52,7 @@
     #}
     {% if suggested %}
     <form method="POST" action="{{ url_for('service_costs.provider_automap', id=provider.id) }}"
-          class="glass-card p-4 flex flex-wrap items-center gap-3 border-l-4 border-brand-500">
+          class="glass-card p-4 flex flex-wrap items-center gap-3 border-brand-500/40">
         <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
         {% for row in suggested %}
         <input type="hidden" name="map:{{ row.id }}" value="{{ row.suggestion.id }}">

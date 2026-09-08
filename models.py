@@ -1821,6 +1821,11 @@ class Feature(db.Model):
         ("portal", "Their own access"),
         ("platform", "Underneath"),
         ("ui", "Interface patterns"),
+        # Not a kind of feature anybody buys. It is where the rules against
+        # building something in the shape a model reaches for first live, so
+        # they are one list rather than scattered through the others: the
+        # coloured-left-edge alert, the em dash, and whatever is caught next.
+        ("classics", "Claude classics"),
     )
     CATEGORY_LABELS = dict(CATEGORIES)
 
@@ -1842,6 +1847,109 @@ class Feature(db.Model):
 
 
 # ── The MVP, assembled ───────────────────────────────────────
+
+
+class Note(db.Model):
+    """Something to do that no other page on the board owns.
+
+    A ticket belongs to whoever raised it and is answerable to them. A time
+    entry belongs to a project. This is the rest of it: the things that have
+    to happen for the business, or about a client, that have nowhere else to
+    live. Nobody is waiting on a reply to one of these, which is exactly why
+    they get forgotten and why they need a list.
+
+    Everything it points at is OPTIONAL and none of it is exclusive. A note
+    can be about a client and the project it is for and the playbook being
+    followed on it at the same time, because that is how the thought arrives.
+    A note with nothing attached is the common case and is not lesser.
+
+    Done is a timestamp rather than a flag, so "what did I clear this week"
+    is a query rather than a second column that has to be kept in step with
+    the first.
+    """
+
+    __tablename__ = "notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, default="")
+
+    done_at = db.Column(db.DateTime, nullable=True, index=True)
+    # A date, not a datetime. Nothing here is due at 3pm, and a time nobody
+    # meant would make every one of these look late by lunchtime.
+    due_on = db.Column(db.Date, nullable=True, index=True)
+
+    # What it is about. SET NULL rather than CASCADE on every one: closing a
+    # project does not mean the note about it was done, and a note that loses
+    # its link still has its words. The same call AppLink.project_id makes.
+    client_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clients.id", ondelete="SET NULL", name="fk_notes_client_id"),
+        nullable=True, index=True)
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL", name="fk_notes_project_id"),
+        nullable=True, index=True)
+    product_id = db.Column(
+        db.Integer,
+        db.ForeignKey("products.id", ondelete="SET NULL", name="fk_notes_product_id"),
+        nullable=True, index=True)
+    playbook_id = db.Column(
+        db.Integer,
+        db.ForeignKey("playbooks.id", ondelete="SET NULL", name="fk_notes_playbook_id"),
+        nullable=True, index=True)
+
+    # The backref is "todos", not "notes": Client, Project and Product each
+    # already carry a free-text notes column, and a relationship of the same
+    # name does not collide quietly, it refuses to map at all and takes every
+    # other model down with it.
+    client = db.relationship("Client", backref=db.backref("todos", lazy="select"))
+    project = db.relationship("Project", backref=db.backref("todos", lazy="select"))
+    product = db.relationship("Product", backref=db.backref("todos", lazy="select"))
+    playbook = db.relationship("Playbook", backref=db.backref("todos", lazy="select"))
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_done(self):
+        return self.done_at is not None
+
+    @property
+    def is_overdue(self):
+        """Past its date and still open. A done note is never late."""
+        return bool(self.due_on and not self.is_done and self.due_on < date.today())
+
+    @property
+    def days_until_due(self):
+        """Negative when it has gone by. None when no date was set."""
+        return None if not self.due_on else (self.due_on - date.today()).days
+
+    @property
+    def links(self):
+        """What this is about, as (label, url_endpoint, kwargs) to render.
+
+        One place decides the order, so the row, the filters and any future
+        page cannot disagree about which attachment leads.
+        """
+        out = []
+        if self.client:
+            out.append(("client", self.client.name,
+                        "pm.client_detail", {"id": self.client_id}))
+        if self.project:
+            out.append(("project", self.project.name,
+                        "pm.project_detail", {"id": self.project_id}))
+        if self.product:
+            out.append(("product", self.product.name,
+                        "products.products_index", {}))
+        if self.playbook:
+            out.append(("playbook", self.playbook.display_name,
+                        "playbooks.playbook_detail", {"slug": self.playbook.slug}))
+        return out
+
+    def __repr__(self):
+        return f"<Note {self.id} {self.title[:30]!r}>"
 
 
 class Message(db.Model):

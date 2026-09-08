@@ -196,7 +196,7 @@
   moving is the pipe, not the week. Only the ones that need saying appear.
 #}
 {% if stale %}
-<div class="glass-card p-4 mb-4 border-l-4 border-amber-500 flex flex-wrap items-center gap-3">
+<div class="glass-card p-4 mb-4 border-amber-500/40 flex flex-wrap items-center gap-3">
   <div class="min-w-0 flex-1">
     <p class="text-sm font-semibold text-white">
       {{ stale | length }} client app{{ '' if stale | length == 1 else 's' }} not answering

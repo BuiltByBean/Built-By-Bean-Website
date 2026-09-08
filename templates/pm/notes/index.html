@@ -1,0 +1,240 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+
+{#
+  The to-do list for everything no other page owns.
+
+  One filtered list, so contained scroll: the add box and the filters stand
+  still and the notes are the only scroller (LM-4). Every press is a live
+  action, because ticking note forty off must not send the list back to
+  note one.
+
+  A row opens on press for the rest of it. Only its own region is swapped on
+  save, so a body half typed into another open row is not thrown away.
+#}
+
+{% block title %}Notes - Built By Bean{% endblock %}
+{% block page_title %}Notes{% endblock %}
+{# A region of its own for the same reason the badge is one: these are
+   counts of a list that changes under a press without the page reloading. #}
+{% block page_subtitle %}<span data-live="notes-count">{% if counts.open %}{{ counts.open | commas }} open{% if counts.overdue %}, {{ counts.overdue | commas }} late{% endif %}{% else %}Nothing outstanding{% endif %}</span>{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+{# The header sits outside the content block, so it cannot see that
+   block's Alpine scope. It dispatches instead and the list listens on
+   window: a bubbling event from here never reaches a sibling branch. #}
+<button type="button" @click="$dispatch('note-add')"
+        class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    Add a note
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0"
+     x-data="{ adding: false }" @note-add.window="adding = !adding">
+
+    {# The add box. Closed until asked for, so the list is what the page is
+       when you land on it. z-20: its pickers open over the notes below,
+       under the filter bar's z-30 (LM-1). #}
+    <form method="POST" data-live-action data-live-reset x-show="adding" x-cloak
+          action="{{ url_for('notes.create') }}"
+          class="shrink-0 relative z-20 glass-card p-4 mb-4 space-y-3">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    What needs doing</label>
+                <input type="text" name="title" required
+                       class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">By when</label>
+                <input type="date" name="due_on"
+                       class="input-ring px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+        </div>
+
+        {# All four, all optional, none exclusive. A thought arrives as a
+           client and a project and a date at once. #}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {{ select_dropdown("client_id", clients, "", "No client", full_width=true) }}
+            {{ select_dropdown("project_id", projects, "", "No project", full_width=true) }}
+            {{ select_dropdown("product_id", products, "", "No product", full_width=true) }}
+            {{ select_dropdown("playbook_id", playbooks, "", "No playbook", full_width=true) }}
+        </div>
+
+        <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    Anything else</label>
+                <textarea name="body" rows="2"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl"></textarea>
+            </div>
+            <button type="submit"
+                    class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+                Add it</button>
+        </div>
+    </form>
+
+    <div class="glass-card p-4 sm:p-5 flex flex-col min-h-0">
+
+        {# Standing still while the notes scroll under it, relative z-30 so
+           its panels paint over them (LM-1, LM-4). #}
+        <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
+              class="shrink-0 relative z-30 flex flex-wrap items-center gap-2 mb-4">
+            <div class="flex gap-1.5">
+                {% for value, label in views %}
+                <button type="button" @click="$el.closest('form').querySelector('[name=view]').value = '{{ value }}'; apply()"
+                        class="min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
+                               {% if view == value %}bg-brand-500/20 text-brand-300{% else %}bg-surface-800 text-surface-400 hover:text-surface-200{% endif %}">
+                    {{ label }}</button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="view" value="{{ view }}">
+            {{ select_dropdown("client_id", [("", "Any client")] + clients[1:], filters.client_id, on_change="apply()") }}
+            {{ select_dropdown("project_id", [("", "Any project")] + projects[1:], filters.project_id, on_change="apply()") }}
+            <span data-live="clear" class="ml-auto inline-flex items-center">
+                {% if filters.client_id or filters.project_id or view != 'open' %}
+                {{ clear_filters(href=url_for('notes.index')) }}
+                {% endif %}
+            </span>
+        </form>
+
+        {# The scroller, and the live region: an offset is carried across a
+           swap by key, so ticking one off holds the place in the list. #}
+        <div data-live="results" class="min-h-0 overflow-y-auto -mx-1 px-1 divide-y divide-white/5">
+            {% if notes %}
+            {% for note in notes %}
+            <div class="py-3" x-data="{ open: false }" data-live-key="note-{{ note.id }}">
+
+                <div class="flex items-start gap-3 min-w-0">
+                    {# The tick is its own form so it is one press, not a
+                       press and then a save. #}
+                    <form method="POST" data-live-action class="shrink-0 pt-0.5"
+                          action="{{ url_for('notes.toggle', id=note.id) }}">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        <button type="submit" aria-label="{{ 'Reopen' if note.is_done else 'Done' }}"
+                                class="w-11 h-11 -m-1.5 flex items-center justify-center rounded-xl transition-colors
+                                       {% if note.is_done %}text-emerald-400 hover:text-emerald-300{% else %}text-surface-500 hover:text-brand-300{% endif %}">
+                            {% if note.is_done %}
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            {% else %}
+                            <span class="w-5 h-5 rounded-md border-2 border-current"></span>
+                            {% endif %}
+                        </button>
+                    </form>
+
+                    <button type="button" @click="open = !open" :aria-expanded="open"
+                            class="min-w-0 flex-1 text-left">
+                        <span class="block text-sm break-words {% if note.is_done %}text-surface-500 line-through{% else %}text-white{% endif %}">
+                            {{ note.title }}</span>
+
+                        <span class="flex flex-wrap items-center gap-1.5 mt-1">
+                            {% if note.due_on %}
+                            {# The date says what it means. A colour alone
+                               would not, and a done note is never late. #}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider
+                                         {% if note.is_overdue %}bg-red-500/15 text-red-300
+                                         {% elif note.is_done %}bg-white/5 text-surface-500
+                                         {% elif note.days_until_due == 0 %}bg-amber-500/15 text-amber-300
+                                         {% else %}bg-white/5 text-surface-400{% endif %}">
+                                {%- if note.is_overdue %}{{ -note.days_until_due }} day{{ '' if note.days_until_due == -1 else 's' }} late
+                                {%- elif note.days_until_due == 0 %}Today
+                                {%- else %}{{ note.due_on | format_date }}{% endif -%}
+                            </span>
+                            {% endif %}
+                            {% for kind, label, endpoint, kwargs in note.links %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-brand-500/10 text-brand-300 max-w-full truncate">
+                                {{ label }}</span>
+                            {% endfor %}
+                            {% if note.body %}
+                            <span class="text-[10px] text-surface-500">has notes</span>
+                            {% endif %}
+                        </span>
+                    </button>
+
+                    <svg class="w-4 h-4 shrink-0 mt-1 text-surface-500 transition-transform"
+                         :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+
+                {# data-live-scope: saving this row rebuilds this row and
+                   nothing else, so a body being typed into another open note
+                   survives. #}
+                <div x-show="open" x-cloak class="mt-3 pl-11">
+                    <form method="POST" data-live-action data-live-scope
+                          action="{{ url_for('notes.update', id=note.id) }}" class="space-y-3">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        <div class="flex flex-wrap items-end gap-3">
+                            <div class="flex-1 min-w-[220px]">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                                    What needs doing</label>
+                                <input type="text" name="title" required value="{{ note.title }}"
+                                       class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">By when</label>
+                                <input type="date" name="due_on" value="{{ note.due_on.isoformat() if note.due_on else '' }}"
+                                       class="input-ring px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {{ select_dropdown("client_id", clients, note.client_id, "No client", full_width=true) }}
+                            {{ select_dropdown("project_id", projects, note.project_id, "No project", full_width=true) }}
+                            {{ select_dropdown("product_id", products, note.product_id, "No product", full_width=true) }}
+                            {{ select_dropdown("playbook_id", playbooks, note.playbook_id, "No playbook", full_width=true) }}
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                                Anything else</label>
+                            <textarea name="body" rows="3"
+                                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">{{ note.body }}</textarea>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="submit"
+                                    class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+                                Save</button>
+                            <span class="text-xs text-surface-500">
+                                Written {{ note.created_at | format_date }}{% if note.is_done %}, done {{ note.done_at | format_date }}{% endif %}</span>
+                        </div>
+                    </form>
+
+                    {# Its own form, outside the save: a destructive press is
+                       never the same submit as an ordinary one. Trailing
+                       edge, and it asks in place rather than through a
+                       browser dialog (LM-2). #}
+                    <form method="POST" data-live-action action="{{ url_for('notes.delete', id=note.id) }}"
+                          class="flex mt-2">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        <span class="ml-auto">
+                            {{ confirm_button('Delete', 'Delete this note?',
+                                              btn_class='min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-500 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                        </span>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="py-12 text-center">
+                <p class="text-surface-400">
+                    {%- if view == 'open' and not filters.client_id and not filters.project_id -%}
+                    Nothing to do
+                    {%- else -%}
+                    Nothing matches that
+                    {%- endif -%}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
