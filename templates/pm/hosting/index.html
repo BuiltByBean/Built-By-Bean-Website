@@ -70,7 +70,14 @@
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Railway</p>
             <p class="text-xl sm:text-2xl font-bold text-red-300 mt-2">{{ lifetime.railway|format_currency }}</p>
-            <p class="text-xs text-surface-400 mt-1">Every month on record</p>
+            {# Says which of the two it is. A derived figure presented as a
+               fact is how this read $231.65 against $136.90 of invoices. #}
+            {% if lifetime.railway_source == 'invoices' %}
+            <p class="text-xs text-surface-400 mt-1">
+                From {{ lifetime.railway_months }} invoice{{ '' if lifetime.railway_months == 1 else 's' }}</p>
+            {% else %}
+            <p class="text-xs text-amber-300 mt-1">Estimated. No invoices recorded yet</p>
+            {% endif %}
         </div>
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Left over</p>

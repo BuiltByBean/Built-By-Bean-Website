@@ -36,7 +36,7 @@ from flask import Blueprint, render_template, request, url_for
 from flask_login import login_required
 
 import contract_docs
-from models import (db, Client, Project, ServiceMapping, ServiceCostEntry,
+from models import (db, Client, Project, ServiceMapping, ServiceCostEntry, ProviderInvoice,
                     ServiceProvider, Expense)
 
 hosting_bp = Blueprint("hosting", __name__, url_prefix="/admin/hosting")
@@ -321,22 +321,38 @@ def _railway_lifetime_by_project():
 
 
 def _railway_all_time():
-    """Every dollar Railway has cost, across every month on record.
+    """Every dollar Railway has cost, and where that number came from.
 
-    Matched on the description prefix rather than by joining the cost entries,
-    because half of this money has no cost entry to join to. Per-project
-    figures only start in August 2026; before that Railway was a single flat
-    expense a month, and a lifetime total that skipped those would be missing
-    two thirds of the months. Every Railway expense carries the provider's
-    display name as its prefix, and nothing else does.
+    Returns {"amount", "source", "months"}.
+
+    It used to sum every expense whose description began with the provider's
+    display name. TWO different things write those: the flat monthly charge
+    from before per-project figures existed, and the sync, which books one
+    expense per project per month. Both match the prefix, so a month holding
+    both was counted twice and the page read $231.65 against $136.90 of real
+    invoices. The docstring even said the two populations existed; the fix it
+    chose added them together.
+
+    A derived total was the wrong SHAPE of answer, not a wrong sum. The
+    invoice is the one number the vendor actually charged, there is exactly
+    one per month, and it is now recorded on the monthly page. The old sum
+    stays only as a fallback for a board with nothing entered yet, and the
+    tile says which of the two it is showing rather than presenting a guess
+    as a fact.
     """
     provider = ServiceProvider.query.filter_by(name="railway").first()
     if provider is None:
-        return 0.0
-    total = (db.session.query(db.func.coalesce(db.func.sum(Expense.amount), 0.0))
-             .filter(Expense.description.ilike(f"{provider.display_name} -%"))
-             .scalar())
-    return float(total or 0.0)
+        return {"amount": 0.0, "source": "none", "months": 0}
+    recorded = (db.session.query(db.func.coalesce(db.func.sum(ProviderInvoice.amount), 0.0),
+                                 db.func.count(ProviderInvoice.id))
+                .filter(ProviderInvoice.provider_id == provider.id).first())
+    total, months = float(recorded[0] or 0.0), int(recorded[1] or 0)
+    if months:
+        return {"amount": total, "source": "invoices", "months": months}
+    derived = (db.session.query(db.func.coalesce(db.func.sum(Expense.amount), 0.0))
+               .filter(Expense.description.ilike(f"{provider.display_name} -%"))
+               .scalar())
+    return {"amount": float(derived or 0.0), "source": "derived", "months": 0}
 
 
 # Worst first. A page whose whole job is to surface the two projects that need
@@ -437,11 +453,14 @@ def hosting_index():
     # agreed and a paid invoice is what arrived - Kuper's subscription is past
     # due as this is written, and a total built from the agreed fees would show
     # that money as earned.
+    railway_lifetime_total = _railway_all_time()
     lifetime = {
         "collected": hosting["collected"],
         "outstanding": hosting["outstanding"],
         "paid_invoices": hosting["paid_invoices"],
-        "railway": _railway_all_time(),
+        "railway": railway_lifetime_total["amount"],
+        "railway_source": railway_lifetime_total["source"],
+        "railway_months": railway_lifetime_total["months"],
     }
     lifetime["margin"] = lifetime["collected"] - lifetime["railway"]
 

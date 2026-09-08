@@ -56,7 +56,8 @@ there.
 
 ## Needs attention
 
-`pm/attention_routes.py` is the mail waiting on a reply, and nothing else.
+`pm/attention_routes.py` is the mail waiting on a reply, and last month's
+vendor invoice. Nothing else.
 It carried seven signals once - declined contracts, hosting fees under the
 floor, overdue invoices, catalogue rewrites, untriaged tickets, late
 builds and mail - and six of them already had a home on the page that owns
@@ -70,6 +71,32 @@ archives the inbound thread AND the row pressed - it matched the thread
 alone once, so a message with no `thread_id` was left untouched while the
 flash still said "Archived." A press that reports success has to have
 acted on the thing that was pressed.
+
+The second signal is a vendor bill that has not been recorded. It earns the
+place on the same test the mail does: only Michael can do it, and there is
+nowhere else it would be noticed. `ProviderInvoice` is one row per provider
+per month, typed off the bill on the same monthly page the per-project usage
+goes into, and the row links straight to the month it is asking about. Only
+finished months are asked for, and only for a provider this board already
+tracks money for.
+
+The lifetime Railway figure used to be assembled by summing every expense
+whose description began with the provider's name. A flat monthly charge and
+the sync's per-project rows both match that, so a month holding both was
+counted twice: the page read $231.65 against $136.90 of real invoices, and a
+single month reproduced at $71.30. The invoice is the truth about what a
+month cost; per-project usage is the truth about how to split it. The tile
+says which of the two it is showing, because a derived number in the same
+type as a recorded one is a guess wearing a fact's clothes. Catalogue rule
+"A total somebody is billed for is recorded, not pattern matched".
+
+His own address is never a row. He has a Client row of his own and
+`watched_senders` reads every client email, so his mail was syncing as client
+mail; taking him off the client list would not have held either, because that
+function re-adds any address that has ever written in.
+`mail_service.own_addresses` is one answer used twice, subtracted from the
+sync and filtered on this page, because the sync only ever inserts and rows
+already written stay written.
 
 A dismissal holds across a sync because `mail_service.ingest` only ever
 inserts. It hung entirely on the Message-ID header though, with the check

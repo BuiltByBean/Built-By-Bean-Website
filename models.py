@@ -1873,6 +1873,61 @@ class Feature(db.Model):
 # ── The MVP, assembled ───────────────────────────────────────
 
 
+class ProviderInvoice(db.Model):
+    """What a vendor actually charged for one month. Typed in, on purpose.
+
+    The board used to answer "what has Railway cost" by summing every expense
+    whose description began with the provider's name. Two different things
+    write those: the flat monthly charge from before per-project figures
+    existed, and the sync, which books one expense per project per month. Both
+    match the prefix, so any month holding both was counted twice, and the
+    lifetime total read $231.65 against $136.90 of actual invoices.
+
+    That was the wrong shape of answer, not a wrong sum. A derived total is a
+    guess assembled from whatever happens to be in the ledger; the invoice is
+    the number the vendor charged, and there is exactly one of it per month.
+    This is Cerebro's principle pointed at money: the code is the truth about
+    what a site has, and the INVOICE is the truth about what it cost. Usage
+    per project stays what it always was, the truth about how to split it.
+
+    One row per provider per month, so entering it twice corrects rather than
+    doubles - which is the whole failure being fixed here.
+    """
+
+    __tablename__ = "provider_invoices"
+    __table_args__ = (
+        db.UniqueConstraint("provider_id", "period_month",
+                            name="uq_provider_invoices_provider_month"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider_id = db.Column(
+        db.Integer,
+        db.ForeignKey("service_providers.id", ondelete="CASCADE",
+                      name="fk_provider_invoices_provider_id"),
+        nullable=False, index=True)
+    # The first of the month it COVERS, not the day it was issued. Railway
+    # bills in arrears: the invoice dated 1 September is August's usage, and
+    # filing it under September would put every month's cost one month late.
+    period_month = db.Column(db.Date, nullable=False, index=True)
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    note = db.Column(db.String(300), default="")
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    provider = db.relationship("ServiceProvider", backref=db.backref(
+        "invoices", lazy="select", cascade="all, delete-orphan"))
+
+    @property
+    def month_label(self):
+        return self.period_month.strftime("%b %Y") if self.period_month else ""
+
+    def __repr__(self):
+        return f"<ProviderInvoice {self.provider_id} {self.period_month} {self.amount}>"
+
+
 class Note(db.Model):
     """Something to do that no other page on the board owns.
 

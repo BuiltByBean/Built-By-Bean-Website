@@ -33,14 +33,51 @@
        does not send the list back to the first. #}
     <div class="glass-card overflow-hidden flex flex-col min-h-0">
         <div data-live="attention" class="min-h-0 overflow-y-auto divide-y divide-white/5">
-            {% if not messages %}
+
+            {#
+              Last month's bill, before the mail.
+
+              The second signal this page has carried since it was cut back to
+              mail alone, and it earns the place on the same test the mail
+              does: only he can do it, and there is nowhere else it would be
+              noticed. A vendor invoice is a number that exists once a month on
+              somebody else's screen and is worthless a quarter later when
+              nobody remembers what the month cost.
+
+              It goes straight to the month it is asking about, so the press
+              lands on the box to type into rather than on a page to navigate
+              from.
+            #}
+            {% for bill in bills %}
+            <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <span class="font-medium text-white truncate max-w-full">{{ bill.provider.display_name }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-300 shrink-0">Bill</span>
+                    </div>
+                    <p class="text-sm text-surface-200">
+                        {{ bill.latest.strftime('%B %Y') }} invoice not recorded</p>
+                    <p class="text-xs text-surface-400">
+                        {%- if bill.count == 1 %}The only month missing
+                        {%- else %}{{ bill.count | commas }} months missing, this is the newest{% endif -%}
+                    </p>
+                </div>
+                <div class="shrink-0 flex items-center gap-2">
+                    <a href="{{ url_for('service_costs.provider_monthly', id=bill.provider.id, month=bill.latest.strftime('%Y-%m')) }}"
+                       class="min-h-[44px] inline-flex items-center px-4 text-sm font-semibold rounded-xl btn-brand transition-all">Put it in</a>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% if not messages and not bills %}
             <div class="p-8 sm:p-12 text-center">
                 <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 <p class="text-surface-300">Nothing is waiting on you.</p>
             </div>
-            {% else %}
+            {% endif %}
+
             {% for m in messages %}
             <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
                 <div class="min-w-0 flex-1">
@@ -74,7 +111,6 @@
                 </div>
             </div>
             {% endfor %}
-            {% endif %}
         </div>
     </div>
 </div>

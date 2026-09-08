@@ -230,6 +230,48 @@
                     Current total <span class="font-bold text-white">${{ "%.2f"|format(total) }}</span>
                 </div>
             </div>
+
+            {#
+              The invoice, beside the split it reconciles against.
+
+              The rows above say how to divide a month between clients. This
+              says what the month cost, which is a different fact and used to
+              be guessed from the rows plus whatever else in the ledger looked
+              like this vendor. That read $231.65 against $136.90 of real
+              invoices. One number per month, typed off the bill.
+
+              The gap is shown rather than hidden: usage rarely equals the
+              invoice, because a plan fee and taxes ride on top, and seeing
+              the difference is how a wrong row gets noticed.
+            #}
+            <div class="p-4 border-t border-surface-700 bg-white/[0.02]">
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="min-w-[200px]">
+                        <label for="sc-invoice" class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                            What {{ provider.display_name }} billed for {{ month.strftime('%b %Y') }}</label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-surface-500">$</span>
+                            <input id="sc-invoice" type="text" inputmode="decimal" name="invoice_amount"
+                                   value="{{ '%.2f'|format(invoice.amount) if invoice else '' }}"
+                                   placeholder="off the invoice"
+                                   class="input-ring w-40 px-3 min-h-[44px] text-sm bg-surface-800 text-white rounded-lg tabular-nums">
+                        </div>
+                    </div>
+                    {% if invoice %}
+                    <p class="text-xs text-surface-400 pb-3">
+                        Usage above is ${{ "%.2f"|format(total) }};
+                        {% set gap = invoice.amount - total %}
+                        {% if gap > 0.005 %}${{ "%.2f"|format(gap) }} of this bill is not usage
+                        {%- elif gap < -0.005 %}${{ "%.2f"|format(-gap) }} more usage than billed
+                        {%- else %}the same as the bill{% endif %}
+                    </p>
+                    {% else %}
+                    <p class="text-xs text-amber-300 pb-3">
+                        Not recorded. Until it is, the lifetime figure is an estimate.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
         <div class="mt-4 flex items-center gap-3">

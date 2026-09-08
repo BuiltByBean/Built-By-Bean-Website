@@ -9,7 +9,8 @@ from flask import (
 
 from flask_login import login_required
 
-from models import db, Client, Project, ServiceProvider, ServiceMapping, ServiceCostEntry
+from models import (db, Client, Project, ServiceProvider, ServiceMapping,
+                    ServiceCostEntry, ProviderInvoice)
 from service_costs_service import (
     sync_provider, list_provider_resources, get_cost_summary,
     _record_cost_entry, _month_bounds, _find_mapping,
@@ -228,6 +229,44 @@ def service_costs_dashboard():
 
 
 # ── Providers ───────────────────────────────────────────────
+
+
+def invoice_for(provider_id, month_start):
+    """The recorded invoice for one provider and month, or None."""
+    return ProviderInvoice.query.filter_by(
+        provider_id=provider_id, period_month=month_start).first()
+
+
+def _save_invoice(provider, month_start):
+    """The single number the vendor actually charged for this month.
+
+    Separate from the per-resource entries on purpose. Those say how to SPLIT
+    a month between clients; this says what the month cost. Deriving the
+    second from the first is what read $231.65 against $136.90 of real
+    invoices, because two different things were writing rows that both looked
+    like Railway spend.
+
+    Blank removes it, the same way a blank resource amount does, so a wrong
+    number can be walked back rather than only overwritten.
+    """
+    raw = (request.form.get("invoice_amount") or "").strip()
+    raw = raw.replace(",", "").replace("$", "").strip()
+    row = invoice_for(provider.id, month_start)
+    if raw == "":
+        if row:
+            db.session.delete(row)
+        return None
+    try:
+        amount = float(raw)
+    except ValueError:
+        return "That invoice amount is not a number."
+    if amount < 0:
+        return "An invoice cannot be negative."
+    if row is None:
+        row = ProviderInvoice(provider_id=provider.id, period_month=month_start)
+        db.session.add(row)
+    row.amount = round(amount, 2)
+    return None
 
 
 @service_costs_bp.route("/providers")
@@ -521,7 +560,13 @@ def provider_monthly(id):
 
     if request.method == "POST":
         _save_monthly_entries(provider, p_start, p_end)
-        flash(f"{provider.display_name} costs for {p_start:%b %Y} saved.", "success")
+        problem = _save_invoice(provider, p_start)
+        if problem:
+            db.session.rollback()
+            flash(problem, "error")
+        else:
+            db.session.commit()
+            flash(f"{provider.display_name} costs for {p_start:%b %Y} saved.", "success")
         return redirect(url_for("service_costs.provider_monthly",
                                 id=id, month=p_start.strftime("%Y-%m")))
 
@@ -616,6 +661,7 @@ def provider_monthly(id):
         total=total,
         suggested=suggested,
         other_id=other_id,
+        invoice=invoice_for(provider.id, p_start),
     )
 
 
