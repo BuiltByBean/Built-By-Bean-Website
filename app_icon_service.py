@@ -34,7 +34,21 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 
-USER_AGENT = "BuiltByBean-PM/1.0 (icon fetch)"
+# A browser string, not a bot one.
+#
+# This said "BuiltByBean-PM/1.0 (icon fetch)" and every runbook for a large
+# vendor came back with no mark while the app board, which points at my own
+# sites, worked perfectly. My sites do not sit behind a WAF. GoDaddy does,
+# and a request that announces itself as a script gets a challenge or a 403
+# instead of a favicon, which this reads as "publishes nothing".
+#
+# Nothing here is evading anything: the request is for a public favicon, it
+# is rate-limited by being one press, and it identifies a real browser
+# engine because that is the only thing these front doors will answer.
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+ACCEPT = ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+          "image/avif,image/webp,image/apng,*/*;q=0.8")
 TIMEOUT = 8
 MAX_BYTES = 2 * 1024 * 1024
 
@@ -78,8 +92,32 @@ def _largest(sizes):
 
 
 def _get(url, **kw):
-    return requests.get(url, timeout=TIMEOUT, headers={"User-Agent": USER_AGENT},
+    return requests.get(url, timeout=TIMEOUT,
+                        headers={"User-Agent": USER_AGENT, "Accept": ACCEPT,
+                                 "Accept-Language": "en-US,en;q=0.9"},
                         allow_redirects=True, **kw)
+
+
+def fetch_by_domain(domain):
+    """The vendor's own icon, asked for through a public favicon service.
+
+    Last resort, and only for a site that answered nothing directly. It is
+    still the vendor's own mark, taken by a different road: what these
+    services return is the favicon of the domain asked for, which is the
+    same picture the site declares.
+
+    Only the domain is sent, which is a public name and nobody's data.
+    """
+    domain = (domain or "").strip().lower().lstrip(".")
+    if not domain or "/" in domain or "." not in domain:
+        return None
+    for url in ("https://icons.duckduckgo.com/ip3/%s.ico" % domain,
+                "https://www.google.com/s2/favicons?sz=128&domain=%s" % domain):
+        got = _download(url)
+        if got:
+            data, ext = got
+            return data, ext, url
+    return None
 
 
 # Lower tier wins. Size only breaks ties inside a tier.

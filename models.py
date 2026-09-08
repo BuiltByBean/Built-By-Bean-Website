@@ -1062,13 +1062,37 @@ class Playbook(db.Model):
         return bool(self.logo_path or self.icon_file)
 
     @property
+    def mark_domain(self):
+        """The domain to ask for this vendor's mark, or None.
+
+        The console URL when there is one. Otherwise the display name flattened
+        to letters and digits with .com after it, which is right for GoDaddy,
+        RevenueCat and Mydoma Studio and is only ever used to ask for a picture.
+        It is never written back to vendor_url: a guessed address is fine to
+        request an icon from and not fine to put on the page as a link.
+        """
+        url = (self.vendor_url or "").strip()
+        if url:
+            host = url.split("//", 1)[-1].split("/", 1)[0].split("@")[-1]
+            host = host.split(":")[0].strip().lower()
+            if "." in host:
+                return host
+        flat = "".join(c for c in (self.display_name or "") if c.isalnum()).lower()
+        return flat + ".com" if flat else None
+
+    @property
     def wants_mark(self):
         """Whether going and looking for one is worth a network call.
 
-        Somewhere to look, nothing found yet, and not asked recently: a vendor
-        that offers no icon must not be re-asked on every press.
+        No mark, somewhere to ask, and not asked recently: a vendor that
+        publishes nothing must not be re-asked on every press.
+
+        This used to require vendor_url, which meant a runbook filed through
+        the door without one was not merely unfetched, it was not even counted
+        as missing: the button never offered it and it stayed a monogram with
+        nothing on the page saying why.
         """
-        if self.has_mark or not self.vendor_url:
+        if self.has_mark or not self.mark_domain:
             return False
         if self.icon_fetched_at is None:
             return True

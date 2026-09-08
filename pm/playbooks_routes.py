@@ -31,6 +31,12 @@ ICON_DIR = "playbook_icons"
 # Capped so the answer arrives while somebody is still looking at the page.
 MARK_BATCH = 8
 
+# What may be handed over directly, for a vendor whose front door answers
+# nothing. Same set the app board takes.
+UPLOAD_TYPES = {"png": "png", "jpg": "jpg", "jpeg": "jpg", "webp": "webp",
+                "svg": "svg", "gif": "gif", "ico": "ico"}
+MAX_UPLOAD = 2 * 1024 * 1024
+
 
 def _icon_folder():
     path = os.path.join(current_app.config["UPLOAD_FOLDER"], ICON_DIR)
@@ -45,18 +51,34 @@ def refresh_playbook_icon(playbook):
     down, slow or offers nothing leaves the runbook on its monogram, which is
     a page that renders rather than a page that hangs.
     """
-    url = (playbook.vendor_url or "").strip()
-    if not url:
+    domain = playbook.mark_domain
+    if not domain:
         return False
+    url = (playbook.vendor_url or "").strip()
     # A vendor_url filed through the door is whatever the session typed, and
     # a bare domain is the common case. fetch refuses anything without a
     # scheme, so it would have silently found nothing.
-    if not url.startswith(("http://", "https://")):
+    if url and not url.startswith(("http://", "https://")):
         url = "https://" + url
-    try:
-        got = app_icon_service.fetch(url)
-    except Exception:
-        got = None
+    got = None
+    for attempt in (url, "https://" + domain):
+        if not attempt:
+            continue
+        try:
+            got = app_icon_service.fetch(attempt)
+        except Exception:
+            got = None
+        if got:
+            break
+    if not got:
+        # The site itself said nothing. Ask for the same picture the other
+        # way before giving up, because "no mark" here has almost always
+        # meant a front door refusing a request rather than a vendor with
+        # no logo.
+        try:
+            got = app_icon_service.fetch_by_domain(domain)
+        except Exception:
+            got = None
     # Stamped either way, so a vendor with no icon is not asked again on the
     # next press.
     playbook.icon_fetched_at = datetime.now(timezone.utc)
@@ -205,6 +227,52 @@ def playbooks_index():
                            missing=sum(1 for p in playbooks if p.wants_mark))
 
 
+def store_playbook_upload(playbook, upload):
+    """Take a mark straight from him. Returns why not, or None.
+
+    The one path that cannot fail on somebody else's server. A fetch depends
+    on a vendor answering; this depends on nothing.
+    """
+    ext = os.path.splitext(upload.filename or "")[1].lstrip(".").lower()
+    ext = UPLOAD_TYPES.get(ext)
+    if not ext:
+        return "That file type cannot be used as a mark."
+    data = upload.read(MAX_UPLOAD + 1)
+    if len(data) > MAX_UPLOAD:
+        return "That image is larger than 2MB."
+    if len(data) < 64:
+        return "That file is empty."
+    old = playbook.icon_file
+    playbook.icon_file = app_icon_service.store(data, ext, _icon_folder())
+    # No source means it was given rather than found, which is what stops a
+    # later sweep from fetching over the top of it.
+    playbook.icon_source = None
+    playbook.icon_fetched_at = datetime.now(timezone.utc)
+    if old and old != playbook.icon_file:
+        try:
+            os.remove(os.path.join(_icon_folder(), old))
+        except OSError:
+            pass
+    return None
+
+
+@playbooks_bp.route("/<slug>/mark", methods=["POST"])
+@login_required
+def mark_upload(slug):
+    playbook = Playbook.query.filter_by(slug=slug).first() or abort(404)
+    upload = request.files.get("mark")
+    if not upload or not upload.filename:
+        flash("Choose an image first.", "warning")
+        return redirect(url_for("playbooks.playbook_detail", slug=slug))
+    problem = store_playbook_upload(playbook, upload)
+    if problem:
+        flash(problem, "error")
+    else:
+        db.session.commit()
+        flash(f"{playbook.display_name} has its mark.", "success")
+    return redirect(url_for("playbooks.playbook_detail", slug=slug))
+
+
 @playbooks_bp.route("/<slug>/icon")
 @login_required
 def icon(slug):
@@ -229,18 +297,22 @@ def marks_refresh():
     """
     waiting = [p for p in Playbook.query.order_by(Playbook.sort_order).all()
                if p.wants_mark]
-    found = sum(1 for p in waiting[:MARK_BATCH] if refresh_playbook_icon(p))
+    batch = waiting[:MARK_BATCH]
+    missed = [p.display_name for p in batch if not refresh_playbook_icon(p)]
     db.session.commit()
-    asked = min(len(waiting), MARK_BATCH)
+    found, asked = len(batch) - len(missed), len(batch)
     if not asked:
         flash("Every runbook already has its mark.", "info")
-    elif found:
-        flash(f"Found {found} of {asked}." +
+    elif not missed:
+        flash(f"Got all {found}." +
               (f" {len(waiting) - asked} still to ask." if len(waiting) > asked else ""),
               "success")
     else:
-        flash(f"Asked {asked}, none published a mark. Set one by hand on the runbook.",
-              "warning")
+        # Named, not counted. "None published a mark" sends you looking at the
+        # vendors; the ones that failed are what you actually need.
+        names = ", ".join(missed[:5]) + ("..." if len(missed) > 5 else "")
+        flash(f"Got {found} of {asked}. Nothing found for {names}. "
+              "Upload one on the runbook.", "warning" if found else "error")
     return redirect(url_for("playbooks.playbooks_index"))
 
 

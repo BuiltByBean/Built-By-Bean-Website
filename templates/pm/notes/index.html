@@ -49,7 +49,7 @@
         <div class="flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-[220px]">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    What needs doing</label>
+                    Note title</label>
                 <input type="text" name="title" required
                        class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
@@ -69,15 +69,20 @@
             {{ select_dropdown("playbook_id", playbooks, "", "No playbook", full_width=true) }}
         </div>
 
-        <div class="flex flex-wrap items-end gap-3">
-            <div class="flex-1 min-w-[220px]">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    Anything else</label>
-                <textarea name="body" rows="2"
-                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl"></textarea>
-            </div>
+        {# The description takes the full width and the submit gets a row of
+           its own. Sitting the button beside a textarea lines it up with
+           nothing: a textarea is several rows tall, carries a resize grip in
+           the corner the button is nearest, and grows when it is dragged, so
+           whatever they were aligned to stops being true on first use. #}
+        <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                Description</label>
+            <textarea name="body" rows="2"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl"></textarea>
+        </div>
+        <div class="flex">
             <button type="submit"
-                    class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+                    class="ml-auto min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
                 Add it</button>
         </div>
     </form>
@@ -177,7 +182,7 @@
                         <div class="flex flex-wrap items-end gap-3">
                             <div class="flex-1 min-w-[220px]">
                                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                                    What needs doing</label>
+                                    Note title</label>
                                 <input type="text" name="title" required value="{{ note.title }}"
                                        class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
                             </div>
@@ -195,16 +200,16 @@
                         </div>
                         <div>
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                                Anything else</label>
+                                Description</label>
                             <textarea name="body" rows="3"
                                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">{{ note.body }}</textarea>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <button type="submit"
-                                    class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
-                                Save</button>
+                        <div class="flex flex-wrap items-center gap-3">
                             <span class="text-xs text-surface-500">
                                 Written {{ note.created_at | format_date }}{% if note.is_done %}, done {{ note.done_at | format_date }}{% endif %}</span>
+                            <button type="submit"
+                                    class="ml-auto min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+                                Save</button>
                         </div>
                     </form>
 

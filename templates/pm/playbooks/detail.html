@@ -104,20 +104,29 @@
        an already indented card fit neither. #}
     <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 min-w-0">
         <div class="flex items-center gap-3 min-w-0 flex-1">
+            {# A chosen SVG, then the mark fetched off the vendor's own site,
+               then the monogram. The label round the last one is a file
+               picker: some vendors sit behind a door that answers a fetch
+               with a challenge, and waiting on them is not a plan. #}
             {% if playbook.logo_path %}
             <img src="{{ url_for('static', filename=playbook.logo_path) }}?v={{ asset_version }}"
                  alt="" aria-hidden="true"
                  class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-2 object-contain">
             {% elif playbook.icon_file %}
-            {# Fetched off the vendor's own site, because a runbook filed
-               through the door arrives without a picture. #}
             <img src="{{ url_for('playbooks.icon', slug=playbook.slug) }}"
                  alt="" aria-hidden="true"
                  class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-2 object-contain">
             {% else %}
-            <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
-                <span class="text-base font-bold text-brand-300">{{ playbook.initials }}</span>
-            </div>
+            <form method="POST" enctype="multipart/form-data" class="flex-shrink-0"
+                  action="{{ url_for('playbooks.mark_upload', slug=playbook.slug) }}">
+                <label title="Give it a mark"
+                       class="w-12 h-12 flex items-center justify-center rounded-xl bg-brand-500/15 border border-dashed border-brand-500/40 cursor-pointer hover:border-brand-400 transition-colors">
+                    <span class="text-base font-bold text-brand-300">{{ playbook.initials }}</span>
+                    <input type="file" name="mark" class="hidden"
+                           accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.ico"
+                           onchange="this.form.requestSubmit()">
+                </label>
+            </form>
             {% endif %}
             <div class="min-w-0">
                 <p class="text-sm text-surface-400">
