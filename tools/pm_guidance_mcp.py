@@ -191,9 +191,12 @@ TOOLS = [
             "a money figure on the live board instead of asking Michael to "
             "go and look: a session shipped a wrong Railway total twice and "
             "could not see it, because the admin pages need a login. Read "
-            "`source` before quoting any number - \"invoices\" is what the "
-            "vendor charged, \"derived\" is assembled from the ledger and is "
-            "a guess. `months_not_recorded` is what is still missing."),
+            "`source` before quoting any number. \"invoices\" is typed off "
+            "the vendor's bill and \"synced\" is read from the vendor's own "
+            "billing API - both are the truth. Only \"derived\" is a guess "
+            "assembled from the ledger. Do NOT ask him to enter invoices for "
+            "a synced vendor; Railway is the only one without a money API "
+            "and the only one that is typed in."),
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -415,7 +418,10 @@ def tool_get_costs(_args):
         lines.append("%s: $%.2f (%s)" % (
             p.get("display_name") or p.get("name"),
             p.get("lifetime") or 0.0, p.get("source")))
-        if p.get("source") == "derived" and p.get("derived_total"):
+        if p.get("source") == "synced":
+            lines.append("    From the vendor's own billing API. Nothing to "
+                         "enter and nobody to ask.")
+        elif p.get("source") == "derived" and p.get("derived_total"):
             lines.append("    NOT A FACT. Assembled from the ledger, which "
                          "double counts a month written by two things.")
         for inv in p.get("invoices", []):

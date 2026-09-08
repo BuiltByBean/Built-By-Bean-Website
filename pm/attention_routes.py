@@ -54,7 +54,16 @@ def _bills_to_enter(force=False):
     Only vendors whose money this board already tracks: a provider with no
     cost entry and no invoice has never cost anything here, and nagging about
     it would make this list noise rather than a list to clear.
+
+    And only vendors that MUST be typed in. Railway is the one whose API will
+    not report money, which is why its figures are copied off a screen by
+    hand and why its ledger could hold two populations at once and double
+    count. Cloudflare and Twilio read their own billing history and usage
+    records straight from the vendor, so there is nothing for anybody to
+    enter, and asking would be inventing a monthly chore for the two vendors
+    that already do it themselves.
     """
+    from pm.service_costs_routes import MANUAL_MONTHLY_PROVIDERS
     now = time.time()
     if not force and _BILLS_CACHE["value"] is not None and now - _BILLS_CACHE["at"] < _BILLS_TTL:
         return _BILLS_CACHE["value"]
@@ -65,6 +74,8 @@ def _bills_to_enter(force=False):
         providers = (ServiceProvider.query.filter_by(is_active=True)
                      .order_by(ServiceProvider.display_name).all())
         for p in providers:
+            if p.name not in MANUAL_MONTHLY_PROVIDERS:
+                continue
             first_entry = (db.session.query(db.func.min(ServiceCostEntry.period_start))
                            .filter(ServiceCostEntry.provider_id == p.id).scalar())
             first_invoice = (db.session.query(db.func.min(ProviderInvoice.period_month))

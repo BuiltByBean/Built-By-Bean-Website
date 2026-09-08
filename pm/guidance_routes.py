@@ -208,11 +208,25 @@ def costs():
     catalogue, and it is his own key for his own business figures, so the
     sensitivity is the same as the client list this door already returns.
 
-    `source` is the whole point of the shape: "invoices" means the number is
-    what the vendor actually charged, "derived" means it was assembled from
-    the ledger and is a guess. A caller that cannot tell those apart will
-    report a guess as a fact, which is exactly what happened.
+    `source` is the whole point of the shape, and it has THREE values, not
+    two. The first version had two and was wrong about most of the board:
+
+      invoices  typed in off the vendor's bill. The truth.
+      synced    read from the vendor's own billing API. Also the truth, and
+                the majority: Cloudflare returns its billing history and
+                Twilio its usage records, so nobody types those and nobody
+                should be asked to.
+      derived   neither. Assembled from the ledger by matching a description
+                prefix, which is a guess, and is the shape that double
+                counted Railway when two things wrote rows that both matched.
+
+    Railway is the only vendor whose API will not report money, which is why
+    it is the only one entered by hand and the only one that could break this
+    way. Calling a synced figure "derived" reads as "this number is a guess"
+    and would have had somebody typing in invoices for two vendors that
+    already do it themselves.
     """
+    from pm.service_costs_routes import MANUAL_MONTHLY_PROVIDERS
     out = []
     for provider in (ServiceProvider.query
                      .order_by(ServiceProvider.display_name).all()):
@@ -242,16 +256,33 @@ def costs():
                     missing.append(month.strftime("%Y-%m"))
                 month = (month + timedelta(days=32)).replace(day=1)
 
+        by_hand = provider.name in MANUAL_MONTHLY_PROVIDERS
+        if invoices:
+            source = "invoices"
+        elif provider.monthly_cost is not None:
+            # A fixed amount configured on the provider, booked on the
+            # billing day. Anthropic is the case: no API to ask, but the
+            # figure was set deliberately, so it is not a guess either.
+            source = "flat"
+        elif not by_hand:
+            source = "synced"
+        else:
+            source = "derived"
+
         out.append({
             "name": provider.name,
             "display_name": provider.display_name,
             "is_active": bool(provider.is_active),
+            "entered_by_hand": by_hand,
             "lifetime": recorded if invoices else round(float(derived or 0.0), 2),
-            "source": "invoices" if invoices else "derived",
+            "source": source,
             "invoice_total": recorded,
             "invoice_count": len(invoices),
             "derived_total": round(float(derived or 0.0), 2),
-            "months_not_recorded": missing,
+            # Only meaningful for a vendor that is typed in. A synced one
+            # has nothing outstanding, so an empty list here is a fact rather
+            # than a coincidence.
+            "months_not_recorded": missing if by_hand else [],
             "invoices": [{"month": i.period_month.strftime("%Y-%m"),
                           "amount": round(i.amount or 0.0, 2),
                           "note": i.note or ""} for i in invoices],
