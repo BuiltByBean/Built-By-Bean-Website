@@ -132,3 +132,53 @@ def post(base_url, path, payload, *, secret, origin_slug, timeout=10):
         raise DeliveryError(f"{exc.code}: {detail}") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise DeliveryError(str(exc)) from exc
+
+
+def fetch(base_url, path, payload, *, secret, origin_slug, timeout=20):
+    """Ask a client's app for data, signed exactly the way a push is.
+
+    A POST carrying a body rather than a GET carrying a query string, because
+    the signature covers a body and a GET has none. Signing a query string
+    would put the proof of identity in every access log and Referer header,
+    which is the thing this protocol exists to avoid.
+
+    Tickets only ever travelled one way: a client's app pushed them here when
+    its own outbox ran. Nothing on this side could ask, so an app whose sender
+    thread never started looked exactly like an app with nothing to report -
+    the same shape of mistake as reading an empty column as a clean result.
+    This is the other direction, so silence can be checked rather than assumed.
+
+    Returns the decoded JSON body. Raises DeliveryError on anything that is not
+    a 2xx carrying JSON, because a fetch that half worked must not read as an
+    empty list of tickets.
+    """
+    body = canonical(payload)
+    timestamp, signature = sign(secret, body)
+    url = base_url.rstrip("/") + path
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+        ORIGIN_HEADER: origin_slug,
+        TIMESTAMP_HEADER: timestamp,
+        SIGNATURE_HEADER: signature,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:400]
+        except Exception:
+            pass
+        raise DeliveryError(f"{exc.code}: {detail}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise DeliveryError(str(exc)) from exc
+
+    try:
+        return json.loads(raw)
+    except ValueError as exc:
+        # An app that answers 200 with a login page is not an app with no
+        # tickets, and the difference has to reach the caller.
+        raise DeliveryError(f"not JSON: {raw[:200]}") from exc

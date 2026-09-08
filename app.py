@@ -1491,6 +1491,25 @@ def create_app():
         if not isinstance(their_id, int):
             return jsonify({"error": "ticket_id must be an integer"}), 400
 
+        ticket, created = _apply_hub_ticket(client, their_id, data)
+        db.session.commit()
+
+        app.logger.info("hub: %s ticket %s/%s -> %s",
+                        "created" if created else "updated",
+                        client.origin_slug, their_id, ticket.id)
+        return jsonify({"ok": True, "id": ticket.id, "created": created}), 201 if created else 200
+
+    def _apply_hub_ticket(client, their_id, data):
+        """One ticket from a client's app, created or brought up to date.
+
+        Extracted from the endpoint above so the pull below goes through the
+        very same rules. Two copies of "what an update may touch" is two
+        answers to that question, and the second one is always the one that
+        quietly un-resolves finished work.
+
+        Does not commit: the caller decides whether one ticket or a hundred is
+        a unit of work.
+        """
         ticket = Ticket.query.filter_by(origin=client.origin_slug,
                                         origin_ticket_id=their_id).first()
         created = ticket is None
@@ -1522,12 +1541,7 @@ def create_app():
         if data.get("priority") in TICKET_PRIORITIES:
             ticket.priority = data["priority"]
         ticket.updated_at = datetime.now(timezone.utc)
-        db.session.commit()
-
-        app.logger.info("hub: %s ticket %s/%s -> %s",
-                        "created" if created else "updated",
-                        client.origin_slug, their_id, ticket.id)
-        return jsonify({"ok": True, "id": ticket.id, "created": created}), 201 if created else 200
+        return ticket, created
 
     @pm_bp.route("/api/hub/status", methods=["POST"])
     def hub_ingest_status():
@@ -1715,7 +1729,33 @@ def create_app():
             priority_labels=TICKET_PRIORITY_LABELS,
             billing_labels=TICKET_BILLING_LABELS,
             billing_buckets=TICKET_BILLING_BUCKETS,
+            stale=stale_hub_clients(),
         )
+
+    @pm_bp.route("/tickets/resync", methods=["POST"])
+    @login_required
+    def tickets_resync():
+        """Ask every wired client app for its tickets, now.
+
+        The schedule is the safety net and this is the press for when waiting
+        for it is not an answer. Says per app what came back, including the
+        ones that refused, because "nothing new" and "could not reach it" look
+        identical on the board and only one of them is fine.
+        """
+        results = pull_all_tickets()
+        if not results:
+            flash("No client app is wired up to be asked.", "warning")
+            return redirect(request.form.get("next") or url_for("pm.tickets_list"))
+        created = sum(c for _, c, _, _ in results)
+        updated = sum(u for _, _, u, _ in results)
+        broken = [c.name for c, _, _, note in results if "read," not in note]
+        if broken:
+            flash(f"{created} new, {updated} updated. Could not reach: "
+                  f"{', '.join(broken)}.", "warning")
+        else:
+            flash(f"{created} new, {updated} updated, from "
+                  f"{len(results)} app{'' if len(results) == 1 else 's'}.", "success")
+        return redirect(request.form.get("next") or url_for("pm.tickets_list"))
 
     @pm_bp.route("/tickets/new", methods=["GET", "POST"])
     @login_required
@@ -2015,6 +2055,194 @@ def create_app():
         """Drain the reply queue by hand."""
         sent, skipped, failed = deliver_pending_replies()
         print(f"sent {sent}, skipped {skipped}, failed {failed}")
+
+    # ── Asking their apps for tickets ─────────────────────────────
+    #
+    # The other direction. Everything above pushes; this pulls, because a
+    # push-only pipe cannot be checked from this end. A client app whose
+    # sender thread never started - one unset environment variable does it -
+    # delivered nothing and said nothing, and the board drew a quiet week.
+    # Now the board asks, on a schedule and on a button, and records both when
+    # it asked and what came back, so a pipe that stopped is visible as a
+    # stamp that stopped rather than as an empty list.
+
+    HUB_PULL_PATH = "/api/hub/tickets/since"
+
+    # How long a client app may go unasked before the tickets page says so.
+    # Comfortably more than the daily schedule, so an ordinary day is quiet
+    # and a stopped schedule is not.
+    HUB_STALE_AFTER = timedelta(days=2)
+
+    def stale_hub_clients():
+        """Wired client apps this board has not heard a good answer from.
+
+        Naive and aware datetimes are both possible here - the column has no
+        timezone and the clock does - so the comparison is made in one place
+        with both sides forced naive UTC. A template cannot do that, and one
+        that tries raises on the first row rather than on the first bad row.
+        """
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - HUB_STALE_AFTER
+        out = []
+        for client in hub_clients():
+            when = client.hub_pulled_at
+            if when is None:
+                out.append(client)
+                continue
+            if when.tzinfo is not None:
+                when = when.astimezone(timezone.utc).replace(tzinfo=None)
+            # A pull that was refused stamped the time and wrote why, so the
+            # note is what says whether the answer was a good one.
+            if when < cutoff or "read," not in (client.hub_pull_note or ""):
+                out.append(client)
+        return out
+
+    # How far back an ordinary pull reaches. Generous on purpose: their side
+    # filters on an updated_at that a clock skew or a slow deploy can put
+    # either side of the boundary, and re-reading a ticket costs one upsert
+    # that changes nothing, while missing one costs a ticket.
+    PULL_OVERLAP_DAYS = 2
+
+    # What a first pull, or a "fetch everything" press, reaches back to. Their
+    # side is free to cap it; this is the ask, not the promise.
+    PULL_ALL_SINCE = "1970-01-01T00:00:00+00:00"
+
+    def hub_clients():
+        """Every client whose app this board is wired to talk to."""
+        return (Client.query
+                .filter(Client.origin_slug.isnot(None),
+                        Client.origin_base_url != "",
+                        Client.ingest_secret != "")
+                .order_by(Client.name).all())
+
+    def pull_client_tickets(client, since=None, limit=500):
+        """Ask one client's app for what it has, and take it in.
+
+        Returns (created, updated, note). Never raises: this runs on a timer
+        and behind a button, and one unreachable app must not stop the rest.
+
+        `since` is theirs to interpret. Left None it reaches a couple of days
+        behind the last successful pull, because a ticket re-read is an upsert
+        that changes nothing and a ticket missed is a ticket missed.
+        """
+        if since is None:
+            base = client.hub_pulled_at
+            if base is None:
+                since = PULL_ALL_SINCE
+            else:
+                if base.tzinfo is None:
+                    base = base.replace(tzinfo=timezone.utc)
+                since = (base - timedelta(days=PULL_OVERLAP_DAYS)).isoformat()
+
+        try:
+            payload = hub.fetch(client.origin_base_url, HUB_PULL_PATH,
+                                {"since": since, "limit": limit},
+                                secret=client.ingest_secret,
+                                origin_slug=client.origin_slug)
+        except hub.DeliveryError as exc:
+            note = str(exc)[:300]
+            # Stamped even on failure. The stamp is "when the board last
+            # asked", and an attempt that was refused is still an attempt;
+            # what changed is the note beside it.
+            client.hub_pulled_at = datetime.now(timezone.utc)
+            client.hub_pull_note = note
+            db.session.commit()
+            app.logger.warning("hub: pull from %s failed: %s", client.origin_slug, note)
+            return 0, 0, note
+
+        rows = payload.get("tickets") if isinstance(payload, dict) else payload
+        if not isinstance(rows, list):
+            note = "answered without a list of tickets"
+            client.hub_pulled_at = datetime.now(timezone.utc)
+            client.hub_pull_note = note
+            db.session.commit()
+            return 0, 0, note
+
+        created = updated = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            their_id = row.get("ticket_id")
+            if not isinstance(their_id, int):
+                continue
+            try:
+                _, was_new = _apply_hub_ticket(client, their_id, row)
+            except Exception as exc:                    # noqa: BLE001
+                # One malformed ticket is not a reason to drop the rest of a
+                # pull that otherwise worked.
+                db.session.rollback()
+                app.logger.warning("hub: %s/%s would not apply: %s",
+                                   client.origin_slug, their_id, exc)
+                continue
+            created += 1 if was_new else 0
+            updated += 0 if was_new else 1
+
+        note = f"{len(rows)} read, {created} new, {updated} updated"
+        client.hub_pulled_at = datetime.now(timezone.utc)
+        client.hub_pull_note = note
+        db.session.commit()
+        app.logger.info("hub: pulled %s: %s", client.origin_slug, note)
+        return created, updated, note
+
+    def pull_all_tickets(since=None):
+        """Ask every wired client app. Returns [(client, created, updated, note)]."""
+        out = []
+        for client in hub_clients():
+            created, updated, note = pull_client_tickets(client, since=since)
+            out.append((client, created, updated, note))
+        return out
+
+    app.pull_client_tickets = pull_client_tickets
+    app.pull_all_tickets = pull_all_tickets
+
+    @app.cli.command("pull-tickets")
+    def pull_tickets_cmd():
+        """Ask every client app for its tickets, by hand."""
+        for client, created, updated, note in pull_all_tickets():
+            print(f"{client.origin_slug}: {note}")
+
+    def _start_ticket_puller():
+        """Ask on a schedule, in the background.
+
+        Daily by default rather than by the minute: their outbox already
+        pushes within a minute of anything happening, so this is the safety
+        net under it rather than the delivery mechanism. It runs one pass a
+        few minutes after boot, so a deploy is also a catch-up, and then once
+        every interval.
+
+        Guarded so only one thread per process exists however many times
+        create_app is called, which the reply sender above was not: under
+        gunicorn each worker still gets its own, and that is harmless because
+        every apply is an upsert keyed on (origin, their id).
+        """
+        import threading
+
+        interval = int(os.environ.get("HUB_PULL_INTERVAL_SECONDS", str(24 * 60 * 60)))
+        if interval <= 0 or os.environ.get("HUB_PULL_DISABLED") == "1":
+            return
+        if getattr(app, "_hub_puller_started", False):
+            return
+        app._hub_puller_started = True
+
+        # Not on the boot itself: a worker that spends its first seconds on
+        # six HTTP calls is a worker that is not answering requests, and
+        # Railway's health check is watching.
+        first_delay = int(os.environ.get("HUB_PULL_FIRST_DELAY_SECONDS", "300"))
+
+        def loop():
+            time.sleep(first_delay)
+            while True:
+                try:
+                    with app.app_context():
+                        pull_all_tickets()
+                except Exception as exc:                # noqa: BLE001
+                    # A dead thread is a schedule that silently stops, which is
+                    # the exact failure this whole mechanism exists to catch.
+                    app.logger.warning("hub: ticket pull pass failed: %s", exc)
+                time.sleep(interval)
+
+        threading.Thread(target=loop, daemon=True, name="hub-ticket-puller").start()
+
+    _start_ticket_puller()
 
     def _start_reply_sender():
         """Drain the queue on a timer, in the background.

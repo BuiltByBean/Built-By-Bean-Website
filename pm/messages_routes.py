@@ -97,7 +97,15 @@ def archive(id):
     message = db.session.get(Message, id) or abort(404)
     root_id = message.thread_id or message.id
     now = datetime.now(timezone.utc)
-    for m in Message.query.filter_by(thread_id=root_id, direction="in").all():
+    # The row itself as well as its thread. Every path that writes a message
+    # sets thread_id, but a row that somehow has none matched nothing here -
+    # and the flash still said "Archived.", so a dismiss that did nothing at
+    # all reported success. A press that claims to have worked has to have
+    # worked on the thing that was pressed.
+    kin = Message.query.filter(
+        Message.direction == "in",
+        db.or_(Message.thread_id == root_id, Message.id == message.id)).all()
+    for m in kin:
         if m.status == "new":
             m.status = "archived"
             m.replied_at = m.replied_at or now

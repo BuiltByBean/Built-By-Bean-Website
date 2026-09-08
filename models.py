@@ -145,6 +145,14 @@ class Client(db.Model):
     # Empty means their app cannot receive them, so a reply stays here and is
     # visible as undelivered rather than being silently dropped.
     origin_base_url = db.Column(db.String(300), default="")
+    # When this board last ASKED their app for tickets, and what came back.
+    # Tickets used to arrive only when their outbox chose to run, so an app
+    # whose sender thread never started was indistinguishable from an app with
+    # nothing to say. These two columns are what makes silence readable: a
+    # stamp that stops moving is a pipe that stopped, and the note says which
+    # end refused. Null means never asked.
+    hub_pulled_at = db.Column(db.DateTime, nullable=True)
+    hub_pull_note = db.Column(db.String(300), default="")
 
     stage = db.Column(db.String(30), default="lead")
     contract_revenue = db.Column(db.Float, default=0.0)

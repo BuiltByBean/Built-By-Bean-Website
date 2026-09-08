@@ -6,11 +6,23 @@
 {% block page_subtitle %}Every client, worst first{% endblock %}
 
 {% block header_actions %}
-<a href="{{ url_for('pm.ticket_create') }}"
-   class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-    New ticket
-</a>
+<div class="flex flex-wrap items-center gap-2">
+    {# The schedule is the safety net; this is the press for when waiting for
+       it is not an answer. #}
+    <form method="POST" action="{{ url_for('pm.tickets_resync') }}">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Resync
+        </button>
+    </form>
+    <a href="{{ url_for('pm.ticket_create') }}"
+       class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        New ticket
+    </a>
+</div>
 {% endblock %}
 
 {#
@@ -174,6 +186,34 @@
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
+{#
+  A client app that has stopped talking, named.
+
+  Tickets arrive because their app pushes them, so an app whose sender stopped
+  delivered nothing and said nothing, and this page drew a quiet week. The
+  board asks daily now and records when it last asked; a stamp that has stopped
+  moving is the pipe, not the week. Only the ones that need saying appear.
+#}
+{% if stale %}
+<div class="glass-card p-4 mb-4 border-l-4 border-amber-500 flex flex-wrap items-center gap-3">
+  <div class="min-w-0 flex-1">
+    <p class="text-sm font-semibold text-white">
+      {{ stale | length }} client app{{ '' if stale | length == 1 else 's' }} not answering
+    </p>
+    <p class="text-xs text-surface-400 mt-0.5">
+      {% for c in stale %}{{ c.name }}{% if c.hub_pull_note %} ({{ c.hub_pull_note }}){% else %} (never asked){% endif %}{{ ', ' if not loop.last }}{% endfor %}
+    </p>
+  </div>
+  <form method="POST" action="{{ url_for('pm.tickets_resync') }}" class="shrink-0">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <button type="submit"
+            class="inline-flex items-center px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+      Try now
+    </button>
+  </form>
+</div>
+{% endif %}
+
 <div class="glass-card p-6 flex flex-col min-h-0">
   {# Each tab counts EXACTLY what clicking it shows. data-live: the tabs
      carry the filters in their links and their counts, so they swap in
