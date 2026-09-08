@@ -36,12 +36,58 @@ Write-Host "standing order  -> $target"
 
 # Replace rather than add beside: two registrations under one name is the
 # kind of thing that works until the wrong one answers.
-claude mcp remove pm-guidance -s user 2>$null | Out-Null
-claude mcp add --scope user pm-guidance -e "PM_GUIDANCE_KEY=$Key" -- python $bridge
-Write-Host "bridge          -> registered at user scope ($bridge)"
+#
+# Look for the CLI BEFORE removing anything, and report what actually
+# happened rather than what was attempted. On 2026-09-07 this was run from
+# inside a Claude Code session, where `claude` is not on PATH: both
+# commands failed with CommandNotFoundException and the script still
+# printed "registered at user scope". Nothing was lost that time only
+# because the remove failed too - on a machine where the CLI exists and
+# the add fails for any other reason, a remove-then-claim leaves the
+# machine with NO bridge and a bootstrap that says it has one. That is
+# strictly worse than either half, and the session that follows would
+# discover it three files in.
+$bridgeOk = $false
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    Write-Host "bridge          -> could not re-register: the 'claude' CLI is not on PATH."
+    Write-Host "                   Nothing was removed - any existing registration stands."
+    Write-Host "                   To refresh it, re-run from a terminal where 'claude'"
+    Write-Host "                   resolves, not from inside a Claude Code session."
+} else {
+    claude mcp remove pm-guidance -s user 2>$null | Out-Null
+    claude mcp add --scope user pm-guidance -e "PM_GUIDANCE_KEY=$Key" -- python $bridge
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "bridge          -> FAILED: 'claude mcp add' exited $LASTEXITCODE."
+        Write-Host "                   The previous registration was removed first, so this"
+        Write-Host "                   machine may now have none - the next line says which."
+    }
+}
+
+# Ask the file, not the command. A registration that is not in
+# ~/.claude.json is not a registration, whatever exit code was returned.
+$configPath = Join-Path $HOME ".claude.json"
+if (Test-Path $configPath) {
+    try {
+        $entry = (Get-Content $configPath -Raw | ConvertFrom-Json).mcpServers.'pm-guidance'
+        if ($entry -and $entry.env.PM_GUIDANCE_KEY) { $bridgeOk = $true }
+    } catch { }
+}
+if ($bridgeOk) {
+    Write-Host "bridge          -> registered at user scope, key present ($bridge)"
+} else {
+    Write-Host "bridge          -> ABSENT from $configPath - the tools will not be in a session."
+}
 
 python $installer
+if ($LASTEXITCODE -ne 0) { throw "the hook installer exited $LASTEXITCODE" }
 Write-Host "hooks           -> ~/.claude/settings.json"
 
 Write-Host ""
-Write-Host "Done. Start a fresh Claude session; it opens with the house rules in it."
+if ($bridgeOk) {
+    Write-Host "Done. Start a fresh Claude session; it opens with the house rules in it."
+} else {
+    Write-Host "PARTLY DONE - the standing order and hooks are in place, but WITHOUT the"
+    Write-Host "bridge a session cannot reach the board, consult a playbook or file a"
+    Write-Host "lesson. Register it before relying on this machine."
+    exit 1
+}
