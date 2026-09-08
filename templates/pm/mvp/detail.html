@@ -77,7 +77,11 @@
     </div>
 
     {# ── what is on it ───────────────────────────────────── #}
-    <div class="glass-card overflow-hidden">
+    {# data-live: adding, removing or repricing changes this card and the two
+       catalogue lists below, and nothing else on the page. The search box, the
+       category chips and the package form above keep their identity, which is
+       what keeps the cursor, the chosen chip and the scroll position. #}
+    <div data-live="chosen" class="glass-card overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-baseline gap-x-3">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
                 {{ package.items|length }} on it</span>
@@ -139,7 +143,7 @@
                     <p class="text-xs text-surface-400 max-w-3xl">{{ item.product.summary }}</p>
                     {% endif %}
 
-                    <form method="POST" action="{{ url_for('mvp.item_update', id=package.id, item_id=item.id) }}"
+                    <form method="POST" data-live-action action="{{ url_for('mvp.item_update', id=package.id, item_id=item.id) }}"
                           class="flex flex-wrap items-end gap-3">
                         <div>
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
@@ -169,7 +173,7 @@
                                 class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
                             Save</button>
                     </form>
-                    <form method="POST" action="{{ url_for('mvp.item_remove', id=package.id, item_id=item.id) }}"
+                    <form method="POST" data-live-action action="{{ url_for('mvp.item_remove', id=package.id, item_id=item.id) }}"
                           class="flex justify-end">
                         <button type="submit"
                                 class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors">
@@ -208,7 +212,7 @@
         </div>
         </div>
 
-        <div x-show="cat === 'all'" class="space-y-1.5">
+        <div data-live="pick-products" x-show="cat === 'all'" class="space-y-1.5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Products</p>
             {% for p in products %}
             {% if p.id in chosen_products %}
@@ -221,7 +225,7 @@
                 </svg>
             </div>
             {% else %}
-            <form method="POST" action="{{ url_for('mvp.item_add', id=package.id) }}"
+            <form method="POST" data-live-action action="{{ url_for('mvp.item_add', id=package.id) }}"
                   data-hay="{{ (p.name ~ ' ' ~ (p.summary or ''))|lower }}"
                   x-show="!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase())">
                 <input type="hidden" name="product_id" value="{{ p.id }}">
@@ -241,7 +245,7 @@
             {% endfor %}
         </div>
 
-        <div class="space-y-1.5">
+        <div data-live="pick-features" class="space-y-1.5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Features</p>
             {% for f in features %}
             {% if f.id in chosen_features %}
@@ -257,7 +261,7 @@
                 </svg>
             </div>
             {% else %}
-            <form method="POST" action="{{ url_for('mvp.item_add', id=package.id) }}"
+            <form method="POST" data-live-action action="{{ url_for('mvp.item_add', id=package.id) }}"
                   data-hay="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ f.category_label)|lower }}"
                   x-show="(cat === 'all' || cat === '{{ f.category }}') && (!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase()))">
                 <input type="hidden" name="feature_id" value="{{ f.id }}">
@@ -282,7 +286,7 @@
         {# The client just named something the catalogue has never heard of.
            Five seconds, or it goes unrecorded: it lands as an idea in the
            catalogue and straight onto this package in one move. #}
-        <form method="POST" action="{{ url_for('mvp.item_add', id=package.id) }}"
+        <form method="POST" data-live-action action="{{ url_for('mvp.item_add', id=package.id) }}"
               class="pt-3 border-t border-white/5 flex flex-wrap items-end gap-3">
             <div class="flex-1 min-w-[180px]">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">

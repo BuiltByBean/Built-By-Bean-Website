@@ -426,6 +426,73 @@
       and runs while the Alpine bundle is still deferred.
     -->
     <script>
+    /*
+      Replace only the regions that changed, and nothing else.
+
+      A page is a set of regions. When an action changes one of them, every
+      other one keeps its identity in the DOM: the search box keeps its cursor
+      and what is half-typed in it, an open dropdown stays open, and the
+      scroller is never touched so the viewport does not move. Re-rendering a
+      region that did not change is not a harmless no-op - it destroys all
+      three.
+
+      Takes the HTML of the same page and swaps every [data-live] key present
+      in both. Returns the parsed document so a caller can read more out of it.
+    */
+    window.bbbSwapLive = function (html) {
+        const fresh = new DOMParser().parseFromString(html, 'text/html');
+        fresh.querySelectorAll('[data-live]').forEach(node => {
+            const key = node.getAttribute('data-live');
+            const stale = document.querySelector('[data-live="' + key + '"]');
+            if (stale) stale.replaceWith(document.adoptNode(node));
+        });
+        return fresh;
+    };
+
+    /*
+      An action that changes part of a page, without loading a new one.
+
+      Every mutation used to be a POST and a redirect, which is a brand new
+      document: it lands at the top of the page, and it throws away the filter
+      state, the search text and the open dropdown along the way. Adding one
+      item to a package sent you back to the top of a ninety row catalogue with
+      the search box empty. This posts the form, then swaps the live regions
+      out of the answer, so the only thing that moves is the thing that changed.
+
+      Delegated from the document, so a form swapped in by an earlier action is
+      live too without anything re-registering. Falls back to a plain submit if
+      the fetch fails, because a broken network must not mean a dead button.
+    */
+    document.addEventListener('submit', function (event) {
+        const form = event.target.closest && event.target.closest('form[data-live-action]');
+        if (!form || event.defaultPrevented) return;
+        event.preventDefault();
+        if (form.dataset.busy === '1') return;
+        form.dataset.busy = '1';
+
+        /* The submitter is passed so a button carrying a name and value is
+           part of the body, exactly as a real submit would send it. */
+        let body;
+        try { body = new FormData(form, event.submitter); }
+        catch (e) { body = new FormData(form); }
+
+        fetch(form.action || location.href, {
+            method: (form.method || 'POST').toUpperCase(),
+            body: body,
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'fetch' },
+        })
+            .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
+            .then(html => {
+                window.bbbSwapLive(html);
+                delete form.dataset.busy;
+                document.dispatchEvent(new CustomEvent('bbb:live-action', { detail: { form } }));
+            })
+            .catch(() => { delete form.dataset.busy; form.submit(); });
+    });
+    </script>
+
+    <script>
     document.addEventListener('alpine:init', () => {
         /* A filter bar over a list the server filters. The pick is the
            apply and the keystroke is the apply: the form's state is fetched
@@ -457,12 +524,7 @@
                     .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
                     .then(html => {
                         if (mine !== this.serial) return;
-                        const fresh = new DOMParser().parseFromString(html, 'text/html');
-                        fresh.querySelectorAll('[data-live]').forEach(node => {
-                            const key = node.getAttribute('data-live');
-                            const stale = document.querySelector('[data-live="' + key + '"]');
-                            if (stale) stale.replaceWith(document.adoptNode(node));
-                        });
+                        const fresh = window.bbbSwapLive(html);
                         this.recount(fresh);
                         history.replaceState(null, '', url);
                     })
@@ -1008,9 +1070,11 @@
         <div id="pm-scroll" class="pm-scroll">
 
         <!-- Flash messages -->
+        {# data-live and ALWAYS rendered, even empty. A live action fetches the
+           redirect, which consumes the flash; with no node here to swap into,
+           the message would be consumed and never shown. #}
         {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div class="px-6 pt-4 space-y-2">
+        <div data-live="flash" class="{% if messages %}px-6 pt-4 space-y-2{% endif %}">
             {% for category, message in messages %}
             <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)"
                  x-transition:leave="transition ease-in duration-300"
@@ -1030,7 +1094,6 @@
             </div>
             {% endfor %}
         </div>
-        {% endif %}
         {% endwith %}
 
         <!-- Page content -->
