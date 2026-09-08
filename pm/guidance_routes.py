@@ -305,7 +305,13 @@ def costs():
             "invoices": len(rows),
             "billed": round(sum(i.total or 0.0 for i in rows), 2),
             "paid": round(client.total_revenue, 2),
-            "outstanding": round(sum(i.amount_due or 0.0 for i in rows), 2),
+            # Only draft and open, which is what the invoices page does.
+            # Stripe's amount_due is the amount due AT FINALISATION and does
+            # not drop to zero when the invoice is paid (amount_remaining is
+            # the one that does), so summing it across every status reports
+            # everything ever billed as still owed.
+            "outstanding": round(sum(i.amount_due or 0.0 for i in rows
+                                     if (i.status or "") in ("draft", "open")), 2),
             "by_status": {
                 s: sum(1 for i in rows if (i.status or "") == s)
                 for s in sorted({(i.status or "") for i in rows})
