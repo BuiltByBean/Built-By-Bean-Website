@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
   Every package that has been scoped, and where each one stands. A package
@@ -32,40 +33,57 @@
         <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Working name</label>
             <input type="text" name="name" placeholder="Their MVP"
-                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+                   class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
         </div>
         <button type="submit" class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
             Start scoping</button>
     </form>
 
     {% if packages %}
-    <div class="glass-card overflow-hidden">
+    {# data-live: deleting one takes a row out of this list and nothing else,
+       so the list is the region and the page never reloads. #}
+    <div data-live="results" class="glass-card overflow-hidden">
         <div class="divide-y divide-white/5">
         {% for p in packages %}
-            <a href="{{ url_for('mvp.package_detail', id=p.id) }}"
-               class="group flex items-center gap-3 p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
-                <span class="min-w-0 flex-1">
-                    <span class="flex flex-wrap items-center gap-2">
-                        <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors">
-                            {{ p.name }}</span>
-                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium {{ status_badge.get(p.status, 'bg-surface-800 text-surface-400') }}">
-                            {{ p.status_label }}</span>
+            {# The row is a container rather than one big anchor: a form cannot
+               live inside an <a>, and the delete has to sit on the trailing
+               edge of the row it deletes. The link still covers everything
+               that is not the button. #}
+            <div class="group flex items-center gap-3 p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
+                <a href="{{ url_for('mvp.package_detail', id=p.id) }}"
+                   class="min-w-0 flex-1 flex items-center gap-3">
+                    <span class="min-w-0 flex-1">
+                        <span class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors">
+                                {{ p.name }}</span>
+                            <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium {{ status_badge.get(p.status, 'bg-surface-800 text-surface-400') }}">
+                                {{ p.status_label }}</span>
+                        </span>
+                        <span class="block mt-1 text-xs text-surface-400">
+                            {{ p.client.name }} &middot; {{ p.items|length }} item{{ 's' if p.items|length != 1 }}</span>
                     </span>
-                    <span class="block mt-1 text-xs text-surface-400">
-                        {{ p.client.name }} &middot; {{ p.items|length }} item{{ 's' if p.items|length != 1 }}</span>
-                </span>
-                <span class="shrink-0 text-right">
-                    <span class="block text-sm tabular-nums {{ 'text-surface-200' if p.estimate else 'text-surface-600' }}">
-                        {{ p.estimate|format_currency if p.estimate else '—' }}</span>
-                    {% if p.monthly_estimate %}
-                    <span class="block text-xs text-surface-500">+{{ p.monthly_estimate|format_currency }}/mo</span>
-                    {% endif %}
-                </span>
-                <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-surface-300 transition-colors"
-                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
-            </a>
+                    <span class="shrink-0 text-right">
+                        <span class="block text-sm tabular-nums {{ 'text-surface-200' if p.estimate else 'text-surface-600' }}">
+                            {{ p.estimate|format_currency if p.estimate else '—' }}</span>
+                        {% if p.monthly_estimate %}
+                        <span class="block text-xs text-surface-500">+{{ p.monthly_estimate|format_currency }}/mo</span>
+                        {% endif %}
+                    </span>
+                    <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-surface-300 transition-colors"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+                <form method="POST" data-live-action class="shrink-0"
+                      action="{{ url_for('mvp.package_delete', id=p.id) }}">
+                    {% call confirm_button(question='Delete it and everything on it?',
+                                           btn_class='inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl text-surface-600 hover:text-red-300 hover:bg-white/5 transition-colors') %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    {% endcall %}
+                </form>
+            </div>
         {% endfor %}
         </div>
     </div>
