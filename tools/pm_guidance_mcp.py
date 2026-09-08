@@ -185,6 +185,18 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_costs",
+        "description": (
+            "What each vendor has actually cost, read only. Use it to CHECK "
+            "a money figure on the live board instead of asking Michael to "
+            "go and look: a session shipped a wrong Railway total twice and "
+            "could not see it, because the admin pages need a login. Read "
+            "`source` before quoting any number - \"invoices\" is what the "
+            "vendor charged, \"derived\" is assembled from the ledger and is "
+            "a guess. `months_not_recorded` is what is still missing."),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "upsert_project",
         "description": (
             "File a project against a client, or update its description or "
@@ -392,6 +404,33 @@ def tool_suggest_update(args):
     return json.dumps(data)
 
 
+def tool_get_costs(_args):
+    text, err = _http("GET", "/api/guidance/costs")
+    if err:
+        return err
+    lines = []
+    for p in json.loads(text).get("providers", []):
+        if not p.get("invoice_count") and not p.get("derived_total"):
+            continue
+        lines.append("%s: $%.2f (%s)" % (
+            p.get("display_name") or p.get("name"),
+            p.get("lifetime") or 0.0, p.get("source")))
+        if p.get("source") == "derived" and p.get("derived_total"):
+            lines.append("    NOT A FACT. Assembled from the ledger, which "
+                         "double counts a month written by two things.")
+        for inv in p.get("invoices", []):
+            lines.append("    %s  $%8.2f  %s" % (
+                inv.get("month"), inv.get("amount") or 0.0, inv.get("note") or ""))
+        if p.get("invoice_count"):
+            lines.append("    %d invoices, $%.2f. The ledger would have said "
+                         "$%.2f." % (p["invoice_count"], p.get("invoice_total") or 0.0,
+                                     p.get("derived_total") or 0.0))
+        missing = p.get("months_not_recorded") or []
+        if missing:
+            lines.append("    NOT RECORDED: " + ", ".join(missing))
+    return "\n".join(lines) or "No vendor has cost anything yet."
+
+
 def tool_get_clients(_args):
     text, err = _http("GET", "/api/guidance/clients")
     if err:
@@ -446,6 +485,7 @@ HANDLERS = {
     "report_lesson": tool_report_lesson,
     "suggest_update": tool_suggest_update,
     "get_clients": tool_get_clients,
+    "get_costs": tool_get_costs,
     "upsert_project": tool_upsert_project,
     "log_expense": tool_log_expense,
     "log_time": tool_log_time,

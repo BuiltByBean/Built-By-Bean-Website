@@ -30,13 +30,14 @@ protected by default rather than by memory.
 import hmac
 import json
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from models import (db, Feature, Playbook, PlaybookStep, Product,
                     CatalogueProposal, Client, Project, Expense, TimeEntry,
-                    ServiceProvider, ServiceMapping)
+                    ServiceProvider, ServiceMapping, ServiceCostEntry,
+                    ProviderInvoice)
 
 guidance_bp = Blueprint("guidance", __name__, url_prefix="/api/guidance")
 
@@ -190,6 +191,73 @@ def clients():
          "projects": [{"id": p.id, "name": p.name, "status": p.status}
                       for p in c.projects]}
         for c in rows]})
+
+
+@guidance_bp.route("/costs")
+def costs():
+    """What each vendor has actually cost, and where that figure came from.
+
+    READ ONLY, and here for a specific failure. Twice in one session the
+    board reported a money figure that was wrong, and both times the session
+    that shipped it could not tell: the guidance door hands out rules,
+    runbooks and clients, and the admin pages need a login, so there was no
+    way to check a number on the live board short of asking Michael to go and
+    look. He found both. That is the wrong person doing the checking.
+
+    Nothing here writes. It is the same bearer token that already gates the
+    catalogue, and it is his own key for his own business figures, so the
+    sensitivity is the same as the client list this door already returns.
+
+    `source` is the whole point of the shape: "invoices" means the number is
+    what the vendor actually charged, "derived" means it was assembled from
+    the ledger and is a guess. A caller that cannot tell those apart will
+    report a guess as a fact, which is exactly what happened.
+    """
+    out = []
+    for provider in (ServiceProvider.query
+                     .order_by(ServiceProvider.display_name).all()):
+        invoices = (ProviderInvoice.query
+                    .filter_by(provider_id=provider.id)
+                    .order_by(ProviderInvoice.period_month).all())
+        recorded = round(sum(i.amount or 0.0 for i in invoices), 2)
+
+        # The same prefix match the hosting page falls back to, returned
+        # beside the recorded total rather than instead of it, so the gap
+        # between the two is visible in one response. That gap was the bug.
+        derived = (db.session.query(db.func.coalesce(db.func.sum(Expense.amount), 0.0))
+                   .filter(Expense.description.ilike(f"{provider.display_name} -%"))
+                   .scalar())
+
+        first_entry = (db.session.query(db.func.min(ServiceCostEntry.period_start))
+                       .filter(ServiceCostEntry.provider_id == provider.id).scalar())
+        starts = [d for d in (first_entry,
+                              invoices[0].period_month if invoices else None) if d]
+        missing = []
+        if starts:
+            have = {i.period_month for i in invoices}
+            month = min(starts).replace(day=1)
+            this_month = date.today().replace(day=1)
+            while month < this_month:
+                if month not in have:
+                    missing.append(month.strftime("%Y-%m"))
+                month = (month + timedelta(days=32)).replace(day=1)
+
+        out.append({
+            "name": provider.name,
+            "display_name": provider.display_name,
+            "is_active": bool(provider.is_active),
+            "lifetime": recorded if invoices else round(float(derived or 0.0), 2),
+            "source": "invoices" if invoices else "derived",
+            "invoice_total": recorded,
+            "invoice_count": len(invoices),
+            "derived_total": round(float(derived or 0.0), 2),
+            "months_not_recorded": missing,
+            "invoices": [{"month": i.period_month.strftime("%Y-%m"),
+                          "amount": round(i.amount or 0.0, 2),
+                          "note": i.note or ""} for i in invoices],
+        })
+
+    return jsonify({"providers": out})
 
 
 # ── The inbox: how the catalogue changes ─────────────────
