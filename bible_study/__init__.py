@@ -62,7 +62,7 @@ def _send_invite_email(app, email, invite_url, name):
                     <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px">
                         <h2 style="color:#6366f1">Bible Study Notes</h2>
                         <p>Hi{(' ' + name) if name else ''},</p>
-                        <p>You've been invited to join Bible Study Notes — a personal Bible study companion for reading, notes, tags, and more.</p>
+                        <p>You've been invited to join Bible Study Notes - a personal Bible study companion for reading, notes, tags, and more.</p>
                         <p><a href="{invite_url}" style="display:inline-block;background:#6366f1;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Set Up Your Account</a></p>
                         <p style="color:#94a3b8;font-size:12px;margin-top:20px">If the button doesn't work, copy this link: {invite_url}</p>
                     </div>
@@ -75,7 +75,7 @@ def _send_invite_email(app, email, invite_url, name):
 
 
 # ---------------------------------------------------------------------------
-# Inline migrations — add columns to existing tables safely
+# Inline migrations - add columns to existing tables safely
 # ---------------------------------------------------------------------------
 def _migrate(app):
     """Add new columns to existing tables. Each ALTER is wrapped in try/except
@@ -103,14 +103,14 @@ def _migrate(app):
 
 
 # ---------------------------------------------------------------------------
-# init_bible_study — called from main app's create_app
+# init_bible_study - called from main app's create_app
 # ---------------------------------------------------------------------------
 def init_bible_study(app):
     """Create tables, run migrations, seed admin user."""
     with app.app_context():
         db.create_all()
         _migrate(app)
-        # Seed admin user. The password comes from BIBLE_STUDY_ADMIN_PASSWORD —
+        # Seed admin user. The password comes from BIBLE_STUDY_ADMIN_PASSWORD -
         # never a literal, because this repo is public. With no env var set the
         # account simply isn't created rather than shipping a known credential.
         u = BibleStudyUser.query.filter(BibleStudyUser.username.ilike("mbean21")).first()
@@ -141,7 +141,7 @@ def init_bible_study(app):
 
 
 # ---------------------------------------------------------------------------
-# Context processor — make helpers available in all blueprint templates
+# Context processor - make helpers available in all blueprint templates
 # ---------------------------------------------------------------------------
 @bible_study_bp.context_processor
 def inject_helpers():

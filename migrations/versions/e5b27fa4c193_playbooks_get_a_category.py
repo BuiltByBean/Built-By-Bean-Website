@@ -5,7 +5,7 @@ setting. Twilio and the YouTube Data API sat next to each other looking like
 comparable jobs, and they are not: one is an account in the client's name with
 a carrier approving it over a fortnight, the other is a key and a quota.
 
-Three categories, on the axis that actually matters — how much of it is
+Three categories, on the axis that actually matters - how much of it is
 somebody else's to do:
 
     service         an account in someone else's name, money or identity

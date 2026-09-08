@@ -449,7 +449,7 @@ def create_app():
         return False
 
     def _sync_expense_for_time_entry(entry, project):
-        """Billable time is pipeline revenue, not an expense — so we do NOT create a
+        """Billable time is pipeline revenue, not an expense - so we do NOT create a
         mirror expense for it. This used to generate a "billable_time" Expense per
         time entry, which wrongly inflated Total Expenses and cluttered the expenses
         list. Here we just remove any legacy mirror still attached to this entry and
@@ -613,7 +613,7 @@ def create_app():
                                           .order_by(Project.name).all()
                 ]
             except Exception:
-                # Table may not exist yet (pre-migration) — fail open, hide widget.
+                # Table may not exist yet (pre-migration) - fail open, hide widget.
                 active_timer = None
                 timer_projects = []
         # What the sidebar wears as badges: everything waiting on him, as
@@ -860,13 +860,13 @@ def create_app():
         total_invoiced = (
             stripe_totals["open"] + stripe_totals["draft"] + scheduled_subscriptions
         )
-        # Material expenses only — exclude any time-entry-linked (billable time) rows.
+        # Material expenses only - exclude any time-entry-linked (billable time) rows.
         total_expenses = db.session.query(db.func.sum(Expense.amount)).filter(
             Expense.time_entry_id.is_(None)
         ).scalar() or 0
 
         # Unbilled: the dollar value of logged time not yet on a draft/open/paid
-        # invoice — money in the pipeline that still needs to be billed.
+        # invoice - money in the pipeline that still needs to be billed.
         invoiced_ids = db.session.query(InvoiceLineItem.time_entry_id).filter(
             InvoiceLineItem.time_entry_id.isnot(None),
             InvoiceLineItem.invoice.has(Invoice.status.in_(["draft", "open", "paid"]))
@@ -917,8 +917,8 @@ def create_app():
         # date sat right there in the record. A project's mvp_date is the
         # deadline that actually matters.
         #
-        # "done" was never a ticket status either — the closed ones are
-        # resolved and dismissed — so the filter excluded nothing.
+        # "done" was never a ticket status either - the closed ones are
+        # resolved and dismissed - so the filter excluded nothing.
         deadlines = []
         for tk in Ticket.query.filter(
             Ticket.due_date >= today,
@@ -933,7 +933,7 @@ def create_app():
             Project.mvp_date >= today, Project.status == "active",
         ).order_by(Project.mvp_date.asc()).all():
             deadlines.append({
-                "kind": "project", "when": pr.mvp_date, "title": pr.name + " — delivery",
+                "kind": "project", "when": pr.mvp_date, "title": pr.name + " - delivery",
                 "where": pr.client.name,
                 "url": url_for("pm.project_detail", id=pr.id),
             })
@@ -1126,7 +1126,7 @@ def create_app():
             client.stage = "contacted"
             moved = True
         db.session.commit()
-        flash(f"Contact logged{' — moved to Contacted' if moved else ''}.", "success")
+        flash(f"Contact logged{' - moved to Contacted' if moved else ''}.", "success")
         return redirect(url_for("pm.client_detail", id=client.id))
 
     @pm_bp.route("/contacts/<int:id>/delete", methods=["POST"])
@@ -1449,7 +1449,7 @@ def create_app():
         db.session.commit()
         moved = sync_project_phases([project])
         if moved:
-            flash(f"Following its dates again — moved to "
+            flash(f"Following its dates again - moved to "
                   f"'{dict(PHASE_CHOICES)[project.phase]}'.", "success")
         else:
             flash("Following its dates again.", "success")
@@ -3384,9 +3384,9 @@ def create_app():
             billed = _sync_expense_for_time_entry(entry, project)
             db.session.commit()
             if billed:
-                flash(f"Logged {entry.hours}h ({entry.rate_type}) = {format_currency(entry.cost)} — expense auto-created", "success")
+                flash(f"Logged {entry.hours}h ({entry.rate_type}) = {format_currency(entry.cost)} - expense auto-created", "success")
             elif _in_free_maintenance(project, entry.rate_type):
-                flash(f"Logged {entry.hours}h ({entry.rate_type}) — free maintenance window, no charge", "success")
+                flash(f"Logged {entry.hours}h ({entry.rate_type}) - free maintenance window, no charge", "success")
             else:
                 flash(f"Logged {entry.hours}h ({entry.rate_type}) = {format_currency(entry.cost)}", "success")
             return redirect(url_for("pm.time_list"))
@@ -3520,7 +3520,7 @@ def create_app():
             db.session.commit()
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify(ok=True)
-        flash("Timer discarded — nothing was logged.", "warning")
+        flash("Timer discarded - nothing was logged.", "warning")
         return redirect(url_for("pm.time_list"))
 
     @pm_bp.route("/time/timer/review", methods=["GET"])
@@ -3589,9 +3589,9 @@ def create_app():
 
         if billed:
             flash(f"Session saved: {entry.hours}h ({entry.rate_type.replace('_', ' ')}) "
-                  f"= {format_currency(entry.cost)} — added to {project.name}", "success")
+                  f"= {format_currency(entry.cost)} - added to {project.name}", "success")
         elif _in_free_maintenance(project, entry.rate_type):
-            flash(f"Session saved: {entry.hours}h — free maintenance window, no charge", "success")
+            flash(f"Session saved: {entry.hours}h - free maintenance window, no charge", "success")
         else:
             flash(f"Session saved: {entry.hours}h ({entry.rate_type.replace('_', ' ')}) "
                   f"= {format_currency(entry.cost)}", "success")
@@ -3617,7 +3617,7 @@ def create_app():
         project_id = request.args.get("project_id", "", type=str)
         client_id = request.args.get("client_id", "", type=str)
 
-        # Only real (material) expenses — time-entry-linked "billable time" rows are
+        # Only real (material) expenses - time-entry-linked "billable time" rows are
         # pipeline revenue, not expenses, and are shown on the Time Tracking side.
         def _filtered(q):
             if category:
@@ -3715,8 +3715,8 @@ def create_app():
         form = ExpenseForm()
         clients = Client.query.order_by(Client.name).all()
         projects = Project.query.order_by(Project.name).all()
-        form.client_id.choices = [(0, "— No client —")] + [(c.id, c.name) for c in clients]
-        form.project_id.choices = [(0, "— No project —")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
+        form.client_id.choices = [(0, "No client")] + [(c.id, c.name) for c in clients]
+        form.project_id.choices = [(0, "No project")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
         form.ticket_id.choices = _ticket_choices("No ticket")
 
         pre_ticket = request.args.get("ticket_id", type=int)
@@ -3771,8 +3771,8 @@ def create_app():
         form = ExpenseForm(obj=expense)
         clients = Client.query.order_by(Client.name).all()
         projects = Project.query.order_by(Project.name).all()
-        form.client_id.choices = [(0, "— No client —")] + [(c.id, c.name) for c in clients]
-        form.project_id.choices = [(0, "— No project —")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
+        form.client_id.choices = [(0, "No client")] + [(c.id, c.name) for c in clients]
+        form.project_id.choices = [(0, "No project")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
         form.ticket_id.choices = _ticket_choices("No ticket")
 
         if request.method == "GET":

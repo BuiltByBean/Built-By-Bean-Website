@@ -104,7 +104,7 @@
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
                 {{ package.items|length }} in the package</span>
             <span class="ml-auto text-sm tabular-nums text-white">
-                {{ package.estimate|format_currency if package.estimate else '—' }}{% if package.monthly_estimate %}
+                {{ package.estimate|format_currency if package.estimate else '-' }}{% if package.monthly_estimate %}
                 <span class="text-xs text-surface-500">+{{ package.monthly_estimate|format_currency }}/mo</span>{% endif %}
             </span>
         </div>
@@ -143,7 +143,7 @@
                     </span>
                     <span class="shrink-0 text-right">
                         <span class="block text-sm tabular-nums {{ 'text-surface-200' if item.price else 'text-surface-600' }}">
-                            {{ item.price|format_currency if item.price else '—' }}</span>
+                            {{ item.price|format_currency if item.price else '-' }}</span>
                         {% if item.monthly_price %}
                         <span class="block text-xs text-surface-500">+{{ item.monthly_price|format_currency }}/mo</span>
                         {% endif %}

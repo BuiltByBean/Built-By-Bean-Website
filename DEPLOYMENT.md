@@ -1,4 +1,4 @@
-# Deployment Checklist — Merging Project Manager into Built-By-Bean-Website
+# Deployment Checklist - Merging Project Manager into Built-By-Bean-Website
 
 Follow these steps in order after reviewing the `merge-project-manager` branch.
 
@@ -17,8 +17,8 @@ Log into Railway → Built-By-Bean-Website project → web service → Variables
 
 **Critical variables to copy from the old Project-Manager Railway service:**
 
-- `SECRET_KEY` — copy exactly (reusing it keeps any existing session cookies valid)
-- `DATABASE_URL` — **must** point at the same Postgres as PM. See step 3.
+- `SECRET_KEY` - copy exactly (reusing it keeps any existing session cookies valid)
+- `DATABASE_URL` - **must** point at the same Postgres as PM. See step 3.
 - `STRIPE_SECRET_KEY`
 - `STRIPE_PUBLISHABLE_KEY`
 - `STRIPE_WEBHOOK_SECRET`
@@ -36,7 +36,7 @@ Log into Railway → Built-By-Bean-Website project → web service → Variables
 
 You have two options:
 
-**Option A (simpler):** Copy the Postgres connection string from the old Project-Manager Railway project and paste it as `DATABASE_URL` on the Built-By-Bean-Website service. Both services will connect to the same DB — harmless because step 6 shuts PM down.
+**Option A (simpler):** Copy the Postgres connection string from the old Project-Manager Railway project and paste it as `DATABASE_URL` on the Built-By-Bean-Website service. Both services will connect to the same DB - harmless because step 6 shuts PM down.
 
 **Option B (cleaner long-term):** In Railway, move the Postgres service from the Project-Manager project into the Built-By-Bean-Website project. Use the Railway UI: project settings → service → "Move to another project."
 
@@ -59,10 +59,10 @@ with no "Running upgrade" lines (schema already at head). Then gunicorn starts.
 
 Visit your Railway deploy URL (or `builtbybean.com` if DNS already points there):
 
-1. `/` — marketing homepage loads. "Log In" button visible top-right.
+1. `/` - marketing homepage loads. "Log In" button visible top-right.
 2. Click "Log In" → `/login` renders with dark theme.
 3. Log in with your existing credentials (Michael.Bean, etc.).
-4. You land on `/admin` — tile grid with "Project Manager" tile.
+4. You land on `/admin` - tile grid with "Project Manager" tile.
 5. Click the tile → `/admin/pm/` loads your dashboard with real data.
 6. Verify: client list, a specific client detail, a project detail, tasks list, Stripe invoices list, service-costs dashboard.
 7. Log out → back to `/` as anonymous. "Log In" button visible again.
@@ -83,13 +83,13 @@ https://builtbybean.com/admin/pm/stripe/webhook
 
 (Substitute your actual Railway URL if DNS isn't cut over yet.)
 
-The signing secret stays the same — no need to change `STRIPE_WEBHOOK_SECRET`.
+The signing secret stays the same - no need to change `STRIPE_WEBHOOK_SECRET`.
 
 **Test it:** Send a test event from Stripe Dashboard (the "Send test event" button). You should see `200 OK` in the webhook delivery log. Alternatively, create a small test invoice in Stripe for a test customer and confirm it shows up in `/admin/pm/stripe/invoices`.
 
 ## 7. DNS cutover (if needed)
 
-If `builtbybean.com` currently points at the old Built-By-Bean-Website Railway service, **no DNS change is needed** — you redeployed that same service with new code. The domain still resolves correctly.
+If `builtbybean.com` currently points at the old Built-By-Bean-Website Railway service, **no DNS change is needed** - you redeployed that same service with new code. The domain still resolves correctly.
 
 If you had DNS pointing at the old Project-Manager service for any reason, update it in Cloudflare / your DNS provider to point at the Built-By-Bean-Website service.
 
@@ -105,7 +105,7 @@ In Railway, go to the old Project-Manager project:
 
 ## 9. Delete the local Project-Manager directory (optional)
 
-Once you're confident the merge is stable, you can delete `C:/Users/MBean/Documents/Project-Manager` from your local disk. The merged `Built-By-Bean-Website` repo now contains everything. (I wouldn't rush this — leave it around for a week as a reference.)
+Once you're confident the merge is stable, you can delete `C:/Users/MBean/Documents/Project-Manager` from your local disk. The merged `Built-By-Bean-Website` repo now contains everything. (I wouldn't rush this - leave it around for a week as a reference.)
 
 ---
 
@@ -123,20 +123,20 @@ Because the DB was never modified by the merge (schema is already at head), your
 
 ## What changed in the code
 
-- `app.py` — was a 71-line marketing site, now a 1990-line `create_app()` factory registering the marketing routes plus a `pm_bp` blueprint mounted at `/admin/pm`.
-- `pm/` — new package containing `stripe_routes.py` and `service_costs_routes.py` (PM's existing blueprints, repointed to `/admin/pm/stripe` and `/admin/pm/service-costs`).
-- `models.py`, `forms.py`, `config.py`, `stripe_service.py`, `service_costs_service.py`, `seed_user.py` — copied from Project-Manager.
-- `migrations/` — copied from Project-Manager. Current head is `b2c3d4e5f7a1`.
-- `templates/pm/` — all 30 PM templates, moved into a namespaced subfolder. All `url_for('xxx')` calls rewritten to `url_for('pm.xxx')` where needed.
-- `templates/login.html` — new, styled to match the marketing site dark theme.
-- `templates/admin_hub.html` — new, tile grid landing page after login.
-- `templates/index.html` — added Log In / Admin button in top-right nav.
-- `static/pm/fonts/DancingScript.ttf` — PM's signature font for SOW PDFs.
-- `static/css/style.css` — appended ~250 lines of scoped styles for login page, hub, tiles, and nav login button.
-- `Procfile` — now runs `flask db upgrade` before starting gunicorn.
-- `requirements.txt` — now includes all PM deps.
-- `.env.example` — merged with all PM env vars.
-- `.gitignore` — adds `data/`, `static/uploads/`, `*.db`, `.claude/`.
+- `app.py` - was a 71-line marketing site, now a 1990-line `create_app()` factory registering the marketing routes plus a `pm_bp` blueprint mounted at `/admin/pm`.
+- `pm/` - new package containing `stripe_routes.py` and `service_costs_routes.py` (PM's existing blueprints, repointed to `/admin/pm/stripe` and `/admin/pm/service-costs`).
+- `models.py`, `forms.py`, `config.py`, `stripe_service.py`, `service_costs_service.py`, `seed_user.py` - copied from Project-Manager.
+- `migrations/` - copied from Project-Manager. Current head is `b2c3d4e5f7a1`.
+- `templates/pm/` - all 30 PM templates, moved into a namespaced subfolder. All `url_for('xxx')` calls rewritten to `url_for('pm.xxx')` where needed.
+- `templates/login.html` - new, styled to match the marketing site dark theme.
+- `templates/admin_hub.html` - new, tile grid landing page after login.
+- `templates/index.html` - added Log In / Admin button in top-right nav.
+- `static/pm/fonts/DancingScript.ttf` - PM's signature font for SOW PDFs.
+- `static/css/style.css` - appended ~250 lines of scoped styles for login page, hub, tiles, and nav login button.
+- `Procfile` - now runs `flask db upgrade` before starting gunicorn.
+- `requirements.txt` - now includes all PM deps.
+- `.env.example` - merged with all PM env vars.
+- `.gitignore` - adds `data/`, `static/uploads/`, `*.db`, `.claude/`.
 
 ## URL structure
 

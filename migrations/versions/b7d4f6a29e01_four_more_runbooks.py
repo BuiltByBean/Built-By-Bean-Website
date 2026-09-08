@@ -1,7 +1,7 @@
 """four more runbooks, written from what the repos actually contain
 
 Six playbooks against nine years of integrations. This is the first wave of
-closing that: Tripleseat, Gmail's SMTP, AWS, and Squarespace — three of which
+closing that: Tripleseat, Gmail's SMTP, AWS, and Squarespace - three of which
 Michael named and one which four separate apps depend on without a word
 written down about it.
 
@@ -49,7 +49,7 @@ TRIPLESEAT = {
     "client_only_md": """\
 **A Tripleseat account with API access turned on.** It is not on by default and
 it is not self-serve on every plan. The venue's Tripleseat admin has to request
-it, and that request goes to Tripleseat rather than to you, so start it early —
+it, and that request goes to Tripleseat rather than to you, so start it early -
 it is the long pole and nothing can be built against a sandbox that does not
 exist.
 
@@ -115,7 +115,7 @@ in aggregate is invisible in a single request's log line.
     10 requests / second      1,200 / minute      18,000 / hour
 
 18,000/hour is a sustained **5 requests per second**. A 150ms interval is 6.67
-req/sec — comfortably inside the per-second and per-minute caps, and 33% over
+req/sec - comfortably inside the per-second and per-minute caps, and 33% over
 the hourly budget. So a long enough run exhausts the quota with every single
 request looking perfectly well-behaved. This is the likely cause of the
 eleven-minute 429 storm recorded as LM-16 in Talent Booker, where individual
@@ -130,7 +130,7 @@ credentials problem you do not have.
 
 **The OAuth 1.0 fallback hides an OAuth 2.0 misconfiguration.** If the client
 pair is wrong or absent the code quietly uses the consumer pair instead and
-keeps working — which is exactly what you want in a migration and exactly what
+keeps working - which is exactly what you want in a migration and exactly what
 you do not want when you think you have finished one. Log which scheme is
 actually in use.
 
@@ -162,16 +162,16 @@ other than a refusal means the endpoint is open.
     "steps": [
         ("Ask the venue to request API access from Tripleseat",
          "Not on by default, not self-serve on every plan, and the request goes "
-         "to Tripleseat rather than to you. It is the long pole — start it "
+         "to Tripleseat rather than to you. It is the long pole - start it "
          "before anything else.",
          "email", "Getting {project} talking to your Tripleseat",
          "Hi {client},\n\nTo pull your events into {project} automatically I "
          "need API access enabled on your Tripleseat account. That has to be "
-         "requested by you rather than by me — Tripleseat will not turn it on "
+         "requested by you rather than by me - Tripleseat will not turn it on "
          "for a third party.\n\nContact Tripleseat support and ask them to "
          "enable API access for your account. They will send back a set of "
          "credentials; forward those to me and I will do the rest.\n\nWorth "
-         "starting now even if we are weeks away from needing it — this is "
+         "starting now even if we are weeks away from needing it - this is "
          "usually the slowest part and everything else waits on it.\n\nThanks,"
          "\nMichael\nBuilt by Bean LLC"),
 
@@ -218,7 +218,7 @@ other than a refusal means the endpoint is open.
          "delay, and we stop making thousands of unnecessary requests against "
          "your account's limits.\n\nCould you or whoever administers Tripleseat "
          "add a webhook pointing at the URL I will send over? Happy to jump on "
-         "a call and do it together — it takes about two minutes.\n\nThanks,"
+         "a call and do it together - it takes about two minutes.\n\nThanks,"
          "\nMichael\nBuilt by Bean LLC"),
 
         ("Verify the signature before the handler runs, and refuse unsigned",
@@ -260,8 +260,8 @@ decides everything else on this page: app passwords, sending limits, and
 whether the address can be an alias on their own domain. Ask which, and get the
 answer from a login rather than from what they assume.
 
-**Two-step verification switched on.** App passwords do not exist without it —
-the option is simply not in the interface — and turning 2SV on is a change to
+**Two-step verification switched on.** App passwords do not exist without it -
+the option is simply not in the interface - and turning 2SV on is a change to
 their personal account security that only they can make.
 
 **The sending address, and that a person owns the mailbox.** Mail sent this way
@@ -284,8 +284,8 @@ else the account does.
     MAIL_USERNAME   the full address
     MAIL_PASSWORD   the app password, spaces removed
 
-Four apps here default to `smtp.gmail.com` — Talent Booker, Bible Study,
-Jakob's Crucible and this one — so the shape above is the house standard rather
+Four apps here default to `smtp.gmail.com` - Talent Booker, Bible Study,
+Jakob's Crucible and this one - so the shape above is the house standard rather
 than a one-off.
 
 **Never the account password.** Google stopped accepting it for SMTP when
@@ -294,7 +294,7 @@ error that reads like a wrong password because it is one, just not in the way
 it looks.
 
 **Workspace can do a domain alias; consumer Gmail cannot, usefully.** See the
-traps — this is the single biggest reason to find out which account it is
+traps - this is the single biggest reason to find out which account it is
 before promising an address.
 """,
     "your_steps_md": """\
@@ -316,7 +316,7 @@ this org has eleven public repos.
 
 **Expect to outgrow it.** Gmail SMTP is right for low volume from a real
 person's mailbox. The moment mail becomes transactional and per-customer, move
-to Resend — Kuper and Data Dungeon both did, and Talent Booker holds both
+to Resend - Kuper and Data Dungeon both did, and Talent Booker holds both
 `MAIL_*` and `RESEND_API_KEY` for exactly that reason.
 """,
     "traps_md": """\
@@ -329,19 +329,19 @@ customer list grows, not on the day it was written.
 **Changing the account password revokes every app password.** All of them,
 silently, across every app using that account. This is the most likely reason
 mail that has worked for a year stops on a Tuesday, and nothing in any app's
-logs will say so — the app just gets an auth failure it has never seen before.
+logs will say so - the app just gets an auth failure it has never seen before.
 
 **A consumer Gmail "send mail as" alias on a custom domain is a dead end for
 this.** Google no longer offers its own relay for external domains on a
 consumer account: the setup screen demands an SMTP host, username and password
 *for that domain*, which a receive-only arrangement such as Cloudflare Email
 Routing does not have. That cost most of a session on `builtbybeans.com`. The
-way through is a real SMTP endpoint for the domain — Resend's satisfies it —
+way through is a real SMTP endpoint for the domain - Resend's satisfies it -
 which is the thing you were trying to avoid setting up.
 
 **Google rewrites the From to the authenticated account.** If the alias is not
 properly verified, the message goes out under the Gmail address instead, and
-there is no error — just the wrong name on the recipient's screen.
+there is no error - just the wrong name on the recipient's screen.
 
 **2-step verification is required and turning it off removes app passwords.**
 If a client "simplifies" their account security later, sending stops.
@@ -382,7 +382,7 @@ your side, this and a password change are the two candidates, in that order.
          None, "", ""),
 
         ("Have them switch on 2-step verification",
-         "App passwords do not exist without it — the option is not in the "
+         "App passwords do not exist without it - the option is not in the "
          "interface. Only they can turn it on.",
          "email", "Two things on your Google account for {project}",
          "Hi {client},\n\nTo let {project} send email from your address I need "
@@ -390,7 +390,7 @@ your side, this and a password change are the two candidates, in that order.
          "because they are account security settings.\n\n1. Turn on 2-step "
          "verification, if it is not already: "
          "https://myaccount.google.com/security\n\n2. Then create an app "
-         "password at https://myaccount.google.com/apppasswords — name it "
+         "password at https://myaccount.google.com/apppasswords - name it "
          "something like \"{project}\" so you can recognise it later.\n\n"
          "Google will show you a 16-character password once. Send me that "
          "rather than your actual password. It only permits sending email, it "
@@ -432,7 +432,7 @@ your side, this and a password change are the two candidates, in that order.
          "cancels the app password {project} uses and email will stop going "
          "out. Nothing will warn either of us. If that happens just make a new "
          "app password and send it over and I will have it back in five "
-         "minutes. — Michael"),
+         "minutes. - Michael"),
 
         ("Check the credential is in the environment and not the repo",
          "An app password in a public repo is a Google account anybody can "
@@ -480,7 +480,7 @@ not. An account with no budget alarm is an account nobody looks at until the
 statement.
 
 **Where the data may legally live.** Region is a decision, not a default, for
-anything holding customer records. It is also permanent — a bucket cannot
+anything holding customer records. It is also permanent - a bucket cannot
 change region, only be copied to a new one.
 
 Almost nothing else needs them, provided the IAM grant below happens properly.
@@ -503,7 +503,7 @@ The secret is shown exactly once at creation. There is no reveal later, only
 app lists. An app that only ever uploads does not need delete.
 
 **Root account keys should not exist at all.** If the client hands you one,
-that is the finding — say so, and ask for an IAM user instead. A root key can
+that is the finding - say so, and ask for an IAM user instead. A root key can
 close the account.
 
 **Turn on MFA for the console login and a billing alarm at the same time.**
@@ -546,7 +546,7 @@ when you write the migration; you will not go back for it.
 
 **Container filesystems are wiped on every deploy, and a volume is not
 automatic.** This is the failure S3 is often reached for as a fix. On Railway
-the fix is attaching a volume, which is cheaper and simpler — reach for S3 for
+the fix is attaching a volume, which is cheaper and simpler - reach for S3 for
 a reason, not as a reflex.
 
 **Egress is the bill, not storage.** Storing images costs almost nothing.
@@ -597,16 +597,16 @@ first signal is the statement.
         ("Get an IAM user scoped to one bucket, never a root key",
          "`s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on "
          "`arn:aws:s3:::bucket/*`, plus `s3:ListBucket` if the app lists. If "
-         "the client offers a root key, that is the finding — ask for an IAM "
+         "the client offers a root key, that is the finding - ask for an IAM "
          "user instead. A root key can close the account.",
          "email", "Storage access for {project}",
          "Hi {client},\n\nFor file storage on {project} I need a limited AWS "
-         "key. Please do not send me your main login details — what I need is "
+         "key. Please do not send me your main login details - what I need is "
          "a scoped user that can only touch the one storage bucket and nothing "
          "else on your account.\n\nIn the AWS console: IAM, Users, Create "
          "user. Skip console access, and attach a policy limited to the bucket "
          "we are using. If that is more than you want to work through, I am "
-         "happy to sit on a call and walk it with you — it is about ten "
+         "happy to sit on a call and walk it with you - it is about ten "
          "minutes and it is worth doing properly, because a key with full "
          "access is a key that can shut the account down.\n\nAWS shows the "
          "secret once. Send it over and I will store it securely.\n\nThanks,"
@@ -638,12 +638,12 @@ first signal is the statement.
         ("Ask whether a Railway volume would be better before committing",
          "For most of these apps it is cheaper, simpler and has no egress "
          "line. S3 earns its place when files are large, numerous, or need to "
-         "outlive the host — not as a reflex against container filesystems "
+         "outlive the host - not as a reflex against container filesystems "
          "being wiped, which a volume already fixes.",
          None, "", ""),
 
         ("Prove the bucket is private from an unauthenticated machine",
-         "`curl -sI https://<bucket>.s3.amazonaws.com/<key>` — 403 is the "
+         "`curl -sI https://<bucket>.s3.amazonaws.com/<key>` - 403 is the "
          "pass, 200 means the world can read it.",
          None, "", ""),
 
@@ -673,7 +673,7 @@ SQUARESPACE = {
     "sort_order": 65,
     "one_liner": (
         "The site the client already has. You are not replacing it, you are "
-        "living beside it — and the DNS is where that goes wrong."
+        "living beside it - and the DNS is where that goes wrong."
     ),
     "client_only_md": """\
 **The Squarespace login, or a contributor invite on it.** Settings, Permissions,
@@ -696,8 +696,8 @@ hero video and a page of copy is a rights question, not a technical one.
 """,
     "access_grant_md": """\
 **A contributor invite, not their password.** Settings, Permissions, Invite
-Contributor. There is no API worth using here — Squarespace's developer surface
-is for template building, not for reading a site — so most of what you need is
+Contributor. There is no API worth using here - Squarespace's developer surface
+is for template building, not for reading a site - so most of what you need is
 done in the interface with your own login.
 
 **Find out who holds the nameservers before touching anything.** This is the
@@ -706,7 +706,7 @@ whole job. Run it yourself rather than asking:
     dig +short NS <domain>
 
 If the answer includes Squarespace nameservers *and* somebody else's, stop and
-read the traps — that is the split-brain case and it is already live on one
+read the traps - that is the split-brain case and it is already live on one
 domain here.
 
 **Access to whatever the answer above points at**, which may be Cloudflare,
@@ -732,8 +732,8 @@ YouTube. A hotlinked asset breaks when the client edits their site, and you
 will not be told.
 
 **Mirror the URL structure the old site used where anything links to it.**
-Talent Booker's public pages map onto the live Squarespace sub-pages —
-`/aerial-1`, `/dancer`, `/photo-booths` — because printed material, saved links
+Talent Booker's public pages map onto the live Squarespace sub-pages -
+`/aerial-1`, `/dancer`, `/photo-booths` - because printed material, saved links
 and search results all point at those paths.
 
 **Leave their site alone.** Editing a Squarespace page you were given access to
@@ -744,7 +744,7 @@ for their marketing site.
 **A domain can be delegated to two nameserver providers at once, and it
 already is here.** `jdentertain.com` is delegated to **NS1 and Squarespace
 simultaneously**. Every one of the eight nameservers happened to agree when
-this was checked, so nothing was broken — but if the two zones ever disagree,
+this was checked, so nothing was broken - but if the two zones ever disagree,
 the result is works-for-me/fails-for-you depending on which nameserver a given
 resolver happened to ask. It is intermittent, unreproducible, and it looks
 exactly like a bad deploy.
@@ -757,7 +757,7 @@ resolver answers from one of them and tells you nothing about the others:
     done
 
 **The SOA serial tells you whether the zone has changed at all.** On
-jdentertain.com it read `1721422032` — a Unix timestamp, over a year old, which
+jdentertain.com it read `1721422032` - a Unix timestamp, over a year old, which
 is what ruled a deploy out as the cause of an outage. A serial that has not
 moved means nobody has touched DNS, whatever anyone says.
 
@@ -803,7 +803,7 @@ page after every DNS change. It is the thing you were not touching and
 therefore the thing you will not check.
 
 **Does a login on the subdomain actually issue a cookie?** Not "does the login
-page load". Log in for real and confirm the session survives a navigation —
+page load". Log in for real and confirm the session survives a navigation -
 cookie-domain bugs pass every test that stops at the form.
 """,
     "steps": [
@@ -814,7 +814,7 @@ cookie-domain bugs pass every test that stops at the form.
          "email", "Where is {domain} managed?",
          "Hi {client},\n\nBefore I can put {project} on your domain I need to "
          "know where two things live, and they are often in different "
-         "places:\n\n1. Where you bought the domain — Squarespace, GoDaddy, "
+         "places:\n\n1. Where you bought the domain - Squarespace, GoDaddy, "
          "Google, somewhere else\n2. Where its DNS settings are managed, which "
          "is sometimes the same place and sometimes not\n\nIf you are not "
          "sure, the login you use to edit your website is a good starting "
@@ -940,7 +940,7 @@ def downgrade():
     for pb in PLAYBOOKS:
         # Steps first, explicitly. The foreign key says CASCADE but SQLite
         # does not enforce one unless `PRAGMA foreign_keys` is on, and it is
-        # not during a migration — so deleting the playbook alone leaves its
+        # not during a migration - so deleting the playbook alone leaves its
         # steps orphaned. They then reattach on the next upgrade, because
         # SQLite hands the new playbook the id the old one just freed, and
         # every count silently doubles.

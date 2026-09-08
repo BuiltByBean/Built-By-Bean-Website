@@ -3,11 +3,11 @@
 The board and the project list have been describing the same things with
 nothing joining them: a Kuper Plumbing tile and a KuperPlumbing.com project,
 side by side, each unaware of the other. Standing on the project there was no
-way to reach the running app, its Railway service or its repo — all three of
+way to reach the running app, its Railway service or its repo - all three of
 which are on the tile, two clicks and a different page away.
 
 Nullable, because half the board is mine rather than a client's. SET NULL on
-delete, because closing an engagement does not take the app off the board —
+delete, because closing an engagement does not take the app off the board -
 the app is still running and still somewhere I go.
 
 The backfill only claims the two pairs that are unambiguous today, and only
@@ -29,7 +29,7 @@ branch_labels = None
 depends_on = None
 
 
-# (app tile name, project name) — matched exactly, both must already exist.
+# (app tile name, project name) - matched exactly, both must already exist.
 PAIRS = [
     ("Kuper Plumbing", "KuperPlumbing.com"),
     ("J&D Entertainment", "Talent Booker"),

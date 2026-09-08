@@ -22,7 +22,7 @@
   playbook, that being the one you came here to work on.
 
   Ticking happens in the background. It used to be a form post and a redirect,
-  which reloaded the page and threw you back to the top — halfway down a
+  which reloaded the page and threw you back to the top - halfway down a
   twelve-step checklist that is the whole list to find again, for every single
   tick. The form is still a real form; it is just intercepted.
 
@@ -69,7 +69,7 @@ document.addEventListener('alpine:init', () => {
             } catch (err) {
                 /* Never leave a tick that did not save looking like it did.
                    Reloading costs the scroll position, which is the thing this
-                   file exists to preserve — but a checkbox lying about what the
+                   file exists to preserve - but a checkbox lying about what the
                    server knows is the worse of the two. */
                 console.error('playbook tick failed', err);
                 window.location.reload();
@@ -167,7 +167,7 @@ function playbookPanel(ids, preferred) {
 {% set ids = applied_playbooks | map(attribute='id') | map('string') | list %}
 
 <div class="flex flex-col lg:flex-row gap-4 items-start"
-     {# Single-quoted, because tojson escapes ' but not " — a double-quoted
+     {# Single-quoted, because tojson escapes ' but not " - a double-quoted
         attribute is closed by the first key in the array. #}
      x-data='playbookPanel({{ ids | tojson }}, "{{ preferred }}")' x-cloak>
 

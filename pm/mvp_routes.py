@@ -128,7 +128,7 @@ def _house_rules():
                "or not the feature they were learned on is in this package.")
     # The slug, because until 2026-09-05 this printed only the name and
     # `suggest_update` takes a slug. Nothing published the mapping, and it is
-    # not derivable — "Migrations beside create_all" is `migrations-with-
+    # not derivable - "Migrations beside create_all" is `migrations-with-
     # create-all` and "Sends that survive the request" is `queue-first-
     # sending`. So every precise append 404'd, sessions fell back to
     # `report_lesson`'s forgiving name match, and the same lesson got filed

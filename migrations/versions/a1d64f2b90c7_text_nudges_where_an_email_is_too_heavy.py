@@ -1,7 +1,7 @@
 """text nudges on the three steps where an email is the wrong shape
 
 Every client message so far is an email, because every one of them asks for
-something structured — details, access, a decision. These three are not asks.
+something structured - details, access, a decision. These three are not asks.
 They are a chase and two status updates, and an email that says "any luck with
 the bank details?" is a heavier object than the question deserves; it sits in
 an inbox looking like it needs a considered reply, which is exactly why it does
@@ -28,23 +28,23 @@ depends_on = None
 # (playbook slug, step position, channel, message)
 NUDGES = [
     ("stripe", 1, "text",
-     "Hi {client}, quick one — Stripe still needs your ID and bank details "
+     "Hi {client}, quick one - Stripe still needs your ID and bank details "
      "before it will let payments through. It is about five minutes in the "
      "dashboard under 'Complete your profile'. Until it is done the account "
      "can only take test payments, so it is the one thing holding this up. "
-     "Shout if anything on the form is unclear. — Michael"),
+     "Shout if anything on the form is unclear. - Michael"),
 
     ("twilio", 6, "text",
      "Hi {client}, the carrier registration for {project} went in today. "
      "Approval usually takes 1-2 weeks and it is entirely on their side, so "
      "there is nothing either of us can do to speed it up. I will let you "
-     "know the moment it clears. — Michael"),
+     "know the moment it clears. - Michael"),
 
     ("cloudflare", 1, "text",
-     "Hi {client}, chasing the Cloudflare invite when you get a minute — I "
+     "Hi {client}, chasing the Cloudflare invite when you get a minute - I "
      "need to be on the account to check two settings that can silently block "
      "the site from being checked properly. It is Manage Account, then "
-     "Members, then invite michaelbean21@gmail.com. — Michael"),
+     "Members, then invite michaelbean21@gmail.com. - Michael"),
 ]
 
 

@@ -113,7 +113,7 @@ def compute(profit, *, filing_status, your_wages, spouse_wages, other_income,
     se_base = max(0.0, profit) * SE_BASE_FRACTION
     # Social security stops at the wage base, and this earner's own salary has
     # already used part of it. Counting a spouse's salary here too would close
-    # the gap early and understate the bill — their wages are capped against
+    # the gap early and understate the bill - their wages are capped against
     # their own base, on their own return line.
     ss_room = max(0.0, table["ss_wage_base"] - own_wages)
     ss_taxable = min(se_base, ss_room)

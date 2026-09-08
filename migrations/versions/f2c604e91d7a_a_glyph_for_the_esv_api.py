@@ -6,7 +6,7 @@ there was no mark to fetch and the rule here is that logos are not drawn.
 The compromise Michael picked: a generic open-book glyph rather than an
 invented Crossway logo, so the grid looks uniform without anything pretending
 to be a brand it is not. It is the same book icon the playbooks UI already
-uses, on a neutral slate ground — every other tile carries a vendor's own
+uses, on a neutral slate ground - every other tile carries a vendor's own
 colour, so slate reads as "there is no mark here".
 
 Seventeen of seventeen have an icon now; sixteen of them are real.

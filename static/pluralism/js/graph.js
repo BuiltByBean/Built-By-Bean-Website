@@ -1,4 +1,4 @@
-/* Pluralism Within — Obsidian-style force-directed map of Christian
+/* Pluralism Within - Obsidian-style force-directed map of Christian
  * denominations. Ported from Data-Dungeon's /dev/graph viewer.
  *
  * Tech: d3-force handles the physics (link spring + charge repulsion +
@@ -89,7 +89,7 @@
 
   function setup(g) {
     if (typeof d3 === 'undefined') {
-      meta.textContent = 'd3 failed to load — graph unavailable';
+      meta.textContent = 'd3 failed to load - graph unavailable';
       return;
     }
     ingest(g);
@@ -101,7 +101,7 @@
 
     window.addEventListener('resize', () => { resize(); requestRedraw(); });
     // ResizeObserver catches canvas/stage size changes from layout (e.g.
-    // iframe resizes, sidebar mount, font load) — `window.resize` alone
+    // iframe resizes, sidebar mount, font load) - `window.resize` alone
     // misses those because the window isn't what's resizing.
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(() => { resize(); requestRedraw(); });
@@ -298,7 +298,7 @@
     buildSim(nodes, edges);
     sim.tick(180);
     sim.alpha(0).stop();
-    // recomputeDim sets _hidden on out-of-focus nodes — must run before
+    // recomputeDim sets _hidden on out-of-focus nodes - must run before
     // fitToVisible or the bounding box includes stale positions.
     recomputeDim();
     fitToVisible(0.78);
@@ -1060,7 +1060,7 @@
         ctx.lineWidth = strokeW;
         ctx.strokeStyle = stroke;
         ctx.stroke();
-        // Thin red outer ring marks extinct traditions — sits just
+        // Thin red outer ring marks extinct traditions - sits just
         // outside the dot so it reads as a halo, not a fat border.
         if (n.extinct) {
           ctx.globalAlpha = Math.min(1, nodeAlpha + 0.1);
@@ -1076,7 +1076,7 @@
     paint(dim, true);
     paint(vivid, false);
 
-    // Labels run on every frame — the priority + MAX_LABELS cap below
+    // Labels run on every frame - the priority + MAX_LABELS cap below
     // keeps the global view calm, while focus + hover surface specifics.
     {
       ctx.font = '600 12px "Source Serif 4", Georgia, serif';
@@ -1104,8 +1104,8 @@
       // Cap by zoom + mode. Hover/select/match always survive because
       // their priorities (1e11+) sort them to the top, well within any
       // cap. Global view at default zoom (~0.7x) shows only ~6 major
-      // hubs — Roman Catholicism, Charismatic, Pentecostalism, Eastern
-      // Orthodoxy, Russian Orthodox, Baptists — and reveals more as
+      // hubs - Roman Catholicism, Charismatic, Pentecostalism, Eastern
+      // Orthodoxy, Russian Orthodox, Baptists - and reveals more as
       // you zoom in.
       const MAX_LABELS = hasSearch
         ? (scale < 0.6 ? 22 : scale < 1.0 ? 45 : scale < 1.6 ? 90 : 250)

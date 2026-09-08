@@ -32,7 +32,7 @@
         </div>
     </div>
 
-    <!-- Desktop collapse toggle — small tab at top, not full height -->
+    <!-- Desktop collapse toggle - small tab at top, not full height -->
     <div class="hidden md:block relative flex-shrink-0 w-0">
         <button @click="navOpen = !navOpen; localStorage.setItem('readerNav', navOpen)"
                 class="absolute top-3 -right-6 z-10 w-6 h-8 flex items-center justify-center rounded-r-md bg-surface-700 hover:bg-surface-600 text-surface-400 transition-colors shadow-sm"
@@ -80,7 +80,7 @@
                     </template>
                 </div>
             </div>
-            <!-- Eraser button — appears right of search when verses selected -->
+            <!-- Eraser button - appears right of search when verses selected -->
             <button x-show="selectedVerses.length > 0" x-cloak x-transition @click="clearSelection()"
                     class="p-2 rounded-lg border border-surface-600 text-surface-400 hover:text-surface-300 hover:border-surface-500 transition-colors flex-shrink-0"
                     title="Clear all highlights">
@@ -287,7 +287,7 @@ function bibleReader() {
                 // Deselect just this one verse
                 this.selectedVerses = this.selectedVerses.filter(v => v !== num);
             } else if (this.selectedVerses.length === 0) {
-                // Nothing selected — select this verse
+                // Nothing selected - select this verse
                 this.selectedVerses = [num];
             } else {
                 // Add verse and fill the full range between min and max
@@ -347,7 +347,7 @@ function bibleReader() {
             this.testament = this.books.find(b => b.name === target.book)?.testament || 'OT';
             // Update URL without reload
             history.pushState(null, '', '/Bible-Study/read/' + encodeURIComponent(target.book) + '/' + target.chapter);
-            document.title = target.book + ' ' + target.chapter + ' — Bible Study Notes';
+            document.title = target.book + ' ' + target.chapter + ' - Bible Study Notes';
             // Scroll to top
             document.getElementById('reading-pane')?.scrollTo(0, 0);
             // Fetch new passage

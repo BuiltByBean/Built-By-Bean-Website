@@ -7,7 +7,7 @@ playbook with no steps adds an empty box.
 The order here is not arbitrary in any of the three. Resend's is the order that
 stops a domain sitting Pending for two days. Cloudflare's puts the two
 invisible settings before anything is submitted to a reviewer, because after is
-too late. Twilio's is built to fail early and cheaply — every client-blocking
+too late. Twilio's is built to fail early and cheaply - every client-blocking
 ask happens before the opt-in page is built, because the page takes an
 afternoon and the brand details take a week to extract.
 
@@ -43,7 +43,7 @@ RESEND_STEPS = [
      "Hi {client},\n\nBefore the app can send email from your domain I need "
      "two things from you.\n\n1. Who manages your DNS? If it is Cloudflare, "
      "GoDaddy, Squarespace or similar, the fastest path is for you to add me "
-     "as a user there and I will add the records myself — there are three of "
+     "as a user there and I will add the records myself - there are three of "
      "them and one is a 400-character key, so typing it by hand goes wrong "
      "more often than not. If you would rather add them yourself, that is "
      "fine and I will send them over.\n\n2. What address should email come "
@@ -56,7 +56,7 @@ RESEND_STEPS = [
      "The one nobody thinks to ask and the one that stops everything. A "
      "domain lives in exactly one Resend team. If a previous developer or a "
      "marketing tool already added it, adding it yourself **revokes their "
-     "access** — find out whose team it is first.",
+     "access** - find out whose team it is first.",
      None, "", ""),
 
     ("Add the domain in Resend, spelled exactly",
@@ -73,12 +73,12 @@ RESEND_STEPS = [
      "target.",
      "email", "Three DNS records to add for {project}",
      "Hi {client},\n\nHere are the three DNS records that let the app send "
-     "email as your domain. They only permit sending — they do not change "
+     "email as your domain. They only permit sending - they do not change "
      "where your existing mail goes.\n\n1. Type TXT, name resend._domainkey, "
      "value: [paste the long p=MIG... value from Resend]\n2. Type CNAME, name "
      "rsend, value rsend.forge.rmta.net\n3. Type CNAME, name send, value "
      "send.forge.rmta.net\n\nIf your DNS is on Cloudflare, please set all "
-     "three to 'DNS only' (grey cloud, not orange) — an orange cloud breaks "
+     "three to 'DNS only' (grey cloud, not orange) - an orange cloud breaks "
      "the check.\n\nLet me know once they are in and I will verify from my "
      "side." + SIGNOFF),
 
@@ -97,7 +97,7 @@ RESEND_STEPS = [
      None, "", ""),
 
     ("Set RESEND_API_KEY and MAIL_FROM on the service",
-     "The key is shown exactly once — into the password manager before the "
+     "The key is shown exactly once - into the password manager before the "
      "tab closes. `MAIL_FROM` is `Name <address@the-verified-domain>`, and "
      "the domain has to be the verified one or every send is refused.",
      None, "", ""),
@@ -106,7 +106,7 @@ RESEND_STEPS = [
      "Send to an address you can actually open. A rewritten From is the "
      "failure this runbook exists to prevent and it is silent: no bounce, no "
      "error, just the wrong name on the client's screen. Then check Resend's "
-     "Logs tab — an accepted API call that never appears there did not go "
+     "Logs tab - an accepted API call that never appears there did not go "
      "out.",
      None, "", ""),
 
@@ -119,7 +119,7 @@ RESEND_STEPS = [
      "looks like it came from you.\n\nMessages go out from {from_address}, "
      "and replies come back to {reply_address}.\n\nOne thing to watch: if a "
      "customer says they did not receive something, tell me rather than "
-     "resending it a few times — I can see the delivery log and say whether "
+     "resending it a few times - I can see the delivery log and say whether "
      "it was delivered, bounced or filtered." + SIGNOFF),
 ]
 
@@ -147,7 +147,7 @@ CLOUDFLARE_STEPS = [
     ("Turn Bot Fight Mode off before anything goes to a reviewer",
      "Security, then Settings. On the free plan it is all or nothing with no "
      "per-path exclusion, and it will challenge a carrier's crawler. Leave it "
-     "off while a re-review could still happen — a second failure looks "
+     "off while a re-review could still happen - a second failure looks "
      "identical to the first.",
      None, "", ""),
 
@@ -167,7 +167,7 @@ CLOUDFLARE_STEPS = [
      "Security, Analytics, Events. Look for `Managed Challenge` rows whose "
      "Service reads `Bot fight mode`, timestamps matching your check runs. "
      "The log records only what it **mitigated**, so once the setting is off, "
-     "**no entry is the pass** — an empty log is the result you want.",
+     "**no entry is the pass** - an empty log is the result you want.",
      None, "", ""),
 
     ("Prove an asset change actually shipped past the cache",
@@ -182,21 +182,21 @@ CLOUDFLARE_STEPS = [
 TWILIO_STEPS = [
     ("Collect the brand details in one ask",
      "A wrong value on an approved profile cannot be edited from the console "
-     "afterwards — it is a support ticket, and reopening an approved profile "
+     "afterwards - it is a support ticket, and reopening an approved profile "
      "risks the approval the campaign depends on. The EIN goes into a "
      "password manager, never into a repo or a transcript.",
      "email", "What I need from you to get {project} texting customers",
      "Hi {client},\n\nBefore your app can text customers, US carriers require "
      "the business behind the messages to be registered. It is a one-time "
      "identity check, it takes a couple of weeks to clear, and it is the "
-     "long pole — so I would like to start it now.\n\nI need all of this "
+     "long pole - so I would like to start it now.\n\nI need all of this "
      "exactly as filed, because it is checked against public records and a "
      "mismatch means starting over:\n\n- Legal business name (not the trading "
      "name)\n- EIN / Tax ID\n- Business type and industry\n- Physical street "
      "address\n- Business phone number\n- An email address on your business "
      "domain (a Gmail address weakens the application)\n- Point of contact: "
      "name, email, mobile\n\nPlease send the EIN separately rather than in "
-     "this email thread — a text message is fine.\n\nOne warning worth "
+     "this email thread - a text message is fine.\n\nOne warning worth "
      "having up front: carriers reject applications for boring reasons, "
      "usually a detail that does not match their records. If it comes back "
      "rejected it is almost never anything you did wrong." + SIGNOFF),
@@ -213,7 +213,7 @@ TWILIO_STEPS = [
      "Hi {client},\n\nTwo questions I need answered before I submit the "
      "registration, because both are baked in afterwards and changing them "
      "means applying again.\n\n1. Will you ever text customers anything "
-     "promotional — offers, seasonal reminders, 'we have a slot free this "
+     "promotional - offers, seasonal reminders, 'we have a slot free this "
      "week'? Or only messages tied to a job they have already booked "
      "(confirmations, 'on my way', invoices)? Promotional messages need a "
      "separate application, so it is cheaper to include it now if there is "
@@ -222,7 +222,7 @@ TWILIO_STEPS = [
      "enquiring about? Most trades businesses want it to stand, so you can "
      "text a returning customer without asking again. If you would rather it "
      "be per job, that works, but the app has to ask again each time.\n\nNo "
-     "wrong answers — I just need them locked before submitting." + SIGNOFF),
+     "wrong answers - I just need them locked before submitting." + SIGNOFF),
 
     ("Get onto their Twilio account and make your own Standard API key",
      "Console, Account, API keys and tokens, Create API key, type "
@@ -251,7 +251,7 @@ TWILIO_STEPS = [
      "Registration fails because the reviewer could not reach the page, the "
      "fields did not describe it, or something in front of the site blocked "
      "the crawler. Never for message wording.\n\n- Phone field and consent "
-     "checkbox **on the same screen** — the single most cited rejection "
+     "checkbox **on the same screen** - the single most cited rejection "
      "reason\n- Checkbox **unchecked by default** and **not required** to "
      "submit\n- The sentence carries all four: what messages, **frequency**, "
      "**'Msg and data rates may apply'**, **STOP/HELP**\n- Terms and Privacy "
@@ -265,8 +265,8 @@ TWILIO_STEPS = [
 
     ("Check what is in front of the site",
      "Both Cloudflare traps will fail a registration and neither is visible "
-     "from your laptop. Run the Cloudflare playbook's checks first — Bot "
-     "Fight Mode off, obfuscation off — then come back.",
+     "from your laptop. Run the Cloudflare playbook's checks first - Bot "
+     "Fight Mode off, obfuscation off - then come back.",
      None, "", ""),
 
     ("Submit the brand, then wait",
@@ -277,7 +277,7 @@ TWILIO_STEPS = [
     ("Fill the campaign form with the links inside message_flow",
      "The `message_flow` field must itself contain the privacy link, the "
      "terms link, the message frequency and the rates statement. Having them "
-     "on the page is not enough — the field is what gets read first. Paste "
+     "on the page is not enough - the field is what gets read first. Paste "
      "the live consent wording verbatim rather than paraphrasing it.",
      None, "", ""),
 
@@ -287,12 +287,12 @@ TWILIO_STEPS = [
      None, "", ""),
 
     ("Set the inbound webhook and prove it refuses forgeries",
-     "Read it back from `GET messaging.twilio.com/v1/Services/{MG}` — check "
+     "Read it back from `GET messaging.twilio.com/v1/Services/{MG}` - check "
      "`inbound_request_url`, `inbound_method`, and that "
      "`use_inbound_webhook_on_number` is false. Then post three ways: "
      "correctly signed, unsigned, and signed over a different body. A working "
      "endpoint answers **200, 403, 403**. Use a harmless body, **never "
-     "`STOP`** — this is production and STOP clears a real customer's "
+     "`STOP`** - this is production and STOP clears a real customer's "
      "consent.",
      None, "", ""),
 
@@ -310,10 +310,10 @@ TWILIO_STEPS = [
      "text your customers.\n\nTwo things worth knowing:\n\nIf a customer "
      "replies STOP, the carrier blocks all further messages to that number "
      "immediately. That is a legal requirement and neither of us can undo it "
-     "from our side — they have to text START to resume. So if someone says "
+     "from our side - they have to text START to resume. So if someone says "
      "they have stopped getting messages, that is usually why.\n\nThe "
      "registration covers the kind of messages we agreed. Sending a different "
-     "kind — a promotion, if we registered for job updates only — is what "
+     "kind - a promotion, if we registered for job updates only - is what "
      "gets numbers filtered by the carriers, and getting un-filtered is "
      "slow. If you want to start sending something new, talk to me first and "
      "I will get it registered properly." + SIGNOFF),

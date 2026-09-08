@@ -12,8 +12,8 @@ def _session_secret():
     """The Flask session-signing key.
 
     This must never fall back to a literal. The repo is public, so a committed
-    default would let anyone forge a signed session cookie for any user —
-    including an admin — without knowing a password. A missing key is a hard
+    default would let anyone forge a signed session cookie for any user -
+    including an admin - without knowing a password. A missing key is a hard
     failure in production; locally we mint a random per-process key, so
     sessions just don't survive a restart, which is fine for development.
     """
@@ -59,10 +59,15 @@ class Config:
     CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "mbean@builtbybeans.com")
     MAIL_USE_TLS = True
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_USERNAME", "")
+    # Addresses that are HIS, comma separated. Mail from one of these is not
+    # somebody waiting on a reply, whatever else the board knows about the
+    # address. The mailbox being read is treated as his without being listed;
+    # this is for the others he writes from.
+    OWN_EMAILS = os.environ.get("OWN_EMAILS", "")
     # The same app password that sends also reads. pm/mail_service.py pulls
     # mail from clients' addresses over IMAP so it shows on the board.
     IMAP_SERVER = os.environ.get("IMAP_SERVER", "imap.gmail.com")
-    # Time tracking is built and kept — routes, models, data all intact — but
+    # Time tracking is built and kept - routes, models, data all intact - but
     # not shown. Set FEATURE_TIME_TRACKING=1 to bring back the nav entry, the
     # header timer, the hours figures and the time tab on projects, tickets
     # and clients.

@@ -1,7 +1,7 @@
 """PostToolUse hook: notice the moments that owe the project manager.
 
-Until now this watched exactly one thing — an edit to a file named
-CLAUDE.md — on the theory that a repo contract being written is the
+Until now this watched exactly one thing - an edit to a file named
+CLAUDE.md - on the theory that a repo contract being written is the
 reliable sign that something was learned. It is a good sign. It is also
 the only one, and an audit of the Robinson & Co. build (a whole new
 client, built end to end with the board live) showed what that misses:
@@ -113,7 +113,7 @@ HOUSEKEEPING = re.compile(
     re.I)
 
 
-# A feature module. Not every file in these directories — one that declares a
+# A feature module. Not every file in these directories - one that declares a
 # blueprint or registers itself is a FEATURE, and a feature is the thing the
 # catalogue has an opinion about. Robinson & Co. called get_feature_guidance
 # four times while building thirty-odd of these.
@@ -170,7 +170,7 @@ def _vendor_token(slug):
     (`gmail-smtp` -> `gmail`), and the whole slug when it is not.
 
     Fixed 2026-09-07. The rule used to be "always the first segment", which
-    turned `app-store` into `app` — and `\\bapp\\b` matches `python app.py`,
+    turned `app-store` into `app` - and `\\bapp\\b` matches `python app.py`,
     so every session in every Flask repo on earth marked a vendor as touched
     and the playbook nudge fired on essentially all of them. This file's own
     docstring says a nudge that cries wolf is worse than no nudge; that is
@@ -208,21 +208,21 @@ def mark_vendor_touched(data, command):
 
 
 def is_vendor_module(file_path):
-    """A source file named after a vendor the board has a runbook for —
+    """A source file named after a vendor the board has a runbook for -
     tripleseat.py, stripe.py, twilio.py.
 
     Added 2026-09-07, after a day of Tripleseat and Twilio work ended with
     both runbooks un-updated and nothing having asked. The lesson marker
     armed on exactly one thing, a CLAUDE.md edit, so vendor work done in
-    ordinary application code armed nothing at all — and the playbook nudge
+    ordinary application code armed nothing at all - and the playbook nudge
     only ever asked whether a runbook had been READ, never whether anything
     was written back to it.
 
     The vendor's own module is the narrow, high-signal half of that gap:
     nobody edits tripleseat.py casually, and when they do it is nearly
     always because the vendor did something worth writing down. The wider
-    half — a vendor lesson learned while editing app code, which is what
-    actually happened that day — has no honest mechanical signal, and
+    half - a vendor lesson learned while editing app code, which is what
+    actually happened that day - has no honest mechanical signal, and
     pretending otherwise would mean nudging every session until the nudge
     was ignored. That one still depends on somebody noticing.
 
@@ -237,7 +237,7 @@ def is_vendor_module(file_path):
 
 def mark_feature_built(data, file_path):
     """A feature module written. Recorded so the Stop hook can ask whether the
-    catalogue was consulted before it — which is the whole point of having a
+    catalogue was consulted before it - which is the whole point of having a
     catalogue, and the thing the Robinson & Co. audit found was skipped."""
     if not FEATURE_DIR.search(file_path.replace("\\", "/")):
         return

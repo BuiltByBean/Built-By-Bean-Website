@@ -79,7 +79,7 @@ document.querySelectorAll('.service-card, .contact-card, .about-content').forEac
     observer.observe(el);
 });
 
-// Section visibility — fade the active section in, dim the others.
+// Section visibility - fade the active section in, dim the others.
 // Reversible (no unobserve) so sections fade out when scrolled past.
 const sectionObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
@@ -97,7 +97,7 @@ document.querySelectorAll('.hero, .section').forEach(el => {
 const hero = document.querySelector('.hero');
 if (hero) hero.classList.add('is-visible');
 
-// Fixed viewport scroll arrows — up chevron pinned near the top of the
+// Fixed viewport scroll arrows - up chevron pinned near the top of the
 // window, down chevron pinned near the bottom. Visibility and targets
 // update dynamically based on which section is currently in view.
 const upBtn = document.querySelector('.scroll-arrow-up');
@@ -108,7 +108,7 @@ if (upBtn && downBtn) {
     // Hide the arrows only during an arrow-triggered smooth scroll (not
     // on every user scroll event, which killed taps on mobile). The
     // class is added on click and removed when the target section is
-    // in view — or after a 900ms safety timeout.
+    // in view - or after a 900ms safety timeout.
     const beginArrowScroll = () => {
         document.documentElement.classList.add('is-scrolling');
         setTimeout(() => {

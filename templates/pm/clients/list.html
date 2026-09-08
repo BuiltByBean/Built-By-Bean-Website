@@ -99,16 +99,16 @@
                 {% for client in clients %}
                 <tr class="hover:bg-surface-800/30 transition-colors cursor-pointer" onclick="window.location='{{ url_for('pm.client_detail', id=client.id) }}'">
                     <td class="py-3 px-4">
-                        <p class="text-sm font-medium text-white">{{ client.company or '—' }}</p>
+                        <p class="text-sm font-medium text-white">{{ client.company or '-' }}</p>
                     </td>
                     <td class="py-3 px-4">
                         <p class="text-sm text-surface-300">{{ client.name }}</p>
                     </td>
                     <td class="py-3 px-4 hidden md:table-cell">
-                        <p class="text-sm text-surface-400 tabular-nums whitespace-nowrap">{{ client.phone | format_phone or '—' }}</p>
+                        <p class="text-sm text-surface-400 tabular-nums whitespace-nowrap">{{ client.phone | format_phone or '-' }}</p>
                     </td>
                     <td class="py-3 px-4 hidden md:table-cell">
-                        <p class="text-sm text-surface-400">{{ client.email or '—' }}</p>
+                        <p class="text-sm text-surface-400">{{ client.email or '-' }}</p>
                     </td>
                     {# Which channels have been tried, and how stale the last
                        attempt is. Both at a glance, because the question this

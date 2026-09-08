@@ -10,7 +10,7 @@
 {#
   Money already asked for that has not arrived, and plans that have stopped
   collecting. Above the totals on purpose: this is the only thing on the page
-  that is a task rather than a fact, and it was previously invisible — folded
+  that is a task rather than a fact, and it was previously invisible - folded
   into "Invoiced", where an invoice fifty days late looks exactly like one
   raised this morning.
 
@@ -182,7 +182,7 @@
     {#
       Only what this business adds to the bill, not the household's tax.
       tax_engine takes the wages already entered on the Taxes page and asks
-      what changes once this profit stacks on top — self employment tax in
+      what changes once this profit stacks on top - self employment tax in
       full, plus the extra income tax the profit pushes into. Answering it any
       other way would either ignore the bracket the profit lands in or claim
       the whole household bill as the cost of trading.
@@ -209,7 +209,7 @@
             {% if tax.ss_capped %}
             Social security is already covered by your salary, so profit only pays medicare.
             {% else %}
-            Assumes {{ tax.wages | format_currency }} of salary for the year —
+            Assumes {{ tax.wages | format_currency }} of salary for the year -
             <a href="{{ url_for('taxes.taxes_index') }}" class="text-brand-400 hover:text-brand-300">change it</a>
             {% endif %}
         </p>

@@ -31,8 +31,8 @@ ONE_LINER = (
 CLIENT_ONLY = """\
 **DNS on the sending domain.** Everything Resend needs is a record on their
 zone: a DKIM key and two CNAMEs. If they run their own DNS, they add them and
-you wait. If their DNS is somewhere you already have access — Cloudflare, in
-most of these — ask for that instead and do it yourself, because a DKIM value
+you wait. If their DNS is somewhere you already have access - Cloudflare, in
+most of these - ask for that instead and do it yourself, because a DKIM value
 read down a phone is a DKIM value typed wrong.
 
 **Which subdomain sends.** Resend wants a subdomain, not the apex, and the
@@ -43,7 +43,7 @@ changing it later means doing the DNS twice.
 **Whether the domain is already in somebody's Resend account.** This is the
 one nobody thinks to ask and the one that stops everything. A domain can only
 live in one Resend team. If a previous developer, an agency, or the client's
-own marketing tool already added it, you cannot add it — and the only way
+own marketing tool already added it, you cannot add it - and the only way
 through is to take it off them. Ask early, in writing.
 
 **The From address, and that it is a real mailbox.** Replies go somewhere.
@@ -55,7 +55,7 @@ ACCESS_GRANT = """\
 Sending permission is enough; full access only if the app manages domains,
 which it does not.
 
-    RESEND_API_KEY     the key, shown once — capture it now
+    RESEND_API_KEY     the key, shown once - capture it now
     MAIL_FROM          Name <address@the-verified-domain>
 
 The key is shown exactly once. There is no "reveal" later, only "create
@@ -63,7 +63,7 @@ another and delete this one", so put it in the password manager before
 closing the tab.
 
 **Know the plan before you promise a timeline.** The free plan caps domains,
-and the cap is per team. Adding one past the cap does not queue or warn — it
+and the cap is per team. Adding one past the cap does not queue or warn - it
 opens an upgrade dialog and stops. If they are at the cap, the fix is usually
 deleting a dead entry rather than paying: see the traps.
 
@@ -88,8 +88,8 @@ On Cloudflare every one of these is **DNS only**. A proxied CNAME resolves to
 Cloudflare's addresses and Resend never sees its own target.
 
 **Clear the way for the `send` CNAME.** DNS forbids a CNAME sharing a name
-with any other record. If `send` already holds an MX or a TXT — the older
-Resend setup put both there — the CNAME cannot be created until they are
+with any other record. If `send` already holds an MX or a TXT - the older
+Resend setup put both there - the CNAME cannot be created until they are
 deleted. Write down what you delete before you delete it.
 
 **Verify, then wait.** Verification is a DNS read: it succeeds when the
@@ -115,13 +115,13 @@ rename. Delete the entry and add the correct spelling.
 them.** Adding a domain someone else has verified returns *"in use by another
 Resend team. Verifying ownership will transfer the domain to your team and
 revoke their access."* That is not a warning about your account, it is a
-warning about theirs — whatever is currently sending on that domain stops.
+warning about theirs - whatever is currently sending on that domain stops.
 Find out whose team it is before clicking. If it is another account of the
 client's own, log into that one instead and make the key there.
 
 **The free plan blocks the add with an upgrade dialog.** At the domain cap you
 get *"You have reached the domain limit of your plan"* and no way past. If one
-of the existing entries is dead — a typo, an abandoned project — delete it and
+of the existing entries is dead - a typo, an abandoned project - delete it and
 the slot is free. Deleting requires typing the domain name to confirm, which
 is also a last chance to notice the typo.
 
@@ -136,13 +136,13 @@ too. After clearing the old records the new CNAME can read as missing for a
 minute or two. Query it again before concluding the change did not take.
 
 **Nothing sends from an unverified domain.** Not a warning, a refusal. Which
-also means Resend cannot rescue an unrelated problem — it will not let you
+also means Resend cannot rescue an unrelated problem - it will not let you
 send as a domain it has not verified, however valid the key.
 
 **A Gmail "send mail as" alias is not a substitute.** Google no longer offers
 its own relay for external domains on a consumer account: it demands an SMTP
 host and password for that domain, and a receive-only setup such as Cloudflare
-Email Routing has neither. Resend's SMTP endpoint does satisfy it — but only
+Email Routing has neither. Resend's SMTP endpoint does satisfy it - but only
 once the domain is verified, which is the thing you were trying to avoid.
 """
 
@@ -157,7 +157,7 @@ show a status it has not re-tested.
     dig +short send.<domain> CNAME
 
 The CNAMEs must return `*.forge.rmta.net`. If they return Cloudflare
-addresses, the record is proxied — turn the cloud grey.
+addresses, the record is proxied - turn the cloud grey.
 
 **Does Resend agree the domain is verified?**
 

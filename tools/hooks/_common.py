@@ -98,7 +98,7 @@ def work_marker_path(session_id):
 #
 # Two kinds of gap, and only one of them is anybody's problem twice.
 #
-# A BOARD-side fix — a playbook trap, a rule, a feature's gold standard —
+# A BOARD-side fix - a playbook trap, a rule, a feature's gold standard -
 # is written once through suggest_update and is live for every machine and
 # every session immediately, because the board is the one copy they all
 # read. Nothing to install, nothing to remember, nothing to note.
@@ -110,14 +110,14 @@ def work_marker_path(session_id):
 # bootstrap fixed that machine, and nothing told the OTHER machine it was
 # now behind.
 #
-# So: bump ECOSYSTEM_VERSION whenever a change here wants a bootstrap —
+# So: bump ECOSYSTEM_VERSION whenever a change here wants a bootstrap -
 # any hook, the installer, or the standing order. The bootstrap stamps the
 # number it installed, session_start compares the two, and a machine that
 # is behind says so on every session until it is not.
 #
 # The one boundary, stated because it is real: this compares the CHECKOUT
 # against what is installed FROM it. A checkout nobody has pulled cannot
-# know a newer version exists — it is not stale from its own point of
+# know a newer version exists - it is not stale from its own point of
 # view. Keeping this repo pulled is the standing order's job; this is what
 # catches the far more common half, where the pull happened and the
 # bootstrap did not.
@@ -140,7 +140,7 @@ def installed_version_path():
 
 def installed_version():
     """What the last bootstrap on this machine installed. 0 when it has
-    never run, or ran before this mechanism existed — both of which mean
+    never run, or ran before this mechanism existed - both of which mean
     the same thing to the caller: behind."""
     try:
         with open(installed_version_path(), encoding="utf-8") as fh:
@@ -151,7 +151,7 @@ def installed_version():
 
 def stamp_installed_version(version):
     """Record what the bootstrap just installed. Only the installer calls
-    this — a hook that stamped its own version would clear the very notice
+    this - a hook that stamped its own version would clear the very notice
     it exists to raise."""
     try:
         with open(installed_version_path(), "w", encoding="utf-8") as fh:

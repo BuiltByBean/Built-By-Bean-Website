@@ -60,6 +60,30 @@ def status():
 # ── Who to listen for ────────────────────────────────────
 
 
+def own_addresses(app=None):
+    """The addresses that are his, lowercased.
+
+    The mailbox being read is one by definition: a copy of his own mail is
+    not a person waiting on him. Anything else he writes from goes in
+    OWN_EMAILS, because the board cannot know about it otherwise.
+
+    Kept as one function because two places need the same answer, and a
+    sender excluded from the sync but not from the attention page would go
+    on showing every row it had already written.
+    """
+    app = app or current_app
+    out = set()
+    for key in ("MAIL_USERNAME", "MAIL_DEFAULT_SENDER"):
+        addr = (app.config.get(key) or "").strip().lower()
+        if addr:
+            out.add(addr)
+    for addr in (app.config.get("OWN_EMAILS") or "").split(","):
+        addr = addr.strip().lower()
+        if addr:
+            out.add(addr)
+    return out
+
+
 def watched_senders():
     emails = set()
     for (addr,) in db.session.query(Client.email).filter(Client.email.isnot(None)).all():
@@ -71,7 +95,10 @@ def watched_senders():
         addr = (addr or "").strip().lower()
         if addr:
             emails.add(addr)
-    return sorted(emails)
+    # Last, not first. His address reaches this set two ways: he has a Client
+    # row of his own, and the second loop re-adds any address that has ever
+    # written in, so taking it off the client list alone would not have held.
+    return sorted(emails - own_addresses())
 
 
 def match_client(address):

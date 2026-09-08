@@ -1,7 +1,7 @@
 """Tripleseat gets its mark
 
 It shipped with initials because simple-icons has no Tripleseat entry, which
-is fair enough — it is a venue-industry tool, not a developer brand. But
+is fair enough - it is a venue-industry tool, not a developer brand. But
 Tripleseat publishes a perfectly good 300x300 icon of its own, so there was a
 real mark to be had; nobody had gone and looked for it.
 

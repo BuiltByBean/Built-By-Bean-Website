@@ -10,14 +10,14 @@
 
   **This page is where sending is decided.** It used to be decided by a
   checkbox on the form three screens back, and this page only reported what
-  that checkbox had said — so a document could be built, read and confirmed,
+  that checkbox had said - so a document could be built, read and confirmed,
   and still quietly land in a downloads folder because of a box ticked or not
   ticked several minutes earlier. Now the button you press is the instruction:
   `preview_action` says send or download, and it is read in preference to the
   old checkbox.
 
   The buttons sit in the page header, next to Discard, and drive this form
-  through `form="send-form"` rather than living inside it — the actions belong
+  through `form="send-form"` rather than living inside it - the actions belong
   with the other actions, and the fields belong with the document.
 
   The PDF is served inline from its own route rather than embedded as a data
@@ -124,7 +124,7 @@
                        class="input-ring w-full px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
                 {% if not signer_email %}
                 <p class="text-xs text-amber-400 mt-1">
-                    No email on file for this client — sending needs one.
+                    No email on file for this client - sending needs one.
                 </p>
                 {% endif %}
             </div>

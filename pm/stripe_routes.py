@@ -570,7 +570,7 @@ def api_uninvoiced_expenses(client_id):
 
     query = Expense.query.filter(
         Expense.client_id == client_id,
-        # Exclude auto-generated "billable_time" mirror expenses — the underlying
+        # Exclude auto-generated "billable_time" mirror expenses - the underlying
         # TimeEntry is already billed as its own line item, so surfacing the mirror
         # here would double-bill the same work. Mirrors up via time_entry_id
         # (see _sync_expense_for_time_entry / Project.total_expenses).
@@ -655,7 +655,7 @@ def setup_products():
         if products:
             flash(f"Stripe products configured: {', '.join(products.keys())}", "success")
         else:
-            flash("Products returned empty — check Stripe dashboard for errors.", "error")
+            flash("Products returned empty - check Stripe dashboard for errors.", "error")
     except Exception as e:
         flash(f"Stripe error: {type(e).__name__}: {e}", "error")
     return redirect(url_for("stripe.stripe_dashboard"))

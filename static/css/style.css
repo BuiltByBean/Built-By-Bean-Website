@@ -295,7 +295,7 @@ body {
     overflow: hidden;
 }
 
-/* Fixed viewport scroll arrows — up pinned to top, down pinned to bottom */
+/* Fixed viewport scroll arrows - up pinned to top, down pinned to bottom */
 .scroll-arrow {
     position: fixed;
     left: 50%;
@@ -519,7 +519,7 @@ html {
     scroll-snap-stop: normal;
 }
 
-/* Fade-on-scroll only kicks in once JS has added .js-ready — that way
+/* Fade-on-scroll only kicks in once JS has added .js-ready - that way
    if the script fails to load, the page stays fully visible. */
 .js-ready .hero > .container,
 .js-ready .section > .container {
@@ -1570,7 +1570,7 @@ html {
     }
 
     /* Keep scroll arrows tappable even while the page is mid-scroll
-       on mobile — pointer-events: none during .is-scrolling kills
+       on mobile - pointer-events: none during .is-scrolling kills
        every tap during touch scrolling. */
     html.is-scrolling .scroll-arrow {
         opacity: 1;

@@ -1,7 +1,7 @@
 """Move projects along on their own.
 
 A phase is not a thing to remember to update. Every transition after the build
-starts is already written down somewhere else — the delivery date came off the
+starts is already written down somewhere else - the delivery date came off the
 statement of work, the go-live date is set when it goes live, and the free
 maintenance window is a number of days from that. So the board reads those and
 moves itself.
@@ -52,7 +52,7 @@ def rank(phase):
 def due_phase(project, today=None):
     """The phase this project's own dates say it is in, or None.
 
-    None means the dates have nothing to say — which is the normal answer for
+    None means the dates have nothing to say - which is the normal answer for
     everything before delivery, and why the first two phases are yours to set.
     """
     today = today or date.today()
@@ -126,7 +126,7 @@ def explain(project, today=None):
         if end:
             left = (end - today).days
             when = f"{end:%b %d, %Y}"
-            return (f"Free maintenance ends {when} — {left} days left."
+            return (f"Free maintenance ends {when} - {left} days left."
                     if left > 0 else f"Free maintenance ended {when}.")
         return "Free maintenance is running."
     if project.phase == "in_production":
@@ -139,7 +139,7 @@ def maintenance_ending(within_days=14, grace_days=30, today=None):
 
     The one transition that costs money to miss. While the window is open
     every hour on that project is free by contract; the day after, it is
-    billable at the maintenance rate — and nothing announces that, because it
+    billable at the maintenance rate - and nothing announces that, because it
     is a date passing rather than anything anybody does.
 
     Returns dicts rather than models so the template does no arithmetic:

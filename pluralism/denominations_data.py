@@ -102,7 +102,7 @@ DENOMINATIONS = [
         "summary": "After rejecting the Council of Chalcedon's two-nature Christology, these churches maintained that Christ has one united nature (miaphysis) that is both divine and human. They represent some of Christianity's oldest continuous traditions.",
         "keyDoctrines": ["Miaphysite Christology", "One united divine-human nature of Christ"],
         "scriptureStance": "Broader canon including books like Enoch (Ethiopian tradition)",
-        "salvationView": "Theosis — union with God through Christ's unified nature"
+        "salvationView": "Theosis - union with God through Christ's unified nature"
     },
     {
         "id": "coptic-orthodox",
@@ -188,7 +188,7 @@ DENOMINATIONS = [
         "summary": "Eastern Orthodoxy traces its origins to the founding of Constantinople in 330 CE as the center of Eastern Christianity. It understands itself as the continuous, unchanged apostolic church governed by ecumenical councils. The Great Schism of 1054 formalized the break with Rome.",
         "keyDoctrines": ["Conciliarism over papal authority", "Theosis (divinization)", "Essence-energies distinction", "Veneration of icons"],
         "scriptureStance": "Septuagint-based OT plus NT; Holy Tradition as interpretive framework",
-        "salvationView": "Theosis — becoming partakers of the divine nature through grace"
+        "salvationView": "Theosis - becoming partakers of the divine nature through grace"
     },
     {
         "id": "greek-orthodox",

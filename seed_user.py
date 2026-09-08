@@ -1,6 +1,6 @@
 """Create the initial admin user.
 
-The password is read from SEED_ADMIN_PASSWORD rather than hardcoded — this
+The password is read from SEED_ADMIN_PASSWORD rather than hardcoded - this
 repo is public, so a literal here would be a published admin credential.
 
     SEED_ADMIN_PASSWORD='...' python seed_user.py

@@ -7,8 +7,8 @@ URL, so this goes and gets it.
 
 Preference is by tier first, size second. The manifest wins outright: it is
 where an app declares its actual app icon, the full-bleed one designed to be
-looked at. A favicon is often a simplified glyph on a tight viewBox — the same
-mark with its edges cropped — so letting a small SVG outrank a 512px manifest
+looked at. A favicon is often a simplified glyph on a tight viewBox - the same
+mark with its edges cropped - so letting a small SVG outrank a 512px manifest
 icon on sharpness alone picks the worse picture, which is exactly what it did
 until this was tiered.
 
@@ -20,7 +20,7 @@ Within a tier, bigger is better, and an SVG counts as big because it is the
 one format that stays sharp at any size.
 
 Everything here is best effort. A site that is down, slow, or offers nothing
-returns None and the tile falls back to initials — a board that renders
+returns None and the tile falls back to initials - a board that renders
 without pictures is fine, a board that hangs waiting for one is not.
 """
 

@@ -6,9 +6,9 @@ somebody worked on before you, which is not how any of this runs: every repo
 lives under the BuiltByBean org, created here, and no client has ever had a
 GitHub account in the loop.
 
-So the step stays and the email goes. What it asks is still worth asking — a
+So the step stays and the email goes. What it asks is still worth asking - a
 fork, a stale collaborator or an old deploy key all keep reading after you stop
-thinking about them — but it is a thing to go and check, not a thing to ask
+thinking about them - but it is a thing to go and check, not a thing to ask
 somebody. And unlike the email, checking it produces an answer the same day.
 
 Rewritten only where the step still carries the seeded title, so an edited copy
@@ -30,13 +30,13 @@ depends_on = None
 
 
 OLD_TITLE = "Ask the client who else already has access"
-OLD_DETAIL = ("A previous developer's fork, an unrevoked invite, an old deploy key — "
+OLD_DETAIL = ("A previous developer's fork, an unrevoked invite, an old deploy key - "
               "all of them still read everything.")
 OLD_SUBJECT = "Quick access question before we start"
 OLD_MESSAGE = (
     "Hi {client},\n\nBefore I set the repository up, one housekeeping "
     "question: does anyone else currently have access to the existing code "
-    "— a previous developer, an agency, or an old integration?\n\nIf so I "
+    "- a previous developer, an agency, or an old integration?\n\nIf so I "
     "will get their access tidied up as part of the handover, so we start "
     "from a clean slate.\n\nThanks,\nMichael\nBuilt by Bean LLC")
 
@@ -53,7 +53,7 @@ NEW_DETAIL = (
     "gh api repos/<org>/<repo>/invitations --jq '[.[].invitee.login]'\n"
     "```\n\n"
     "If something comes back that should not be there, and the repo has ever "
-    "held a credential, revoking is not enough — see the traps."
+    "held a credential, revoking is not enough - see the traps."
 )
 
 

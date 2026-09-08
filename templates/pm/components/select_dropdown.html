@@ -7,7 +7,7 @@
   themed app no matter what is done to the closed control.
 
     name       submitted under this, via the hidden input
-    options    [(value, label), ...] — values are compared as strings
+    options    [(value, label), ...] - values are compared as strings
     selected   current value, or none
     size       'md' for filter bars and forms, 'sm' for tight grids
     model      a property in the SURROUNDING x-data to bind BOTH ways: a pick
@@ -22,7 +22,7 @@
   time, so a caller whose list depends on another field can replace it live:
   dispatch `dropdown-set-options` with { name, options: [{v, l}] } from
   anywhere and the instance carrying that name re-renders. This is what
-  retired the app's last native <select>s — the live-filtered project and
+  retired the app's last native <select>s - the live-filtered project and
   variant pickers that the fixed-list version could not serve.
 
   `dropdown-change` still fires with {name, value} on every pick and still

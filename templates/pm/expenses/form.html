@@ -16,11 +16,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Client</label>
-                        {{ select_dropdown(form.client_id.name, form.client_id.choices, form.client_id.data or 0, "— No client —", full_width=true) }}
+                        {{ select_dropdown(form.client_id.name, form.client_id.choices, form.client_id.data or 0, "No client", full_width=true) }}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
-                        {{ select_dropdown(form.project_id.name, form.project_id.choices, form.project_id.data or 0, "— No project —", full_width=true) }}
+                        {{ select_dropdown(form.project_id.name, form.project_id.choices, form.project_id.data or 0, "No project", full_width=true) }}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Ticket</label>

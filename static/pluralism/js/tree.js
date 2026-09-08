@@ -86,7 +86,7 @@
     function render(data) {
         const lookup = new Map(data.map((d) => [d.id, d]));
 
-        /* ── Year scale (Y axis) — oldest at bottom ── */
+        /* ── Year scale (Y axis) - oldest at bottom ── */
         const years = data.map((d) => d.founded);
         const minYear = Math.min(...years);
         const maxYear = Math.max(...years);

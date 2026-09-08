@@ -167,7 +167,7 @@
                 </span>
                 {% if page_kind != 'rule' %}
                 <span class="shrink-0 text-sm tabular-nums {{ 'text-surface-200' if f.typical_value else 'text-surface-600' }}">
-                    {{ f.typical_value|format_currency if f.typical_value else '—' }}</span>
+                    {{ f.typical_value|format_currency if f.typical_value else '-' }}</span>
                 {% endif %}
                 <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
                      :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">

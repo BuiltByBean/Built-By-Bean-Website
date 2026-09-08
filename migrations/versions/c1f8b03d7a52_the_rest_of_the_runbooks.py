@@ -5,7 +5,7 @@ API, the LLM APIs and the App Store. Seventeen playbooks now, which is every
 third party any of these apps actually talks to.
 
 Two of these correct something believed rather than checked. Kuper's geocoding
-is not Google Maps — it is Nominatim, one request a second with a User-Agent,
+is not Google Maps - it is Nominatim, one request a second with a User-Agent,
 and `GOOGLE_MAPS_API_KEY` is a dead credential sitting in production that
 nothing reads. And `RC_PUBLIC_KEY` in Data Dungeon is RevenueCat, which means
 that app ships in-app purchases.
@@ -93,7 +93,7 @@ lower than people expect, and exhaustion shows up as intermittent timeouts
 rather than as a connection error.
 
 **Know where the backups are before you need them.** Not "assume the host does
-it". See the traps — this is the one that ends a business.
+it". See the traps - this is the one that ends a business.
 """,
     "traps_md": """\
 **A Railway Postgres can be exposed to the open internet, and one here is.**
@@ -121,7 +121,7 @@ is the only warning there is.
 
 **The ORM's delete and the database's `ON DELETE CASCADE` are different
 things.** A relationship without `passive_deletes` makes SQLAlchemy try to null
-a child's foreign key first, which a NOT NULL column refuses — so the delete
+a child's foreign key first, which a NOT NULL column refuses - so the delete
 raises instead of cascading. This is live in this codebase: deleting a project
 that has time entries fails exactly this way.
 """,
@@ -186,8 +186,8 @@ Compare it against workers x threads and against the plan's cap.
          "first costs nothing and answers the question underneath most exit "
          "conversations.", "email", "Your data on {project}",
          "Hi {client},\n\nOne thing worth putting in writing now rather than "
-         "later: everything in {project} — your customers, jobs, invoices and "
-         "history — is yours, not mine.\n\nIf you ever want a copy, ask and I "
+         "later: everything in {project} - your customers, jobs, invoices and "
+         "history - is yours, not mine.\n\nIf you ever want a copy, ask and I "
          "will send you the lot in a spreadsheet-readable format within a "
          "couple of weeks, no questions and no charge. That holds whether we "
          "are still working together or not.\n\nThanks,\nMichael\n"
@@ -208,7 +208,7 @@ SENTRY = {
     ),
     "client_only_md": """\
 **Whose Sentry account.** Free tier is generous enough for every app here, and
-if it is yours the errors from their app land in your account — which is what
+if it is yours the errors from their app land in your account - which is what
 you want operationally and worth them knowing.
 
 **That errors leave their server.** A crash report contains a stack trace and,
@@ -222,7 +222,7 @@ Nothing else. This is your tool, not theirs.
 
     SENTRY_DSN            identifies the project, safe in client-side code
     SENTRY_ENVIRONMENT    production / staging, so the two do not merge
-    SENTRY_AUTH_TOKEN     reads issues back out — this one IS a secret
+    SENTRY_AUTH_TOKEN     reads issues back out - this one IS a secret
     SENTRY_ORG_SLUG
     SENTRY_PROJECT_SLUG
 
@@ -266,7 +266,7 @@ the DSN in a `.env` and forgets. Ship dark and set it per environment.
 **A resolved issue reopens on the next occurrence**, which is correct and
 surprising. An issue you resolved without fixing comes back looking new.
 
-**Sentry going down does not take the app down** — the SDK fails quietly — but
+**Sentry going down does not take the app down** - the SDK fails quietly - but
 it also means silence is not proof that nothing broke.
 """,
     "verify_md": """\
@@ -284,7 +284,7 @@ not the config.
 with it. It should be refused.
 """,
     "steps": [
-        ("Ship it dark — no DSN, no reporting",
+        ("Ship it dark - no DSN, no reporting",
          "The whole block should be a no-op when `SENTRY_DSN` is unset, so "
          "local development and unconfigured environments send nothing. "
          "Opt-in per environment beats remembering to switch it off.",
@@ -348,7 +348,7 @@ announced.
 
 **Google Maps needs no key either, for what it is used for here.** Kuper builds
 `https://www.google.com/maps/dir/?...` deep links, which are plain URLs. There
-is no Maps API call anywhere in that codebase — see the traps.
+is no Maps API call anywhere in that codebase - see the traps.
 """,
     "your_steps_md": """\
 **One request per second, maximum, and never during a page render.** Kuper's
@@ -368,7 +368,7 @@ Collapsing them means a service outage looks like a bad address forever after.
 """,
     "traps_md": """\
 **There is a dead Google Maps key in production right now.** Kuper's Railway
-service carries `GOOGLE_MAPS_API_KEY`, and nothing in that codebase reads it —
+service carries `GOOGLE_MAPS_API_KEY`, and nothing in that codebase reads it -
 not the geocoder, which is Nominatim, and not the directions links, which need
 no key. It is an unused credential sitting in production, which is the kind of
 thing that is fine until it is in a leak. **Delete it or start using it.**
@@ -453,7 +453,7 @@ cannot. Store the id, display the handle. The Wisdom Crucible is
 from the API, and a client who uploads as unlisted and expects the site to show
 it will report that as a bug in your code.
 
-**Nothing else** — reading public videos needs no permission from them. If you
+**Nothing else** - reading public videos needs no permission from them. If you
 ever need to *upload* or read private data, that is OAuth against their Google
 account and a different conversation.
 """,
@@ -487,7 +487,7 @@ videos change a few times a week. Fetching per visitor spends quota on traffic.
 
 **Embed via `youtube-nocookie.com`** and allow it explicitly in the
 Content-Security-Policy. Jakob's Crucible has `frame-src
-https://www.youtube-nocookie.com` for exactly this — the embed silently fails
+https://www.youtube-nocookie.com` for exactly this - the embed silently fails
 to render if the CSP does not name it.
 """,
     "traps_md": """\
@@ -544,7 +544,7 @@ a row at a bogus id, and load the page.
          "handle.", "email", "Two details about your YouTube channel",
          "Hi {client},\n\nTo pull your videos onto the site automatically I "
          "need two things:\n\n1. Your channel handle (the @name)\n2. Your "
-         "channel ID — in YouTube Studio go to Settings, then Channel, then "
+         "channel ID - in YouTube Studio go to Settings, then Channel, then "
          "Advanced settings, and it is listed there\n\nI need the ID as well "
          "as the handle because handles can be changed later and the ID never "
          "changes, so building on the ID means the site keeps working if you "
@@ -558,7 +558,7 @@ a row at a bogus id, and load the page.
          "A channel changes a few times a week. Fetching per visitor spends "
          "quota on traffic.", None, "", ""),
         ("Name youtube-nocookie.com in the Content-Security-Policy",
-         "The embed silently fails to render otherwise — nothing in the server "
+         "The embed silently fails to render otherwise - nothing in the server "
          "log, nothing that reads as an error unless you open the console. It "
          "only shows up in production.", None, "", ""),
         ("Handle a deleted or privated video as normal, not as an error",
@@ -710,7 +710,7 @@ retry. Collapsing them into one `except` means retrying forever against a key
 that is simply wrong.
 
 **Tool definitions are not portable.** The same tool needs a different shape for
-each provider — Meeting Assistant keeps `active_tools_anthropic` and
+each provider - Meeting Assistant keeps `active_tools_anthropic` and
 `active_tools_openai` side by side rather than pretending one schema fits both.
 """,
     "your_steps_md": """\
@@ -781,7 +781,7 @@ variable.
          "Hi {client},\n\nOne thing to be straight about before we switch this "
          "on.\n\nFor {project} to do the AI parts, the text it is working on "
          "gets sent to an outside service to be processed. That means whatever "
-         "is in it — names, notes, whatever was said in a meeting — leaves our "
+         "is in it - names, notes, whatever was said in a meeting - leaves our "
          "server and goes to theirs.\n\nThey do not train on it and they "
          "delete it on a set schedule, and I am happy to send you their terms "
          "in writing.\n\nI want you to say yes to that knowingly rather than "
@@ -851,7 +851,7 @@ purchase and Apple takes its cut. That is a pricing conversation, not a
 technical one.
 """,
     "access_grant_md": """\
-**An invite to their developer account** — App Store Connect, Users and Access.
+**An invite to their developer account** - App Store Connect, Users and Access.
 Admin to configure the app, Developer to build and upload. Never their Apple ID.
 
 **Certificates and provisioning profiles are per account.** Let Xcode manage
@@ -861,7 +861,7 @@ expire quietly and the failure surfaces as a build error weeks later.
 **RevenueCat, if there is anything to buy.** Data Dungeon carries
 `@revenuecat/purchases-capacitor` and `RC_PUBLIC_KEY`, which is a RevenueCat
 public key. It sits between the app and StoreKit so receipts, restores and
-subscription state are not hand-rolled — which is the right call, because
+subscription state are not hand-rolled - which is the right call, because
 receipt validation is where homegrown IAP goes wrong.
 
     RC_PUBLIC_KEY      RevenueCat, safe in the client
@@ -896,7 +896,7 @@ who could not get in.
 **Guideline 4.2 is the one that kills web wrappers.** An app that is a website
 in a shell gets rejected as offering minimal functionality. Data Dungeon takes
 this risk knowingly and mitigates it with native plugins and explicit review
-notes — but it is recorded as a *medium, recoverable* risk with a fallback
+notes - but it is recorded as a *medium, recoverable* risk with a fallback
 ready, not as a solved problem. Treat any `server.url` app the same way.
 
 **Guideline 5.1.1(v): account deletion must be possible inside the app.** Not a
@@ -945,13 +945,13 @@ Compare it against the network calls, not against what you remember building.
          "$99/year on their card, in their name. Organisation enrolment needs a "
          "D-U-N-S number, which takes days on its own. This is the long pole "
          "and it is entirely on their side.",
-         "email", "The Apple account for {project} — worth starting now",
+         "email", "The Apple account for {project} - worth starting now",
          "Hi {client},\n\nTo put {project} on the App Store you need an Apple "
          "Developer account in your business's name. It has to be yours rather "
          "than mine, because the app is published as your company and the "
          "agreements with Apple are with you.\n\nIt is $99 a year at "
          "https://developer.apple.com/programs/\n\nHave ready:\n- Your legal "
-         "business name, exactly as registered\n- Your D-U-N-S number — if you "
+         "business name, exactly as registered\n- Your D-U-N-S number - if you "
          "do not have one Apple will walk you through getting it free, but it "
          "adds a few days\n- A business phone and address\n\nApple may "
          "telephone to verify. I would start this now even though we are weeks "
@@ -963,7 +963,7 @@ Compare it against the network calls, not against what you remember building.
          "Admin to configure the app, Developer to build and upload.",
          None, "", ""),
         ("Decide Path A or Path B, and write down why",
-         "Path B loads the live site through `server.url` — one surface, full "
+         "Path B loads the live site through `server.url` - one surface, full "
          "parity, and the shape Guideline 4.2 scrutinises. Path A bundles the "
          "frontend. Data Dungeon chose B and keeps A scaffolded, which turns a "
          "rejection from a crisis into a switch.", None, "", ""),
@@ -985,7 +985,7 @@ Compare it against the network calls, not against what you remember building.
          "them in one go:\n\n- App name as it should appear (30 characters "
          "max)\n- A subtitle (30 characters)\n- Which category it belongs in\n"
          "- A support URL and a marketing URL\n- A link to your privacy "
-         "policy\n- Your age rating — I will send the questionnaire\n\nOn the "
+         "policy\n- Your age rating - I will send the questionnaire\n\nOn the "
          "privacy policy: Apple asks us to declare exactly what the app "
          "collects, and that declaration is a statement about your business "
          "rather than a formality. I will draft what I know the app does and "

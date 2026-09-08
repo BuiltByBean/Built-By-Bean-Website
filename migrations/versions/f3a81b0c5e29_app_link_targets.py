@@ -2,7 +2,7 @@
 
 One tile, three places you actually go: the running app, the deploy that
 serves it, and the code behind it. Typing those two URLs for every app would
-be busywork, so they are filled in from what Railway already knows — it holds
+be busywork, so they are filled in from what Railway already knows - it holds
 the project and service ids, and the GitHub repo each service deploys from.
 
 Only filled where the column is empty, so nothing typed by hand is

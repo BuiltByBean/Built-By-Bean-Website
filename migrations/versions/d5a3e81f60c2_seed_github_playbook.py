@@ -1,7 +1,7 @@
 """a runbook for GitHub, written from this org's own history
 
-Seventeen repos, eleven of them public, and this one — the board holding
-client records and Stripe configuration — among the public ones. That is a
+Seventeen repos, eleven of them public, and this one - the board holding
+client records and Stripe configuration - among the public ones. That is a
 choice, and it works, but only if nothing secret was ever committed. Two
 commits in this repo's own history say otherwise, and they are the reason the
 traps section leads with git history rather than with access.
@@ -41,7 +41,7 @@ before you ask rather than when it arrives.
 
 **Whether it is public or private, and on purpose.** Public is free and fine
 for a marketing site. It is not fine for anything that will ever hold a key,
-and "we will make it private later" does not work — see the traps. Ask on day
+and "we will make it private later" does not work - see the traps. Ask on day
 one, and write down the answer.
 
 **Who else already has access.** A previous developer with a fork, a
@@ -55,7 +55,7 @@ Collaborators, Add people. Write access is enough to work; Admin is only
 needed to change branch protection or connect deploys, and it is worth saying
 which one you need and why rather than being handed Admin by default.
 
-**For anything automated, a token or a key — never the account.**
+**For anything automated, a token or a key - never the account.**
 
     Fine-grained PAT   scoped to named repos, expires, read/write contents
     Deploy key         one repo, read-only unless you say otherwise
@@ -85,7 +85,7 @@ guesses at variable names from a stack trace.
 **Connect the deploy to the repo, not to your laptop.** On Railway that means
 attaching the GitHub repo to the service so a push to main deploys. A service
 deployed from the CLI works, but nothing afterwards knows where its code came
-from — not Railway's dashboard, not anything reading Railway's API, not the
+from - not Railway's dashboard, not anything reading Railway's API, not the
 next person.
 
 **Protect main once there is anything worth protecting.** Settings, Branches.
@@ -99,7 +99,7 @@ the repo asserts for itself.
 
 TRAPS = """\
 **Deleting a secret does not delete it. This repo proves it.** Two commits
-here removed live credentials — a fallback `SECRET_KEY` and hardcoded admin
+here removed live credentials - a fallback `SECRET_KEY` and hardcoded admin
 passwords. Both fixes are correct and both values are still readable by
 anybody, because a commit that removes a line is a commit that contains the
 line:
@@ -108,7 +108,7 @@ line:
 
 The repository is public. The fix going forward is not the fix going back. If
 a real credential was ever committed to a public repo, treat it as published
-and **rotate it** — the only cleanup that works is rewriting history, which
+and **rotate it** - the only cleanup that works is rewriting history, which
 breaks every clone, and it is still a race against whoever already cloned.
 
 **Public is the expensive default.** Eleven of these seventeen repos are
@@ -123,7 +123,7 @@ and every fork.
 
 **A CLI deploy has no repo behind it.** Railway only knows a service's
 repository when the service is connected to GitHub for auto-deploy. Deploy it
-by CLI and the API reports no repo at all — not an error, just an empty field,
+by CLI and the API reports no repo at all - not an error, just an empty field,
 which is why one project on the apps board had no GitHub button until it was
 filled in by hand.
 

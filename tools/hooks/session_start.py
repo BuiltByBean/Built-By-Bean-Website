@@ -22,8 +22,8 @@ def pending_machine_updates():
     """Say so when this machine is behind the tooling it is running from.
 
     A board-side fix reaches every machine the moment it is filed, so it is
-    never mentioned here. A MACHINE-side one — a hook, the installer, the
-    standing order — travels only by pulling this repo and re-running the
+    never mentioned here. A MACHINE-side one - a hook, the installer, the
+    standing order - travels only by pulling this repo and re-running the
     bootstrap, and until 2026-09-07 nothing anywhere said a machine had
     fallen behind. You found out by noticing the wrong behaviour.
 
@@ -36,7 +36,7 @@ def pending_machine_updates():
     if checkout <= installed:
         return
     print("=" * 66)
-    print(f"THIS MACHINE HAS PENDING PM-ECOSYSTEM UPDATES — it last installed "
+    print(f"THIS MACHINE HAS PENDING PM-ECOSYSTEM UPDATES - it last installed "
           f"v{installed}, and the Built-By-Bean-Website checkout it is running "
           f"from is v{checkout}. Something in the hooks, the installer or the "
           "standing order changed and has not been applied here yet, so this "
@@ -59,7 +59,7 @@ def cache_vendors(key):
     Fetched once here rather than per command: the Stop hook wants to know
     whether a vendor was touched without its runbook being read, and a
     network call on every shell command would be intolerable. A failure is
-    silent — the vendor check is a nicety and the brief is the point.
+    silent - the vendor check is a nicety and the brief is the point.
     """
     text, err = board_get("/api/guidance/playbooks", key)
     if err or not text:

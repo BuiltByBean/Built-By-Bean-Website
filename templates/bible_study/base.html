@@ -43,7 +43,7 @@
         /* Hide desktop sidebar on mobile, show bottom nav */
         .bottom-nav{display:none}
         @media(max-width:1023px){.bottom-nav{display:flex}}
-        /* Page transitions — no white flash */
+        /* Page transitions - no white flash */
         .page-fade{transition:opacity 0.15s ease}
         .page-fade.fade-out{opacity:0}
     </style>
@@ -183,7 +183,7 @@ window.openScripture = async function(ref) {
         root.__x.$data.scriptureText = 'Error loading verse.';
     }
 };
-// Smooth page transitions — no white flash
+// Smooth page transitions - no white flash
 document.addEventListener('click', e => {
     const link = e.target.closest('a[href]');
     if (!link) return;

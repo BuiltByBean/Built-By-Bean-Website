@@ -143,7 +143,7 @@ def send_for_signature(pdf_bytes, *, title, filename, signer_name=None,
     """
     if not configured():
         raise SignaDocError(
-            "SignaDoc is not configured — set SIGNADOC_URL and SIGNADOC_API_KEY."
+            "SignaDoc is not configured - set SIGNADOC_URL and SIGNADOC_API_KEY."
         )
     if not signers:
         signers = [{"id": "client", "name": signer_name, "email": signer_email}]

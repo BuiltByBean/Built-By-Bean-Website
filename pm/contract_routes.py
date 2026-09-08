@@ -2,7 +2,7 @@
 
 The signing portal owns the envelope. These pages own the join: which client,
 which project, which document. Status is read back from the portal whenever a
-page here is opened, and the portal wins every disagreement — a status cached
+page here is opened, and the portal wins every disagreement - a status cached
 here exists so a list draws before the network does, not so anything is decided
 from it.
 
@@ -111,7 +111,7 @@ COUNTERSIGNER_NAME = "Michael Bean"
 # contracts are sent FROM, which is the portal's MAIL_FROM.
 COUNTERSIGNER_EMAIL = os.environ.get("COUNTERSIGNER_EMAIL", "michaelbean21@gmail.com")
 
-# Who the portal says a document came from. This is display and audit only —
+# Who the portal says a document came from. This is display and audit only -
 # the actual From header on the email is the portal's own MAIL_FROM, set on
 # the SignaDoc service, and the two are kept the same on purpose: a document
 # that says it came from one address and arrives from another reads as a
@@ -276,7 +276,7 @@ def refresh_open_requests():
     envelope with its status, and a list page should not fan out.
 
     Returns the number of rows that changed, or None if the portal could not be
-    asked — which the pages report rather than swallow, because a status that
+    asked - which the pages report rather than swallow, because a status that
     quietly stopped updating is worse than one that says it is stale.
     """
     open_rows = SignatureRequest.query.filter(
@@ -348,7 +348,7 @@ def contract_detail(id):
             current_app.logger.exception("SignaDoc envelope fetch failed")
             error = f"Could not reach SignaDoc: {exc}"
     else:
-        error = "SignaDoc is not configured — set SIGNADOC_URL and SIGNADOC_API_KEY."
+        error = "SignaDoc is not configured - set SIGNADOC_URL and SIGNADOC_API_KEY."
 
     return render_template(
         "pm/contracts/detail.html",
@@ -363,7 +363,7 @@ def contract_detail(id):
 def contract_resend(id):
     row = db.session.get(SignatureRequest, id) or abort(404)
     if not row.signer_ref:
-        flash("No signer reference on this request — open it in SignaDoc instead.", "warning")
+        flash("No signer reference on this request - open it in SignaDoc instead.", "warning")
         return redirect(url_for("contracts.contract_detail", id=id))
     try:
         reply = signadoc.resend(row.envelope_id, row.signer_ref, email=True)
@@ -377,7 +377,7 @@ def contract_resend(id):
     if reply.get("emailed") and reply.get("mailMode") == "smtp":
         flash(f"A fresh signing link is on its way to {row.signer_email}.", "success")
     else:
-        flash("A fresh signing link is ready below — SignaDoc has no mail server, "
+        flash("A fresh signing link is ready below - SignaDoc has no mail server, "
               "so send it to them yourself.", "warning")
     return redirect(url_for("contracts.contract_detail", id=id))
 
@@ -473,8 +473,8 @@ def sent_message(row):
     it, and saying "sent" then would be a lie the client discovers a week later
     when they ask where the contract is.
 
-    A countersigned document has not gone to the client at all yet — it is
-    waiting on Michael — and saying "sent to them" would be the same lie one
+    A countersigned document has not gone to the client at all yet - it is
+    waiting on Michael - and saying "sent to them" would be the same lie one
     step earlier.
     """
     own = getattr(row, "own_signing_url", None)
@@ -482,7 +482,7 @@ def sent_message(row):
         return (f"Ready for your signature. Sign it here and it goes to "
                 f"{row.signer_name} the moment you are done: {own}")
     if row.mail_mode == "smtp":
-        return f"Sent to {row.signer_email} — they have a one-click link to sign."
+        return f"Sent to {row.signer_email} - they have a one-click link to sign."
     return (f"Envelope created for {row.signer_name}. SignaDoc has no mail server "
             f"configured, so copy the signing link below and send it to them.")
 
@@ -524,7 +524,7 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
     """Send a document this board just generated, if the form asked for it.
 
     Returns the SignatureRequest when it went out, and None when it was not
-    asked for or could not be done — in which case the caller still hands the
+    asked for or could not be done - in which case the caller still hands the
     PDF over. Losing somebody's contract to a failed API call would be much
     the worse of the two outcomes, so a failure here flashes what went wrong
     and lets the download happen anyway.
@@ -556,7 +556,7 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
             if request.form.get("revision_of", type=int) else None,
         )
     except SignaDocError as exc:
-        flash(f"Could not send it for signature: {exc} Nothing was sent — the document is still here, try again.", "error")
+        flash(f"Could not send it for signature: {exc} Nothing was sent - the document is still here, try again.", "error")
         return SEND_FAILED
 
     flash(sent_message(row), "success")
@@ -567,7 +567,7 @@ def finish_send(sent, *, pdf_bytes, filename):
     """What to do with a document once sending has been attempted.
 
     Three outcomes, and they were previously two. Sent goes to whoever has to
-    act next — which for a document carrying a Built by Bean signature line is
+    act next - which for a document carrying a Built by Bean signature line is
     Michael, straight into the signing portal, because a countersigned
     contract is waiting on him and nobody else can move it. Failed keeps the
     preview and says so, rather than handing over a download that looks like

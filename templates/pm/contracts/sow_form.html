@@ -47,7 +47,7 @@
                                            placeholder="Choose a client", full_width=true, model="clientId") }}
                         {% if not client_options %}
                         <p class="mt-1.5 text-xs text-amber-400">
-                            No clients yet —
+                            No clients yet -
                             <a href="{{ url_for('pm.client_create') }}" class="underline hover:text-amber-300">add one first</a>.
                         </p>
                         {% endif %}

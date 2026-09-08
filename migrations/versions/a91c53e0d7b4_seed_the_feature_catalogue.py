@@ -292,7 +292,7 @@ CATALOGUE = [
   "Inside `overflow:auto` it is clipped (TB LM-8). Floating it in a clipping "
   "ancestor in a list row has the same effect (LM-41). A `relative z-30` card "
   "ties with the mobile drawer and paints over it (LM-53).",
-  TB, "CLAUDE.md — Filters & Dropdowns"),
+  TB, "CLAUDE.md - Filters & Dropdowns"),
 
  ("timezones", "Times that are the right times", "ui",
   "Storing, comparing and displaying times without a five-hour drift.", None,

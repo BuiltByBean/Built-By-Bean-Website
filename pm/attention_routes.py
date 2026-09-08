@@ -17,7 +17,7 @@ was reached and whatever the next sync brings.
 from flask import Blueprint, render_template, url_for, current_app
 from flask_login import login_required
 
-from models import Message
+from models import db, Message
 from pm import mail_service
 from pm.hosting_routes import increases_due_count
 
@@ -28,8 +28,16 @@ def _unanswered():
     # A person is waiting: a client's mail, or a lead through the site's
     # form, with no reply from here yet. Archived rows are dismissed ones
     # and never come back, because the sync only ever inserts.
-    return (Message.query.filter_by(direction="in", status="new")
-            .order_by(Message.received_at.desc()))
+    #
+    # Never his own address. The sync stops bringing those in, but rows
+    # already written stay written, so the page has to filter as well or the
+    # ones already sitting there would need dismissing one at a time.
+    q = Message.query.filter_by(direction="in", status="new")
+    own = mail_service.own_addresses()
+    if own:
+        q = q.filter(db.func.lower(db.func.coalesce(Message.from_email, ""))
+                     .notin_(list(own)))
+    return q.order_by(Message.received_at.desc())
 
 
 def attention_counts():

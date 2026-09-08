@@ -95,10 +95,10 @@
                         <p class="text-xs text-surface-400">{{ entry.project.client.name }}</p>
                     </td>
                     <td class="py-3 px-4 hidden md:table-cell">
-                        <p class="text-sm text-surface-300">{{ entry.ticket.display_title if entry.ticket else '—' }}</p>
+                        <p class="text-sm text-surface-300">{{ entry.ticket.display_title if entry.ticket else '-' }}</p>
                     </td>
                     <td class="py-3 px-4 hidden lg:table-cell">
-                        <p class="text-sm text-surface-400 truncate max-w-[200px]">{{ entry.description or '—' }}</p>
+                        <p class="text-sm text-surface-400 truncate max-w-[200px]">{{ entry.description or '-' }}</p>
                     </td>
                     <td class="py-3 px-4 text-center">
                         {{ badge(entry.rate_type) }}

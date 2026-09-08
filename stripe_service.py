@@ -504,7 +504,7 @@ def get_overdue_invoices(ttl=300):
     An open invoice with no due date is not overdue. Stripe leaves the field
     empty on a subscription charge and on anything created without one, and
     calling those late would mean the panel cried wolf on the day it was
-    raised — which is how a panel stops being read.
+    raised - which is how a panel stops being read.
 
     Oldest first, because that is the order they should be chased in.
     """
@@ -536,7 +536,7 @@ def get_stalled_subscriptions(ttl=300):
 
     Its own call rather than a flag on `_recurring_plan`, which exists to
     project revenue forward and treats a past_due subscription as still
-    billing — correct for a forecast, wrong for a list of things to go and fix.
+    billing - correct for a forecast, wrong for a list of things to go and fix.
     """
     import time
     from datetime import datetime, timezone

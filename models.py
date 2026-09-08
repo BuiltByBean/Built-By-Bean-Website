@@ -67,7 +67,7 @@ class User(UserMixin, db.Model):
 # The two closed stages earn their place: without "Not interested" the only
 # record of a no is that nobody wrote anything down, and a business that has
 # already turned you down gets called again six weeks later. "Follow up later"
-# is the other half of that — a no for now is not a no.
+# is the other half of that - a no for now is not a no.
 CLIENT_STAGE_CHOICES = [
     ("lead", "Lead"),
     ("contacted", "Contacted"),
@@ -79,7 +79,7 @@ CLIENT_STAGE_CHOICES = [
     ("not_interested", "Not interested"),
 ]
 
-# Stages that mean nobody should be ringing this business again — one because
+# Stages that mean nobody should be ringing this business again - one because
 # they said no, one because they are already paying.
 CLIENT_STAGES_CLOSED = ("not_interested", "active_client")
 
@@ -220,8 +220,8 @@ class ClientContact(db.Model):
     Cold calling a town means the only thing standing between you and ringing
     somebody for the second time is a written record. A flag saying "phoned"
     would answer that for about a fortnight; what you actually need three
-    months later is the date and the sentence — "left a voicemail", "spoke to
-    the owner, call back in September" — which is why this is a row per
+    months later is the date and the sentence - "left a voicemail", "spoke to
+    the owner, call back in September" - which is why this is a row per
     attempt and not a column per channel.
     """
 
@@ -339,7 +339,7 @@ class Project(db.Model):
 
     @property
     def total_expenses(self):
-        """Material expenses only — excludes auto-generated billable time expenses."""
+        """Material expenses only - excludes auto-generated billable time expenses."""
         return sum(
             e.amount for e in Expense.query.filter(
                 Expense.project_id == self.id,
@@ -534,7 +534,7 @@ class Ticket(db.Model):
 
     @property
     def total_expenses(self):
-        # Material expenses only — exclude time-entry-linked billable time rows.
+        # Material expenses only - exclude time-entry-linked billable time rows.
         return sum(e.amount for e in self.expenses if e.time_entry_id is None)
 
     @property
@@ -1158,8 +1158,8 @@ class SignatureRequest(db.Model):
 
     Deliberately thin. The portal owns the envelope: its status, its audit
     chain, its sealed PDF. What is kept here is the join the portal has no way
-    to know — which client this was for, which project, which of our documents
-    it came from — plus the last status seen, so a list can be drawn without
+    to know - which client this was for, which project, which of our documents
+    it came from - plus the last status seen, so a list can be drawn without
     waiting on the network first.
 
     `status` is therefore a cache and nothing more. It is refreshed from the
@@ -1175,7 +1175,7 @@ class SignatureRequest(db.Model):
     envelope_id = db.Column(db.String(64), nullable=False, unique=True, index=True)
 
     title = db.Column(db.String(200), nullable=False)
-    # engagement_letter | sow | document — what produced the PDF, so the list
+    # engagement_letter | sow | document - what produced the PDF, so the list
     # can say what was sent without opening it.
     kind = db.Column(db.String(30), nullable=False, default="document")
 
@@ -1277,7 +1277,7 @@ class AppLink(db.Model):
 
     `url` holds either a full address for something deployed elsewhere, or a
     path beginning with / for a page inside this app, and is rendered as
-    given — which is why it is normalised on the way in.
+    given - which is why it is normalised on the way in.
     """
 
     __tablename__ = "app_links"
@@ -1294,12 +1294,12 @@ class AppLink(db.Model):
     icon_fetched_at = db.Column(db.DateTime, nullable=True)
 
     # The other two places you go for an app: the deploy that serves it and
-    # the code behind it. Both optional — a page inside this app has neither.
+    # the code behind it. Both optional - a page inside this app has neither.
     railway_url = db.Column(db.String(500), nullable=True)
     github_url = db.Column(db.String(500), nullable=True)
 
     # The engagement this app belongs to, where there is one. Nullable because
-    # half the board is mine — Bible Study, Pluralism, Data Dungeon — and those
+    # half the board is mine - Bible Study, Pluralism, Data Dungeon - and those
     # have no client and no project behind them.
     #
     # SET NULL rather than CASCADE: closing out a project does not take the app

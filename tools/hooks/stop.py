@@ -9,8 +9,8 @@ beginning and it works.
 
 **Unlogged work.** If commits were made and no log_time or log_expense
 followed, say so once. This is new, and it is here because an audit of
-the Robinson & Co. build — a whole new client, built end to end over two
-days with the board live — found log_time called ZERO times. Nothing was
+the Robinson & Co. build - a whole new client, built end to end over two
+days with the board live - found log_time called ZERO times. Nothing was
 watching a commit, so nothing ever asked. The standing order said to log
 time as it happens; prose does not survive four hours of building.
 
@@ -114,7 +114,7 @@ def check_work(data, lines):
             f"{n} commit{'' if n == 1 else 's'} landed this session and no "
             "time was logged. If this was work on a client's project, call "
             "log_time with the client, the project, the hours and what was "
-            "built — and log_expense for anything bought. Measure the hours "
+            "built - and log_expense for anything bought. Measure the hours "
             "rather than estimating them: the transcript has timestamps, and "
             "summing the gaps under fifteen minutes is closer than memory.")
     if owes_guidance:
@@ -132,7 +132,7 @@ def check_work(data, lines):
             f"{', '.join(vendors)} {'was' if len(vendors) == 1 else 'were'} "
             "used this session and get_playbook was never called. Each of "
             "those has a runbook holding what only the client can do, the "
-            "access to ask for, and the traps — the Robinson & Co. build lost "
+            "access to ask for, and the traps - the Robinson & Co. build lost "
             "an afternoon to a Railway config file that had been deprecated "
             "for a year and was silently ignored. If you learned anything "
             "about one of them today, file it.")

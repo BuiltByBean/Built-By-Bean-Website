@@ -1,4 +1,4 @@
-<!-- Live working-session timer — rendered in the PM header on every page. -->
+<!-- Live working-session timer - rendered in the PM header on every page. -->
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 <div x-data='timerWidget({{ active_timer | tojson }}, {{ timer_projects | tojson }})' x-cloak class="relative">
 
@@ -24,9 +24,9 @@
 
                 <div>
                     <label class="block text-xs font-medium text-surface-400 mb-1">Project</label>
-                    {% set tw = namespace(proj=[("", "— Pick later —")]) %}
+                    {% set tw = namespace(proj=[("", "- Pick later -")]) %}
                     {% for p in timer_projects %}{% set tw.proj = tw.proj + [(p.id, p.label)] %}{% endfor %}
-                    {{ select_dropdown("start_project_id", tw.proj, "", "— Pick later —", full_width=true, model="startProjectId") }}
+                    {{ select_dropdown("start_project_id", tw.proj, "", "- Pick later -", full_width=true, model="startProjectId") }}
                 </div>
 
                 <div>
@@ -91,7 +91,7 @@
                app to throw away a timer is the loudest possible way to ask
                the smallest question. #}
             <button x-show="!sureDiscard" @click="sureDiscard = true" :disabled="busy"
-                    title="Discard — log nothing"
+                    title="Discard - log nothing"
                     class="p-1.5 rounded-lg hover:bg-white/10 text-surface-400 hover:text-red-500 transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>

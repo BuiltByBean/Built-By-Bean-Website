@@ -64,7 +64,7 @@
                     </span>
                     <span class="shrink-0 text-right">
                         <span class="block text-sm tabular-nums {{ 'text-surface-200' if p.estimate else 'text-surface-600' }}">
-                            {{ p.estimate|format_currency if p.estimate else '—' }}</span>
+                            {{ p.estimate|format_currency if p.estimate else '-' }}</span>
                         {% if p.monthly_estimate %}
                         <span class="block text-xs text-surface-500">+{{ p.monthly_estimate|format_currency }}/mo</span>
                         {% endif %}

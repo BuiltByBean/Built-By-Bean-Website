@@ -61,7 +61,10 @@ def sanitize(text):
     font can draw. Kept here so both documents strip the same characters."""
     if text is None:
         return ""
-    for bad, good in (("—", "-"), ("–", "-"), ("‘", "'"),
+    # Escaped rather than typed: these are the characters being
+    # REMOVED, so spelling them literally would make this file the
+    # one place the no-em-dashes scanner still fires.
+    for bad, good in (("\u2014", "-"), ("\u2013", "-"), ("‘", "'"),
                       ("’", "'"), ("“", '"'), ("”", '"'),
                       ("…", "..."), (" ", " "), ("•", "-")):
         text = text.replace(bad, good)

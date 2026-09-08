@@ -3,7 +3,7 @@
 This was a hardcoded page at /admin. It is rows now, so adding something is a
 form rather than a deploy.
 
-Each tile wears the app's own icon, fetched from its manifest or favicon —
+Each tile wears the app's own icon, fetched from its manifest or favicon -
 see app_icon_service. That fetch is a network call to somebody else's server,
 so it never happens while a page is being rendered: it runs on save, and on
 demand from the board. A tile whose site offers no icon shows its initials
@@ -42,7 +42,7 @@ def _icon_folder():
 def _normalise(url):
     """What the user typed, as something a browser can follow.
 
-    A bare domain is the common case — somebody types builtbybeans.com and
+    A bare domain is the common case - somebody types builtbybeans.com and
     means https. A leading / is a page inside this app and is left alone.
     """
     url = (url or "").strip()
@@ -77,7 +77,7 @@ def index():
     """The board, split by whose work it is.
 
     An app belongs to a client engagement or it does not, and that is already
-    what project_id says — client work first, because that is the half with
+    what project_id says - client work first, because that is the half with
     somebody waiting on it. Ordering inside each group stays by id, so a tile
     does not move under the cursor when a project is attached or detached.
     """
@@ -176,7 +176,7 @@ def edit(id=None):
         # else's server paying for our save button.
         elif (moved and not given) or request.form.get("refresh_icon"):
             if not _refresh_icon(link) and moved:
-                flash(f"Saved. {name} offers no icon to fetch — "
+                flash(f"Saved. {name} offers no icon to fetch - "
                       f"upload one on this page, or it shows its initials.", "info")
         db.session.commit()
         flash(f"{name} saved.", "success")
@@ -185,7 +185,7 @@ def edit(id=None):
     # Pairs rather than objects, because the dropdown macro wants
     # (value, label) and Jinja has no zip to build them at render time.
     project_options = [("", "Not a client project")] + [
-        (p.id, f"{p.name} — {p.client.name}")
+        (p.id, f"{p.name} - {p.client.name}")
         for p in Project.query.order_by(Project.name).all()
     ]
     return render_template("pm/apps/form.html", link=link,

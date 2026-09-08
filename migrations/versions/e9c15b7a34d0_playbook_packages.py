@@ -33,7 +33,7 @@ depends_on = None
 GITHUB_STEPS = [
     ("Decide public or private, and write it down",
      "Public is free and fine for a marketing site. It is not fine for "
-     "anything that will ever hold a key. Decide now — \"we will make it "
+     "anything that will ever hold a key. Decide now - \"we will make it "
      "private later\" does not work, because history is already published.",
      None, "", ""),
     ("Create the repo in the right place",
@@ -49,12 +49,12 @@ GITHUB_STEPS = [
      "Documents what the app needs and survives the repo going public.",
      None, "", ""),
     ("Ask the client who else already has access",
-     "A previous developer's fork, an unrevoked invite, an old deploy key — "
+     "A previous developer's fork, an unrevoked invite, an old deploy key - "
      "all of them still read everything.",
      "email", "Quick access question before we start",
      "Hi {client},\n\nBefore I set the repository up, one housekeeping "
      "question: does anyone else currently have access to the existing code "
-     "— a previous developer, an agency, or an old integration?\n\nIf so I "
+     "- a previous developer, an agency, or an old integration?\n\nIf so I "
      "will get their access tidied up as part of the handover, so we start "
      "from a clean slate.\n\nThanks,\nMichael\nBuilt by Bean LLC"),
     ("Connect the repo to the deploy",
@@ -96,7 +96,7 @@ RAILWAY_STEPS = [
      "email", "Domain and DNS for your new site",
      "Hi {client},\n\nWe are ready to point your domain at the new build. Two "
      "things I need:\n\n1. The exact domain you want it live on (with or "
-     "without www).\n2. Who manages the DNS — if it is a provider like "
+     "without www).\n2. Who manages the DNS - if it is a provider like "
      "GoDaddy, Cloudflare or Squarespace, and whether you can add me or would "
      "rather add two records yourself.\n\nIf you can add me, that is the "
      "fastest route and I will handle it end to end.\n\nThanks,\nMichael\n"
@@ -122,11 +122,11 @@ STRIPE_STEPS = [
      "It is their money and their legal identity. An account you create for "
      "them is an account they cannot fully control, and moving it later means "
      "re-onboarding every customer.",
-     "email", "Setting up payments — one thing only you can do",
+     "email", "Setting up payments - one thing only you can do",
      "Hi {client},\n\nTo take card payments we need a Stripe account in your "
      "business's name. This one has to be created by you, because Stripe "
      "verifies the business identity and bank details directly with the "
-     "owner — I cannot do that part on your behalf, and you would not want me "
+     "owner - I cannot do that part on your behalf, and you would not want me "
      "to.\n\nIt takes about ten minutes at https://dashboard.stripe.com/register\n\n"
      "Have ready:\n- Your legal business name and EIN\n- Business address and "
      "phone\n- The bank account payouts should land in\n\nOnce it is created, "
@@ -144,7 +144,7 @@ STRIPE_STEPS = [
      "and security\n2. Click 'New member' and invite michaelbean21@gmail.com\n"
      "3. Choose the 'Developer' role\n\nDeveloper lets me build and test the "
      "integration. It does not let me move money or change your bank details "
-     "— those stay with you.\n\nThanks,\nMichael\nBuilt by Bean LLC"),
+     "- those stay with you.\n\nThanks,\nMichael\nBuilt by Bean LLC"),
     ("Create restricted API keys, not the secret key",
      "A restricted key is scoped and revocable on its own. The account secret "
      "key is the account.",
@@ -169,7 +169,7 @@ STRIPE_STEPS = [
     ("Confirm the first payout reaches their bank",
      "Stripe holds the first payout for several days. Tell them before they "
      "notice and worry.",
-     "email", "Payments are live — what to expect on your first payout",
+     "email", "Payments are live - what to expect on your first payout",
      "Hi {client},\n\nPayments are live and working.\n\nOne thing worth "
      "knowing so it does not surprise you: Stripe holds the first payout for "
      "roughly 7 days while the account settles. After that payouts arrive on "

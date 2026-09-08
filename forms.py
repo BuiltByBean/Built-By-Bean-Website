@@ -119,8 +119,8 @@ from models import CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES  # noqa: E402,F
 class ContactLogForm(FlaskForm):
     """One attempt to reach a business.
 
-    The note is where the useful part lives — "left a voicemail", "spoke to
-    the owner, call back in September" — so it is the field with the room.
+    The note is where the useful part lives - "left a voicemail", "spoke to
+    the owner, call back in September" - so it is the field with the room.
     """
 
     channel = SelectField("How", choices=CONTACT_CHANNEL_CHOICES, default="phone")
