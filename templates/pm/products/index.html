@@ -89,7 +89,7 @@
         </div>
         <div class="divide-y divide-white/5">
         {% for p in group.products %}
-        <div class="p-4 sm:p-5">
+        <div data-live="product-{{ p.id }}" class="p-4 sm:p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="w-10 h-10 shrink-0 rounded-xl bg-white/5 flex items-center justify-center">
                     <svg class="w-5 h-5 text-brand-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +140,7 @@
                    What a client actually pays is set on the sale and raised
                    from the hosting page. Off is no fee, and zero is off. #}
                 {% set fee = (p.monthly_price|commas) if p.monthly_price else (default_hosting_fee|commas) %}
-                <form method="POST" action="{{ url_for('products.product_price', id=p.id) }}"
+                <form method="POST" data-live-action data-live-scope action="{{ url_for('products.product_price', id=p.id) }}"
                       x-data='{ m: {{ "true" if p.monthly_price else "false" }},
                                 price: {{ (p.price|commas)|tojson }} }'
                       class="flex flex-wrap items-center gap-2">
@@ -190,7 +190,7 @@
         <div class="px-4 sm:px-5 py-3 border-b border-white/5">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Sold</span>
         </div>
-        <div class="divide-y divide-white/5">
+        <div data-live="sales" class="divide-y divide-white/5">
         {% for s in sales %}
         <div class="p-4 sm:p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
@@ -220,7 +220,7 @@
                     {# Removing a sale erases the record of having sold it,
                        so it asks - and wears a border, like every other
                        control that acts on press. #}
-                    <form method="POST" action="{{ url_for('products.sale_delete', id=s.id) }}">
+                    <form method="POST" data-live-action data-live-scope action="{{ url_for('products.sale_delete', id=s.id) }}">
                         {{ confirm_button('Remove', 'Erase this sale?',
                                           btn_class='min-h-[44px] px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
                     </form>
@@ -236,7 +236,7 @@
     <div x-show="sell" style="display: none"
          class="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 lg:pl-[260px]">
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="sell = null"></div>
-        <form method="POST" action="{{ url_for('products.product_sell') }}"
+        <form method="POST" data-live-action data-live-scope action="{{ url_for('products.product_sell') }}"
               class="relative w-full max-w-lg glass-card shadow-2xl p-5 space-y-4"
               {#- Variant and project options follow the product and client
                   live. Built synchronously so the effect tracks `choices` and

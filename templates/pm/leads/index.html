@@ -152,11 +152,15 @@
             </form>
         </div>
 
+        {# openId sits OUTSIDE data-live, deliberately. Alpine state lives on
+           the element, so state kept inside a swapped region is reset by every
+           action - logging a call would close the row it was logged on. #}
+        <div x-data="{ openId: null }">
         <div data-live="results" class="contents">
         {% if leads %}
         {# One open row at a time. See the note at the top of this file. No
            overflow container here on purpose: it would clip the panels. #}
-        <div class="space-y-2" x-data="{ openId: null }">
+        <div class="space-y-2">
             {% for l in leads %}
             <div id="lead-{{ l.id }}"
                  {# z-20, not z-30: the sticky bar is z-30 and comes first in
@@ -263,7 +267,7 @@
                     {# Log an attempt. The channel buttons also set the outcome
                        the channel usually has, so the common case is two
                        presses: the channel, then Log it. #}
-                    <form method="POST" action="{{ url_for('leads.touch', id=l.id) }}"
+                    <form method="POST" data-live-action action="{{ url_for('leads.touch', id=l.id) }}"
                           x-data="{ channel: 'phone', outcome: 'no_answer', went: '' }"
                           class="rounded-xl border border-white/10 bg-surface-900/40 p-2.5 sm:p-3 space-y-3">
                         {{ filter_fields() }}
@@ -332,7 +336,7 @@
                     {% endif %}
 
                     <div class="flex flex-wrap items-center gap-2 sm:gap-3 pt-1">
-                        <form method="POST" action="{{ url_for('leads.stage', id=l.id) }}"
+                        <form method="POST" data-live-action action="{{ url_for('leads.stage', id=l.id) }}"
                               x-data class="w-full sm:w-auto sm:min-w-[13rem]">
                             {{ filter_fields() }}
                             {{ select_dropdown("stage", stage_choices, l.stage or 'lead', "Lead",
@@ -344,7 +348,7 @@
                             <a href="{{ url_for('pm.client_detail', id=l.client_id) }}"
                                class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-emerald-500/30 text-emerald-300 hover:border-emerald-500/60 transition-colors">Open the client</a>
                             {% else %}
-                            <form method="POST" action="{{ url_for('leads.convert', id=l.id) }}">
+                            <form method="POST" data-live-action action="{{ url_for('leads.convert', id=l.id) }}">
                                 {{ filter_fields() }}
                                 {{ confirm_button('Make them a client', 'Create the client?', tone='brand',
                                                   btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors') }}
@@ -353,7 +357,7 @@
                         </div>
                     </div>
 
-                    <form method="POST" action="{{ url_for('leads.note', id=l.id) }}" class="flex flex-wrap gap-2">
+                    <form method="POST" data-live-action action="{{ url_for('leads.note', id=l.id) }}" class="flex flex-wrap gap-2">
                         {{ filter_fields() }}
                         <input type="text" name="notes" value="{{ l.notes or '' }}" placeholder="Anything worth remembering"
                                class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
@@ -376,6 +380,7 @@
             <p class="text-surface-400 text-sm">Nothing matches that.</p>
         </div>
         {% endif %}
+        </div>
         </div>
     </div>
 </div>

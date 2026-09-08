@@ -77,12 +77,12 @@
 
     {% if p.status == 'pending' %}
     <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
-        <form method="POST" action="{{ url_for('inbox.reject', id=p.id) }}">
+        <form method="POST" data-live-action action="{{ url_for('inbox.reject', id=p.id) }}">
             <button type="submit"
                     class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300 transition-colors">
                 Reject</button>
         </form>
-        <form method="POST" action="{{ url_for('inbox.accept', id=p.id) }}">
+        <form method="POST" data-live-action action="{{ url_for('inbox.accept', id=p.id) }}">
             <button type="submit"
                     class="min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
                 Accept</button>
@@ -90,7 +90,7 @@
     </div>
     {% elif p.is_live %}
     <div class="flex justify-end pt-1">
-        <form method="POST" action="{{ url_for('inbox.revert', id=p.id) }}">
+        <form method="POST" data-live-action action="{{ url_for('inbox.revert', id=p.id) }}">
             {{ confirm_button('Revert', 'Put it back the way it was?') }}
         </form>
     </div>
@@ -99,7 +99,7 @@
 {% endmacro %}
 
 {% block content %}
-<div class="flex flex-col flex-1 min-h-0 gap-5 stagger-in">
+<div data-live="results" class="flex flex-col flex-1 min-h-0 gap-5 stagger-in">
 
     <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
         <div class="glass-card p-4">

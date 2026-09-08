@@ -119,7 +119,7 @@
                     <td class="py-3 px-4 text-right">
                         <div class="flex items-center justify-end gap-2">
                             <a href="{{ url_for('pm.time_edit', id=entry.id) }}" class="text-xs text-brand-500 hover:text-brand-600 font-medium">Edit</a>
-                            <form method="POST" action="{{ url_for('pm.time_delete', id=entry.id) }}" class="inline" x-data="{ confirm: false }">
+                            <form method="POST" data-live-action action="{{ url_for('pm.time_delete', id=entry.id) }}" class="inline" x-data="{ confirm: false }">
                                 <button type="button" @click="confirm = true" x-show="!confirm" class="text-xs text-red-500 hover:text-red-600 font-medium">Del</button>
                                 <div x-show="confirm" class="flex items-center gap-1">
                                     <button type="submit" class="px-2 py-0.5 text-xs bg-red-500 text-white rounded">Yes</button>

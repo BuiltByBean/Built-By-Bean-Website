@@ -23,7 +23,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-col flex-1 min-h-0 gap-4 stagger-in">
+<div data-live="results" class="flex flex-col flex-1 min-h-0 gap-4 stagger-in">
 
     {% if reveal %}
     <div class="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5">
@@ -79,12 +79,12 @@
                 <div class="flex flex-wrap items-center justify-end gap-2 max-w-full basis-full sm:basis-auto">
                     <a href="{{ url_for('users.edit', id=u.id) }}"
                        class="min-h-[44px] inline-flex items-center px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:text-white transition-colors">Edit</a>
-                    <form method="POST" action="{{ url_for('users.reset', id=u.id) }}">
+                    <form method="POST" data-live-action action="{{ url_for('users.reset', id=u.id) }}">
                         {{ confirm_button('Reset password', 'New temporary password?', tone='brand',
                                           btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors') }}
                     </form>
                     {% if u.id != current_user.id %}
-                    <form method="POST" action="{{ url_for('users.switch', id=u.id) }}">
+                    <form method="POST" data-live-action action="{{ url_for('users.switch', id=u.id) }}">
                         {% if u.is_active %}
                         {{ confirm_button('Switch off', 'Lock them out?',
                                           btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}

@@ -439,15 +439,82 @@
       Takes the HTML of the same page and swaps every [data-live] key present
       in both. Returns the parsed document so a caller can read more out of it.
     */
-    window.bbbSwapLive = function (html) {
+    window.bbbSwapLive = function (html, only) {
+        const wanted = only ? new Set(only) : null;
+        const open = bbbCaptureOpen();
+        /* A live region is sometimes the scroller itself - a contained-scroll
+           list marks the scrolling box as its results. Replacing it puts a
+           brand new element in with scrollTop 0, which throws the reader back
+           to the top of the list: the exact thing this whole mechanism exists
+           to stop, reintroduced by the mechanism. So the offsets are carried
+           across by key. */
+        const offsets = {};
+        document.querySelectorAll('[data-live]').forEach(node => {
+            if (node.scrollTop) offsets[node.getAttribute('data-live')] = node.scrollTop;
+        });
+
         const fresh = new DOMParser().parseFromString(html, 'text/html');
         fresh.querySelectorAll('[data-live]').forEach(node => {
             const key = node.getAttribute('data-live');
+            if (wanted && !wanted.has(key)) return;
             const stale = document.querySelector('[data-live="' + key + '"]');
             if (stale) stale.replaceWith(document.adoptNode(node));
         });
+
+        Object.keys(offsets).forEach(key => {
+            const node = document.querySelector('[data-live="' + key + '"]');
+            /* Clamped by the browser when the new content is shorter, which is
+               correct: a filter that returns three rows has nowhere to be. */
+            if (node) node.scrollTop = offsets[key];
+        });
+
+        bbbRestoreOpen(open);
         return fresh;
     };
+
+    /*
+      A row that was expanded stays expanded across a swap.
+
+      Alpine state lives on the element, so a swapped region takes its x-data
+      with it and every open card snaps shut. Changing a ticket's status while
+      reading it would therefore close the thing being read, which is the same
+      complaint as being thrown to the top of the page, just smaller.
+
+      The open state is read out of the DOM rather than out of Alpine, because
+      aria-expanded is already there for a screen reader and is true exactly
+      when the card is open. A card opts in by carrying data-live-key, which is
+      what identifies it as the same card on the other side of the swap.
+    */
+    function bbbCaptureOpen() {
+        const open = [];
+        document.querySelectorAll('[data-live-key]').forEach(el => {
+            if (el.querySelector('[aria-expanded="true"]')) {
+                open.push(el.getAttribute('data-live-key'));
+            }
+        });
+        return open;
+    }
+
+    function bbbRestoreOpen(keys) {
+        if (!keys.length) return;
+        /* After Alpine has initialised whatever the swap brought in. It
+           observes the document, so the components exist a tick later, not
+           at the moment replaceWith returns. */
+        setTimeout(() => {
+            keys.forEach(key => {
+                let el = null;
+                try { el = document.querySelector('[data-live-key="' + CSS.escape(key) + '"]'); }
+                catch (e) { return; }
+                if (!el) return;
+                const host = el.matches('[x-data]') ? el : el.querySelector('[x-data]');
+                if (!host) return;
+                try {
+                    const data = window.Alpine && window.Alpine.$data(host);
+                    if (data && 'open' in data) data.open = true;
+                } catch (e) { /* a card that does not track open is not an error */ }
+            });
+        }, 0);
+    }
 
     /*
       An action that changes part of a page, without loading a new one.
@@ -484,7 +551,18 @@
         })
             .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
             .then(html => {
-                window.bbbSwapLive(html);
+                /* A form marked data-live-scope replaces only the region it
+                   sits in, plus the flash. A page whose rows each carry an
+                   unsaved field - a price typed into row nine while row two is
+                   saved - must not have every row rebuilt, or the typing in
+                   the others is thrown away, which is the same loss this whole
+                   mechanism exists to prevent. */
+                const scope = form.closest('[data-live]');
+                if (form.hasAttribute('data-live-scope') && scope) {
+                    window.bbbSwapLive(html, [scope.getAttribute('data-live'), 'flash']);
+                } else {
+                    window.bbbSwapLive(html);
+                }
                 delete form.dataset.busy;
                 document.dispatchEvent(new CustomEvent('bbb:live-action', { detail: { form } }));
             })

@@ -9,7 +9,7 @@
 <div class="flex flex-wrap items-center gap-2">
     {# The schedule is the safety net; this is the press for when waiting for
        it is not an answer. #}
-    <form method="POST" action="{{ url_for('pm.tickets_resync') }}">
+    <form method="POST" data-live-action action="{{ url_for('pm.tickets_resync') }}">
         <input type="hidden" name="next" value="{{ request.full_path }}">
         <button type="submit"
                 class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
@@ -30,7 +30,8 @@
   two cannot drift into showing different things about the same ticket.
 #}
 {% macro ticket_card(t) %}
-<div class="rounded-2xl border border-surface-700 bg-surface-800/40 p-4 mb-3" x-data="{ open: false }">
+<div data-live-key="ticket-{{ t.id }}"
+     class="rounded-2xl border border-surface-700 bg-surface-800/40 p-4 mb-3" x-data="{ open: false }">
   <div class="flex flex-wrap items-center gap-2 mb-2">
     {# Category first, because bugs sort first and the eye should agree with the order. #}
     <span class="px-2 py-0.5 rounded-lg text-xs font-semibold
@@ -126,7 +127,7 @@
 
       {# Answers from here and comes back here. `next` is what keeps the board
          from throwing you at the detail page for a one-line reply. #}
-      <form method="POST" action="{{ url_for('pm.ticket_reply', id=t.id) }}" class="flex gap-2 mt-2">
+      <form method="POST" data-live-action action="{{ url_for('pm.ticket_reply', id=t.id) }}" class="flex gap-2 mt-2">
         <input type="hidden" name="next" value="{{ request.full_path }}">
         <input type="text" name="body" required placeholder="Reply to {{ t.reporter_name or 'them' }}"
                class="input-ring flex-1 min-w-0 px-3.5 py-2 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
@@ -152,7 +153,7 @@
   {%- for p in ['urgent','soon','normal','backlog'] -%}{%- set o.priority = o.priority + [(p, priority_labels[p])] -%}{%- endfor -%}
   {%- for c in categories -%}{%- set o.category = o.category + [(c, category_labels[c])] -%}{%- endfor -%}
   {%- for b in billing_buckets -%}{%- set o.billing = o.billing + [(b, billing_labels[b])] -%}{%- endfor -%}
-  <form method="POST" action="{{ url_for('pm.ticket_triage', id=t.id) }}"
+  <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
         class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-2">
     {{ select_dropdown("status", o.status, t.status, size="sm", full_width=true) }}
     {{ select_dropdown("priority", o.priority, t.priority, size="sm", full_width=true) }}
@@ -166,11 +167,11 @@
   </form>
 
   <div class="mt-2 flex flex-wrap gap-2">
-    <form method="POST" action="{{ url_for('pm.ticket_flag', id=t.id) }}">
+    <form method="POST" data-live-action action="{{ url_for('pm.ticket_flag', id=t.id) }}">
       <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">
         {{ "Stop circling back" if t.followup_flagged else "Circle back on this" }}</button>
     </form>
-    <form method="POST" action="{{ url_for('pm.ticket_scope', id=t.id) }}">
+    <form method="POST" data-live-action action="{{ url_for('pm.ticket_scope', id=t.id) }}">
       <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">
         {{ "Bring back in scope" if t.out_of_scope else "Out of scope" }}</button>
     </form>
@@ -204,7 +205,7 @@
       {% for c in stale %}{{ c.name }}{% if c.hub_pull_note %} ({{ c.hub_pull_note }}){% else %} (never asked){% endif %}{{ ', ' if not loop.last }}{% endfor %}
     </p>
   </div>
-  <form method="POST" action="{{ url_for('pm.tickets_resync') }}" class="shrink-0">
+  <form method="POST" data-live-action action="{{ url_for('pm.tickets_resync') }}" class="shrink-0">
     <input type="hidden" name="next" value="{{ request.full_path }}">
     <button type="submit"
             class="inline-flex items-center px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">

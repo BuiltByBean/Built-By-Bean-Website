@@ -15,7 +15,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6 stagger-in">
+<div data-live="results" class="space-y-6 stagger-in">
 
     {% if providers %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -79,7 +79,7 @@
                     Monthly costs
                 </a>
                 {% endif %}
-                <form method="POST" action="{{ url_for('service_costs.provider_sync', id=provider.id) }}">
+                <form method="POST" data-live-action action="{{ url_for('service_costs.provider_sync', id=provider.id) }}">
                     <button type="submit" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-900/30 text-brand-400 hover:bg-brand-900/50 transition-colors">
                         {% if provider.name == 'railway' %}Refresh projects{% else %}Sync Now{% endif %}
                     </button>
