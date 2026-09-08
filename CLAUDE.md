@@ -56,15 +56,48 @@ there.
 
 ## Needs attention
 
-`pm/attention_routes.py` is the one page that says what the board has
-noticed is waiting on Michael - contracts a client sent back, hosting
-fees under the floor, invoices past due, catalogue rewrites waiting on a
-yes, tickets untriaged or flagged, builds past their promised date with
-no go-live - worst first, each row carrying the press that resolves it.
-Its own nav section, top of the sidebar, with the total as the badge
-(`attention_counts()` in the context processor). A page that learns to
-notice something new adds it HERE, not a badge of its own; the inbox
-decisions take `next` so a press on this page comes back to it.
+`pm/attention_routes.py` is the mail waiting on a reply, and nothing else.
+It carried seven signals once - declined contracts, hosting fees under the
+floor, overdue invoices, catalogue rewrites, untriaged tickets, late
+builds and mail - and six of them already had a home on the page that owns
+the work, which made this a page to skim rather than clear. Mail was the
+only one with nowhere else to be answered. Hosting still reads its own
+sidebar badge out of `attention_counts()`, so that dict keeps a `hosting`
+key that is not a row on the page; `total` is the mail alone.
+
+Each row carries Reply and Dismiss. Dismiss is `messages.archive`, which
+archives the inbound thread AND the row pressed - it matched the thread
+alone once, so a message with no `thread_id` was left untouched while the
+flash still said "Archived." A press that reports success has to have
+acted on the thing that was pressed.
+
+A dismissal holds across a sync because `mail_service.ingest` only ever
+inserts. It hung entirely on the Message-ID header though, with the check
+SKIPPED when that header was absent, and the IMAP search reaches two days
+behind the newest row - so a mail with no Message-ID was re-inserted every
+five minutes as a NEW row with a new id and a new status, and archiving it
+did nothing anybody could see. Mail without that header now gets a
+fingerprint of its sender, date and subject.
+
+## Tickets travel both ways
+
+Tickets are PUSHED here by each client app's outbox, and `hub.fetch` is
+the board asking for them: the same signed POST as a push, because the
+signature covers a body and a GET has none. Daily, five minutes after boot
+so a deploy is also a catch-up, plus a Resync button on the tickets page.
+`Client.hub_pulled_at` and `hub_pull_note` are when the board last asked
+and what came back, and the tickets page names the apps that are not
+answering rather than drawing an empty list. A 200 that is not JSON is a
+failure, not an empty list of tickets.
+
+Only Talent Booker and Kuper Plumbing speak this hub, and each answers
+`/api/hub/tickets/since` by calling its OWN outbox builder rather than
+writing the payload a second time. The board's side is the same:
+`_apply_hub_ticket` is lifted out of the push endpoint and the pull goes
+through it, so a pulled ticket cannot overwrite triage that a pushed one
+respects. Two builders is two shapes and two ingest paths is two answers
+to "what may an update touch", and in both cases the copy that drifts is
+the one nobody watches.
 
 ## The mail comes in
 
