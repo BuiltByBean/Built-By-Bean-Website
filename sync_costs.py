@@ -55,8 +55,33 @@ def main():
             print(f"  {name:12} ok      {count} cost entr{'y' if count == 1 else 'ies'}")
 
     print(f"{len(results) - failed}/{len(results)} providers synced")
+    _invoices(app)
     _sweep()
     return 1 if failed == len(results) else 0
+
+
+def _invoices(app):
+    """Pull Stripe's invoices into local rows, on the same nightly run.
+
+    Client.total_revenue sums local rows, and a local row used to exist only
+    for an invoice the board itself raised: the webhook dropped anything else
+    on the floor. So a subscription invoice Stripe wrote on its own, or one
+    raised in the dashboard, showed on the invoices page (which reads Stripe
+    live) and nowhere else. Cason Kuper read Total Revenue $0.00 against
+    $3,500 collected.
+
+    Its failure is reported and never turns a good cost sync into a bad exit,
+    the same way the repo sweep is treated."""
+    try:
+        from stripe_service import import_invoices_from_stripe
+        with app.app_context():
+            made, updated, orphans = import_invoices_from_stripe()
+        print(f"invoices: {made} new, {updated} updated", flush=True)
+        if orphans:
+            print(f"  {len(orphans)} had no client here: "
+                  f"{', '.join(orphans[:6])}", flush=True)
+    except Exception as err:  # noqa: BLE001
+        print(f"invoice import failed: {str(err)[:200]}", flush=True)
 
 
 def _sweep():

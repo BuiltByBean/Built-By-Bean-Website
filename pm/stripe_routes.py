@@ -11,6 +11,7 @@ from stripe_service import (
     create_stripe_customer, get_stripe_balance, get_recent_payments,
     get_recent_payouts, create_stripe_invoice, finalize_and_send_invoice,
     void_stripe_invoice, sync_invoice_from_stripe, handle_webhook_event,
+    import_invoices_from_stripe,
     process_invoice_event, ensure_products_exist, get_stripe_invoice_totals,
     get_stripe_invoices,
 )
@@ -294,6 +295,34 @@ def invoices_list():
 
 
 # ── Generate Invoice ────────────────────────────────────────
+
+
+@stripe_bp.route("/invoices/import", methods=["POST"])
+@login_required
+def invoices_import():
+    """Write Stripe's invoices down as local rows, now.
+
+    This page has always been right, because it reads Stripe live. Everything
+    else on the board reads local rows, and a local row only existed for an
+    invoice the board itself raised, so the client page and the hosting page
+    were reading an incomplete copy of what this page was showing correctly.
+
+    Also runs nightly. The button is for the minute after money arrives.
+    """
+    made, updated, orphans = import_invoices_from_stripe()
+    if made:
+        flash(f"{made} invoice{'' if made == 1 else 's'} written down, "
+              f"{updated} brought up to date.", "success")
+    else:
+        flash(f"Nothing new. {updated} already recorded and up to date.", "info")
+    if orphans:
+        # Named rather than swallowed. An import that quietly leaves money out
+        # is the bug this whole thing exists to fix.
+        names = ", ".join(orphans[:4]) + ("..." if len(orphans) > 4 else "")
+        flash(f"{len(orphans)} could not be placed: {names}. Their Stripe "
+              "customer is not on any client here; set it on the client.",
+              "warning")
+    return redirect(request.form.get("next") or url_for("stripe.invoices_list"))
 
 
 @stripe_bp.route("/invoices/new", methods=["GET", "POST"])

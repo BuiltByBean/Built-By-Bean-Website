@@ -18,6 +18,22 @@
 {% block page_subtitle %}Every invoice, and the account behind them{% endblock %}
 
 {% block header_actions %}
+{# This page reads Stripe live, which is why it has always been right. The
+   rest of the board reads local rows, and a local row only existed for an
+   invoice the board raised itself, so the client and hosting pages were
+   reading an incomplete copy of what is shown here. This writes what is on
+   this screen down. It also runs nightly; the press is for the minute after
+   money arrives. #}
+<form method="POST" action="{{ url_for('stripe.invoices_import') }}">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <button type="submit"
+            class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+        </svg>
+        Record these
+    </button>
+</form>
 <a href="{{ url_for('stripe.invoice_create') }}"
    class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
     + New Invoice

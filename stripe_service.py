@@ -398,6 +398,95 @@ def get_stripe_invoices(ttl=300):
     return rows
 
 
+def import_invoices_from_stripe(ttl=0):
+    """Pull every Stripe invoice into a local row. Returns (made, updated, err).
+
+    WHY THIS HAS TO EXIST. Client.total_revenue sums LOCAL invoice rows, and
+    until now a local row only came into being when the board itself raised
+    the invoice: the app creates one in stripe_routes, and the webhook looks
+    for an existing row by stripe_invoice_id and DROPS the event when there
+    is none, logging "No matching local invoice" and returning success.
+
+    So anything raised in the Stripe dashboard, and every invoice Stripe
+    generates on its own for a subscription, existed only at Stripe. The
+    invoices page reads Stripe live so it looked right; the client page reads
+    local rows so it read zero. Cason Kuper showed Total Revenue $0.00 with
+    $3,500 collected, and the hosting page had him at "collected $0.00,
+    $50.00 unpaid" for a subscription invoice nobody here ever wrote.
+
+    Two sources of truth for the same fact, and the one the client page used
+    was the incomplete one.
+
+    Matched to a client through Client.stripe_customer_id, which is the id
+    Stripe already knows them by.
+
+    invoices.client_id is NOT NULL, deliberately, because an invoice goes with
+    the client when the client goes. So an invoice whose Stripe customer is
+    not a client here CANNOT be stored, and the count of those comes back with
+    the others rather than being swallowed. Swallowing it is the whole bug
+    being fixed: a number that quietly leaves money out is worse than one that
+    says it could not place it. The remedy is to put the Stripe customer id on
+    the client, which is a field on the client edit form.
+
+    Fields the BOARD owns are never overwritten: project_id, notes, and the
+    line items it wrote. Everything Stripe owns is taken from Stripe every
+    time, because Stripe is where those change.
+    """
+    from models import db, Client, Invoice
+
+    rows = get_stripe_invoices(ttl=ttl)
+    if not rows:
+        return 0, 0, None
+
+    by_customer = {
+        c.stripe_customer_id: c
+        for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
+    }
+    existing = {
+        inv.stripe_invoice_id: inv
+        for inv in Invoice.query.filter(Invoice.stripe_invoice_id.isnot(None)).all()
+    }
+
+    made = updated = 0
+    orphans = []
+    for row in rows:
+        sid = row.get("id")
+        if not sid:
+            continue
+        local = existing.get(sid)
+        owner = by_customer.get(row.get("customer_id"))
+        if local is None:
+            if owner is None:
+                # Nowhere to put it. Named, not dropped.
+                orphans.append(row.get("number") or sid)
+                continue
+            local = Invoice(stripe_invoice_id=sid, client_id=owner.id)
+            db.session.add(local)
+            existing[sid] = local
+            made += 1
+        else:
+            updated += 1
+
+        local.status = row.get("status") or local.status
+        local.invoice_number = row.get("number") or local.invoice_number
+        local.total = row.get("total") or 0.0
+        local.amount_due = row.get("amount_due") or 0.0
+        local.amount_paid = row.get("amount_paid") or 0.0
+        if local.subtotal in (None, 0.0):
+            local.subtotal = local.total
+        if row.get("due_date"):
+            local.due_date = row["due_date"].date() if hasattr(row["due_date"], "date") else row["due_date"]
+        if row.get("paid_at") and not local.paid_at:
+            local.paid_at = row["paid_at"]
+        # Only fill an owner in, never take one away: somebody may have
+        # attached an invoice to a client by hand that Stripe cannot know.
+        if local.client_id is None and owner is not None:
+            local.client_id = owner.id
+
+    db.session.commit()
+    return made, updated, orphans
+
+
 def get_stripe_invoice_totals(ttl=300):
     """Every Stripe invoice, bucketed by what state its money is in.
 
@@ -786,7 +875,7 @@ def handle_webhook_event(payload, sig_header):
 
 
 def process_invoice_event(event):
-    from models import db, Invoice, StripeWebhookLog
+    from models import db, Client, Invoice, StripeWebhookLog
 
     event_type = event["type"]
     invoice_data = event["data"]["object"]
@@ -805,10 +894,41 @@ def process_invoice_event(event):
 
     local_invoice = Invoice.query.filter_by(stripe_invoice_id=stripe_invoice_id).first()
     if not local_invoice:
-        log.processed = True
-        log.error_message = "No matching local invoice"
-        db.session.commit()
-        return True
+        # It used to stop here, mark the event processed and return success,
+        # so every invoice the board did not raise itself was dropped on the
+        # floor: subscription invoices Stripe generates on its own, and
+        # anything raised in the dashboard. Client.total_revenue sums local
+        # rows, so that money simply did not exist to this board.
+        #
+        # A row is made instead. Its owner comes from the Stripe customer id
+        # when a client carries one, and stays empty otherwise rather than
+        # the event being refused.
+        customer_id = getattr(invoice_data, "customer", None)
+        if not isinstance(customer_id, str):
+            customer_id = getattr(customer_id, "id", None)
+        owner = (Client.query.filter_by(stripe_customer_id=customer_id).first()
+                 if customer_id else None)
+        if owner is None:
+            # invoices.client_id is NOT NULL, so there is nowhere to put this
+            # one. Say which customer it was, rather than the old message
+            # that said only that nothing matched: the remedy is to put that
+            # id on a client, and a log line that does not name it cannot be
+            # acted on.
+            log.processed = True
+            log.error_message = (
+                "No client carries Stripe customer %s, so invoice %s could "
+                "not be recorded" % (customer_id or "?", stripe_invoice_id))
+            db.session.commit()
+            return True
+        local_invoice = Invoice(stripe_invoice_id=stripe_invoice_id,
+                                client_id=owner.id, status="draft")
+        local_invoice.invoice_number = getattr(invoice_data, "number", None)
+        local_invoice.total = (getattr(invoice_data, "total", 0) or 0) / 100.0
+        local_invoice.amount_due = (getattr(invoice_data, "amount_due", 0) or 0) / 100.0
+        local_invoice.subtotal = local_invoice.total
+        db.session.add(local_invoice)
+        db.session.flush()
+        log.error_message = "Made a local invoice for one raised outside the board"
 
     # Use getattr for Stripe SDK v15+ StripeObject compatibility
     if event_type == "invoice.finalized":
