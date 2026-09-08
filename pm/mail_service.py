@@ -22,6 +22,7 @@ client, and go out through Gmail's SMTP, so Gmail keeps them in Sent as
 though they had been typed there.
 """
 import email
+import hashlib
 import html
 import imaplib
 import logging
@@ -170,21 +171,45 @@ def _when(msg):
         return datetime.now(timezone.utc)
 
 
+def _fingerprint(msg, addr):
+    """A stable id for a mail that carries no Message-ID of its own.
+
+    Every sync searches a window that reaches two days behind the newest row,
+    so the same mail is read again on every pass. Dedupe hung entirely on the
+    Message-ID header, and the check was skipped when that header was absent -
+    so a mail without one was inserted afresh every five minutes, and archiving
+    it did nothing, because the row that came back was a different row. That is
+    what "the email I dismissed is back" was.
+
+    Sender, date and subject are what the mail itself supplies and do not change
+    between reads. Marked `sha256:` so it cannot collide with a real Message-ID,
+    which always carries an @.
+    """
+    seed = " |> ".join((
+        addr,
+        (msg.get("Date") or "").strip(),
+        (_decode(msg.get("Subject")) or "").strip(),
+    ))
+    return "sha256:" + hashlib.sha256(seed.encode("utf-8", "replace")).hexdigest()
+
+
 def ingest(msg):
     """One parsed mail into one row. Returns the row, or None if it was
     already here."""
-    external_id = (msg.get("Message-ID") or "").strip()[:300]
-    if external_id and Message.query.filter_by(external_id=external_id).first():
-        return None
     name, addr = parseaddr(_decode(msg.get("From")))
     addr = (addr or "").strip().lower()
     if not addr:
+        return None
+    external_id = (msg.get("Message-ID") or "").strip()[:300]
+    if not external_id:
+        external_id = _fingerprint(msg, addr)
+    if Message.query.filter_by(external_id=external_id).first():
         return None
     row = Message(
         source="gmail", direction="in", from_name=_decode(name)[:200],
         from_email=addr[:200], to_email=parseaddr(_decode(msg.get("To")))[1][:200],
         subject=_decode(msg.get("Subject"))[:300], body=body_text(msg),
-        external_id=external_id or None, received_at=_when(msg), status="new",
+        external_id=external_id, received_at=_when(msg), status="new",
     )
     client = match_client(addr)
     row.client_id = client.id if client else None
