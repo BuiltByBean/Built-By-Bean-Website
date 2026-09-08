@@ -1145,7 +1145,14 @@
                   last, so the primary sits hard against the trailing edge and
                   back does not take the spot the most-used control wants.
                 #}
-                <div class="flex items-center gap-3 flex-wrap justify-end">
+                {# ml-auto, not just justify-between on the row. When the row
+                   wraps, this group is the only item on the second line, and
+                   justify-between puts a lone item at the START of its line -
+                   so back and the page action came back to the left edge at
+                   exactly the width where wrapping begins, which is every
+                   phone. The auto margin pushes the group right on its own
+                   line as well as on a shared one. #}
+                <div class="flex items-center gap-3 flex-wrap justify-end ml-auto">
                     {% block back %}{% endblock %}
                     {% if time_tracking %}{% include "pm/components/timer_widget.html" %}{% endif %}
                     {% block header_actions %}{% endblock %}

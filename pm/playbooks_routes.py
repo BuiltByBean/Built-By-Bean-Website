@@ -181,14 +181,8 @@ def playbook_edit(slug):
                            providers=_providers(), categories=Playbook.CATEGORIES, editing=True)
 
 
-@playbooks_bp.route("/<int:id>/delete", methods=["POST"])
-@login_required
-def playbook_delete(id):
-    playbook = db.session.get(Playbook, id)
-    if playbook is None:
-        abort(404)
-    name = playbook.display_name
-    db.session.delete(playbook)
-    db.session.commit()
-    flash(f"{name} playbook deleted.", "success")
-    return redirect(url_for("playbooks.playbooks_index"))
+# No delete route, deliberately. A playbook is the written record of how a
+# vendor gets set up and it outlives every project that used it, so there is
+# nothing that wants deleting one and a hidden endpoint is still an endpoint.
+# Taking the button away and leaving the route would only mean the next person
+# to read the file puts the button back.

@@ -161,15 +161,11 @@
     </section>
     {% endfor %}
 
-    {# Delete sits at the bottom, on the trailing edge, away from Edit in the
-       header. Two destructive-adjacent controls next to each other is how the
-       wrong one gets pressed. #}
-    <div class="flex justify-end pt-2">
-        <form method="POST" action="{{ url_for('playbooks.playbook_delete', id=playbook.id) }}">
-            {{ confirm_button('Delete playbook', 'Delete it, for good?',
-                              btn_class='inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-red-500/30 bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors') }}
-        </form>
-    </div>
+    {# No delete. A playbook is the written record of how a vendor is set up,
+       and it outlives every project that used it: deleting one throws away
+       what was learned the last three times somebody wired that vendor, and
+       there is no version of "we do not use them any more" that is worth
+       that. Edit it, or leave it. #}
 
 </div>
 {% endblock %}

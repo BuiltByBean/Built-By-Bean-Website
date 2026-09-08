@@ -11,6 +11,15 @@
 
 {% block header_actions %}
 <div class="flex items-center gap-2">
+    {# Delete was at the very bottom, past a thread that can be any length.
+       Distance is not what makes it safe, the confirm is: it lives here where
+       it can be reached, and ml-auto keeps it off the end of the group so it
+       is never adjacent to the button pressed most. #}
+    <form method="POST" action="{{ url_for('pm.ticket_delete', id=ticket.id) }}"
+          class="order-last ml-2">
+        {{ confirm_button('Delete', 'Delete it, its thread and its data?',
+                          btn_class='min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+    </form>
     {% if time_tracking %}
     <a href="{{ url_for('pm.time_create', project_id=ticket.project_id, ticket_id=ticket.id) }}"
        class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
@@ -273,13 +282,4 @@
     {% endif %}
 </div>
 
-<!-- Delete -->
-{# The house component rather than its own copy of the same idea: it wraps
-   at 375, where the old one-line confirm row ran off the screen, and the
-   resting button gets a border like everything else that acts on press. #}
-<form method="POST" action="{{ url_for('pm.ticket_delete', id=ticket.id) }}"
-      class="flex flex-wrap">
-    {{ confirm_button('Delete ticket', 'Delete it, its thread and its data?',
-                      btn_class='min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
-</form>
 {% endblock %}
