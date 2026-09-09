@@ -12,8 +12,8 @@ which also registers the bridge. The order alone is one copy:
 
 Every session on this machine carries the pm-guidance tools: get_rules,
 get_feature_guidance, get_playbook, report_lesson, suggest_update,
-get_clients, upsert_project, log_expense, log_time and
-register_hosting_resource. They talk to the deployed board at
+get_clients, upsert_project, log_expense, log_time,
+register_hosting_resource and register_app. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
 session agrees on. The bridge is registered at user scope and reads
 PM_GUIDANCE_KEY from the environment. The bootstrap also installs three
@@ -36,7 +36,9 @@ lesson. That is the harness enforcing this order, not a request.
   suggest_update the moment it is learned, not at the end of the work.
 - Doing real client work: upsert_project for the project, log_time and
   log_expense as they happen, register_hosting_resource for anything
-  stood up.
+  stood up, and register_app the moment a public URL is verified - a
+  build is not stood up until it is on My Apps, and a green
+  register_hosting_resource without a url does NOT put it there.
 - If the tools are missing from a session, or answer 401, say so first
   and do not pretend the loop is working. The fix is the registration in
   ~/.claude.json and PM_GUIDANCE_KEY in the environment, then a fresh

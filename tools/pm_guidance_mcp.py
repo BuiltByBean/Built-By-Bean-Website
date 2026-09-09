@@ -269,7 +269,9 @@ TOOLS = [
             "- a Railway service, a Cloudflare domain, a Twilio number - "
             "mapped to their project, so its cost is held against that "
             "build's hosting fee. Provider is the board's name for the "
-            "vendor (railway, cloudflare, twilio...)."),
+            "vendor (railway, cloudflare, twilio...). Pass url (the public "
+            "address, once verified) and the same call puts the app on My "
+            "Apps; without it the tile is NOT created - the reply says so."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -283,8 +285,49 @@ TOOLS = [
                           "description": "A human name for it"},
                 "monthly_cost": {"type": "number",
                                  "description": "If the provider bills flat"},
+                "url": {"type": "string",
+                        "description": "The public address this serves, once "
+                                       "verified - creates or updates the My Apps tile"},
+                "app_name": {"type": "string",
+                             "description": "The tile's name (default: the project)"},
+                "github_url": {"type": "string",
+                               "description": "owner/repo or the full address"},
+                "description": {"type": "string"},
             },
             "required": ["provider", "resource_identifier", "client"],
+        },
+    },
+    {
+        "name": "register_app",
+        "description": (
+            "Put a deployed thing on the board's My Apps page - the moment its "
+            "public URL is verified, from the same session that verified it. "
+            "Idempotent on the address: a second call edits the tile rather than "
+            "duplicating it. Give provider + resource_identifier too and the "
+            "hosting mapping is filed in the same call. A build is not stood up "
+            "until it is here."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The tile's name"},
+                "url": {"type": "string",
+                        "description": "The public address, e.g. https://acme.example.com"},
+                "client": {"type": "string"},
+                "project": {"type": "string"},
+                "repo": {"type": "string",
+                         "description": "owner/repo on GitHub, or the full address"},
+                "description": {"type": "string"},
+                "railway_url": {"type": "string",
+                                "description": "The deploy that serves it (derived from a "
+                                               "Railway project id when omitted)"},
+                "provider": {"type": "string",
+                             "description": "railway, cloudflare... to file the hosting "
+                                            "mapping in the same call"},
+                "resource_identifier": {"type": "string",
+                                        "description": "The id the provider knows it by"},
+                "monthly_cost": {"type": "number"},
+            },
+            "required": ["name", "url", "client"],
         },
     },
 ]
@@ -474,14 +517,36 @@ def tool_log_time(args):
             + ").")
 
 
+def _app_line(app):
+    icon = {"fetched": "icon fetched", "kept": "icon kept",
+            "none": "no icon offered - it shows initials"}.get(app.get("icon"), "")
+    return (f"My Apps: {app['action']} tile '{app['name']}' (id {app['id']}) "
+            f"at {app['url']}" + (f", {icon}" if icon else "") + ".")
+
+
 def tool_register_hosting_resource(args):
     data, err = _post("/api/guidance/hosting-resources", args)
     if err:
         return err
     where = f" on {data['project']}" if data.get("project") else ""
-    return (f"{data['action'].capitalize()} {data['provider']} resource for "
+    line = (f"{data['action'].capitalize()} {data['provider']} resource for "
             f"{data['client']}{where} (mapping {data['id']}). The hosting "
             "page will hold its cost against the fee.")
+    if data.get("app"):
+        line += " " + _app_line(data["app"])
+    elif data.get("note"):
+        line += " NOT on My Apps: " + data["note"] + "."
+    return line
+
+
+def tool_register_app(args):
+    data, err = _post("/api/guidance/apps", args)
+    if err:
+        return err
+    line = _app_line(data)
+    if data.get("mapping"):
+        line += f" Hosting mapping {data['mapping']} filed."
+    return line
 
 
 HANDLERS = {
@@ -496,6 +561,7 @@ HANDLERS = {
     "log_expense": tool_log_expense,
     "log_time": tool_log_time,
     "register_hosting_resource": tool_register_hosting_resource,
+    "register_app": tool_register_app,
 }
 
 

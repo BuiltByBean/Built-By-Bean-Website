@@ -38,6 +38,8 @@ from models import (db, Feature, Playbook, PlaybookStep, Product,
                     CatalogueProposal, Client, Project, Expense, TimeEntry,
                     ServiceProvider, ServiceMapping, ServiceCostEntry,
                     ProviderInvoice)
+from models import AppLink  # the My Apps tile (register_app)
+from pm.apps_routes import _normalise as _normalise_url, _refresh_icon as _refresh_app_icon
 
 guidance_bp = Blueprint("guidance", __name__, url_prefix="/api/guidance")
 
@@ -985,33 +987,20 @@ def log_time():
                     "project": project.name, "billable": entry.cost})
 
 
-@guidance_bp.route("/hosting-resources", methods=["POST"])
-def register_hosting_resource():
-    """The infrastructure a session just stood up, mapped to the build it
-    belongs to - which is what lets the hosting page hold that build's fee
-    against what it actually costs."""
-    body = request.get_json(silent=True) or {}
+def _upsert_mapping(body, client, project):
+    """The cost mapping for one provider resource. Returns (mapping, created, error)."""
     provider_ref = _cap(body.get("provider"), 50).lower()
     provider = ServiceProvider.query.filter(
         db.or_(ServiceProvider.name.ilike(provider_ref),
                ServiceProvider.display_name.ilike(provider_ref))).first()
     if provider is None:
         names = ", ".join(p.name for p in ServiceProvider.query.all())
-        return jsonify({"error": f"no provider {provider_ref!r}; this board "
-                                 f"tracks: {names}"}), 400
+        return None, False, (f"no provider {provider_ref!r}; this board "
+                             f"tracks: {names}")
     identifier = _cap(body.get("resource_identifier"), 300)
     if not identifier:
-        return jsonify({"error": "resource_identifier is required - the id "
-                                 "the provider knows the thing by"}), 400
-    client, err = _find_client(body.get("client"))
-    if err:
-        return jsonify({"error": err}), 400
-    project = None
-    if body.get("project"):
-        project, err = _find_project(client, body.get("project"))
-        if err:
-            return jsonify({"error": err}), 400
-
+        return None, False, ("resource_identifier is required - the id "
+                             "the provider knows the thing by")
     mapping = ServiceMapping.query.filter_by(
         provider_id=provider.id, resource_identifier=identifier).first()
     created = mapping is None
@@ -1028,8 +1017,157 @@ def register_hosting_resource():
     if monthly is not None:
         mapping.monthly_cost = monthly
     mapping.is_active = True
+    mapping.provider = provider
+    return mapping, created, None
+
+
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+_REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
+
+
+def _repo_url(raw):
+    """`BuiltByBean/Talent-Booker` or a full address, as a link."""
+    raw = _cap(raw, 500)
+    if not raw:
+        return None
+    if _REPO.match(raw):
+        return "https://github.com/" + raw
+    return _normalise_url(raw)[:500] or None
+
+
+def _upsert_app(body, client, project):
+    """The My Apps tile for a deployed thing, created or updated. Idempotent on the
+    ADDRESS, because the address is what a deployed thing is: the same host edits the
+    same tile, so a second deploy or a re-run never duplicates. A tile with no host match
+    is still matched by name within the project (or unattached), for the rows that were
+    typed in by hand before this route existed. Returns (link, created, icon, error);
+    `icon` is True when a favicon was fetched, False when the site offered none, None
+    when an icon was already there and left alone."""
+    url = _normalise_url(_cap(body.get("url"), 500))
+    if not url.startswith(("http://", "https://")):
+        return None, False, None, ("url is required - the public address that was just "
+                                   "verified, e.g. https://acme.example.com")
+    name = _cap(body.get("app_name") or body.get("name"), 120) \
+        or (project.name if project else client.name)
+    host = url.split("//", 1)[-1].split("/", 1)[0].lower()
+    link = None
+    for row in AppLink.query.filter(AppLink.url.ilike(f"%{host}%")).all():
+        if row.host.lower() == host:
+            link = row
+            break
+    if link is None and project is not None:
+        link = AppLink.query.filter(AppLink.project_id == project.id,
+                                    AppLink.name.ilike(name)).first()
+    if link is None:
+        link = AppLink.query.filter(AppLink.project_id.is_(None),
+                                    AppLink.name.ilike(name)).first()
+    created = link is None
+    if created:
+        link = AppLink()
+        db.session.add(link)
+    moved = created or link.url != url
+    link.name = name
+    link.url = url[:500]
+    description = _cap(body.get("description"), 2000)
+    if description:
+        link.description = description
+    repo = _repo_url(body.get("github_url") or body.get("repo"))
+    if repo:
+        link.github_url = repo
+    railway_url = _normalise_url(_cap(body.get("railway_url"), 500))
+    if railway_url:
+        link.railway_url = railway_url[:500]
+    if project is not None:
+        link.project_id = project.id
+    db.session.flush()
+    # The icon is the app's own, fetched once (see apps_routes). An icon somebody uploaded
+    # by hand is never replaced by a fetch, and a failed fetch never fails the registration:
+    # the tile with initials is still the tile, which is the whole point of this route.
+    icon = None
+    given = bool(link.icon_file) and link.icon_source is None
+    if (moved and not given) or not link.icon_file:
+        try:
+            icon = bool(_refresh_app_icon(link))
+        except Exception:
+            icon = False
+    return link, created, icon, None
+
+
+def _app_summary(link, created, icon):
+    return {"action": "created" if created else "updated", "id": link.id,
+            "name": link.name, "url": link.url,
+            "icon": ("fetched" if icon else ("kept" if link.icon_file else "none")),
+            "project": link.project.name if link.project else None}
+
+
+@guidance_bp.route("/hosting-resources", methods=["POST"])
+def register_hosting_resource():
+    """The infrastructure a session just stood up, mapped to the build it
+    belongs to - which is what lets the hosting page hold that build's fee
+    against what it actually costs. With a `url`, the same call puts the
+    thing on My Apps (rule: a build is not stood up until it is there);
+    without one, the reply says so, because a green mapping used to read
+    as "the board knows about this app" when it did not."""
+    body = request.get_json(silent=True) or {}
+    client, err = _find_client(body.get("client"))
+    if err:
+        return jsonify({"error": err}), 400
+    project = None
+    if body.get("project"):
+        project, err = _find_project(client, body.get("project"))
+        if err:
+            return jsonify({"error": err}), 400
+    mapping, created, err = _upsert_mapping(body, client, project)
+    if err:
+        return jsonify({"error": err}), 400
+    out = {"action": "registered" if created else "updated",
+           "id": mapping.id, "provider": mapping.provider.display_name,
+           "client": client.name,
+           "project": project.name if project else None, "app": None}
+    if body.get("url"):
+        if (mapping.provider.name or "").lower() == "railway" and not body.get("railway_url") \
+                and _UUID.match(mapping.resource_identifier or ""):
+            body = dict(body, railway_url="https://railway.com/project/" + mapping.resource_identifier)
+        link, app_created, icon, err = _upsert_app(body, client, project)
+        if err:
+            db.session.rollback()
+            return jsonify({"error": err}), 400
+        out["app"] = _app_summary(link, app_created, icon)
+    else:
+        out["note"] = ("no url given, so My Apps was not touched: pass url (the public "
+                       "address, once verified) or call register_app")
     db.session.commit()
-    return jsonify({"action": "registered" if created else "updated",
-                    "id": mapping.id, "provider": provider.display_name,
-                    "client": client.name,
-                    "project": project.name if project else None})
+    return jsonify(out)
+
+
+@guidance_bp.route("/apps", methods=["POST"])
+def register_app():
+    """A deployed thing onto My Apps, the moment its public address is verified -
+    the one point where every field is known to be true rather than intended. With
+    provider + resource_identifier it files the hosting mapping in the same call."""
+    body = request.get_json(silent=True) or {}
+    client, err = _find_client(body.get("client"))
+    if err:
+        return jsonify({"error": err}), 400
+    project = None
+    if body.get("project"):
+        project, err = _find_project(client, body.get("project"))
+        if err:
+            return jsonify({"error": err}), 400
+    mapping = None
+    if body.get("provider") or body.get("resource_identifier"):
+        mapping, _m_created, err = _upsert_mapping(body, client, project)
+        if err:
+            return jsonify({"error": err}), 400
+        if (mapping.provider.name or "").lower() == "railway" and not body.get("railway_url") \
+                and _UUID.match(mapping.resource_identifier or ""):
+            body = dict(body, railway_url="https://railway.com/project/" + mapping.resource_identifier)
+    link, created, icon, err = _upsert_app(body, client, project)
+    if err:
+        db.session.rollback()
+        return jsonify({"error": err}), 400
+    db.session.commit()
+    out = _app_summary(link, created, icon)
+    out["client"] = client.name
+    out["mapping"] = mapping.id if mapping else None
+    return jsonify(out)
