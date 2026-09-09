@@ -326,6 +326,8 @@ TOOLS = [
                 "resource_identifier": {"type": "string",
                                         "description": "The id the provider knows it by"},
                 "monthly_cost": {"type": "number"},
+                "refresh_icon": {"type": "boolean",
+                                 "description": "Fetch the icon again (after a rebrand)"},
             },
             "required": ["name", "url", "client"],
         },

@@ -1085,7 +1085,10 @@ def _upsert_app(body, client, project):
     # the tile with initials is still the tile, which is the whole point of this route.
     icon = None
     given = bool(link.icon_file) and link.icon_source is None
-    if (moved and not given) or not link.icon_file:
+    # refresh_icon: the app's icon changed (a rebrand) - go and get it again, unless it
+    # was uploaded by hand, which was a choice and is never fetched over.
+    refresh = bool(body.get("refresh_icon")) and not given
+    if (moved and not given) or not link.icon_file or refresh:
         try:
             icon = bool(_refresh_app_icon(link))
         except Exception:
