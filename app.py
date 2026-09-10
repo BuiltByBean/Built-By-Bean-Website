@@ -2654,17 +2654,20 @@ def create_app():
 
         # Section 5
         section_heading("5. General Terms")
+        import contract_docs
         terms = [
             "All project scopes, timelines, and fees are confirmed in a signed Statement of Work (SOW) before work begins.",
             "Client is responsible for timely feedback, content, and approvals. Client-caused delays may affect project timelines.",
             "Built by Bean LLC has no obligation to perform any work beyond a delivered and accepted MVP unless separately contracted in writing.",
-            "Built by Bean LLC reserves the right to display completed work in its portfolio unless the client requests otherwise in writing.",
             "This engagement letter does not constitute a binding contract for services. A formal SOW governs each individual project or work request.",
             # Everything below is the protection that used to live only in the
             # SOW. A letter that sets pricing expectations and is signed by a
             # client is a document that can be argued about, so it carries the
             # same terms rather than relying on a SOW that may not exist yet.
-            "Built by Bean LLC retains ownership of the software it writes. On full payment the client receives a perpetual, non-exclusive, non-transferable license to use the delivered application for its own business, with no renewal and no recurring license fee. The client's own data remains the client's at all times.",
+            # The ownership words come from contract_docs.IP_TERMS, the one
+            # place they are written, so this letter and the SOW it precedes
+            # cannot disagree about who owns the code.
+            *contract_docs.IP_TERMS,
             "Built by Bean LLC provides services on a best-effort basis and is not liable for indirect, incidental, consequential or punitive damages, including loss of revenue, data or business opportunity. Total liability will not exceed the total fees paid by the client.",
             "Built by Bean LLC is not responsible for outages, data loss or service interruptions caused by third-party providers - hosting platforms, cloud storage, domain registrars, DNS providers, email delivery services, payment processors or mobile carriers - which operate under their own terms, and does not guarantee 100% uptime of any deployed application.",
             "The client is responsible for maintaining its own backups of any content, data or credentials it provides, and Built by Bean LLC is not responsible for loss of client-provided materials.",
@@ -3116,7 +3119,6 @@ def create_app():
             "All project scopes, timelines, and fees are confirmed in this signed SOW before work begins.",
             "Client is responsible for timely feedback, content, and approvals. Client-caused delays may affect the delivery timeline and do not extend the free maintenance window.",
             "Built by Bean LLC has no obligation to perform any work beyond the delivered and accepted MVP unless separately contracted in writing.",
-            "Built by Bean LLC reserves the right to display completed work in its portfolio unless the client requests otherwise in writing prior to project start.",
             "All fees are in USD. Late payments are subject to a $50 per day late fee for each day payment remains outstanding past the invoice due date.",
             "This SOW, once signed by both parties, constitutes a binding agreement for the scope and terms described herein.",
         ]
@@ -3130,14 +3132,14 @@ def create_app():
             "Built by Bean LLC does not guarantee 100% uptime or availability of any deployed application. While reasonable efforts will be made to ensure reliability, factors outside of Built by Bean LLC's control - including server failures, network outages, cyberattacks, and force majeure events - may impact availability.",
             "Client is solely responsible for maintaining backups of any content, data, or credentials provided to Built by Bean LLC during the project. Built by Bean LLC is not responsible for loss of client-provided materials.",
             "Built by Bean LLC's total liability under this SOW shall not exceed the total fees paid by the client under this agreement.",
-            # Built by Bean keeps the code and licenses its use. This replaced an
-            # assignment-on-payment clause that said the opposite of how the
-            # business actually runs, and which would have handed away the right
-            # to reuse anything across clients.
-            "All software, source code, designs, and other work product created by Built by Bean LLC remain the exclusive property of Built by Bean LLC. Upon receipt of full payment, Client is granted a perpetual, worldwide, non-exclusive, non-transferable license to use the delivered application for Client's own internal business purposes, with no renewal and no recurring license fee.",
-            "This license does not permit Client to resell, sublicense, distribute, or provide the software to any third party as a service. Built by Bean LLC retains the right to reuse the underlying code, components, methods, and techniques in other work for other clients.",
-            "Until full payment is received, Client is granted no license and has no right to use the work product.",
-            "Client data - including customer records, content, files, and any material Client provides or generates through the application - is and remains the sole property of Client at all times. Built by Bean LLC claims no ownership of it, will not sell or license it to any third party, and will provide Client a complete export in a machine-readable format on written request.",
+            # Who owns what: read from contract_docs.IP_TERMS, the one place
+            # those words are written, so this document, the engagement
+            # letter and the shorter agreements cannot describe the same
+            # right three different ways. Built by Bean keeps the code and
+            # may do anything at all with it; the client holds a perpetual
+            # license with nothing to renew; hosting is the only recurring
+            # charge and is not a license fee.
+            *contract_docs.IP_TERMS,
             "Client is responsible for ensuring that any content, images, trademarks, or materials provided for use in the project do not infringe on third-party intellectual property rights. Client agrees to indemnify Built by Bean LLC against any claims arising from client-provided materials.",
             "This agreement shall be governed by the laws of the State of Texas. Any disputes arising under this agreement shall be resolved in the courts of the State of Texas.",
         ]

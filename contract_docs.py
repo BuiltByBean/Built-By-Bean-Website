@@ -250,6 +250,66 @@ HOSTING_RAISE_REASON = (
 )
 
 
+# ── Who owns what ────────────────────────────────────────
+#
+# Written once and read into the Statement of Work, the engagement letter and
+# the standalone protections on the shorter documents, because three copies of
+# an ownership clause are three clauses that will say three different things
+# the first time one of them is edited, and this is the one clause that must
+# not.
+#
+# What it says, in the order a client reads it. The code is Built by Bean's,
+# outright, and stays so after payment. Built by Bean may do anything at all
+# with it, including packaging it up and selling it as a product to anybody,
+# and owes the client nothing for that. What the client buys is a perpetual
+# license to use the application they paid for, with no renewal and no
+# recurring license fee: they do not pay monthly to keep the right to use it.
+# The one recurring charge is hosting, which is a different thing and says so,
+# and which suspends access when unpaid without ending the license. Their
+# data is theirs. An earlier version said only that Built by Bean "retains the
+# right to reuse the underlying code in other work for other clients", which
+# is true and narrower than the freedom the business actually needs.
+IP_TERMS = [
+    "All software, source code, designs, documentation and other work product created "
+    "by Built by Bean LLC, including everything built for or delivered to the Client, is "
+    "and remains the sole and exclusive property of Built by Bean LLC. Nothing in this "
+    "agreement, and no payment made under it, transfers ownership of any of it to the "
+    "Client.",
+
+    "Built by Bean LLC is free to use, reuse, copy, modify, combine, license, distribute, "
+    "sell and otherwise deal with that work product, in whole or in part, in any way and "
+    "for any purpose it chooses, including reusing it in work for other clients and "
+    "packaging it, or any product derived from it, for license or sale to anyone. It owes "
+    "the Client no notice, consent, credit, royalty or other payment for doing so.",
+
+    "On receipt of full payment of the build fee, the Client is granted a perpetual, "
+    "royalty-free, non-exclusive, non-transferable license to use the delivered "
+    "application for the Client's own business, with no renewal, no expiry and no "
+    "recurring license fee. Until full payment is received, the Client has no license and "
+    "no right to use the work product.",
+
+    "That license does not permit the Client to copy, resell, sublicense, distribute or "
+    "provide the application or its code to any third party, or to offer it to others as "
+    "a service.",
+
+    "The Hosting & Infrastructure Fee is the only recurring charge. It pays for keeping "
+    "the application online and the Client's data stored and backed up; it is not a "
+    "license fee, and the license above does not depend on it. If it goes unpaid, access "
+    "to the hosted application is suspended as set out in the hosting terms and restored "
+    "in full when the account is brought current. A lapse in hosting does not end the "
+    "license.",
+
+    "Client data, meaning customer records, content, files and any material the Client "
+    "provides or generates through the application, is and remains the sole property of "
+    "the Client at all times. Built by Bean LLC claims no ownership of it, will not sell "
+    "or license it to any third party, and will provide the Client a complete export in a "
+    "machine-readable format on written request.",
+
+    "Built by Bean LLC may show completed work in its portfolio unless the Client asks "
+    "otherwise in writing before the project starts.",
+]
+
+
 # ── Shared chrome ────────────────────────────────────────
 
 
@@ -390,10 +450,9 @@ STANDALONE_PROTECTIONS = [
     "materials it provides do not infringe third-party rights, and indemnifies Built by "
     "Bean LLC against any claim arising from Client-provided materials.",
 
-    "All software, source code and designs created by Built by Bean LLC remain the "
-    "exclusive property of Built by Bean LLC. On full payment the Client holds a "
-    "perpetual, non-exclusive, non-transferable license to use them for its own business. "
-    "The Client's own data remains the Client's at all times.",
+    # Ownership: the seven sentences above, spliced in here so the shorter
+    # documents carry exactly what the Statement of Work carries.
+    *IP_TERMS,
 
     "Built by Bean LLC has no obligation to perform work beyond what is described in this "
     "agreement unless separately contracted in writing.",

@@ -362,6 +362,39 @@ that says what the fee is for and what stops when it stops being paid -
 read into the SOW, the standalone agreement and every fee update from
 that one place, so no two documents can describe it differently.
 
+## Who owns what
+
+`contract_docs.IP_TERMS` is the one place the ownership words are written,
+and the Statement of Work (Section 9), the engagement letter (Section 5)
+and the standalone protections on the add-on, hosting and addendum
+documents all read it. Before 2026-09-09 each of the three carried its own
+copy, and the SOW's said Built by Bean "retains the right to reuse the
+underlying code in other work for other clients", which is true and much
+narrower than what the business needs: the code is Built by Bean's outright,
+and Built by Bean may reuse it, package it, or sell a product built from it
+to anyone, owing the client nothing. What the client buys is a perpetual
+license to use their application with no renewal and no recurring license
+fee. Hosting is the only recurring charge, it is not a license fee, and a
+lapse suspends access without ending the license. Their data is theirs and
+exportable on request. Two things the terms deliberately leave as they
+were, because they are Michael's to decide: the license is non-transferable
+(it does not follow a sale of the client's business without his consent),
+and the client is not handed the source code.
+
+The website says only what the contract says. It used to promise "pay once,
+then use it for as long as you like" with no mention of the hosting fee
+that the contract makes a condition of access, which is exactly the
+"stop paying and it switches off" the same page was criticising. The one
+recurring charge is now named on the page, "full support" became the
+maintenance window the SOW actually grants, and the footer names the LLC
+that signs the contracts. When the copy on the site or the words in a
+contract change, read the other one again.
+
+`scratchpad/contracts_check.py` (in the session scratchpad, worth keeping)
+renders all five documents through the routes the board uses and reads the
+PDFs back with pymupdf, asserting the sentences that matter appear in every
+one, appear once, and that no words from the retired clauses survive.
+
 ## House rules
 
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page
