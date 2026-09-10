@@ -58,7 +58,9 @@
     <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-400">Out of scope</span>
     {% endif %}
 
-    <span class="ml-auto text-xs text-surface-400">{{ t.created_at | format_date }}</span>
+    {# sm:ml-auto, not ml-auto: on a phone this strip wraps, and an auto
+       margin on the last chip lands it alone on a row behind a hole. #}
+    <span class="sm:ml-auto text-xs text-surface-400">{{ t.created_at | format_date }}</span>
   </div>
 
   {# Shortened while it is shut, whole when it is open. These tickets arrive

@@ -401,6 +401,11 @@
             .pm-shell a.w-9, .pm-shell button.w-9 { min-width: 44px; min-height: 44px; }
         }
 
+        /* Code wraps. A `gh api repos/<org>/<repo>/...` line in rendered
+           content pushed a project page 136px sideways at 375px; nothing
+           scrolls the page sideways, and a line of code is not an exception. */
+        #pm-scroll code, #pm-scroll pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
         .flash-msg {
             background: var(--surface);
             border: 1px solid var(--border);

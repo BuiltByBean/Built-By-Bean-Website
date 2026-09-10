@@ -38,7 +38,7 @@
                 {% else %}bg-surface-700 text-surface-300{% endif %}">
                 {{ inv.days_overdue }} day{{ '' if inv.days_overdue == 1 else 's' }} late
             </span>
-            <span class="text-xs text-surface-400 ml-auto">{{ inv.number or inv.id }}</span>
+            <span class="text-xs text-surface-400 sm:ml-auto">{{ inv.number or inv.id }}</span>
         </a>
         {% endfor %}
 
@@ -57,7 +57,7 @@
             {% if sub.collection_method == 'charge_automatically' %}
             <span class="text-xs text-surface-400">set to auto-charge a card</span>
             {% endif %}
-            <span class="text-xs text-surface-400 ml-auto">subscription</span>
+            <span class="text-xs text-surface-400 sm:ml-auto">subscription</span>
         </a>
         {% endfor %}
     </div>
@@ -88,7 +88,7 @@
                 free maintenance ends {{ row.ends_on | format_date }}
             </span>
             {% endif %}
-            <span class="text-xs text-surface-400 ml-auto">maintenance</span>
+            <span class="text-xs text-surface-400 sm:ml-auto">maintenance</span>
         </a>
         {% endfor %}
     </div>
