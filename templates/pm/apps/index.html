@@ -55,7 +55,7 @@
 
         <a href="{{ url_for('apps.edit', id=app.id) }}"
            aria-label="Edit {{ app.name }}"
-           class="absolute top-3 right-3 p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
+           class="absolute top-2 right-2 w-11 h-11 inline-flex items-center justify-center rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
             </svg>
@@ -68,7 +68,7 @@
         <a href="{{ app.url }}"
            {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
            title="Open {{ app.name }}"
-           class="flex-1 inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+           class="flex-1 inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
             {{ launch("w-3.5 h-3.5 flex-shrink-0") }}
             Open
         </a>
@@ -76,7 +76,7 @@
         {% if app.project %}
         <a href="{{ url_for('pm.project_detail', id=app.project.id) }}"
            title="{{ app.project.name }} project"
-           class="inline-flex items-center justify-center min-h-[38px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
             </svg>
@@ -87,7 +87,7 @@
         {% if app.railway_url %}
         <a href="{{ app.railway_url }}" target="_blank" rel="noopener"
            title="{{ app.name }} on Railway"
-           class="inline-flex items-center justify-center min-h-[38px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
             {{ railway("w-4 h-4") }}
             <span class="sr-only">Railway</span>
         </a>
@@ -96,7 +96,7 @@
         {% if app.github_url %}
         <a href="{{ app.github_url }}" target="_blank" rel="noopener"
            title="{{ app.name }} on GitHub"
-           class="inline-flex items-center justify-center min-h-[38px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
             {{ github("w-4 h-4") }}
             <span class="sr-only">GitHub</span>
         </a>

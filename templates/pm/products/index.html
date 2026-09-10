@@ -146,7 +146,7 @@
                       class="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="has_monthly" :value="m ? '1' : ''">
                     <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500 pointer-events-none">$</span>
+                        <span class="absolute z-10 pointer-events-none left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500 pointer-events-none">$</span>
                         <input type="text" name="price" inputmode="decimal" value="{{ p.price|commas }}"
                                x-model="price" @blur="price = fmt(price)" placeholder="quoted"
                                class="input-ring w-28 min-h-[44px] pl-7 pr-3 py-2.5 text-sm tabular-nums bg-surface-800/50 text-white rounded-xl">

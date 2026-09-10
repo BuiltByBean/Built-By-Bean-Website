@@ -139,7 +139,7 @@
                the same unallocated amount every month while the real bill moved
                between a dozen projects and a dozen clients. The route refuses
                the field for these vendors too, so a stale form cannot set it. #}
-            <div x-show="!{{ manual_monthly|tojson }}.includes(providerType)">
+            <div x-show='!{{ manual_monthly|tojson }}.includes(providerType)'>
                 <label for="monthly-cost" class="block text-sm font-medium text-surface-300 mb-1.5">
                     Flat monthly cost
                     <span class="text-surface-500 font-normal">(optional)</span>
@@ -176,7 +176,7 @@
                     class="px-6 py-2.5 text-sm font-semibold rounded-xl btn-brand transition-all">
                 {{ 'Update Provider' if editing else 'Add Provider' }}
             </button>
-            <a href="{{ url_for('service_costs.providers_list') }}" class="px-6 py-2.5 text-sm font-medium text-surface-500 hover:text-surface-300">Cancel</a>
+            <a href="{{ url_for('service_costs.providers_list') }}" class="inline-flex items-center min-h-[44px] px-6 rounded-xl border border-white/10 text-sm font-medium text-surface-400 hover:text-white transition-colors">Cancel</a>
         </div>
 
     </form>

@@ -69,14 +69,14 @@
         {{ select_dropdown("category", cat_opts, category, model="category", extra_class="max-w-[15rem]") }}
         {{ select_dropdown("status", [("all", "Built and not")] + statuses|list, status,
                            model="status", extra_class="max-w-[11rem]") }}
-        <div class="ml-auto flex items-center gap-2">
+        <div class="w-full sm:w-auto sm:ml-auto flex items-center gap-2">
             {{ clear_filters(click="clear()", show="active") }}
             {# Features get named on a call and caught in seconds. Rules are
                written by the sessions that learn them, through the door, so
                there is nothing to type in here. #}
             {% if page_kind != 'rule' %}
             <button type="button" @click="adding = !adding"
-                    class="min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                    class="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
                 Add one</button>
             {% endif %}
         </div>

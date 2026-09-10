@@ -383,6 +383,24 @@
 
            Colour is never the only carrier: every message says its outcome
            in words, so the tint is emphasis rather than information. */
+        /* Phone first, enforced once. Below 640px every button and every
+           link styled as one is at least 44px tall, and an icon press (a
+           p-2 / w-8 / w-9 box) is 44px both ways. Written here rather than
+           on each control because the 375px sweep found thirty-odd presses
+           between 30 and 41px across ten pages, each one styled by hand,
+           and the next page built by hand would have added more. Option
+           rows inside a dropdown panel keep their height: a panel is a list
+           to scan, and its rows are already the width of a thumb. */
+        @media (max-width: 640px) {
+            .pm-shell button:not([role="option"]),
+            .pm-shell a[class*="rounded"],
+            .pm-shell select { min-height: 44px; }
+            .pm-shell a.p-2, .pm-shell button.p-2,
+            .pm-shell a.p-1\.5, .pm-shell button.p-1\.5,
+            .pm-shell a.w-8, .pm-shell button.w-8,
+            .pm-shell a.w-9, .pm-shell button.w-9 { min-width: 44px; min-height: 44px; }
+        }
+
         .flash-msg {
             background: var(--surface);
             border: 1px solid var(--border);

@@ -398,7 +398,13 @@ one, appear once, and that no words from the retired clauses survive.
 ## House rules
 
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page
-  sideways, nothing overflows its card, every tap target is at least 44px.
+  sideways, nothing overflows its card, every tap target is at least 44px
+  (base.html enforces that below 640px on every button, every link styled
+  as one, and every icon press; a control that must be smaller has to
+  argue with that rule, not merely forget it). A native `<select>` can be
+  rendered by WTForms (`form.field()`) as well as typed, and the LM-2 grep
+  cannot see that one: a picker in a form template is `select_dropdown`
+  fed `form.field.choices`.
   Verify with `getBoundingClientRect()`, not by looking. Sweep every route
   by loading it in a 375px-wide iframe and asserting
   `#pm-scroll.scrollWidth <= #pm-scroll.clientWidth` (the scroller clips
@@ -438,8 +444,9 @@ one, appear once, and that no words from the retired clauses survive.
   `|tojson` escapes `<`, `>`, `&` and `'` and leaves `"` alone, so
   `x-show="{{ list|tojson }}.includes(x)"` ends at the first double quote it
   writes. It shipped as `x-show="["`, Alpine threw on every row, and the
-  buttons that record how a call went were never once on the screen. Grep:
-  `rg -n 'x-[a-z]+="\{\{[^"]*tojson' templates/`.
+  buttons that record how a call went were never once on the screen, and a
+  second one hid behind a `!` on the providers form. Grep the whole value:
+  `rg -n '="[^"]*\{\{[^"]*tojson' templates/`.
 - **PowerShell mangles UTF-8.** Never round-trip a template through
   `Get-Content | Set-Content` - the box-drawing and arrow characters in
   comments come out as mojibake. Use targeted editing tools.
