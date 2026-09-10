@@ -361,6 +361,30 @@ posts `stage` as the new stage. "Make them a client" writes a `Client`
 carrying the address, the contact and everything learned, and links the two
 rows.
 
+## Contracts, and clearing the tests off the list
+
+`pm/contract_routes.py`. The overview carries two presses per row and only
+ever one at a time. **Void** is the real thing: it reaches the portal, kills
+the signing link, and asks first. **Hide** is local tidying: `archived_at` on
+`SignatureRequest`, nothing sent, nothing deleted, the row and its sealed PDF
+still on their own page, and one press to put it back, so it does not ask.
+
+A contract still OUT for signature cannot be hidden. A live signing link
+nobody is watching is the one thing a tidy-up must not leave behind, so those
+offer Void and not Hide, and the refusal says to void it first. The tiles
+count what is on the screen rather than the table, and the toggle says how
+many are hidden.
+
+The one place a failure is allowed to settle a row is a **404 from the
+portal**: that envelope does not exist, so nothing is out for signature, and
+the row is marked voided here with a flash saying nothing was sent. That
+matters because the test rows pointed at envelopes wiped long ago and were
+otherwise stuck as "sent" for ever, unhideable. Every other failure changes
+nothing, above all a network one - a portal that did not answer has agreed to
+nothing - which is why `SignaDocError` now carries the portal's own status
+code and `None` when it was never reached. `tools/test_contract_tidy.py`
+proves both halves.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last

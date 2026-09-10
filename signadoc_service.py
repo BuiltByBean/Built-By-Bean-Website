@@ -41,7 +41,18 @@ FIELD_TYPES = {
 
 
 class SignaDocError(Exception):
-    """The portal did not take it, or could not be reached. Carries why."""
+    """The portal did not take it, or could not be reached. Carries why.
+
+    `status` is the portal's own HTTP code when there was one, and None when
+    the portal was never reached at all. The difference decides what a caller
+    may assume: a 404 means that envelope does not exist and a row pointing at
+    it cannot be out for signature, while no status at all means the network
+    failed and nothing may be concluded.
+    """
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
 
 
 def base_url():
@@ -81,8 +92,8 @@ def _request(method, path, payload=None, raw=False):
         except Exception:
             pass
         if exc.code == 401:
-            raise SignaDocError("SignaDoc refused the API key.") from exc
-        raise SignaDocError(detail or f"SignaDoc returned {exc.code}.") from exc
+            raise SignaDocError("SignaDoc refused the API key.", 401) from exc
+        raise SignaDocError(detail or f"SignaDoc returned {exc.code}.", exc.code) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise SignaDocError(f"Could not reach SignaDoc: {exc}") from exc
     except json.JSONDecodeError as exc:

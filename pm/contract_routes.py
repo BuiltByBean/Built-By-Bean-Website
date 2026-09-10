@@ -311,11 +311,26 @@ def refresh_open_requests():
 # ── Pages ────────────────────────────────────────────────
 
 
+def _safe_next(fallback):
+    """Where a press should land. Relative paths only, so an open redirect
+    cannot be posted in."""
+    nxt = (request.form.get("next") or "").strip()
+    if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+        return nxt
+    return fallback
+
+
 @contracts_bp.route("/")
 @login_required
 def contracts_index():
     stale = refresh_open_requests() is None
-    rows = SignatureRequest.query.order_by(SignatureRequest.created_at.desc()).all()
+    show_hidden = request.args.get("hidden") == "1"
+    everything = SignatureRequest.query.order_by(SignatureRequest.created_at.desc()).all()
+    hidden_count = sum(1 for row in everything if row.is_archived)
+    rows = everything if show_hidden else [row for row in everything if not row.is_archived]
+    # The tiles count what is on the screen, not the table: a tile above a
+    # filtered list that reports the whole table answers a question nobody
+    # asked (catalogue rule, learned on the leads page).
     counts = {}
     for row in rows:
         counts[row.status] = counts.get(row.status, 0) + 1
@@ -325,6 +340,8 @@ def contracts_index():
         counts=counts,
         stale=stale,
         configured=signadoc.configured(),
+        show_hidden=show_hidden,
+        hidden_count=hidden_count,
     )
 
 
@@ -387,16 +404,63 @@ def contract_resend(id):
 def contract_void(id):
     row = db.session.get(SignatureRequest, id) or abort(404)
     reason = (request.form.get("reason") or "").strip()
+    back = _safe_next(url_for("contracts.contract_detail", id=id))
     try:
         signadoc.void_envelope(row.envelope_id, reason)
     except SignaDocError as exc:
+        # A 404 is the portal saying that envelope does not exist. A row
+        # pointing at nothing cannot be out for signature, and leaving it
+        # "sent" for ever means it can never be tidied away either, which is
+        # exactly the state the old test rows were stuck in. Settle it here
+        # and say plainly that is what happened. Any other failure - above
+        # all a network one, which carries no status at all - changes
+        # nothing, because a portal that did not answer has not agreed to
+        # anything.
+        if exc.status == 404:
+            row.status = "voided"
+            row.synced_at = _now()
+            db.session.commit()
+            flash("The signing portal has no such envelope, so this one is "
+                  "marked voided here. Nothing was sent.", "warning")
+            return redirect(back)
         flash(f"Could not void it: {exc}", "error")
-        return redirect(url_for("contracts.contract_detail", id=id))
+        return redirect(back)
     row.status = "voided"
     row.synced_at = _now()
     db.session.commit()
     flash("Voided. The signing link no longer works.", "success")
-    return redirect(url_for("contracts.contract_detail", id=id))
+    return redirect(back)
+
+
+@contracts_bp.route("/<int:id>/hide", methods=["POST"])
+@login_required
+def contract_hide(id):
+    """Off the list, not out of existence.
+
+    The envelope is not touched: a signed contract stays signed and stays
+    downloadable from its own page. This is for the rows that were tests and
+    for the ones that are long finished.
+    """
+    row = db.session.get(SignatureRequest, id) or abort(404)
+    back = _safe_next(url_for("contracts.contracts_index"))
+    if not row.can_hide:
+        flash("That one is still out for signature. Void it first, then hide it.", "warning")
+        return redirect(back)
+    row.archived_at = _now()
+    db.session.commit()
+    flash(f"Hidden. {row.title} is still on its own page.", "success")
+    return redirect(back)
+
+
+@contracts_bp.route("/<int:id>/unhide", methods=["POST"])
+@login_required
+def contract_unhide(id):
+    row = db.session.get(SignatureRequest, id) or abort(404)
+    back = _safe_next(url_for("contracts.contracts_index", hidden=1))
+    row.archived_at = None
+    db.session.commit()
+    flash(f"{row.title} is back on the list.", "success")
+    return redirect(back)
 
 
 @contracts_bp.route("/<int:id>/signed.pdf")

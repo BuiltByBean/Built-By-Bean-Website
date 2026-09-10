@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
   Every contract that has gone out, and where it stopped.
@@ -7,6 +8,14 @@
   button somebody has to remember to press. When the portal cannot be reached
   the page still draws from what was last known and says so, because a stale
   number that admits it is stale is useful and one that pretends is not.
+
+  Two presses on each row, and only ever one of them at a time. Void is the
+  real thing and asks first: it reaches the portal and kills the signing
+  link. Hide is local tidying and does not ask, because nothing is destroyed
+  and unhiding is one press - the row keeps its own page and a signed
+  contract stays downloadable. A contract still OUT for signature offers
+  Void and not Hide, because a live signing link nobody is watching is the
+  one thing a tidy-up must not leave behind.
 #}
 
 {% block title %}Contracts - Built By Bean{% endblock %}
@@ -75,6 +84,16 @@
         </a>
     </div>
 
+    {# Only when there is something hidden to talk about. #}
+    {% if hidden_count or show_hidden %}
+    <div class="flex justify-end">
+        <a href="{{ url_for('contracts.contracts_index', hidden=None if show_hidden else 1) }}"
+           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+            {% if show_hidden %}Hide them again{% else %}Show hidden ({{ hidden_count | commas }}){% endif %}
+        </a>
+    </div>
+    {% endif %}
+
     {% if requests %}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {% for key, label in [('sent', 'Out for signature'), ('completed', 'Signed'),
@@ -100,6 +119,7 @@
                         <th class="px-4 py-3 font-medium hidden md:table-cell">Client</th>
                         <th class="px-4 py-3 font-medium hidden md:table-cell">Sent</th>
                         <th class="px-4 py-3 font-medium">Status</th>
+                        <th class="px-4 py-3 font-medium text-right">Tidy</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -136,6 +156,37 @@
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ req.status_classes }}">
                                 {{ req.status_label }}
                             </span>
+                            {% if req.is_archived %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 ml-1 rounded-full text-xs font-medium bg-surface-800 text-surface-500">
+                                Hidden
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-right whitespace-nowrap">
+                            {% if req.is_archived %}
+                            <form method="POST" action="{{ url_for('contracts.contract_unhide', id=req.id) }}" class="inline">
+                                <input type="hidden" name="next" value="{{ request.full_path }}">
+                                <button type="submit"
+                                        class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                                    Unhide
+                                </button>
+                            </form>
+                            {% elif req.can_hide %}
+                            <form method="POST" action="{{ url_for('contracts.contract_hide', id=req.id) }}" class="inline">
+                                <input type="hidden" name="next" value="{{ request.full_path }}">
+                                <button type="submit"
+                                        class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                                    Hide
+                                </button>
+                            </form>
+                            {% else %}
+                            {#- Still out for signature: the only tidy-up on
+                                offer is the one that stops it. -#}
+                            <form method="POST" action="{{ url_for('contracts.contract_void', id=req.id) }}" class="inline">
+                                <input type="hidden" name="next" value="{{ request.full_path }}">
+                                {{ confirm_button('Void', 'Kill the signing link?') }}
+                            </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

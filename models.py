@@ -1245,6 +1245,11 @@ class SignatureRequest(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     synced_at = db.Column(db.DateTime, nullable=True)
 
+    # Tidied off the list without being destroyed. The row stays, the
+    # envelope is untouched, and a signed contract is still findable, which
+    # is why this is a flag and not a delete: what was signed happened.
+    archived_at = db.Column(db.DateTime, nullable=True)
+
     # What the client said when they would not sign it. The portal collects a
     # reason on decline; without this it lived only in an email, which is the
     # one place a negotiation cannot be picked up from later.
@@ -1288,6 +1293,20 @@ class SignatureRequest(db.Model):
     def is_open(self):
         """Still waiting on somebody. Only these need refreshing."""
         return self.status in ("draft", "sent")
+
+    @property
+    def is_archived(self):
+        return self.archived_at is not None
+
+    @property
+    def can_hide(self):
+        """Whether it may be tidied off the list.
+
+        Only when it has stopped moving. Hiding a contract that is out for
+        signature leaves a live signing link nobody is watching, so an open
+        one is voided first and hidden after.
+        """
+        return not self.is_open
 
     @property
     def kind_label(self):
