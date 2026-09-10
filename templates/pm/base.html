@@ -395,6 +395,11 @@
             .pm-shell button:not([role="option"]),
             .pm-shell a[class*="rounded"],
             .pm-shell select { min-height: 44px; }
+            /* An inline anchor ignores min-height entirely, which is how a
+               Cancel styled as a button stayed 40px under the rule above.
+               Anything not already laid out as a block, a flex or a grid
+               becomes an inline-flex box that the height applies to. */
+            .pm-shell a[class*="rounded"]:not(.block):not(.flex):not(.grid):not(.hidden) { display: inline-flex; align-items: center; }
             .pm-shell a.p-2, .pm-shell button.p-2,
             .pm-shell a.p-1\.5, .pm-shell button.p-1\.5,
             .pm-shell a.w-8, .pm-shell button.w-8,
