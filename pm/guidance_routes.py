@@ -28,6 +28,7 @@ gate is a blueprint-wide before_request, so a route added later is
 protected by default rather than by memory.
 """
 import hmac
+import html
 import json
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -1035,29 +1036,73 @@ def _repo_url(raw):
     return _normalise_url(raw)[:500] or None
 
 
+def _host(url):
+    return (url or "").split("//", 1)[-1].split("/", 1)[0].lower()
+
+
+# The address a platform hands out before a real domain is attached. It is a
+# stepping stone, never the app's name, and it must never take a card back
+# from a domain somebody paid for.
+_TEMP_HOSTS = (".up.railway.app", ".railway.app", ".onrender.com", ".fly.dev",
+               ".vercel.app", ".netlify.app", ".herokuapp.com", ".pages.dev")
+
+
+def _is_temp_host(host):
+    return any(host.endswith(t) for t in _TEMP_HOSTS)
+
+
+def better_address(current, incoming):
+    """Which of two addresses the card should show.
+
+    A real domain beats a platform's temporary one, whichever came second: a
+    session re-registering the Railway address after the domain was attached
+    must not put the temporary one back on the card. Between two real domains
+    the shorter host wins, which is the apex over a subdomain (entertainhq.com
+    over app.entertainhq.com), and equals go to the newer, so a move to a new
+    domain still lands. Returns the address to keep.
+    """
+    if not current:
+        return incoming
+    a, b = _host(current), _host(incoming)
+    if a == b:
+        return incoming
+    if _is_temp_host(b) and not _is_temp_host(a):
+        return current
+    if _is_temp_host(a) and not _is_temp_host(b):
+        return incoming
+    return current if len(a) < len(b) else incoming
+
+
 def _upsert_app(body, client, project):
-    """The My Apps tile for a deployed thing, created or updated. Idempotent on the
-    ADDRESS, because the address is what a deployed thing is: the same host edits the
-    same tile, so a second deploy or a re-run never duplicates. A tile with no host match
-    is still matched by name within the project (or unattached), for the rows that were
-    typed in by hand before this route existed. Returns (link, created, icon, error);
-    `icon` is True when a favicon was fetched, False when the site offered none, None
-    when an icon was already there and left alone."""
+    """The My Apps tile for a deployed thing, created or updated. One card per
+    app, and idempotent: the same host edits the same card, and so does the
+    same PROJECT, because a project is one deployed thing whatever address it
+    answers on this week. Before 2026-09-10 a second registration under the
+    same project with a new name made a second card, which is how Robinson &
+    Co. came to have one card on its Railway address and another on its real
+    domain, and EntertainHQ one on the apex and one on app. A tile with no
+    host and no project match is matched by name among the unattached rows,
+    for the ones typed in by hand before this route existed. Returns (link,
+    created, icon, error); `icon` is True when a favicon was fetched, False
+    when the site offered none, None when an icon was already there and left
+    alone."""
     url = _normalise_url(_cap(body.get("url"), 500))
     if not url.startswith(("http://", "https://")):
         return None, False, None, ("url is required - the public address that was just "
                                    "verified, e.g. https://acme.example.com")
-    name = _cap(body.get("app_name") or body.get("name"), 120) \
+    # A name is never HTML. One arrived as "Robinson &amp; Co." and was shown
+    # that way, ampersand and all.
+    name = html.unescape(_cap(body.get("app_name") or body.get("name"), 120)) \
         or (project.name if project else client.name)
-    host = url.split("//", 1)[-1].split("/", 1)[0].lower()
+    host = _host(url)
     link = None
     for row in AppLink.query.filter(AppLink.url.ilike(f"%{host}%")).all():
         if row.host.lower() == host:
             link = row
             break
     if link is None and project is not None:
-        link = AppLink.query.filter(AppLink.project_id == project.id,
-                                    AppLink.name.ilike(name)).first()
+        link = (AppLink.query.filter(AppLink.project_id == project.id)
+                .order_by(AppLink.id).first())
     if link is None:
         link = AppLink.query.filter(AppLink.project_id.is_(None),
                                     AppLink.name.ilike(name)).first()
@@ -1065,6 +1110,7 @@ def _upsert_app(body, client, project):
     if created:
         link = AppLink()
         db.session.add(link)
+    url = better_address(None if created else link.url, url)
     moved = created or link.url != url
     link.name = name
     link.url = url[:500]

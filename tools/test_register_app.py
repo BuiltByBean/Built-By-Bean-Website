@@ -11,6 +11,11 @@ database and proves, through the same JSON door the bridge uses:
   3. register_hosting_resource WITH a url creates the tile (and derives the Railway link).
   4. register_hosting_resource WITHOUT a url leaves My Apps alone and SAYS SO in the reply.
   5. A tile typed in by hand earlier (same name, no project) is adopted, not duplicated.
+  6. A second address under the same project edits the project's ONE card; it never
+     makes a second (Robinson & Co. had two on 2026-09-10, one per address).
+  7. A platform's temporary address never takes the card back from a real domain.
+  8. Between two real domains the apex wins over a subdomain (entertainhq.com over
+     app.entertainhq.com), and a name that arrives as HTML is stored as text.
 
 Run: python tools/test_register_app.py
 """
@@ -90,9 +95,13 @@ print("\nREGISTER_HOSTING_RESOURCE:")
 code, d = post("hosting-resources", {"provider": "railway", "resource_identifier": "12345678-1234-1234-1234-123456789abc",
                                      "client": "Test Owner", "project": "Widget", "label": "Widget on Railway",
                                      "url": "https://gadget.example.test"})
-check("with a url it creates the tile in the same call", code == 200 and (d.get("app") or {}).get("action") == "created", (code, d))
+check("with a url it edits the project's one card in the same call",
+      code == 200 and (d.get("app") or {}).get("action") == "updated", (code, d))
 with application.app_context():
+    widget_id = Project.query.filter_by(name="Widget").first().id
+    n = AppLink.query.filter(AppLink.project_id == widget_id).count()
     row = AppLink.query.filter(AppLink.url.ilike("%gadget.example.test%")).first()
+    check("one card for the project, on the newer of two equal real domains", n == 1 and row is not None, (n, row and row.url))
     check("and derives the Railway project link from the id",
           row is not None and row.railway_url == "https://railway.com/project/12345678-1234-1234-1234-123456789abc",
           row and row.railway_url)
@@ -110,6 +119,39 @@ with application.app_context():
     n = AppLink.query.filter(AppLink.name.ilike("Old Hand-Typed")).count()
     row = AppLink.query.filter(AppLink.name.ilike("Old Hand-Typed")).first()
 check("the existing row is updated and attached, not duplicated", d.get("action") == "updated" and n == 1 and row.project_id is not None, (d, n))
+
+print("\nONE CARD PER APP:")
+with application.app_context():
+    owner = Client.query.filter_by(name="Test Owner").first()
+    db.session.add(Project(name="Gizmo", client_id=owner.id, status="active"))
+    db.session.commit()
+
+
+def gizmo_cards():
+    with application.app_context():
+        pid = Project.query.filter_by(name="Gizmo").first().id
+        rows = AppLink.query.filter(AppLink.project_id == pid).order_by(AppLink.id).all()
+        return [(r.name, r.url) for r in rows]
+
+
+code, d = post("apps", {"name": "Gizmo", "url": "https://gizmo-production.up.railway.app",
+                        "client": "Test Owner", "project": "Gizmo"})
+check("the temporary address makes the card", d.get("action") == "created" and gizmo_cards() == [("Gizmo", "https://gizmo-production.up.railway.app")], (d, gizmo_cards()))
+code, d = post("apps", {"name": "Gizmo Studio", "url": "https://gizmo.example.test",
+                        "client": "Test Owner", "project": "Gizmo"})
+check("the real domain, registered later under a new name, edits that card rather than making a second",
+      d.get("action") == "updated" and gizmo_cards() == [("Gizmo Studio", "https://gizmo.example.test")], (d, gizmo_cards()))
+code, d = post("apps", {"name": "Gizmo Studio", "url": "https://gizmo-production.up.railway.app",
+                        "client": "Test Owner", "project": "Gizmo"})
+check("the temporary address registered again does not take the card back",
+      gizmo_cards() == [("Gizmo Studio", "https://gizmo.example.test")], gizmo_cards())
+code, d = post("apps", {"name": "Gizmo Studio app", "url": "https://app.gizmo.example.test",
+                        "client": "Test Owner", "project": "Gizmo"})
+check("a subdomain after the apex leaves the apex on the card, and makes no second",
+      len(gizmo_cards()) == 1 and gizmo_cards()[0][1] == "https://gizmo.example.test", gizmo_cards())
+code, d = post("apps", {"name": "Gizmo &amp; Co.", "url": "https://gizmo.example.test",
+                        "client": "Test Owner", "project": "Gizmo"})
+check("a name that arrives as HTML is stored as text", gizmo_cards()[0][0] == "Gizmo & Co.", gizmo_cards())
 
 print("\nTHE DOOR:")
 r = c.post("/api/guidance/apps", json={"name": "x", "url": "https://x.test", "client": "Test Owner"})
