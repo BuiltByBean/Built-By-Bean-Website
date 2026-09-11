@@ -69,7 +69,8 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
-                    Their share <span class="text-surface-500 font-normal">%</span> *
+                    Their share of it *
+                    <span class="block text-xs text-surface-500 font-normal">percent, so 35 means 35%</span>
                 </label>
                 <input type="text" name="share_pct" required
                        value="{{ request.args.get('share_pct', '35') }}"
@@ -77,7 +78,10 @@
                        placeholder="35">
             </div>
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Share of what *</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Share of what *
+                    <span class="block text-xs text-surface-500 font-normal">profit after costs, or a cut of the gross</span>
+                </label>
                 {{ select_dropdown("basis", basis_choices,
                                    request.args.get("basis", "net_profit"), "Pick a basis",
                                    full_width=true, model="basis") }}
@@ -86,42 +90,59 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Calculated on</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Which revenue counts
+                    <span class="block text-xs text-surface-500 font-normal">all of it, or only what they bring in</span>
+                </label>
                 {{ select_dropdown("scope", scope_choices, "all", "Which revenue",
                                    full_width=true) }}
             </div>
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Paid</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Worked out every
+                    <span class="block text-xs text-surface-500 font-normal">and paid once that period closes</span>
+                </label>
                 {{ select_dropdown("period", period_choices, "monthly", "How often",
                                    full_width=true) }}
             </div>
         </div>
 
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {# Four numbers that are four different things, so each label names the
+           clause its number lands in rather than naming a unit. The unit goes
+           under it, muted. "Paid within days" and "Restrictions last months"
+           were terse to the point of unreadable.
+
+           items-end so the boxes stay on one line with each other when a label
+           wraps to two, which is what put the third box lower than the rest. #}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
-                    Paid within <span class="text-surface-500 font-normal">days</span>
+                    You pay them within
+                    <span class="block text-xs text-surface-500 font-normal">days of the period ending</span>
                 </label>
                 <input type="text" name="pay_days" value="30"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
             </div>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
-                    Notice to end <span class="text-surface-500 font-normal">days</span>
+                    Either side can end it on
+                    <span class="block text-xs text-surface-500 font-normal">days written notice</span>
                 </label>
                 <input type="text" name="notice_days" value="30"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
             </div>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
-                    Paid on after it ends <span class="text-surface-500 font-normal">months</span>
+                    They keep earning after it ends
+                    <span class="block text-xs text-surface-500 font-normal">months, 0 to stop that day</span>
                 </label>
                 <input type="text" name="tail_months" value="0"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
             </div>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
-                    Restrictions last <span class="text-surface-500 font-normal">months</span>
+                    They cannot compete for
+                    <span class="block text-xs text-surface-500 font-normal">months after it ends</span>
                 </label>
                 <input type="text" name="restraint_months" value="12"
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
@@ -134,14 +155,15 @@
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
                     Taken off before the split
+                    <span class="block text-xs text-surface-500 font-normal">costs the venture itself carries, one per line</span>
                 </label>
                 <textarea name="deductions" rows="8"
                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ deductions }}</textarea>
-                <p class="mt-1 text-xs text-surface-400">One per line.</p>
             </div>
             <div class="sm:w-1/2">
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">
-                    Your own time, deducted too <span class="text-surface-500 font-normal">$/hr, optional</span>
+                    Your own time, deducted too
+                    <span class="block text-xs text-surface-500 font-normal">$/hr, and blank means it is not</span>
                 </label>
                 <input type="text" name="our_time_rate" value=""
                        class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
@@ -151,16 +173,20 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">You do</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    You do
+                    <span class="block text-xs text-surface-500 font-normal">one per line</span>
+                </label>
                 <textarea name="our_duties" rows="7"
                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ our_duties }}</textarea>
-                <p class="mt-1 text-xs text-surface-400">One per line.</p>
             </div>
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">They do</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    They do
+                    <span class="block text-xs text-surface-500 font-normal">one per line</span>
+                </label>
                 <textarea name="their_duties" rows="7"
                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ their_duties }}</textarea>
-                <p class="mt-1 text-xs text-surface-400">One per line.</p>
             </div>
         </div>
 
@@ -177,11 +203,17 @@
            whose icons were already fetched off their own sites. #}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Logo on the document</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Logo on the document
+                    <span class="block text-xs text-surface-500 font-normal">from My Apps, whose icons are already fetched</span>
+                </label>
                 {{ select_dropdown("mark_app_id", marks, "", "No logo", full_width=true) }}
             </div>
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1.5">Its colour</label>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Its colour
+                    <span class="block text-xs text-surface-500 font-normal">every rule and heading on the document</span>
+                </label>
                 <input type="color" name="accent" value="#a855f7"
                        class="w-full h-[46px] px-1 py-1 rounded-xl bg-surface-800/50 border border-white/10 cursor-pointer">
             </div>
