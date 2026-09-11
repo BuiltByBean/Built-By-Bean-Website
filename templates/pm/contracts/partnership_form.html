@@ -36,7 +36,12 @@
 
     {% include "pm/contracts/_prefill.html" %}
 
-    <div class="glass-card relative z-30 p-5 sm:p-6 space-y-5 max-w-3xl">
+    {# Wider than the other contract forms, which are 3xl, because this one
+       carries more than they do: a row of four numbers and two lists side by
+       side. At 3xl the four boxes were thumbnails with a third of the page
+       empty beside them. 5xl leaves the textareas a readable line length,
+       which is what stops this going wider still. #}
+    <div class="glass-card relative z-30 p-5 sm:p-6 space-y-5 max-w-5xl">
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
