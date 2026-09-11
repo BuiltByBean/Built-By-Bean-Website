@@ -39,6 +39,24 @@ FAMILY = "Inter"
 FALLBACK = "Helvetica"
 
 
+def rgb(value, fallback=ACCENT):
+    """A hex colour as a tuple, or the fallback.
+
+    Never raises. The colour comes off a form, and a document that will not
+    render because somebody typed a bad hex is an outage where a violet rule
+    would have been a shrug.
+    """
+    text = (value or "").strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        return fallback
+    try:
+        return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return fallback
+
+
 def register_fonts(pdf):
     """Load Inter if it is on disk, and report which family to use.
 
@@ -82,18 +100,27 @@ class ContractPDF:
     LEFT = 30
     RIGHT = 180
 
-    def __init__(self, pdf):
+    def __init__(self, pdf, accent=None):
         self.pdf = pdf
         self.family = register_fonts(pdf)
+        # Every rule, eyebrow and callout border on the document. Held here
+        # rather than read from the module constant at each call site, because
+        # a co-branded document has to be able to wear somebody else's colour
+        # without every helper growing a parameter for it.
+        #
+        # Takes a hex string as readily as a tuple. The colour arrives from a
+        # form field, and parsing it at the one place that stores it means no
+        # caller can forget to.
+        self.accent = accent if isinstance(accent, (tuple, list)) else rgb(accent)
 
     # -- primitives -------------------------------------------------------
 
     def _font(self, style="", size=10):
         self.pdf.set_font(self.family, style, size)
 
-    def rule(self, colour=ACCENT, width=0.5, gap=0):
+    def rule(self, colour=None, width=0.5, gap=0):
         p = self.pdf
-        p.set_draw_color(*colour)
+        p.set_draw_color(*(colour or self.accent))
         p.set_line_width(width)
         y = p.get_y() + gap
         p.line(self.LEFT, y, self.RIGHT, y)
@@ -108,11 +135,45 @@ class ContractPDF:
 
     # -- blocks -----------------------------------------------------------
 
-    def eyebrow(self, text):
+    def eyebrow(self, text, partner=""):
+        """Who is issuing this. With `partner`, two names on one line.
+
+        A document about something two parties take to market together says so
+        at the top, the way it would on a cover slide: the issuer on the left in
+        the accent, the venture on the right in ink. One line, because a second
+        logo lockup on a contract reads as a brochure.
+        """
         self._font("B", 7.5)
-        self.pdf.set_text_color(*ACCENT)
-        self.pdf.cell(0, 4, sanitize(text).upper(), new_x="LMARGIN", new_y="NEXT")
+        self.pdf.set_text_color(*self.accent)
+        if not partner:
+            self.pdf.cell(0, 4, sanitize(text).upper(), new_x="LMARGIN", new_y="NEXT")
+        else:
+            self.pdf.cell(90, 4, sanitize(text).upper())
+            self.pdf.set_text_color(*INK)
+            self.pdf.cell(0, 4, sanitize(partner).upper(), align="R",
+                          new_x="LMARGIN", new_y="NEXT")
         self.pdf.ln(1)
+
+    def mark(self, path, size=16):
+        """The venture's own logo, right-aligned above the eyebrow.
+
+        Returns whether one was drawn. Never raises: the file is somebody's
+        favicon, fetched off their site months ago, and it can be an .ico, an
+        SVG fpdf cannot parse, or gone from the volume entirely. A contract
+        that renders without a logo is a contract; one that 500s while somebody
+        is waiting to send it is not.
+        """
+        if not path or not os.path.exists(path):
+            return False
+        p = self.pdf
+        top = p.get_y()
+        try:
+            p.image(path, x=self.RIGHT - size, y=top, h=size)
+        except Exception:
+            p.set_xy(self.LEFT, top)
+            return False
+        p.set_xy(self.LEFT, top + size + 3)
+        return True
 
     def title(self, text, subtitle=""):
         p = self.pdf
@@ -163,7 +224,7 @@ class ContractPDF:
         self.space_needed(height + 4)
         top = p.get_y()
         p.set_fill_color(250, 248, 253)
-        p.set_draw_color(*ACCENT)
+        p.set_draw_color(*self.accent)
         p.set_line_width(0.4)
         p.rect(self.LEFT, top, self.RIGHT - self.LEFT, height, style="DF")
         p.set_xy(self.LEFT + 6, top + 4.5)

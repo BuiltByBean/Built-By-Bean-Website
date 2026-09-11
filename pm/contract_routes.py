@@ -670,7 +670,7 @@ def finish_send(sent, *, pdf_bytes, filename):
 # need - the client picker, sending, the signature-request record - is here.
 
 import contract_docs
-from models import Client, Project
+from models import AppLink, Client, Project
 
 
 def _projects_for_picker():
@@ -935,6 +935,118 @@ def generate_addendum():
                     f"Addendum - {title}", "addendum", own, cli, w, h, client)
 
 
+# ── Revenue share with a partner ─────────────────────────
+#
+# The only document this board sends that is not about work sold to a client:
+# somebody helps take a product to market and is paid a share of what it earns.
+# It carries the venture's own branding, because the person signing it is being
+# asked to go and sell that thing, and a document about EntertainHQ that looks
+# like every other contract is a document about nothing in particular.
+#
+# The mark is chosen from My Apps rather than uploaded here. Every app on that
+# board has already had its own icon fetched off its own site, so the picture
+# is already on the volume - and a file uploaded into this form would not
+# survive the preview anyway, because pressing Send replays the form and a
+# browser does not re-send a file it was never given again.
+
+
+def _marks_for_picker():
+    """Apps on the board with an icon, as something to brand a document with."""
+    links = (AppLink.query.filter(AppLink.icon_file.isnot(None))
+             .order_by(AppLink.name).all())
+    return [("", "No logo")] + [(str(link.id), link.name) for link in links]
+
+
+def _mark_path(app_id):
+    """Where that icon actually is, or None if it is not there any more."""
+    if not app_id:
+        return None
+    # Imported here rather than at module scope: the folder is apps_routes'
+    # answer, and one copy of it is what keeps a moved icon directory from
+    # silently breaking contracts.
+    from pm.apps_routes import _icon_folder
+    link = db.session.get(AppLink, app_id)
+    if not link or not link.icon_file:
+        return None
+    path = os.path.join(_icon_folder(), link.icon_file)
+    return path if os.path.exists(path) else None
+
+
+@contracts_bp.route("/new/partnership", methods=["GET"])
+@login_required
+def partnership_form():
+    options, lookup = _clients_for_picker()
+    return render_template(
+        "pm/contracts/partnership_form.html",
+        today=datetime.now(timezone.utc).date().isoformat(),
+        client_options=options, client_lookup=lookup,
+        marks=_marks_for_picker(),
+        basis_choices=contract_docs.SHARE_BASIS_CHOICES,
+        scope_choices=contract_docs.SHARE_SCOPE_CHOICES,
+        period_choices=contract_docs.PAY_PERIOD_CHOICES,
+        deductions="\n".join(contract_docs.PARTNERSHIP_DEDUCTIONS),
+        our_duties="\n".join(contract_docs.PARTNERSHIP_OUR_DUTIES),
+        their_duties="\n".join(contract_docs.PARTNERSHIP_THEIR_DUTIES),
+    )
+
+
+@contracts_bp.route("/new/partnership", methods=["POST"])
+@login_required
+def generate_partnership():
+    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    venture = (request.form.get("venture") or "").strip()
+    raw_pct = (request.form.get("share_pct") or "").strip().lstrip("$").rstrip("%")
+
+    if not client or not venture or not raw_pct:
+        flash("Choose the partner, name the venture, and set the share.", "warning")
+        return redirect(url_for("contracts.partnership_form"))
+
+    # The one number the whole document turns on. A share that is not a number,
+    # or is not a share, would print on the contract exactly as typed and be
+    # argued about later, so it is refused here rather than rendered.
+    try:
+        pct = float(raw_pct.replace(",", ""))
+    except ValueError:
+        flash("The share has to be a number, like 35.", "warning")
+        return redirect(url_for("contracts.partnership_form"))
+    if not 0 < pct <= 100:
+        flash("The share has to be more than 0 and at most 100 percent.", "warning")
+        return redirect(url_for("contracts.partnership_form"))
+
+    def lines(field, fallback):
+        raw = (request.form.get(field) or "").strip()
+        return [l.strip(" -\t") for l in raw.splitlines() if l.strip()] if raw else fallback
+
+    basis = (request.form.get("basis") or "net_profit").strip()
+    pdf_bytes, own, cli, w, h = contract_docs.build_partnership(
+        partner_name=client.name,
+        venture=venture,
+        share_pct=f"{pct:g}",
+        basis=basis,
+        scope=(request.form.get("scope") or "all").strip(),
+        deductions=lines("deductions", contract_docs.PARTNERSHIP_DEDUCTIONS),
+        our_time_rate=(request.form.get("our_time_rate") or "").strip(),
+        our_duties=lines("our_duties", contract_docs.PARTNERSHIP_OUR_DUTIES),
+        their_duties=lines("their_duties", contract_docs.PARTNERSHIP_THEIR_DUTIES),
+        period=(request.form.get("period") or "monthly").strip(),
+        pay_days=(request.form.get("pay_days") or "30").strip(),
+        notice_days=(request.form.get("notice_days") or "30").strip(),
+        tail_months=(request.form.get("tail_months") or "0").strip(),
+        restraint_months=(request.form.get("restraint_months") or "12").strip(),
+        special_terms=(request.form.get("special_terms") or "").strip(),
+        date_str=_fmt(request.form.get("date")),
+        title=(request.form.get("doc_title") or "Revenue Share Agreement").strip(),
+        accent=(request.form.get("accent") or "").strip(),
+        mark_path=_mark_path(request.form.get("mark_app_id", type=int)),
+        countersign=wants_send(),
+    )
+
+    label = (request.form.get("doc_title") or "Revenue Share Agreement").strip()
+    return _deliver(pdf_bytes,
+                    f"{_safe(venture)}_RevenueShare_{_safe(client.name)}.pdf",
+                    f"{label} - {venture}", "partnership", own, cli, w, h, client)
+
+
 def _fmt(raw):
     """A form date as "September 01, 2026", or whatever was typed."""
     raw = (raw or "").strip()
@@ -1041,7 +1153,8 @@ def preview(token):
     return render_template("pm/contracts/preview.html", token=token, meta=meta,
                            form=form, configured=signadoc.configured(),
                            signer_name=signer_name, signer_email=signer_email,
-                           countersigned=meta.get("kind") in ("sow", "addon", "addendum"))
+                           countersigned=meta.get("kind") in ("sow", "addon", "addendum",
+                                                             "partnership"))
 
 
 @contracts_bp.route("/preview/<token>/file.pdf")
@@ -1082,6 +1195,7 @@ FORM_ENDPOINTS = {
     "sow": "pm.sow_form",
     "addon": "contracts.addon_form",
     "addendum": "contracts.addendum_form",
+    "partnership": "contracts.partnership_form",
 }
 
 

@@ -1,0 +1,202 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  Taking a product to market with somebody, and splitting what it earns.
+
+  Everything here is a term that will move between one of these and the next,
+  which is why it is a form rather than a document somebody edits: the terms
+  change, the document is rebuilt, and no two copies of it can drift.
+
+  The two choices that matter most are the basis and what it applies to. A
+  share of net profit and a commission on gross are worth thousands of dollars
+  apart on the same revenue, and so are all of it and only what the partner
+  brings in. Both are picked before the document exists rather than corrected
+  after somebody has read it.
+
+  One card on purpose. Every picker here opens a panel, and a second card below
+  this one would paint over whichever panel reaches it (LM-1).
+#}
+
+{% block title %}New revenue share agreement - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
+{% block page_title %}New revenue share agreement{% endblock %}
+{% block page_subtitle %}Take a product to market with somebody, and split what it earns{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('contracts.generate_partnership') }}"
+      x-data='{
+        clientId: "{{ request.args.get("client_id", "") }}",
+        clients: {{ client_lookup | tojson }},
+        chosen: null,
+        basis: "{{ request.args.get("basis", "net_profit") }}"
+      }'
+      x-effect="chosen = clients[clientId] || null">
+
+    {% include "pm/contracts/_prefill.html" %}
+
+    <div class="glass-card relative z-30 p-5 sm:p-6 space-y-5 max-w-3xl">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Partner *</label>
+                {{ select_dropdown("client_id", client_options, "", "Who you are partnering with",
+                                   full_width=true, model="clientId") }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
+                <input type="date" name="date" required value="{{ today }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Venture *</label>
+                <input type="text" name="venture" required
+                       value="{{ request.args.get('venture', 'EntertainHQ') }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="EntertainHQ">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Title on the document</label>
+                <input type="text" name="doc_title" value="Revenue Share Agreement"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Their share <span class="text-surface-500 font-normal">%</span> *
+                </label>
+                <input type="text" name="share_pct" required
+                       value="{{ request.args.get('share_pct', '35') }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="35">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Share of what *</label>
+                {{ select_dropdown("basis", basis_choices,
+                                   request.args.get("basis", "net_profit"), "Pick a basis",
+                                   full_width=true, model="basis") }}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Calculated on</label>
+                {{ select_dropdown("scope", scope_choices, "all", "Which revenue",
+                                   full_width=true) }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Paid</label>
+                {{ select_dropdown("period", period_choices, "monthly", "How often",
+                                   full_width=true) }}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Paid within <span class="text-surface-500 font-normal">days</span>
+                </label>
+                <input type="text" name="pay_days" value="30"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Notice to end <span class="text-surface-500 font-normal">days</span>
+                </label>
+                <input type="text" name="notice_days" value="30"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Paid on after it ends <span class="text-surface-500 font-normal">months</span>
+                </label>
+                <input type="text" name="tail_months" value="0"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Restrictions last <span class="text-surface-500 font-normal">months</span>
+                </label>
+                <input type="text" name="restraint_months" value="12"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        {# Only a net profit share has anything to deduct. A commission on gross
+           says so on the document instead, and there is nothing here to set. #}
+        <div x-show="basis === 'net_profit'" x-cloak class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Taken off before the split
+                </label>
+                <textarea name="deductions" rows="8"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ deductions }}</textarea>
+                <p class="mt-1 text-xs text-surface-400">One per line.</p>
+            </div>
+            <div class="sm:w-1/2">
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Your own time, deducted too <span class="text-surface-500 font-normal">$/hr, optional</span>
+                </label>
+                <input type="text" name="our_time_rate" value=""
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="Leave blank and it is not deducted">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">You do</label>
+                <textarea name="our_duties" rows="7"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ our_duties }}</textarea>
+                <p class="mt-1 text-xs text-surface-400">One per line.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">They do</label>
+                <textarea name="their_duties" rows="7"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">{{ their_duties }}</textarea>
+                <p class="mt-1 text-xs text-surface-400">One per line.</p>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                Terms specific to this one <span class="text-surface-500 font-normal">optional</span>
+            </label>
+            <textarea name="special_terms" rows="3"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                      placeholder="Anything agreed for this partnership that is not covered above">{{ request.args.get("special_terms", "") }}</textarea>
+        </div>
+
+        {# The venture's own look. The logo list is the apps on the board,
+           whose icons were already fetched off their own sites. #}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Logo on the document</label>
+                {{ select_dropdown("mark_app_id", marks, "", "No logo", full_width=true) }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Its colour</label>
+                <input type="color" name="accent" value="#a855f7"
+                       class="w-full h-[46px] px-1 py-1 rounded-xl bg-surface-800/50 border border-white/10 cursor-pointer">
+            </div>
+        </div>
+
+        {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                Preview it
+            </button>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="inline-flex items-center min-h-[44px] px-3 text-sm text-surface-400 hover:text-surface-200">Cancel</a>
+        </div>
+    </div>
+</form>
+{% endblock %}

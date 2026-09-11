@@ -1316,6 +1316,7 @@ class SignatureRequest(db.Model):
             "addon": "Add-on agreement",
             "addendum": "Addendum",
             "hosting": "Hosting agreement",
+            "partnership": "Revenue share",
         }.get(self.kind, "Document")
 
     def __repr__(self):

@@ -385,6 +385,73 @@ nothing - which is why `SignaDocError` now carries the portal's own status
 code and `None` when it was never reached. `tools/test_contract_tidy.py`
 proves both halves.
 
+## The revenue share, which is not a partnership
+
+`contract_docs.build_partnership`, the form at `/admin/contracts/new/partnership`,
+`kind='partnership'`. The deal it papers: Michael and somebody who knows an
+industry take a product to market together and split what it earns. EntertainHQ
+with Kenali Kendrick is the first. He calls it a partnership, the board's button
+calls it a Revenue share, and the DOCUMENT calls itself a Revenue Share
+Agreement, because Texas creates a general partnership out of conduct rather
+than intent (TBOC 152.051) and a share of profits is one of the factors. A
+general partner is jointly liable for the other's debts, owes fiduciary duties,
+and can bind the business by signing something. Section 2 therefore negates
+every factor a court weighs - no capital, no losses, no control, no property in
+common, no authority to bind - and says the word "partner" is a commercial
+description. `PARTNERSHIP_NOT` is that list and it is kept whole: it is only as
+good as its completeness.
+
+Two things about the money are chosen before the document exists, because they
+are worth thousands of dollars apart on the same revenue and cannot be fixed by
+reading afterwards. The basis (`SHARE_BASES`) is a share of Net Profit or a
+commission on Gross Receipts, and each document says in terms that it is not the
+other. The scope (`SHARE_SCOPES`) is everything the Venture earns or only
+customers the Partner introduced. Net Profit names its deductions as a list, and
+Built by Bean's own time is NOT among them unless a rate is typed in, because a
+deduction list that quietly swallows general overhead makes a 35% share of
+nothing.
+
+"She is paid once I am paid, not before" is Section 5 and it is the one callout
+on the document: nothing is earned on an invoice, a promise or a signed order
+until the money has arrived and cleared, there is no advance or draw, and a
+refund that lands after payment comes back out of the next one.
+
+`PARTNERSHIP_PROTECTIONS` is NOT `STANDALONE_PROTECTIONS`, and the comment on it
+says why: that list is written for a document where the client pays, so it
+carries a $50 per day late fee - which here would run against Michael - and a
+liability cap measured on fees the Client paid, which in a document where the
+client pays nothing evaluates to zero. `THIRD_PARTY_TERMS` and `GOVERNING_LAW`
+are the clauses that genuinely do not care who pays and are shared constants
+rather than copies, spliced back into `STANDALONE_PROTECTIONS` at their original
+positions so no existing document changed a word. Catalogue rule "Shared
+boilerplate carries a direction of payment".
+`tools/test_partnership_contract.py` asserts the late fee is absent here and
+still present on the SOW, so re-merging the lists fails loudly.
+
+Ownership is its own clause (`PARTNERSHIP_OWNERSHIP`) rather than `IP_TERMS`,
+because IP_TERMS is framed around a delivered application, a build fee and a
+license to use it, and none of those exist when nobody is buying anything. What
+this one has to nail down instead is that a share of the money is not a share of
+the thing: the Venture is Built by Bean's outright, what the Partner contributes
+is assigned as it is created, and a SALE of the Venture is not a Gross Receipt,
+so no share is payable on the proceeds. It also says outright that it does not
+replace the Partner's own Statement of Work, because the first partner is
+already a client with one.
+
+This is the only document that may wear a look of its own: `accent` (a hex off
+the form, parsed by `contract_style.rgb`, which falls back rather than raising)
+and `mark_path` (an icon already on the volume for an app on My Apps, drawn
+through `ContractPDF.mark`, which returns False rather than raising on an .ico,
+an SVG fpdf cannot parse, or a file that is gone). A contract that renders
+without a logo is a contract; one that 500s while somebody is waiting to send it
+is not. The logo is picked from My Apps rather than uploaded because a file
+uploaded into the form would not survive the preview: pressing Send replays the
+form, and a browser does not re-send a file it was never given again.
+
+The terms of one of these will change. That is why it is a form: regenerate it,
+do not edit a PDF, and `form_json` plus `FORM_ENDPOINTS['partnership']` mean
+Revise reopens it filled in as it was sent.
+
 ## Hosting fees that raise themselves
 
 `pm/hosting_routes.py` holds every priced project's fee against last
