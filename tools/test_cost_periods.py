@@ -21,6 +21,9 @@ What is proved:
   5. NO EXPENSE IS DATED IN THE FUTURE. The entry's period is a key and is the
      whole month; the expense's date is a fact about when money went out, and
      the two are not the same field. A month in progress dates to today.
+  6. And the ledger SAYS the month rather than a day. $59.67 of SMS did not
+     happen on the 16th, it accrued over sixteen days, so the row reads
+     "Sep 2026 / to date" and not a date it did not land on.
 
 Run: python tools/test_cost_periods.py
 """
@@ -204,7 +207,8 @@ with application.app_context():
             raw_amount=price, allocated_amount=price, expense_id=exp.id,
             description=f"Twilio - Standard Outbound SMS ({day:%b %Y})"))
     # August, already settled: one row, and it must survive untouched.
-    aug = Expense(category="service_cost", amount=70.51, date=date(2026, 8, 31))
+    aug = Expense(category="service_cost", amount=70.51, date=date(2026, 8, 31),
+                  description="Twilio - Standard Outbound SMS (last month)")
     db.session.add(aug)
     db.session.flush()
     db.session.add(ServiceCostEntry(
@@ -275,6 +279,66 @@ with application.app_context():
         period_start=date(2026, 9, 1)).count() == 1)
     check("still four entries in total", ServiceCostEntry.query.count() == 4,
           ServiceCostEntry.query.count())
+
+
+# ── What the ledger says about a month of usage ──────────────────
+print("\nTHE LEDGER SAYS THE MONTH, NOT A DAY:")
+import re  # noqa: E402
+
+from models import User  # noqa: E402
+
+with application.app_context():
+    boss = User(username="mb2", email="mb2@example.test", first_name="Michael", role="ceo")
+    boss.set_password("x")
+    db.session.add(boss)
+    # Something somebody typed off a receipt: a real charge on a real day,
+    # which must keep saying that day.
+    db.session.add(Expense(category="software", amount=21.28,
+                           date=date(2026, 9, 9),
+                           description="ChatGPT Plus subscription"))
+    db.session.commit()
+    boss_id = boss.id
+
+application.config["WTF_CSRF_ENABLED"] = False
+client = application.test_client()
+with client.session_transaction() as sess:
+    sess["_user_id"] = str(boss_id)
+    sess["_fresh"] = True
+
+page = client.get("/admin/expenses").data.decode("utf-8", "replace")
+
+
+def when(needle):
+    """What the When column actually says for the row carrying `needle`.
+
+    The row, then its FIRST cell, rather than a search of the whole page: the
+    first version of this asked whether a string appeared anywhere in the HTML,
+    and two of its checks passed against the exact markup they were written to
+    catch, because the words were also somewhere else on the page.
+    """
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", page, re.S)
+    hit = next((r for r in rows if needle in r), None)
+    if hit is None:
+        return None
+    cell = re.search(r"<td[^>]*sm:table-cell[^>]*>(.*?)</td>", hit, re.S)
+    return " ".join(re.sub(r"<[^>]+>", " ", cell.group(1)).split()) if cell else None
+
+
+check("the page draws", "Twilio" in page)
+check("the column is headed When, because half of it is not a date",
+      ">When<" in page, "ledger header")
+
+running = when("Standard Outbound SMS (Sep 2026)")
+check("a month of usage reads as the month", running == "Sep 2026 to date", running)
+check("THE POINT: and never as a day it did not land on",
+      running is not None and not re.search(r"\d{2}, \d{4}", running), running)
+
+closed = when("(last month)")
+check("a month that has finished drops the to date", closed == "Aug 2026", closed)
+
+typed = when("ChatGPT Plus subscription")
+check("a charge somebody typed off a receipt keeps its own day",
+      typed == "Sep 09, 2026", typed)
 
 print("\n" + ("ALL PASS" if not FAIL else str(len(FAIL)) + " FAILED: " + ", ".join(FAIL)))
 sys.exit(1 if FAIL else 0)

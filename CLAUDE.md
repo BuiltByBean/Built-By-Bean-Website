@@ -176,6 +176,18 @@ Migration `e7b2c05d18af` pulls back the rows already written that way,
 touching only expenses a cost entry owns: a hand typed expense dated
 ahead is somebody's deliberate note and is left alone.
 
+And a date that has happened is still the wrong thing to show. Dated the
+16th, $59.67 of Twilio SMS read as a sixty dollar charge that landed that
+morning; it accrued over sixteen days and has no single day at all. So the
+ledger's first column is **When**, not Date, and a row whose cost entry
+spans a month says the MONTH - "Sep 2026", with "to date" under it while
+that month is still open - where a charge on a day still says the day.
+`Expense.date` is untouched: it sorts the list and decides the month a
+figure rolls into, it is just no longer what the row claims. Three steps to
+get here, and each one only looked right until somebody read the screen:
+the period was the key, then the key became the date, then the date stopped
+pretending to be one.
+
 Chasing that one found a second, unrelated fault on the same page. The ledger
 ordered by `Expense.date.desc()` and nothing else, and every vendor charge for
 a month is dated the last day of it, so far more than twenty rows share a date.

@@ -3721,16 +3721,26 @@ def create_app():
         # one per row. Absent means I spent it directly. The provider and the
         # period ride along so a row's action can go to the page that actually
         # governs the number, which is never the expense form.
-        vendor_by_expense = {
-            eid: {"provider_id": pid, "label": label, "name": name,
-                  "month": start.strftime("%Y-%m") if start else ""}
-            for eid, pid, label, name, start in
-            db.session.query(ServiceCostEntry.expense_id, ServiceProvider.id,
-                             ServiceProvider.display_name, ServiceProvider.name,
-                             ServiceCostEntry.period_start)
-            .join(ServiceProvider, ServiceCostEntry.provider_id == ServiceProvider.id)
-            .filter(ServiceCostEntry.expense_id.isnot(None)).all()
-        }
+        # The PERIOD rides along as well as the provider. A vendor row is a
+        # month's usage, not a charge that landed on a day, and the ledger has
+        # to be able to say so: $59.67 of Twilio SMS did not happen on the
+        # 16th, it accrued over sixteen days. `covers` is the month when the
+        # entry spans one, and `to_date` says that month has not finished.
+        today = date.today()
+        vendor_by_expense = {}
+        for eid, pid, label, name, start, finish in db.session.query(
+                ServiceCostEntry.expense_id, ServiceProvider.id,
+                ServiceProvider.display_name, ServiceProvider.name,
+                ServiceCostEntry.period_start, ServiceCostEntry.period_end) \
+                .join(ServiceProvider, ServiceCostEntry.provider_id == ServiceProvider.id) \
+                .filter(ServiceCostEntry.expense_id.isnot(None)).all():
+            spans = bool(start and finish and finish > start)
+            vendor_by_expense[eid] = {
+                "provider_id": pid, "label": label, "name": name,
+                "month": start.strftime("%Y-%m") if start else "",
+                "covers": start.strftime("%b %Y") if spans else "",
+                "to_date": spans and finish > today,
+            }
 
         vendor_total = sum(e.amount for e in rows if e.id in vendor_by_expense)
         unallocated = sum(e.amount for e in rows if e.client_id is None)

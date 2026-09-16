@@ -44,8 +44,12 @@
             <thead>
                 <tr class="border-b border-surface-700">
                     {# Four columns do not fit in 375px, and the date is the one
-                       that repeats down the page. It moves under the name. #}
-                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden sm:table-cell">Date</th>
+                       that repeats down the page. It moves under the name.
+
+                       "When", not "Date": half these rows are a month of usage
+                       rather than a charge on a day, and a column headed Date
+                       has to invent one. #}
+                    <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden sm:table-cell">When</th>
                     <th class="text-left py-3 px-2 sm:px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider">What</th>
                     <th class="text-left py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden lg:table-cell">Client</th>
                     <th class="text-center py-3 px-4 text-xs font-semibold text-surface-400 uppercase tracking-wider hidden md:table-cell">Category</th>
@@ -68,7 +72,27 @@
                 {% set detail = expense.description or '' %}
                 {% if vendor and detail in (headline, vendor.label ~ ' - ' ~ headline, vendor.label) %}{% set detail = '' %}{% endif %}
                 <tr class="hover:bg-surface-800/30 transition-colors">
-                    <td class="py-3 px-4 text-sm text-surface-300 whitespace-nowrap hidden sm:table-cell">{{ expense.date | format_date }}</td>
+                    {#
+                      A month of usage says the month. A charge on a day says
+                      the day.
+
+                      Twilio bills for what was sent across a whole month, and
+                      the figure grows until the month closes. Showing it
+                      against a single date claimed something that did not
+                      happen: dated the month's end it sat in the future, and
+                      dated today it read as a sixty dollar charge that landed
+                      this morning. The expense's own date still sorts this
+                      list and still decides the month it rolls up into; it is
+                      just not what the row says any more.
+                    #}
+                    <td class="py-3 px-4 text-sm text-surface-300 whitespace-nowrap hidden sm:table-cell">
+                        {% if vendor and vendor.covers %}
+                        {{ vendor.covers }}
+                        {%- if vendor.to_date %}
+                        <span class="block text-xs text-surface-500">to date</span>
+                        {%- endif %}
+                        {% else %}{{ expense.date | format_date }}{% endif %}
+                    </td>
 
                     {# max-w-0 with w-full is what makes truncate work inside a
                        table: the cell absorbs the space the fixed columns leave
@@ -101,7 +125,10 @@
                           and the thing worth knowing, is who it was for.
                         #}
                         <p class="text-xs text-surface-400 truncate">
-                            <span class="sm:hidden">{{ expense.date.strftime('%b %d') if expense.date else '' }}</span>
+                            <span class="sm:hidden">
+                                {%- if vendor and vendor.covers %}{{ vendor.covers }}{% if vendor.to_date %} to date{% endif %}
+                                {%- else %}{{ expense.date.strftime('%b %d') if expense.date else '' }}{% endif -%}
+                            </span>
                             {%- if detail %}<span class="hidden sm:inline">{{ detail }}</span>{% endif -%}
                             <span class="lg:hidden">
                                 {%- if expense.client %} &middot; {{ expense.client.name }}
