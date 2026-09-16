@@ -871,6 +871,30 @@ class ServiceProvider(db.Model):
     billing_day = db.Column(db.Integer, nullable=True)
     last_sync_at = db.Column(db.DateTime, nullable=True)
     sync_error = db.Column(db.Text, nullable=True)
+
+    # WHOSE account these credentials open. Null is Built by Bean's own, which
+    # is every provider that existed before this column.
+    #
+    # A vendor account can belong to a CLIENT and sit on the client's card.
+    # Twilio is the case it was built for: the runbook says to get onto the
+    # client's account and make a key on it, and that the account SID "names
+    # whose account is billed". The board read one such account nightly and
+    # booked every dollar of it as money this business had spent. It had spent
+    # none of it.
+    #
+    # What changes when this is set: the cost is still recorded and still
+    # attributed, because what it costs to run a client's app is worth knowing
+    # and is the number a hosting conversation needs. No Expense is written,
+    # because an expense is money that left this business.
+    account_client_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clients.id", ondelete="SET NULL",
+                      name="fk_service_providers_account_client_id"),
+        nullable=True, index=True)
+    # What the vendor itself calls that account, read back from their API on a
+    # sync. A SID is not an answer to "whose is this" and nobody can read one.
+    account_label = db.Column(db.String(200), nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -879,6 +903,12 @@ class ServiceProvider(db.Model):
                                cascade="all, delete-orphan", lazy="dynamic")
     cost_entries = db.relationship("ServiceCostEntry", back_populates="provider",
                                    cascade="all, delete-orphan", lazy="dynamic")
+    account_client = db.relationship("Client", foreign_keys=[account_client_id])
+
+    @property
+    def is_ours(self):
+        """Whether money spent here is this business's money."""
+        return self.account_client_id is None
 
     def __repr__(self):
         return f"<ServiceProvider {self.display_name}>"

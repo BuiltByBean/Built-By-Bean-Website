@@ -51,6 +51,26 @@
             </div>
 
             <div class="space-y-2 mb-4">
+                {# Whose card the money on this account comes off. First, and
+                   named, because a provider pointed at a client's account
+                   contributes nothing to what this business spent, and that is
+                   not something to have to open a form to find out. #}
+                <div class="flex items-center justify-between text-sm gap-3">
+                    <span class="text-surface-400">Billed to</span>
+                    {% if provider.account_client %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 text-right">
+                        {{ provider.account_client.name }}'s card
+                    </span>
+                    {% else %}
+                    <span class="text-white text-right">Built by Bean</span>
+                    {% endif %}
+                </div>
+                {% if provider.account_label %}
+                <div class="flex items-center justify-between text-sm gap-3">
+                    <span class="text-surface-400">Account</span>
+                    <span class="text-surface-300 text-right truncate">{{ provider.account_label }}</span>
+                </div>
+                {% endif %}
                 <div class="flex items-center justify-between text-sm">
                     <span class="text-surface-400">Last Sync</span>
                     <span class="text-white">{{ provider.last_sync_at|format_date if provider.last_sync_at else 'Never' }}</span>

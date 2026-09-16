@@ -173,6 +173,46 @@ def _extract_credentials(name):
     return {}
 
 
+def _account_client_id():
+    """Whose account the credentials open, or None for Built by Bean's own."""
+    raw = (request.form.get("account_client_id") or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _reconcile_ownership(provider):
+    """Make the ledger agree with whose account this turned out to be.
+
+    Waiting for the nightly sync would leave a client's spending sitting in
+    Michael's ledger until tomorrow, and the whole point of the setting is the
+    number it takes out of his totals today. Returns how many expenses moved.
+    """
+    from service_costs_service import _drop_expense, _sync_expense
+    touched = 0
+    for entry in provider.cost_entries.all():
+        # Who the cost is attributed to moves with the account, so the row
+        # stops reading "[unallocated]" the moment there is somebody it plainly
+        # belongs to. Without this it kept the label it was written with until
+        # the next nightly sync happened to rewrite it.
+        base = (entry.description or "").replace(" [unallocated]", "")
+        attributed = ((entry.mapping.client_id if entry.mapping else None)
+                      or provider.account_client_id)
+        entry.description = base if attributed else base + " [unallocated]"
+        if provider.account_client_id:
+            if entry.expense_id:
+                _drop_expense(entry)
+                touched += 1
+        elif entry.expense_id is None:
+            _sync_expense(entry, entry.mapping)
+            touched += 1
+    db.session.commit()
+    return touched
+
+
 def _billing_day():
     """Day of the month a flat provider is charged, or None."""
     raw = (request.form.get("billing_day") or "").strip()
@@ -298,6 +338,7 @@ def provider_create():
             credentials_json=json.dumps(creds),
             monthly_cost=_monthly_cost(name),
             billing_day=_billing_day(),
+            account_client_id=_account_client_id(),
         )
         db.session.add(provider)
         db.session.commit()
@@ -309,6 +350,7 @@ def provider_create():
         editing=False,
         provider=None,
         manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
+        account_clients=Client.query.order_by(Client.name).all(),
     )
 
 
@@ -327,8 +369,19 @@ def provider_edit(id):
                 (request.form.get("display_name") or "").strip() or provider.display_name
             )
         provider.is_active = "is_active" in request.form
+        was = provider.account_client_id
+        provider.account_client_id = _account_client_id()
         db.session.commit()
-        flash(f"{provider.display_name} updated.", "success")
+        note = ""
+        if provider.account_client_id != was:
+            moved = _reconcile_ownership(provider)
+            if provider.account_client_id and moved:
+                who = provider.account_client.name if provider.account_client else "the client"
+                note = (f" {moved} charge{'s' if moved != 1 else ''} came off your ledger: "
+                        f"that account is on {who}'s card.")
+            elif moved:
+                note = f" {moved} charge{'s' if moved != 1 else ''} booked back to you."
+        flash(f"{provider.display_name} updated.{note}", "success")
         return redirect(url_for("service_costs.providers_list"))
 
     creds = json.loads(provider.credentials_json) if provider.credentials_json else {}
@@ -338,6 +391,7 @@ def provider_edit(id):
         provider=provider,
         creds=creds,
         manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
+        account_clients=Client.query.order_by(Client.name).all(),
     )
 
 

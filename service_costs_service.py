@@ -48,6 +48,20 @@ def _month_bounds(when=None):
     return first, (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
 
+def _drop_expense(cost_entry):
+    """Unbook a cost entry, leaving the entry itself alone.
+
+    Called when the account turns out to belong to a client. The entry stays,
+    because what their app costs to run is worth knowing; the expense goes,
+    because this business did not spend it.
+    """
+    expense = cost_entry.expense
+    cost_entry.expense_id = None
+    if expense is not None:
+        db.session.delete(expense)
+    db.session.flush()
+
+
 def _sync_expense(cost_entry, mapping, default_client_id=None):
     """Keep an Expense in step with a cost entry, creating one if absent.
 
@@ -438,11 +452,24 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
         # client, not whether a mapping exists. Since a caller can supply the
         # owner directly, keying the label off the mapping alone labelled every
         # Stripe fee unallocated while it sat correctly on a client's row.
-        attributed = (mapping.client_id if mapping else None) or default_client_id
+        #
+        # An account that BELONGS to a client attributes every cost on it to
+        # them by default, because it is their account and their card, and a
+        # mapping can still override for one resource.
+        owner = provider.account_client_id
+        attributed = ((mapping.client_id if mapping else None)
+                      or default_client_id or owner)
         entry.description = description if attributed else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
-        _sync_expense(entry, mapping, default_client_id=default_client_id)
+        if owner:
+            # Their account, their card. The cost is worth recording and worth
+            # seeing against them; it is not money this business spent, so it
+            # never becomes an Expense. Any expense a previous sync wrote for
+            # it goes, or the ledger would keep counting it for ever.
+            _drop_expense(entry)
+        else:
+            _sync_expense(entry, mapping, default_client_id=default_client_id)
 
     return len(_find_mapping(provider.id, resource_id) or [None])
 
@@ -520,6 +547,19 @@ def _sync_twilio(provider):
     resp = requests.get(url, params=params, auth=(account_sid, auth_token), timeout=30)
     resp.raise_for_status()
     data = resp.json()
+
+    # What Twilio itself calls this account. A SID answers nobody's question
+    # about whose account is being read, and the answer decides whether the
+    # money on it is this business's or a client's. Never fatal: a sync that
+    # read real charges does not fail because a label lookup did.
+    try:
+        who = requests.get(
+            f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}.json",
+            auth=(account_sid, auth_token), timeout=15)
+        if who.status_code == 200:
+            provider.account_label = (who.json().get("friendly_name") or "")[:200]
+    except Exception:
+        pass
 
     records = data.get("usage_records", [])
 

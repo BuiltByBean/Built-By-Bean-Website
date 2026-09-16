@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 
 {% block title %}{{ 'Edit' if editing else 'Add' }} Provider - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('service_costs.providers_list'), 'Service Providers') }}{% endblock %}
@@ -65,6 +66,36 @@
                 <input type="password" name="railway_api_token" value="{{ creds.api_token if editing else '' }}"
                        class="w-full input-ring px-4 py-2.5 text-sm bg-surface-800 text-white" placeholder="railway_token_...">
                 <p class="text-xs text-surface-400 mt-1">Generate at railway.com > Account Settings > Tokens</p>
+            </div>
+        </div>
+
+        {#
+          Whose account these credentials open.
+
+          Not a detail: it decides whether money on this account is this
+          business's or a client's. Twilio's own runbook here says to get onto
+          the CLIENT'S account and make a key on it, so a provider row pointed
+          at a client reads a card that is not Michael's, and every dollar of
+          it was landing in his ledger as money he had spent.
+        #}
+        <div class="glass-card p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Whose account is this</h3>
+            {% if provider and provider.account_label %}
+            <p class="text-sm text-surface-300">
+                The vendor calls it
+                <span class="text-white font-medium">{{ provider.account_label }}</span>
+            </p>
+            {% endif %}
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Billed to
+                    <span class="block text-xs text-surface-500 font-normal">a client's account is on their card, so nothing on it is your expense</span>
+                </label>
+                {% set owner_opts = [["", "Built by Bean (my own card)"]] %}
+                {% for c in account_clients %}{% set _ = owner_opts.append([c.id, c.name ~ " (their card)"]) %}{% endfor %}
+                {{ select_dropdown("account_client_id", owner_opts,
+                                   provider.account_client_id if editing else "",
+                                   "Built by Bean (my own card)", full_width=true) }}
             </div>
         </div>
 

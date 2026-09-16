@@ -188,6 +188,25 @@ get here, and each one only looked right until somebody read the screen:
 the period was the key, then the key became the date, then the date stopped
 pretending to be one.
 
+**Whose account is it.** Every cost entry wrote an Expense, which assumes
+the account the credentials open is Built by Bean's. The Twilio runbook on
+this very board says otherwise in as many words: "get onto the CLIENT'S
+Twilio account, then create your own API key on it", and
+"TWILIO_ACCOUNT_SID names whose account is BILLED, not a credential". So
+the nightly sync was reading an account on somebody else's card and booking
+all of it as money this business had spent. `ServiceProvider.account_client_id`
+says whose it is, null being ours, which is every provider that came before
+it. When it names a client: the cost entry is still written and still
+attributed to them, because what it costs to run their app is the number a
+hosting conversation needs, and **no Expense is written**, because an
+expense is money that left this business. Changing the setting reconciles
+on the press rather than waiting for the nightly run, in both directions,
+and restates the attribution so a row stops reading "[unallocated]" the
+moment it plainly belongs to somebody. `account_label` is what the vendor
+calls the account, read back on each Twilio sync, because a SID answers
+nobody's question about whose it is and the answer decides whose money it
+was. `tools/test_whose_account.py`.
+
 Chasing that one found a second, unrelated fault on the same page. The ledger
 ordered by `Expense.date.desc()` and nothing else, and every vendor charge for
 a month is dated the last day of it, so far more than twenty rows share a date.
