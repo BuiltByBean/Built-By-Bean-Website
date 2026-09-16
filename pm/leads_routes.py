@@ -137,6 +137,12 @@ def index():
         query = query.order_by(Lead.touches.any(), no_start,
                                Lead.started_on, Lead.name)
 
+    # Appended to whichever sort was chosen above, because every one of them
+    # ends on a column thousands of rows can share - a name, a start date, an
+    # updated_at stamped by one import. Without a unique column last, paging
+    # through five thousand leads shows some twice and never shows others.
+    query = query.order_by(Lead.id)
+
     pagination = query.paginate(page=page, per_page=PER_PAGE, error_out=False)
 
     def options(column, skip, chosen):

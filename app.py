@@ -1018,7 +1018,7 @@ def create_app():
         if not_tried:
             query = query.filter(~Client.contacts.any(ClientContact.channel == not_tried))
 
-        query = query.order_by(Client.name.asc())
+        query = query.order_by(Client.name.asc(), Client.id.asc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
         return render_template("pm/clients/list.html",
             clients=pagination.items, pagination=pagination, search=search,
@@ -1208,7 +1208,7 @@ def create_app():
         if status:
             query = query.filter(Project.status == status)
 
-        query = query.order_by(Project.created_at.desc())
+        query = query.order_by(Project.created_at.desc(), Project.id.desc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
         return render_template("pm/projects/list.html",
             projects=pagination.items, pagination=pagination,
@@ -3382,7 +3382,9 @@ def create_app():
         if rate_type:
             query = query.filter(TimeEntry.rate_type == rate_type)
 
-        query = query.order_by(TimeEntry.date.desc())
+        # See the note on the expense ledger: a date is not a total order,
+        # and a day with more than twenty entries on it pages unstably.
+        query = query.order_by(TimeEntry.date.desc(), TimeEntry.id.desc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
 
         all_filtered = TimeEntry.query
@@ -3693,7 +3695,15 @@ def create_app():
                           .outerjoin(Client, Expense.client_id == Client.id)
                           .outerjoin(Project, Expense.project_id == Project.id)
                           .outerjoin(Ticket, Expense.ticket_id == Ticket.id))
-        pagination = query.order_by(Expense.date.desc()).paginate(
+        # The id last, and it is not decoration. Every vendor charge for a
+        # month is dated the last day of it, so well over twenty rows share a
+        # date, and a date alone is not a total order: the database may return
+        # that block differently for each query, and page one and page two then
+        # cut through it in different places. Measured on the live ledger,
+        # pages one and two returned eight of the same rows and eight expenses
+        # appeared on neither page. Any paginated list needs a unique column
+        # last or it is a different list on every press.
+        pagination = query.order_by(Expense.date.desc(), Expense.id.desc()).paginate(
             page=page, per_page=20, error_out=False)
 
         # Every figure on this page comes off this one list.

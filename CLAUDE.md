@@ -150,6 +150,20 @@ a series and nothing is touched. `tools/test_cost_periods.py` runs fifteen
 nights of the real payload through the sync and then folds a ledger built to
 look exactly like the one that shipped.
 
+Chasing that one found a second, unrelated fault on the same page. The ledger
+ordered by `Expense.date.desc()` and nothing else, and every vendor charge for
+a month is dated the last day of it, so far more than twenty rows share a date.
+A date alone is not a total order: the database may return that block
+differently for each query, and page one and page two then cut through it in
+different places. Measured live, 75 slots over four pages held 67 distinct
+rows - **eight expenses came back on both page one and page two, and eight
+others were on no page at all.** Every paginated query in the app now ends its
+ordering on a unique column: expenses, time, clients, projects and leads.
+`tools/test_stable_paging.py` carries it as a SOURCE check on purpose, because
+SQLite returns rows in rowid order when nothing else decides it, so the fault
+does not reproduce against the database the suite runs on and a behavioural
+test alone would pass on the broken code.
+
 ## Tickets travel both ways
 
 Tickets are PUSHED here by each client app's outbox, and `hub.fetch` is
