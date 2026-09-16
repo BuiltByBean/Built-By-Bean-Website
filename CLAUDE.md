@@ -614,6 +614,50 @@ renders all five documents through the routes the board uses and reads the
 PDFs back with pymupdf, asserting the sentences that matter appear in every
 one, appear once, and that no words from the retired clauses survive.
 
+## The shell does not move
+
+`bbbSwapLive` said the principle for one page in 2026: "Re-rendering a region
+that did not change is not a harmless no-op - it destroys all three." It was
+applied to actions INSIDE a page and never to the step between two of them, so
+pressing Expenses and then My Apps threw away and rebuilt the whole shell: the
+sidebar and its scroll position, the drawer on a phone, the banner, the running
+timer, and every entry animation played again. The owner's verdict, 2026-09-16:
+elements that are not changing do not need to refresh.
+
+`bbbNavigate` (bottom of base.html) swaps instead. What moves between two pages
+of this board is `#pm-page-title`, `#pm-page-subtitle`, `#pm-back`,
+`#pm-actions`, `#pm-main`, the flash strip and the two sidebar counts. What does
+not move is everything else, and the sidebar in particular is NEVER replaced:
+one class comes off one link and goes onto another, which is all "you are here"
+ever was. The timer sits between `#pm-back` and `#pm-actions` for that reason -
+it is counting, and rebuilding a running clock because somebody opened another
+page is the complaint in miniature. A GET form is a navigation too and swaps
+the same way; POST is left alone, and the forms that must act without a reload
+already say so with `data-live-action`.
+
+It falls back to an ordinary navigation at every point it cannot be sure, and
+the board works with the script deleted: a response that is not text/html, one
+without this shell (the login redirect is the one that matters), a failed
+fetch, a modified click, `download`, a `target`, another origin, anything
+outside `/admin`, and anything that looks like a file. Verified: a `.pdf` and a
+link to `/Bible-Study` both still load as documents.
+
+Two mechanics that are silent when wrong. **A `<script>` inside replaced markup
+does not run** - the parser marks nodes created that way as already executed -
+so each one in `#pm-main` is re-created, which is what makes the contract
+forms' inline `revisionPrefill` survive a swap. And a second press while the
+first is in flight would otherwise land last and show the page nobody asked
+for, so a token is carried and the newest press wins.
+
+`tools/test_shell_stays_put.py` drives a real browser, because nothing else can
+test this: after the dust settles the page is correct either way, and every DOM
+assertion, accessibility tree and screenshot samples the settled state. It
+stamps a property on the shell elements from JavaScript, navigates, and asserts
+the stamp is still there - which a server render cannot reproduce, so it can
+only pass if those very elements survived. Catalogue rule "Only the part that
+changed is allowed to change", which carries the five reasons this keeps
+getting missed.
+
 ## House rules
 
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page

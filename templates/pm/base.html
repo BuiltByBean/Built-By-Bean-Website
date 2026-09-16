@@ -411,6 +411,13 @@
            scrolls the page sideways, and a line of code is not an exception. */
         #pm-scroll code, #pm-scroll pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
+        /* While a page is being fetched. The delay is the whole point: a
+           navigation that answers quickly never shows this at all, so the
+           common case has no flicker, and only a slow one admits it is
+           working. Nothing else on the shell dims, because nothing else is
+           changing. */
+        .pm-navigating #pm-main { opacity: 0.55; transition: opacity 120ms ease 140ms; }
+
         .flash-msg {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -1255,8 +1262,13 @@
                         </svg>
                     </button>
                     <div class="min-w-0">
-                        <h2 class="text-lg font-bold text-white">{% block page_title %}Dashboard{% endblock %}</h2>
-                        <p class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
+                        {# Identified, because moving between pages changes these
+                           two lines and nothing else in this bar. See the note on
+                           bbbNavigate. tabindex -1 so focus can be moved here on
+                           arrival without putting the heading in the tab order. #}
+                        <h2 id="pm-page-title" tabindex="-1"
+                            class="text-lg font-bold text-white outline-none">{% block page_title %}Dashboard{% endblock %}</h2>
+                        <p id="pm-page-subtitle" class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
                     </div>
                 </div>
                 {#
@@ -1282,9 +1294,12 @@
                    phone. The auto margin pushes the group right on its own
                    line as well as on a shared one. #}
                 <div class="flex items-center gap-3 flex-wrap justify-end ml-auto">
-                    {% block back %}{% endblock %}
+                    {# display:contents, so these wrappers carry an id for the
+                       swap without taking part in the layout: back and the page
+                       actions stay direct flex items of this row. #}
+                    <span id="pm-back" class="contents">{% block back %}{% endblock %}</span>
                     {% if time_tracking %}{% include "pm/components/timer_widget.html" %}{% endif %}
-                    {% block header_actions %}{% endblock %}
+                    <span id="pm-actions" class="contents">{% block header_actions %}{% endblock %}</span>
                 </div>
             </div>
         </header>
@@ -1330,7 +1345,7 @@
            scroller and clips, the filter bar stands still, and the results
            scroll inside their own container with the scrollbar starting
            below the bar. See CLAUDE.md LM-4. #}
-        <main class="p-6 animate-fade-in {% block main_class %}{% endblock %}">
+        <main id="pm-main" class="p-6 animate-fade-in {% block main_class %}{% endblock %}">
             {% block content %}{% endblock %}
         </main>
 
@@ -1375,9 +1390,29 @@
         return PREFIX + u.pathname + u.search + u.hash;
     }
 
-    function save() {
-        try { store.setItem(key(), String(Math.round(scroller.scrollTop))); } catch (e) {}
+    function save(url) {
+        try { store.setItem(key(url), String(Math.round(scroller.scrollTop))); } catch (e) {}
     }
+
+    /* Handed to the navigation code rather than copied into it. Two places
+       deriving the same storage key from a URL is two formats the first time
+       either is edited, and the symptom would be a page that silently forgets
+       where it was. */
+    window.bbbScroll = {
+        save: save,
+        depth: function (url) {
+            var n = parseInt(store.getItem(key(url)) || '', 10);
+            return n > 0 ? n : 0;
+        },
+        claimReturn: function (url) {
+            var intent = null;
+            try {
+                intent = store.getItem(INTENT);
+                store.removeItem(INTENT);
+            } catch (e) {}
+            return !!intent && intent === key(url);
+        }
+    };
 
     // Record the position continuously rather than only on the way out.
     // pagehide alone misses the case where the tab is discarded, and on iOS
@@ -1458,6 +1493,200 @@
         }
         setTimeout(attempt, 16);
     })();
+})();
+</script>
+
+<!--
+  Moving between pages without rebuilding the parts that did not move.
+
+  bbbSwapLive already said the principle for one page: "Re-rendering a region
+  that did not change is not a harmless no-op - it destroys all three." It was
+  applied to actions inside a page and never to the step between two of them,
+  so pressing Expenses and then My Apps threw away and rebuilt the entire
+  shell: the sidebar, its scroll position, the drawer on a phone, the banner,
+  the running timer, and every entry animation played again.
+
+  Almost none of that changes between two pages of this board. What changes is
+  the title, the two lines in the banner, the back link and page actions, the
+  content, and which sidebar link is lit. So those are what move.
+
+  The sidebar in particular is never replaced. One class goes off one link and
+  onto another - which is all "you are here" ever was.
+
+  Falls back to an ordinary navigation at every point it cannot be sure: a
+  response that is not HTML, one that does not carry this shell (a redirect to
+  the login page), a fetch that fails, a modified click, a download, anything
+  off this origin or outside /admin. The site works with this script deleted.
+-->
+<script>
+(function () {
+    var scroller = document.getElementById('pm-scroll');
+    if (!scroller || !document.getElementById('pm-main') || !window.DOMParser) return;
+
+    /* Replaced whole, by id, so the element carries its identity across and a
+       page that renders nothing into one gets an empty one rather than the
+       previous page's. */
+    var SWAP = ['pm-page-title', 'pm-page-subtitle', 'pm-back', 'pm-actions',
+                'pm-main'];
+    /* Regions outside the content that a new page may still change: the flash
+       strip, and the two sidebar counts. Everything else in the sidebar is
+       identical on every page and is left alone. */
+    var LIVE = ['flash', 'nav-attention', 'nav-notes'];
+    var FILES = /\.(pdf|png|jpe?g|gif|svg|ico|csv|zip|xlsx?|docx?|txt)$/i;
+
+    function swappable(a, ev) {
+        if (!a || ev.defaultPrevented) return false;
+        if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return false;
+        if (a.hasAttribute('download') || a.hasAttribute('data-no-swap')) return false;
+        if (a.target && a.target !== '_self') return false;
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#') return false;
+        var u;
+        try { u = new URL(a.href, location.href); } catch (e) { return false; }
+        if (u.origin !== location.origin) return false;
+        /* The board's own pages only. The public site and the other apps on
+           this domain have their own shells. */
+        if (u.pathname.indexOf('/admin') !== 0) return false;
+        if (FILES.test(u.pathname)) return false;
+        /* A link to where we already are, anchor and all, is the browser's job. */
+        if (u.href === location.href) return false;
+        return true;
+    }
+
+    /* A script that arrives inside replaced markup does not run: the parser
+       marks nodes created this way as already-executed. Several pages define
+       their Alpine component in one (the contract forms' prefill is the case),
+       so they are re-created, which is what makes them run. Idempotent by
+       nature - they define functions. */
+    function runScripts(root) {
+        root.querySelectorAll('script').forEach(function (old) {
+            var next = document.createElement('script');
+            for (var i = 0; i < old.attributes.length; i++) {
+                next.setAttribute(old.attributes[i].name, old.attributes[i].value);
+            }
+            next.text = old.textContent;
+            old.replaceWith(next);
+        });
+    }
+
+    function lightTheRightLink(fresh) {
+        var want = {};
+        fresh.querySelectorAll('aside a.sidebar-link').forEach(function (a) {
+            want[a.getAttribute('href')] = a.classList.contains('active');
+        });
+        document.querySelectorAll('aside a.sidebar-link').forEach(function (a) {
+            var state = want[a.getAttribute('href')];
+            if (state === undefined) return;
+            a.classList.toggle('active', state);
+        });
+    }
+
+    var token = 0;
+
+    function go(url, push, returning) {
+        var mine = ++token;
+        if (window.bbbScroll) window.bbbScroll.save();
+        document.documentElement.classList.add('pm-navigating');
+
+        fetch(url, { credentials: 'same-origin', headers: { 'X-Shell': 'swap' } })
+            .then(function (res) {
+                var type = res.headers.get('content-type') || '';
+                if (!res.ok || type.indexOf('text/html') === -1) throw new Error('not a page');
+                return res.text().then(function (html) { return { html: html, url: res.url || url }; });
+            })
+            .then(function (answer) {
+                /* A second press while the first was in flight wins. Without
+                   this the slower answer lands last and shows the page nobody
+                   asked for any more. */
+                if (mine !== token) return;
+                var fresh = new DOMParser().parseFromString(answer.html, 'text/html');
+                if (!fresh.getElementById('pm-main')) {
+                    /* Not this shell. A redirect to the login page is the one
+                       that matters, and it must be a real navigation. */
+                    location.href = answer.url;
+                    return;
+                }
+
+                SWAP.forEach(function (id) {
+                    var stale = document.getElementById(id);
+                    var next = fresh.getElementById(id);
+                    if (stale && next) stale.replaceWith(document.adoptNode(next));
+                });
+                LIVE.forEach(function (key) {
+                    var stale = document.querySelector('[data-live="' + key + '"]');
+                    var next = fresh.querySelector('[data-live="' + key + '"]');
+                    if (stale && next) stale.replaceWith(document.adoptNode(next));
+                });
+                document.title = fresh.title || document.title;
+                lightTheRightLink(fresh);
+                runScripts(document.getElementById('pm-main'));
+
+                if (push) history.pushState({ pm: true }, '', answer.url);
+
+                /* A fresh page opens at the top; a return goes back to where it
+                   was left. Same rule the full page load already followed, and
+                   the same stored depth, so the two agree. */
+                var depth = returning && window.bbbScroll ? window.bbbScroll.depth(answer.url) : 0;
+                scroller.scrollTop = depth;
+
+                /* On a phone the drawer is over the page that was just left. */
+                try {
+                    var root = window.Alpine && window.Alpine.$data(document.documentElement);
+                    if (root && 'sidebarOpen' in root) root.sidebarOpen = false;
+                } catch (e) {}
+
+                /* Somebody using a screen reader has had no page load to
+                   announce the change, so send focus to the new heading. */
+                var heading = document.getElementById('pm-page-title');
+                if (heading) heading.focus({ preventScroll: true });
+            })
+            .catch(function () { location.href = url; })
+            .then(function () {
+                if (mine === token) document.documentElement.classList.remove('pm-navigating');
+            });
+    }
+
+    /* A GET form is a navigation with its answers in the query string, so it
+       gets the same treatment. The filter bars on the ledger, the clients list
+       and the tickets list are all this shape. POST is left to the browser:
+       it has side effects and a redirect, and the forms that must act without
+       a reload already say so with data-live-action. */
+    document.addEventListener('submit', function (ev) {
+        var form = ev.target;
+        if (!form || ev.defaultPrevented) return;
+        if ((form.method || 'get').toLowerCase() !== 'get') return;
+        if (form.hasAttribute('data-live-action') || form.hasAttribute('data-no-swap')) return;
+        if (form.target && form.target !== '_self') return;
+        var action = form.getAttribute('action') || location.pathname;
+        var u;
+        try { u = new URL(action, location.href); } catch (e) { return; }
+        if (u.origin !== location.origin) return;
+        if (u.pathname.indexOf('/admin') !== 0) return;
+        /* The form's own fields decide the query string, exactly as the browser
+           would build it. */
+        u.search = new URLSearchParams(new FormData(form)).toString();
+        ev.preventDefault();
+        go(u.href, true, false);
+    });
+
+    document.addEventListener('click', function (ev) {
+        var a = ev.target.closest && ev.target.closest('a[href]');
+        if (!swappable(a, ev)) return;
+        ev.preventDefault();
+        /* A back control has already recorded that this arrival is a return. */
+        var returning = a.hasAttribute('data-back-to')
+            || (window.bbbScroll && window.bbbScroll.claimReturn(a.href));
+        go(a.href, true, returning);
+    });
+
+    window.addEventListener('popstate', function (ev) {
+        if (!ev.state || !ev.state.pm) { location.reload(); return; }
+        go(location.href, false, true);
+    });
+
+    /* So the first back press out of a swapped page has somewhere to return to
+       rather than reloading. */
+    try { history.replaceState({ pm: true }, '', location.href); } catch (e) {}
 })();
 </script>
 
