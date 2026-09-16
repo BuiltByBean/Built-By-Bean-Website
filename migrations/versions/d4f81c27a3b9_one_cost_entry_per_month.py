@@ -112,10 +112,12 @@ def upgrade():
             "period_end = :last WHERE id = :id"),
             {"first": first, "last": last, "id": entry_id})
         if expense_id:
-            # The expense takes its date from the period it covers, the same
-            # way the sync writes it.
-            bind.execute(sa.text("UPDATE expenses SET date = :last WHERE id = :id"),
-                         {"last": last, "id": expense_id})
+            # The same date the sync would write: the period's end or today,
+            # whichever came first. The period is a key and covers the whole
+            # month; the expense's date is a fact about when money went out,
+            # and the end of a month in progress has not happened yet.
+            bind.execute(sa.text("UPDATE expenses SET date = :when WHERE id = :id"),
+                         {"when": min(last, date.today()), "id": expense_id})
 
     print(f"[d4f81c27a3b9] folded {len(drop_entries)} duplicate cost entries, "
           f"restated {len(restate)}")

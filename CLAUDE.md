@@ -158,6 +158,24 @@ a series and nothing is touched. `tools/test_cost_periods.py` runs fifteen
 nights of the real payload through the sync and then folds a ledger built to
 look exactly like the one that shipped.
 
+**A period is a key; a date is a fact, and they are not the same field.**
+Fixing the above by keying the entry to the whole month put the expense's
+date at the end of that month, because `_sync_expense` dated from
+`period_end` - so on the 16th the ledger showed September's accruing
+Twilio, Cloudflare and Stripe charges dated **Sep 30**, money listed
+against a day that had not happened. Cloudflare and Stripe had read that
+way since before any of this; the Twilio fix simply made three more rows
+do it and the owner spotted it at once. The date is now `min(period_end,
+today)`: it lands in the month it belongs to, it is a day that has
+happened, and it stops moving once that month closes, because the last
+nightly run of a month is the last day of it. The key is untouched, so
+nothing goes back to a row a night. `_sync_flat` already held this rule
+for subscriptions - "a subscription you have not been charged for yet is
+not an expense" - and the month bucket path simply did not honour it.
+Migration `e7b2c05d18af` pulls back the rows already written that way,
+touching only expenses a cost entry owns: a hand typed expense dated
+ahead is somebody's deliberate note and is left alone.
+
 Chasing that one found a second, unrelated fault on the same page. The ledger
 ordered by `Expense.date.desc()` and nothing else, and every vendor charge for
 a month is dated the last day of it, so far more than twenty rows share a date.

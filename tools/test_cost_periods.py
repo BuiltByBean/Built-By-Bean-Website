@@ -18,6 +18,9 @@ What is proved:
   4. The migration folds a ledger that already carries the duplicates, keeps
      the newest reading, deletes the rest with their expenses, and leaves the
      twice billed vendor alone.
+  5. NO EXPENSE IS DATED IN THE FUTURE. The entry's period is a key and is the
+     whole month; the expense's date is a fact about when money went out, and
+     the two are not the same field. A month in progress dates to today.
 
 Run: python tools/test_cost_periods.py
 """
@@ -123,12 +126,30 @@ with application.app_context():
     expenses = Expense.query.filter_by(category="service_cost").all()
     check("one expense beside it", len(expenses) == 1, len(expenses))
     if expenses:
-        check("dated in the month it covers",
-              expenses[0].date == date(2026, 9, 30), expenses[0].date)
+        # The last sync above ran on 15 September, mid month. The entry is
+        # keyed to the whole month either way; the expense is not dated past
+        # the day it was read.
+        check("THE POINT: dated a day that has happened, not the month's end",
+              expenses[0].date == date(2026, 9, 15), expenses[0].date)
+        check("and still inside the month it covers",
+              (expenses[0].date.year, expenses[0].date.month) == (2026, 9),
+              expenses[0].date)
         check("for the real figure", round(expenses[0].amount, 2) == 59.67,
               expenses[0].amount)
 
     print("\nA MONTH THAT CLOSED, AND A NEW ONE:")
+    # The last nightly run of September, which is what settles the month on
+    # its own last day. Nothing re-reads a closed month afterwards - the sync
+    # only ever asks for the current one - so the date a month keeps is
+    # whatever its final run saw. That is a real date in the right month
+    # either way, and with a nightly job the final run is the last day.
+    for day, price in ((date(2026, 9, 30), 61.40),):
+        costs.date = type("D", (), {"today": staticmethod(lambda d=day: d),
+                                    "fromisoformat": staticmethod(date.fromisoformat)})
+        costs.requests = type("R", (), {
+            "get": staticmethod(lambda *a, _d=day, _p=price, **kw: twilio_on(_d, _p))})
+        costs._sync_twilio(twilio)
+
     day = date(2026, 10, 4)
     costs.date = type("D", (), {"today": staticmethod(lambda d=day: d),
                                 "fromisoformat": staticmethod(date.fromisoformat)})
@@ -138,8 +159,18 @@ with application.app_context():
     entries = ServiceCostEntry.query.filter_by(provider_id=twilio_id).order_by(
         ServiceCostEntry.period_start).all()
     check("October is its own row", len(entries) == 2, len(entries))
-    check("and September is left exactly as it was",
-          round(entries[0].raw_amount, 2) == 59.67, entries[0].raw_amount)
+    check("and September holds its final reading",
+          round(entries[0].raw_amount, 2) == 61.40, entries[0].raw_amount)
+    sept_expense = db.session.get(Expense, entries[0].expense_id)
+    check("September's expense settled on the last day of September, now it is over",
+          sept_expense.date == date(2026, 9, 30), sept_expense.date)
+    oct_expense = db.session.get(Expense, entries[1].expense_id)
+    check("and October, still running, is dated the day it was read",
+          oct_expense.date == date(2026, 10, 4), oct_expense.date)
+    check("nothing in the ledger is dated ahead of the day it was read",
+          all(e.date <= date(2026, 10, 4)
+              for e in Expense.query.filter_by(category="service_cost").all()),
+          [str(e.date) for e in Expense.query.filter_by(category="service_cost").all()])
 
 
 # ── The migration, over a ledger that already has the duplicates ──
@@ -215,9 +246,10 @@ with application.app_context():
               sept[0].raw_amount)
         check("with the month's own bounds", sept[0].period_end == date(2026, 9, 30),
               sept[0].period_end)
-        check("and its expense re-dated to match",
-              db.session.get(Expense, sept[0].expense_id).date == date(2026, 9, 30),
-              db.session.get(Expense, sept[0].expense_id).date)
+        # Not the month's end: the same honest date the sync writes.
+        settled = db.session.get(Expense, sept[0].expense_id).date
+        check("and its expense dated no later than today",
+              settled == min(date(2026, 9, 30), date.today()), settled)
     check("the fourteen duplicate expenses went with them",
           Expense.query.filter_by(category="service_cost").count() == 4,
           Expense.query.filter_by(category="service_cost").count())

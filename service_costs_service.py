@@ -58,6 +58,15 @@ def _sync_expense(cost_entry, mapping, default_client_id=None):
 
     Updates rather than inserts on a second run, because the entry it mirrors
     is itself updated in place as the month accumulates.
+
+    The DATE is not the period. A cost entry's period is a key and has to be
+    the whole calendar month, or a nightly sync writes a new row every night
+    instead of correcting the one it wrote before. An expense's date is a fact
+    about when money went out, and the end of a month in progress has not
+    happened yet: dating September's accruing charges Sep 30 put future dates
+    on the ledger while it was the 16th. So the date is the period's end or
+    today, whichever came first. It still lands in the month it belongs to,
+    and it stops moving the day that month closes.
     """
     expense = cost_entry.expense
     if expense is None:
@@ -72,7 +81,7 @@ def _sync_expense(cost_entry, mapping, default_client_id=None):
     expense.project_id = mapping.project_id if mapping else None
     expense.amount = cost_entry.allocated_amount
     expense.description = cost_entry.description
-    expense.date = cost_entry.period_end
+    expense.date = min(cost_entry.period_end, date.today())
     db.session.flush()
     cost_entry.expense_id = expense.id
     return expense
