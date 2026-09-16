@@ -80,6 +80,14 @@ only one with nowhere else to be answered. Hosting still reads its own
 sidebar badge out of `attention_counts()`, so that dict keeps a `hosting`
 key that is not a row on the page; `total` is the mail alone.
 
+A row opens on press and shows the whole message, one at a time, the same
+shape the leads page uses: the summary is the press target, a chevron says so,
+and the snippet gives way to the body rather than repeating its first hundred
+characters above it. The body is capped and scrolls inside itself, because one
+long mail would otherwise push every other row off the page it exists to
+clear. `openId` lives on the card OUTSIDE `data-live`, or a Dismiss would swap
+the region and close the row somebody was reading.
+
 Each row carries Reply and Dismiss. Dismiss is `messages.archive`, which
 archives the inbound thread AND the row pressed - it matched the thread
 alone once, so a message with no `thread_id` was left untouched while the
