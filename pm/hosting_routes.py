@@ -268,9 +268,17 @@ def _status(fee, cost):
     has priced. A fee of nothing is still guarded, and reads as free hosting,
     because whether it is unset or agreed at zero the money recovered is the
     same and the page should say so rather than crash.
+
+    Free hosting is its OWN band and not a loss. It was a loss once, so a
+    project deliberately hosted for nothing and costing nothing to run was
+    counted on the Needs a look tile and in the sidebar badge, while its row
+    said "Hosted free" and offered no press: the page asked to be looked at
+    and then had nothing to show. Nothing is owed on nothing. It becomes a
+    loss the moment it actually costs something, because free to the client
+    was never meant to mean paid for out of pocket.
     """
     if not fee:
-        return ("loss", "Hosted free")
+        return ("loss", "Free, and it costs") if cost > 0 else ("free", "Hosted free")
     if cost <= 0:
         return ("fine", "No cost recorded")
     if cost >= fee:
@@ -357,7 +365,10 @@ def _railway_all_time():
 
 # Worst first. A page whose whole job is to surface the two projects that need
 # attention should not open on the eleven that do not.
-STATUS_ORDER = {"loss": 0, "raise": 1, "fine": 2}
+# Sorted by how much it wants doing about it. Free hosting sits below Fine:
+# a fee that covers its costs is at least earning, and one nobody is being
+# charged is the row least likely to need anybody today.
+STATUS_ORDER = {"loss": 0, "raise": 1, "fine": 2, "free": 3}
 
 
 @hosting_bp.route("/")

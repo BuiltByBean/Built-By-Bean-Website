@@ -467,6 +467,19 @@ that says what the fee is for and what stops when it stops being paid -
 read into the SOW, the standalone agreement and every fee update from
 that one place, so no two documents can describe it differently.
 
+Hosted free is its own band and NOT a loss. It was a loss once, so Robinson &
+Co., hosted free at $0.00 and costing $0.00 to run, was counted on the Needs a
+look tile and in the sidebar badge while its own row said "Hosted free" and
+offered no press: the page asked to be looked at and had nothing to show. A
+free project becomes a loss the moment it actually costs something, because
+free to the client never meant paid for out of pocket, and then it offers the
+same draft as any other row ("Put it on $25.00/mo"). That press had to move
+out of the bar's `{% if %}`, which is gated on there being a fee to measure
+against. `tools/test_hosting_bands.py` walks all five bands and asserts the
+tile, the sidebar badge and the number of draft links are the same number -
+the badge agreeing with the tile proves nothing on its own, because both read
+the same wrong function.
+
 ## Who owns what
 
 `contract_docs.IP_TERMS` is the one place the ownership words are written,

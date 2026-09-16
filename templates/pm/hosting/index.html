@@ -102,12 +102,18 @@
 
         <div class="divide-y divide-white/5">
         {% for r in rows %}
+{# Keyed lookups, so a new status has to be given a colour here rather than
+           quietly rendering as nothing. 'free' is grey on purpose: it is not
+           good news and it is not bad news, it is a row nobody is being
+           charged for. #}
         {% set tone = {'loss': 'bg-red-500/10 text-red-300',
                        'raise': 'bg-amber-500/10 text-amber-300',
-                       'fine': 'bg-emerald-500/10 text-emerald-300'}[r.status] %}
+                       'fine': 'bg-emerald-500/10 text-emerald-300',
+                       'free': 'bg-surface-800 text-surface-400'}[r.status] %}
         {% set fill = {'loss': 'bg-red-500',
                        'raise': 'bg-amber-500',
-                       'fine': 'bg-emerald-500'}[r.status] %}
+                       'fine': 'bg-emerald-500',
+                       'free': 'bg-surface-600'}[r.status] %}
         <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
 
             <div class="flex items-start justify-between gap-3">
@@ -156,21 +162,6 @@
                 </span>
             </div>
 
-            {% if r.increase %}
-            {# The page noticed; this is the doing. One press opens the fee
-               update filled in - the new fee, the one it cancels, the first
-               of next month, the reason - and what is left is reading it
-               and sending it. Trailing edge, filled, because it acts. #}
-            <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
-                <a href="{{ r.increase.url }}"
-                   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
-                    Draft the increase to {{ r.increase.new_monthly|format_currency }}/mo
-                </a>
-            </div>
-            {% endif %}
-
-            {{ lifetime_strip(r) }}
-
             {% else %}
             {# Only an agreed fee of nothing reaches this. There is no width to
                measure a cost against, so there is no bar - just what it cost to
@@ -178,8 +169,26 @@
             <p class="mt-3 text-xs text-surface-400">
                 Hosted free - {{ r.cost|format_currency }} of cost, none of it recovered.
             </p>
-            {{ lifetime_strip(r) }}
             {% endif %}
+
+            {# Outside the bar's branch, because a row hosted free that has
+               started costing money is counted on the tile and has to offer
+               the same press as any other. The page noticed; this is the
+               doing. One press opens the fee update filled in - the new fee,
+               the one it cancels, the first of next month, the reason - and
+               what is left is reading it and sending it. Trailing edge,
+               filled, because it acts. #}
+            {% if r.increase %}
+            <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <a href="{{ r.increase.url }}"
+                   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
+                    {% if r.fee %}Draft the increase to{% else %}Put it on{% endif %}
+                    {{ r.increase.new_monthly|format_currency }}/mo
+                </a>
+            </div>
+            {% endif %}
+
+            {{ lifetime_strip(r) }}
 
         </div>
         {% endfor %}
