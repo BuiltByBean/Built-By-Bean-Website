@@ -120,6 +120,36 @@ five minutes as a NEW row with a new id and a new status, and archiving it
 did nothing anybody could see. Mail without that header now gets a
 fingerprint of its sender, date and subject.
 
+## What a month of usage cost
+
+`service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows
+with an `Expense` beside each one. The entry's key is (provider, resource,
+period_start, period_end, mapping), and **period_end being part of that key is
+the whole trap**: a month to date figure grows all month, so a nightly sync has
+to CORRECT the row it wrote last night rather than stack another beside it, and
+it can only do that if the period it writes does not move.
+
+`_month_bounds()` is the answer and its docstring has said so since the first
+time this happened. Stripe and Cloudflare used it; Twilio and AWS were written
+before it and never picked it up. Twilio's monthly usage record carries an
+end_date that tracks today while the month is open, so from 2026-09-01 the
+nightly run wrote a NEW row every night holding the whole month to date.
+Fifteen nights in, September read **$462.79 of outbound SMS against $59.67 of
+real usage**, plus the same in miniature for inbound SMS and Polly. August was
+a single correct row, which is the tell: once a month closes its end_date stops
+moving and the key settles. Every other provider was clean.
+
+Migration `d4f81c27a3b9` folds what was left behind. The rule it applies, per
+(provider, resource, mapping, month): a group is a month to date SERIES only
+when its rows start on the first AND at least one ends after that day. Keep the
+newest, give it the month's bounds, delete the rest with their expenses. That
+test is what protects `_sync_flat`, where a vendor billing twice in one month
+legitimately writes two SINGLE DAY entries (Anthropic did, in March and again
+in May): every row there starts and ends on its own day, so the group is never
+a series and nothing is touched. `tools/test_cost_periods.py` runs fifteen
+nights of the real payload through the sync and then folds a ledger built to
+look exactly like the one that shipped.
+
 ## Tickets travel both ways
 
 Tickets are PUSHED here by each client app's outbox, and `hub.fetch` is

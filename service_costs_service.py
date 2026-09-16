@@ -272,7 +272,11 @@ def _sync_aws(provider):
                        aws_access_key_id=key_id, aws_secret_access_key=secret)
 
     end = date.today()
-    start = end - timedelta(days=30)
+    # Aligned to the first of a month, so every MONTHLY bucket Cost Explorer
+    # returns starts on the 1st and covers a whole month. Asking from a date
+    # mid-month returns a part-month bucket, and a part-month figure keyed to
+    # the whole month overwrites the full one next time it is read.
+    start = (end - timedelta(days=30)).replace(day=1)
 
     # 1. Get total cost by service
     response = ce.get_cost_and_usage(
@@ -286,8 +290,11 @@ def _sync_aws(provider):
     s3_total = 0
 
     for result in response.get("ResultsByTime", []):
-        p_start = date.fromisoformat(result["TimePeriod"]["Start"])
-        p_end = date.fromisoformat(result["TimePeriod"]["End"])
+        # The month the bucket belongs to. Cost Explorer ends the current
+        # month's bucket at today, which moves, and see the note on Twilio
+        # above for what a moving period_end does to a daily sync.
+        p_start, p_end = _month_bounds(
+            date.fromisoformat(result["TimePeriod"]["Start"]))
 
         for group in result.get("Groups", []):
             service_name = group["Keys"][0]
@@ -305,8 +312,7 @@ def _sync_aws(provider):
 
     # 2. Break down S3 costs by bucket using CloudWatch storage metrics
     if s3_total > 0:
-        p_start = start.replace(day=1)
-        p_end = end
+        p_start, p_end = _month_bounds()
         count += _sync_aws_s3_by_bucket(provider, creds, s3_total, p_start, p_end)
 
     db.session.commit()
@@ -516,8 +522,17 @@ def _sync_twilio(provider):
             continue
 
         resource_id = f"twilio:{category}"
-        p_start = date.fromisoformat(record.get("start_date", start.isoformat()))
-        p_end = date.fromisoformat(record.get("end_date", now.isoformat()))
+        # The calendar month the record falls in, NOT the slice Twilio happens
+        # to be reporting. A monthly usage record's end_date moves with today
+        # while the month is open, and period_end is part of the entry's key,
+        # so a nightly sync wrote a new row every night holding the month to
+        # date instead of correcting the one it wrote the night before.
+        # September 2026 booked itself fifteen times and read $462.79 against
+        # $59.67 of real usage. Read off the record's own start_date rather
+        # than off today, so widening the query range later cannot silently
+        # file August's usage under September.
+        p_start, p_end = _month_bounds(
+            date.fromisoformat(record.get("start_date", start.isoformat())))
 
         description_text = record.get("description", category)
 
