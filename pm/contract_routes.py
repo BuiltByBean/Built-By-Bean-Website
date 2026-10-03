@@ -143,7 +143,7 @@ def _parsed(stamp):
 def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_email,
                    message="", fields=None, client=None, project=None,
                    source_document=None, countersigner=False, form=None,
-                   revision_of=None):
+                   revision_of=None, send=True):
     """Send a PDF out for signature and record where it went.
 
     Raises SignaDocError if the portal will not take it, having written
@@ -155,7 +155,20 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
     him and invites the client the moment he is done. The row still records
     the client as the signer, because the client is who the document is
     waiting on for all but the first few minutes of its life.
+
+    `send=False` stops at a draft in the portal with no fields on it, for a
+    PDF whose signature lines this board cannot know: somebody places them in
+    the portal's editor and sends it from there. The row is still written now,
+    as a draft, so the refresh picks the envelope up when it goes out and the
+    sealed copy is filed here like any other.
     """
+    if send:
+        fields = fields or DEFAULT_FIELDS
+    else:
+        # Never the defaults on a draft. A box dropped at the bottom of the
+        # last page is exactly the guess this path exists to avoid, and one
+        # left in place by accident is a signature in the wrong spot.
+        fields = fields or []
     signers = None
     order = "parallel"
     if countersigner:
@@ -172,11 +185,12 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
         signer_name=signer_name,
         signer_email=signer_email,
         message=message,
-        fields=fields or DEFAULT_FIELDS,
+        fields=fields,
         signers=signers,
         signing_order=order,
         sender_name=SENDER_NAME,
         sender_email=SENDER_EMAIL,
+        send=send,
     )
     links = reply.get("links") or [{}]
     # The client's link is the one worth keeping: it is what gets resent when
@@ -228,6 +242,8 @@ def _apply(row, envelope):
 
     row.status = status
     row.synced_at = _now()
+    if not row.signer_ref:
+        _adopt_signer(row, envelope)
     if status == "completed":
         row.completed_at = _parsed(envelope.get("completedAt")) or _now()
         _file_signed_copy(row)
@@ -243,6 +259,26 @@ def _apply(row, envelope):
         row.decline_reason = (reason or envelope.get("voidReason") or "").strip() or None
         row.declined_at = _now()
     return True
+
+
+def _adopt_signer(row, envelope):
+    """Learn who the signer is from the portal, for a row that never knew.
+
+    A draft finished in the portal's editor was written here before it had a
+    signing link, so its row has no signer reference and Resend would refuse
+    it. The signer may also have been changed in the editor, so the row takes
+    the portal's name and address rather than keeping the one typed here.
+    """
+    signers = [s for s in envelope.get("signers") or [] if isinstance(s, dict) and s.get("id")]
+    if not signers:
+        return
+    wanted = (row.signer_email or "").strip().lower()
+    match = next((s for s in signers if (s.get("email") or "").lower() == wanted), signers[0])
+    row.signer_ref = match["id"]
+    if match.get("name"):
+        row.signer_name = match["name"][:120]
+    if match.get("email"):
+        row.signer_email = match["email"][:200]
 
 
 def _file_signed_copy(row):
@@ -372,6 +408,10 @@ def contract_detail(id):
         req=row,
         envelope=envelope,
         error=error,
+        # A draft has no signing link yet, so its one useful action is to go
+        # and finish it.
+        editor_url=(signadoc.editor_url(row.envelope_id)
+                    if row.status == "draft" and signadoc.configured() else None),
     )
 
 
@@ -506,6 +546,11 @@ def send_document(document_id):
         if not name or not email:
             flash("The signer needs a name and an email address.", "warning")
             return redirect(url_for("contracts.send_document", document_id=document_id))
+        # The second button. A document with its signature lines anywhere but
+        # the bottom of the last page - several of them, or more than one
+        # person's - goes to the portal as a draft and is finished in its
+        # editor, rather than sent with a box in the wrong place.
+        place = request.form.get("place_fields") == "1"
         try:
             data = read_pdf(doc.filename)
         except Exception as exc:  # boto3 raises its own error types, not OSError
@@ -517,10 +562,18 @@ def send_document(document_id):
                 kind="document", signer_name=name, signer_email=email,
                 message=message, client=client,
                 project=doc.project, source_document=doc,
+                send=not place,
             )
         except SignaDocError as exc:
             flash(f"SignaDoc would not take it: {exc}", "error")
             return redirect(url_for("contracts.send_document", document_id=document_id))
+        if place:
+            # Straight into the editor, because placing the fields is the next
+            # step and nobody else can take it. No flash: it would wait for
+            # the next page here and could then say "not sent" about an
+            # envelope that went out in the meantime. The row's own page
+            # offers the way back into the editor for as long as it is a draft.
+            return redirect(signadoc.editor_url(row.envelope_id))
         flash(sent_message(row), "success")
         return redirect(url_for("contracts.contract_detail", id=row.id))
 

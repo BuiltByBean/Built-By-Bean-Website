@@ -15,6 +15,10 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 from flask_login import login_required, current_user
 from sqlalchemy import and_, case, func, or_
 
+# The import's own key builders, imported rather than copied: a typed row and
+# an imported one must not disagree about what counts as the same business,
+# and two copies of a key format is two formats the first time either moves.
+from import_leads import norm as _norm, street_key as _street_key
 from models import (db, Lead, LeadPerson, LeadTouch, Client,
                     CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES,
                     LEAD_OUTCOME_CHOICES, LEAD_OUTCOMES_REACHED,
@@ -247,6 +251,68 @@ def _back(lead_id=None):
             args[key] = value
     target = url_for("leads.index", **args)
     return target + (f"#lead-{lead_id}" if lead_id else "")
+
+
+
+
+@leads_bp.route("/new", methods=["POST"])
+@login_required
+def lead_add():
+    """A business somebody met, which no public record carries.
+
+    The import builds this list out of state files, and a sole trader is in
+    none of them: no franchise tax without a company, no sales tax permit
+    selling labour, no licence for a trade Texas does not license. The first
+    one to prove it was a painter in Powderly the owner had already spoken to.
+
+    `dedupe_key` is built exactly as the import builds it, so a later import
+    that finds the same business by name and street FOLDS INTO this row rather
+    than writing a second one. The source is recorded as typed, which is what
+    stops the loader overwriting any of it: the import never overwrites a
+    phone, email, website or owner that somebody put there by hand.
+    """
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("A lead needs a name.", "warning")
+        return redirect(url_for("leads.index"))
+
+    city = (request.form.get("city") or "").strip()
+    address = (request.form.get("address") or "").strip()
+    key = f"{_norm(name)}|{_street_key(address) or _norm(city)}"[:240]
+
+    existing = Lead.query.filter_by(dedupe_key=key).first()
+    if existing:
+        flash(f"{existing.name} is already on the list.", "warning")
+        return redirect(url_for("leads.index", q=name))
+
+    website = (request.form.get("website") or "").strip()
+    lead = Lead(
+        dedupe_key=key,
+        name=name,
+        address=address,
+        city=city.title(),
+        state=(request.form.get("state") or "TX").strip().upper()[:10],
+        phone=(request.form.get("phone") or "").strip(),
+        email=(request.form.get("email") or "").strip(),
+        website=website,
+        # new_industry, not industry: the filter bar on the same page already
+        # submits a field called industry, and two controls with one name send
+        # whichever the browser likes.
+        industry=(request.form.get("new_industry") or "").strip(),
+        owner_name=(request.form.get("owner_name") or "").strip(),
+        notes=(request.form.get("notes") or "").strip(),
+        sources="typed",
+    )
+    # Nobody has to go looking for a website that was just typed in, and a row
+    # with a website that was never checked must not read as "no site found":
+    # an empty column and an established absence are different facts.
+    if website:
+        lead.website_checked_at = datetime.now(timezone.utc)
+    db.session.add(lead)
+    db.session.commit()
+    flash(f"{name} added to the list.", "success")
+    return redirect(url_for("leads.index", q=name))
+
 
 
 @leads_bp.route("/<int:id>/touch", methods=["POST"])

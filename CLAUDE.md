@@ -413,6 +413,43 @@ other two. The Comptroller files an unknown start date as 1961-09-01, the
 day the sales tax began, and that is stored as no date rather than rendered
 as sixty-five years of trading.
 
+**The trades that sell labour were missing, and the count said so.** On
+2026-10-03 the owner spoke to a painter in Powderly and found him absent. The
+board listed EIGHT painting businesses for a three county trade area, beside
+Trucking at 625 and Health practices at 556 - and those two numbers are the
+tell, because they are the two sources that publish a register (FMCSA, CMS).
+A painter sells labour: no sales tax, so not on the permit spine; painting is
+not licensed in Texas, so no TDLR row; one van, so no map. The franchise file
+holds them and was downloaded only to ENRICH, on the rule that "a registration
+proves an entity exists and nothing more". True of shells, false of trades.
+
+`trade_in_the_name` is the cheap half of evidence of trading: nobody registers
+a holding entity as "SIMMONS PAINTING LLC". A registration whose own NAME
+declares a trade creates a lead; one that declares nothing still does not.
+Measured against the live board, that is **180 businesses** the list did not
+have: 40 concrete and welding, 25 plumbing and electrical, 19 building trades,
+15 cleaning and landscaping, 10 painters.
+
+It is kept deliberately narrow, because the same file holds PAINTED WIND
+RANCH, PAINTER FIREARMS TRAINING INSTITUTE and NETA PAINTER, CPA. Only the
+-ING form and the unmistakable compounds, matched on whole words, with a veto
+list of words that name a different business (ranch, cpa, holdings, realty,
+minerals). A wrong name on a call sheet is worse than a missing one, because
+somebody reads it out. The create pass runs LAST, after the carrier census,
+the maps and the licence files, or it would invent eighty hauliers the FMCSA
+was about to supply.
+
+**And a sole trader is in no state file at all** - no company, so no franchise
+tax either. The painter is one: real, trading, with a website and a telephone,
+and in neither Comptroller file. No source change reaches him, so
+`leads.lead_add` is the way to type one in. It builds `dedupe_key` with the
+import's own `norm` and `street_key`, IMPORTED rather than copied, so a later
+import folds into that row instead of writing the business twice; it records
+the source as `typed`, which is what stops the loader overwriting it; and a
+website typed by hand stamps `website_checked_at`, because somebody has just
+looked. A row with no website typed stays NULL and must not read as "no site
+found". `tools/test_lead_holes.py`.
+
 `enrich_sites.py` then reads each business's own website: the emails and
 telephone numbers on its contact page, and the PEOPLE. A headcount is taken
 only where the business states one itself ("a team of fourteen"); nothing is

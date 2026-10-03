@@ -194,26 +194,33 @@ with application.app_context():
     db.session.add_all([provider, flat])
     db.session.commit()
 
-    # The ledger as it stood: one row per night, each holding the month to date.
+    # The ledger as it stood: one row per night, each holding the month to
+    # date. In the month the clock is ACTUALLY in, because the ledger checks
+    # further down read these rows and a fixture pinned to one calendar month
+    # is a suite that starts failing on the first of the next.
+    THIS_FIRST = date.today().replace(day=1)
+    PREV_LAST = THIS_FIRST - timedelta(days=1)
+    PREV_FIRST = PREV_LAST.replace(day=1)
+    THIS_LAST = (THIS_FIRST + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     for i, price in enumerate(READINGS):
-        day = date(2026, 9, 1) + timedelta(days=i)
+        day = THIS_FIRST + timedelta(days=i)
         exp = Expense(category="service_cost", amount=price, date=day,
                       description=f"Twilio - Standard Outbound SMS ({day:%b %Y})")
         db.session.add(exp)
         db.session.flush()
         db.session.add(ServiceCostEntry(
             provider_id=provider.id, resource_identifier="twilio:sms-outbound",
-            period_start=date(2026, 9, 1), period_end=day,
+            period_start=THIS_FIRST, period_end=day,
             raw_amount=price, allocated_amount=price, expense_id=exp.id,
             description=f"Twilio - Standard Outbound SMS ({day:%b %Y})"))
     # August, already settled: one row, and it must survive untouched.
-    aug = Expense(category="service_cost", amount=70.51, date=date(2026, 8, 31),
+    aug = Expense(category="service_cost", amount=70.51, date=PREV_LAST,
                   description="Twilio - Standard Outbound SMS (last month)")
     db.session.add(aug)
     db.session.flush()
     db.session.add(ServiceCostEntry(
         provider_id=provider.id, resource_identifier="twilio:sms-outbound",
-        period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+        period_start=PREV_FIRST, period_end=PREV_LAST,
         raw_amount=70.51, allocated_amount=70.51, expense_id=aug.id))
     # The protected case: one vendor, two charges, one month, both real.
     for day, amount in ((date(2026, 3, 26), 21.32), (date(2026, 3, 28), 86.75)):
@@ -243,21 +250,21 @@ with application.app_context():
 
     sept = ServiceCostEntry.query.filter_by(
         resource_identifier="twilio:sms-outbound",
-        period_start=date(2026, 9, 1)).all()
+        period_start=THIS_FIRST).all()
     check("September is one row now", len(sept) == 1, len(sept))
     if sept:
         check("holding the newest reading", round(sept[0].raw_amount, 2) == 59.67,
               sept[0].raw_amount)
-        check("with the month's own bounds", sept[0].period_end == date(2026, 9, 30),
+        check("with the month's own bounds", sept[0].period_end == THIS_LAST,
               sept[0].period_end)
         # Not the month's end: the same honest date the sync writes.
         settled = db.session.get(Expense, sept[0].expense_id).date
         check("and its expense dated no later than today",
-              settled == min(date(2026, 9, 30), date.today()), settled)
+              settled == min(THIS_LAST, date.today()), settled)
     check("the fourteen duplicate expenses went with them",
           Expense.query.filter_by(category="service_cost").count() == 4,
           Expense.query.filter_by(category="service_cost").count())
-    aug_rows = ServiceCostEntry.query.filter_by(period_start=date(2026, 8, 1)).all()
+    aug_rows = ServiceCostEntry.query.filter_by(period_start=PREV_FIRST).all()
     check("August, already settled, is untouched",
           len(aug_rows) == 1 and round(aug_rows[0].raw_amount, 2) == 70.51)
     twice = ServiceCostEntry.query.filter_by(
@@ -275,8 +282,8 @@ with application.app_context():
     print("\nRUNNING IT TWICE CHANGES NOTHING:")
     fold.upgrade()
     db.session.commit()
-    check("still one September row", ServiceCostEntry.query.filter_by(
-        period_start=date(2026, 9, 1)).count() == 1)
+    check("still one row for the live month", ServiceCostEntry.query.filter_by(
+        period_start=THIS_FIRST).count() == 1)
     check("still four entries in total", ServiceCostEntry.query.count() == 4,
           ServiceCostEntry.query.count())
 
@@ -292,9 +299,12 @@ with application.app_context():
     boss.set_password("x")
     db.session.add(boss)
     # Something somebody typed off a receipt: a real charge on a real day,
-    # which must keep saying that day.
+    # which must keep saying that day. Dated inside the live month for the
+    # same reason the assertions are: a fixture pinned to one calendar month
+    # is a test that expires.
+    typed_on = date.today().replace(day=1)
     db.session.add(Expense(category="software", amount=21.28,
-                           date=date(2026, 9, 9),
+                           date=typed_on,
                            description="ChatGPT Plus subscription"))
     db.session.commit()
     boss_id = boss.id
@@ -328,17 +338,23 @@ check("the page draws", "Twilio" in page)
 check("the column is headed When, because half of it is not a date",
       ">When<" in page, "ledger header")
 
-running = when("Standard Outbound SMS (Sep 2026)")
-check("a month of usage reads as the month", running == "Sep 2026 to date", running)
+# The month that is ACTUALLY in progress, not the one this was written in.
+# Hard-coding September made this pass in September and fail on 1 October,
+# when the row correctly stopped saying "to date".
+this_month = date.today().strftime("%b %Y")
+running = when(f"Standard Outbound SMS ({this_month})")
+check("a month still running reads as the month, and says so",
+      running == f"{this_month} to date", running)
 check("THE POINT: and never as a day it did not land on",
       running is not None and not re.search(r"\d{2}, \d{4}", running), running)
 
 closed = when("(last month)")
-check("a month that has finished drops the to date", closed == "Aug 2026", closed)
+check("a month that has finished drops the to date",
+      closed == PREV_FIRST.strftime("%b %Y"), closed)
 
 typed = when("ChatGPT Plus subscription")
 check("a charge somebody typed off a receipt keeps its own day",
-      typed == "Sep 09, 2026", typed)
+      typed == typed_on.strftime("%b %d, %Y"), typed)
 
 print("\n" + ("ALL PASS" if not FAIL else str(len(FAIL)) + " FAILED: " + ", ".join(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -52,6 +52,102 @@
 {% endmacro %}
 
 {% block content %}
+{#
+  Somewhere to put a business you met.
+
+  This list is built out of state files, and a sole trader is in none of them:
+  no franchise tax without a company, no sales tax permit selling labour, no
+  licence for a trade Texas does not license. The first one to prove it was a
+  painter in Powderly the owner had already spoken to, who could not be added
+  because there was nothing to add him with.
+
+  The key is the import's own, so a later import that finds the same business
+  folds into this row instead of writing a second one. The button and the form
+  share one x-data: Alpine keeps state on the element, and the header is a
+  different block that could never see it.
+#}
+<div x-data="{ adding: false }" class="mb-4">
+    <div class="flex justify-end">
+        <button type="button" @click="adding = !adding"
+                class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl btn-brand transition-all">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add a lead
+        </button>
+    </div>
+
+    {# relative z-30 per LM-1: the trade picker's panel opens over the tiles
+       and the filter bar below it. #}
+    <div x-show="adding" x-cloak class="glass-card relative z-30 p-4 sm:p-5 mt-4">
+        <form method="POST" action="{{ url_for('leads.lead_add') }}" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                        Business *
+                        <span class="block text-xs text-surface-500 font-normal">as they answer the phone</span>
+                    </label>
+                    <input type="text" name="name" required
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                        Town
+                        <span class="block text-xs text-surface-500 font-normal">where they are based</span>
+                    </label>
+                    <input type="text" name="city"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                        Trade
+                        <span class="block text-xs text-surface-500 font-normal">the words the filters already use</span>
+                    </label>
+                    {# The same vocabulary the filter bar offers, or a typed
+                       lead files itself under a label no filter can reach. #}
+                    {% set add_trades = [("", "Not classified")] %}
+                    {% for i, n in industries %}{% set _ = add_trades.append((i, i)) %}{% endfor %}
+                    {{ select_dropdown("new_industry", add_trades, "", "Not classified",
+                                       full_width=true) }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Telephone</label>
+                    <input type="text" name="phone"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                        Website
+                        <span class="block text-xs text-surface-500 font-normal">leave blank and it stays unchecked</span>
+                    </label>
+                    <input type="text" name="website"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Who you spoke to</label>
+                    <input type="text" name="owner_name"
+                           class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
+                <textarea name="notes" rows="2"
+                          class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"></textarea>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-3">
+                <button type="button" @click="adding = false"
+                        class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:text-surface-200 transition-colors">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="inline-flex items-center min-h-[44px] px-5 text-sm font-medium rounded-xl btn-brand transition-all">
+                    Add them
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% set channel_labels = dict(channel_choices) %}
 {% set filtering = filters.q or filters.city or filters.stage or filters.industry or filters.website or filters.age or filters.untried %}
 

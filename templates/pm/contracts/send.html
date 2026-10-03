@@ -64,9 +64,10 @@
 
                 <div class="rounded-xl bg-surface-800/40 border border-white/10 p-4">
                     <p class="text-xs text-surface-300">
-                        This document was not written here, so the signature and date fields
-                        go at the bottom of its last page. Engagement letters and statements of
-                        work written here put them on their own signature lines instead.
+                        This document was not written here, so Send for signature puts the
+                        signature and date fields at the bottom of its last page. Engagement
+                        letters and statements of work written here put them on their own
+                        signature lines instead.
 
                         <span class="block mt-2">Sending it gives the signer an account: they can
                         sign back in with that address any time to see every contract you have
@@ -75,13 +76,24 @@
                 </div>
             </div>
 
-            <div class="flex items-center gap-3 mt-6 pt-6 border-t border-surface-700">
+            {#- Two ways out. Send places the fields itself, at the bottom of
+                the last page. Place fields stops at a draft in SignaDoc and
+                opens its editor, for a document whose signature lines are
+                anywhere else, or several, or more than one person's. -#}
+            <div class="flex flex-wrap items-center gap-3 mt-6 pt-6 border-t border-surface-700">
                 <button type="submit" {% if not configured %}disabled{% endif %}
-                        class="inline-flex items-center gap-2 px-6 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="inline-flex items-center gap-2 min-h-[44px] px-6 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                     </svg>
                     Send for signature
+                </button>
+                <button type="submit" name="place_fields" value="1" {% if not configured %}disabled{% endif %}
+                        class="inline-flex items-center gap-2 min-h-[44px] px-6 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+                    </svg>
+                    Place fields in SignaDoc
                 </button>
                 <a href="{{ url_for('contracts.contracts_index') }}"
                    class="px-6 py-2.5 text-sm text-surface-300 hover:text-white transition-colors">

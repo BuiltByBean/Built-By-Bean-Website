@@ -207,3 +207,8 @@ def resend(envelope_id, signer_id, email=True):
 def envelope_url(envelope_id):
     """Where the sender goes to watch this envelope in the portal."""
     return f"{base_url()}/envelopes/{envelope_id}"
+
+
+def editor_url(envelope_id):
+    """Where a draft's fields are placed by hand before it is sent."""
+    return f"{base_url()}/envelopes/{envelope_id}/edit"

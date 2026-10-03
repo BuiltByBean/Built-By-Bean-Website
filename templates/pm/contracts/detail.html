@@ -243,12 +243,24 @@
             <div class="glass-card p-5 space-y-4">
                 <h3 class="text-sm font-bold text-white">Actions</h3>
 
+                {#- A draft has nobody to send a link to yet: its fields are
+                    placed in the portal's editor and it is sent from there. -#}
+                {% if editor_url %}
+                <a href="{{ editor_url }}"
+                   class="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
+                    </svg>
+                    Place fields in SignaDoc
+                </a>
+                {% else %}
                 <form method="POST" action="{{ url_for('contracts.contract_resend', id=req.id) }}">
                     <button type="submit"
                             class="w-full min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
                         Send a fresh link
                     </button>
                 </form>
+                {% endif %}
 
                 {#
                   Voiding kills the signing link for good, so it asks first -

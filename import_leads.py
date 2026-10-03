@@ -473,6 +473,97 @@ def overture_trade(hierarchy):
     return group.replace("_", " ").capitalize()
 
 
+# ── a trade in the name ─────────────────────────────────────
+#
+# Which words turn a company registration into a lead, and what trade each one
+# means in the vocabulary the rest of the list uses.
+#
+# Only the -ING form and the unmistakable compounds. "PAINTER" is a surname at
+# least as often as it is a job - this county's franchise file holds NETA
+# PAINTER, CPA LLC and PAINTER FIREARMS TRAINING INSTITUTE LLC - and a wrong
+# name on a call sheet is worse than a missing one, because somebody reads it
+# out. Matched on whole words for the same reason: PAINTED WIND RANCH is a
+# ranch, not a decorator.
+TRADE_IN_THE_NAME = {
+    "painting": "Painting and finishing",
+    "painters": "Painting and finishing",
+    "drywall": "Painting and finishing",
+    "roofing": "Building trade contractors",
+    "roofers": "Building trade contractors",
+    "flooring": "Building trade contractors",
+    "framing": "Building trade contractors",
+    "siding": "Building trade contractors",
+    "guttering": "Building trade contractors",
+    "gutters": "Building trade contractors",
+    "fencing": "Building trade contractors",
+    "concrete": "Site preparation and other trades",
+    "paving": "Site preparation and other trades",
+    "excavating": "Site preparation and other trades",
+    "excavation": "Site preparation and other trades",
+    "welding": "Site preparation and other trades",
+    "plumbing": "Plumbing, heating and electrical",
+    "electric": "Plumbing, heating and electrical",
+    "electrical": "Plumbing, heating and electrical",
+    "heating": "Plumbing, heating and electrical",
+    "hvac": "Plumbing, heating and electrical",
+    "landscaping": "Cleaning and landscaping",
+    "landscapes": "Cleaning and landscaping",
+    "lawncare": "Cleaning and landscaping",
+    "cleaning": "Cleaning and landscaping",
+    "janitorial": "Cleaning and landscaping",
+    "housekeeping": "Cleaning and landscaping",
+    "remodeling": "Home services",
+    "remodelling": "Home services",
+    "handyman": "Home services",
+    "plastering": "Home services",
+    "insulation": "Home services",
+    "glazing": "Home services",
+    "upholstery": "Home services",
+    "towing": "Car repair",
+    "automotive": "Car repair",
+    "transmission": "Car repair",
+    "detailing": "Car repair",
+    "barbershop": "Salons and barbers",
+    "barbers": "Salons and barbers",
+    "photography": "Design services",
+    "catering": "Caterers",
+    "bakery": "Restaurants and cafes",
+    "trucking": "Trucking",
+    "hauling": "Trucking",
+    "logistics": "Trucking",
+}
+
+# A word that says the company is something else, whatever trade word it also
+# carries. Every one of these sits in the live file beside a trade word.
+NOT_THAT_TRADE = {
+    "ranch", "ranches", "farm", "farms", "cpa", "firearms", "institute",
+    "academy", "training", "church", "ministries", "ministry", "holdings",
+    "holding", "properties", "property", "realty", "investments", "capital",
+    "land", "acres", "estates", "museum", "foundation", "park", "supply",
+    "insurance", "bank", "title", "royalty", "royalties", "minerals",
+}
+
+_NAME_WORDS = re.compile(r"[a-z]+")
+
+
+def trade_in_the_name(name):
+    """The trade a company name declares, or "" if it declares none.
+
+    Evidence of trading, and free. A registration alone says a company exists
+    at the Secretary of State and nothing more, which is why it has never
+    created a lead on its own - but nobody registers a holding entity as
+    "SIMMONS PAINTING LLC".
+    """
+    words = set(_NAME_WORDS.findall((name or "").lower()))
+    if not words or words & NOT_THAT_TRADE:
+        return ""
+    for word in sorted(words):
+        found = TRADE_IN_THE_NAME.get(word)
+        if found:
+            return found
+    return ""
+
+
 def trade(label):
     """One name per trade, whichever source named it."""
     text = re.sub(r"\s+", " ", (label or "").strip())
@@ -991,12 +1082,40 @@ def run(cache=None, enrich=True, verbose=True):
             if "comptroller" not in entry["sources"]:
                 entry["sources"].append("comptroller")
 
-        # 2. Franchise taxpayers. ENRICH ONLY, never create. A registration
-        #    says a company exists at the Secretary of State; it says nothing
-        #    about whether anybody trades under it or would take a call, and
-        #    the file is mostly holding entities, dormant shells and LLCs that
-        #    exist to own one field. Creating a lead from one put five
-        #    thousand uncallable names on a call sheet.
+        # 2. Franchise taxpayers. A registration ENRICHES anything already
+        #    here, and creates a lead only when the company's own NAME says
+        #    what it does.
+        #
+        #    The file is mostly holding entities, dormant shells and LLCs that
+        #    exist to own one field, and creating a lead from every one of them
+        #    put five thousand uncallable names on a call sheet. But refusing
+        #    all of them lost the opposite kind of business: a painter sells
+        #    labour, so collects no sales tax and is not on the permit spine;
+        #    painting is not a licensed trade in Texas, so there is no TDLR
+        #    record; and a one-van operation is often on no map. The board
+        #    listed EIGHT painting businesses for a three county trade area
+        #    while a dozen more sat in this file, already downloaded, used
+        #    only to decorate. Found 2026-10-03, when a painter the owner had
+        #    just spoken to was not on his own list.
+        #
+        #    Nobody registers a holding entity as "SIMMONS PAINTING LLC". See
+        #    trade_in_the_name for how narrow that test is kept, and why.
+        def enrich_from_franchise(entry, row):
+            """What a registration adds to a row that already exists."""
+            name = row.get("taxpayer_name") or ""
+            org = (row.get("taxpayer_organizational_type") or "").strip().upper()
+            entry.setdefault("legal_name", pretty(name))
+            if not entry.get("entity_type"):
+                entry["entity_type"] = ENTITY_TYPES.get(org, "")
+            if not entry.get("started_on"):
+                entry["started_on"] = parse_date(row.get("sos_charter_date"))
+            entry.setdefault("taxpayer_number", row.get("taxpayer_number") or "")
+            owner = owner_from_taxpayer(name, org)
+            if owner and not entry.get("owner_name"):
+                entry["owner_name"] = owner
+            if "franchise" not in entry["sources"]:
+                entry["sources"].append("franchise")
+
         by_name = {}
         for entry in book.values():
             by_name.setdefault(norm(entry["name"]), entry)
@@ -1005,15 +1124,7 @@ def run(cache=None, enrich=True, verbose=True):
             entry = by_name.get(norm(name))
             if not name.strip() or entry is None:
                 continue
-            org = (row.get("taxpayer_organizational_type") or "").strip().upper()
-            entry.setdefault("legal_name", pretty(name))
-            if not entry.get("entity_type"):
-                entry["entity_type"] = ENTITY_TYPES.get(org, "")
-            if not entry.get("started_on"):
-                entry["started_on"] = parse_date(row.get("sos_charter_date"))
-            entry.setdefault("taxpayer_number", row.get("taxpayer_number") or "")
-            if "franchise" not in entry["sources"]:
-                entry["sources"].append("franchise")
+            enrich_from_franchise(entry, row)
 
         # 3. OpenStreetMap: the contact details.
         by_name = {}
@@ -1274,6 +1385,53 @@ def run(cache=None, enrich=True, verbose=True):
                 entry["sources"].append("tdlr")
 
         print(f"  {len(book)} businesses assembled")
+
+        # 8. Registered trades nobody else listed. LAST, on purpose: every
+        #    other source has now had its say, so this only makes a row for a
+        #    company that is genuinely on no other list. Running it at step 2
+        #    would have invented eighty hauliers before the FMCSA census was
+        #    read.
+        #
+        #    A registration alone still creates nothing. The test is that the
+        #    company's own NAME says what it does, which is the cheap half of
+        #    "evidence of trading": nobody registers a holding entity as
+        #    "SIMMONS PAINTING LLC". See trade_in_the_name for how narrow that
+        #    is kept and why it has to be.
+        #
+        #    Why this exists: a painter sells labour, so collects no sales tax
+        #    and is not on the permit spine; painting is not a licensed trade
+        #    in Texas, so there is no TDLR record; and a one-van operation is
+        #    often on no map. The board listed EIGHT painting businesses for a
+        #    three county trade area while a dozen more sat in this file,
+        #    already downloaded, used only to decorate. Found 2026-10-03, when
+        #    a painter the owner had just spoken to was not on his own list.
+        by_name = {}
+        for entry in book.values():
+            by_name.setdefault(norm(entry["name"]), entry)
+        made = 0
+        for row in franchise:
+            name = (row.get("taxpayer_name") or "").strip()
+            if not name or norm(name) in by_name:
+                continue
+            declared = trade_in_the_name(name)
+            if not declared:
+                continue
+            if not in_orbit(row.get("taxpayer_city"),
+                            str(row.get("taxpayer_county_code"))):
+                continue
+            entry = slot(name, row.get("taxpayer_address"), row.get("taxpayer_city"))
+            by_name.setdefault(norm(name), entry)
+            entry.update({
+                "address": pretty(row.get("taxpayer_address")),
+                "city": town(row.get("taxpayer_city")),
+                "state": row.get("taxpayer_state") or "TX",
+                "zip_code": (row.get("taxpayer_zip") or "")[:5],
+                "county": COUNTIES.get(str(row.get("taxpayer_county_code")), ""),
+                "industry": declared,
+            })
+            enrich_from_franchise(entry, row)
+            made += 1
+        print(f"  {made} registered trades no other source listed")
 
         # 5. Their own websites, once each, for a published email.
         if enrich:
