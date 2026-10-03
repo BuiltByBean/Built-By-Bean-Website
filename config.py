@@ -40,7 +40,20 @@ class Config:
     REMEMBER_COOKIE_SECURE = _IN_PRODUCTION
     PERMANENT_SESSION_LIFETIME = timedelta(days=14)
     _db_url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(basedir, "data", "project_manager.db"))
-    SQLALCHEMY_DATABASE_URI = _db_url.replace("postgres://", "postgresql://", 1)
+    # postgres:// is the scheme the platform hands out and SQLAlchemy has never
+    # accepted it.
+    _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+    # And then NAME THE DRIVER. A bare postgresql:// URL gets whichever driver
+    # SQLAlchemy prefers, and that preference moved to psycopg (version 3)
+    # while this repo installs psycopg2-binary. Nothing here changed: the first
+    # rebuild after 2026-09-16 picked up the newer library, every gunicorn
+    # worker died on ModuleNotFoundError inside db.init_app, and
+    # builtbybeans.com served 502 before a single request reached the app. A
+    # default that lives in somebody else's release notes is not a choice this
+    # application made.
+    if _db_url.startswith("postgresql://"):
+        _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    SQLALCHEMY_DATABASE_URI = _db_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Where uploaded files (receipts, documents, generated PDFs) are stored when
     # not using S3. Set UPLOAD_FOLDER=/data/uploads in prod and mount a persistent
