@@ -7,8 +7,10 @@
 
   The signing link is the most important thing on this page whenever SignaDoc
   has no mail server, because then it is the only way the client ever gets the
-  document. So it is shown in full, with a copy button, rather than hidden
-  behind a "share" affordance that has to be discovered.
+  document. It is not kept, though: a signer's link signs in AS them for
+  fourteen days, so Copy link asks the portal for a fresh one at the press
+  (contract_link) and puts it on the clipboard. Only when the browser refuses
+  the clipboard is it shown, in this page and nowhere else.
 #}
 
 {% block title %}{{ req.title }} - Signatures{% endblock %}
@@ -41,28 +43,70 @@
                     {% endif %}
                 </div>
 
-                {% if req.status in ('sent', 'draft') and req.signing_url %}
+                {% if req.status == 'sent' and req.signer_ref %}
                 {#
                   x-data on the wrapper rather than the button so the label can
                   flip: a copy button that gives no feedback gets pressed three
                   times and pasted once.
+
+                  The clipboard is handed a promise where the browser takes one
+                  (Safari only lets a page write the clipboard inside the press
+                  itself, and the link arrives after a network round trip), and
+                  the fetched text where it does not.
                 #}
-                <div x-data="{ copied: false }">
-                    <label class="block text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">
+                <div x-data="signingLink('{{ url_for('contracts.contract_link', id=req.id) }}')">
+                    <p class="text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">
                         Signing link for {{ req.signer_name }}
-                    </label>
+                    </p>
                     <div class="flex flex-col sm:flex-row gap-2">
-                        <input type="text" readonly value="{{ req.signing_url }}"
+                        <button type="button" @click="copy()" :disabled="busy"
+                                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all whitespace-nowrap disabled:opacity-60">
+                            <span x-show="!copied && !busy">Copy link</span>
+                            <span x-show="busy" x-cloak>Getting a link</span>
+                            <span x-show="copied && !busy" x-cloak>Copied</span>
+                        </button>
+                        <input x-show="shown" x-cloak type="text" readonly :value="shown"
+                               aria-label="Signing link"
                                class="flex-1 min-w-0 px-3 py-2.5 text-sm rounded-xl bg-surface-900 border border-white/10 text-surface-300 font-mono"
                                @focus="$el.select()">
-                        <button type="button"
-                                @click="navigator.clipboard.writeText('{{ req.signing_url }}'); copied = true; setTimeout(() => copied = false, 2000)"
-                                class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all whitespace-nowrap">
-                            <span x-show="!copied">Copy link</span>
-                            <span x-show="copied" x-cloak>Copied</span>
-                        </button>
                     </div>
+                    <p x-show="error" x-cloak x-text="error" class="text-xs text-red-400 mt-2"></p>
                 </div>
+                <script>
+                function signingLink(endpoint) {
+                    return {
+                        busy: false, copied: false, shown: "", error: "",
+                        fetchUrl() {
+                            return fetch(endpoint, { method: "POST", credentials: "same-origin" })
+                                .then(r => r.json().then(d => {
+                                    if (!r.ok || !d.url) throw new Error(d.error || "No link came back.");
+                                    return d.url;
+                                }));
+                        },
+                        async copy() {
+                            this.busy = true; this.copied = false; this.error = ""; this.shown = "";
+                            let url = null;
+                            const pending = this.fetchUrl().then(u => (url = u));
+                            try {
+                                if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+                                    await navigator.clipboard.write([new ClipboardItem({
+                                        "text/plain": pending.then(u => new Blob([u], { type: "text/plain" })),
+                                    })]);
+                                } else {
+                                    await navigator.clipboard.writeText(await pending);
+                                }
+                                this.copied = true;
+                                setTimeout(() => (this.copied = false), 2000);
+                            } catch (e) {
+                                try { await pending; } catch (e2) { this.error = e2.message; }
+                                if (url) this.shown = url;
+                            } finally {
+                                this.busy = false;
+                            }
+                        },
+                    };
+                }
+                </script>
                 {% elif req.status == 'completed' %}
                 <div class="flex flex-wrap gap-3">
                     <a href="{{ url_for('contracts.contract_signed_pdf', id=req.id) }}"
@@ -144,7 +188,11 @@
                             <p class="text-xs text-surface-400 break-all">{{ s.email }}</p>
                         </div>
                         <div class="text-right">
-                            <p class="text-sm text-surface-200 capitalize">{{ s.status }}</p>
+                            {# The portal says "completed" for a signer who has signed
+                               (BuiltByBean/Signadoc server/src/index.js). Talent Booker
+                               read it as "signed" and showed everyone as waiting
+                               (2026-10-07); here the word is translated, not matched. #}
+                            <p class="text-sm text-surface-200">{{ {'completed': 'Signed', 'signed': 'Signed', 'declined': 'Declined'}.get((s.status or '')|lower, 'Waiting') }}</p>
                             {% if s.signedAt %}
                             <p class="text-xs text-surface-400">Signed {{ s.signedAt[:10] }}</p>
                             {% elif s.viewedAt %}

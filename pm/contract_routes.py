@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, abort, Response,
-    current_app,
+    current_app, jsonify,
 )
 from flask_login import login_required
 
@@ -193,8 +193,10 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
         send=send,
     )
     links = reply.get("links") or [{}]
-    # The client's link is the one worth keeping: it is what gets resent when
-    # somebody says they never got it. Michael's own link is surfaced
+    # Only the client's signer id is kept, so Resend and Copy link can ask the
+    # portal for a fresh link later. The link itself is not kept: it signs in
+    # AS that person for fourteen days, so a stored one is a signature waiting
+    # in the database (Talent Booker LM-145). Michael's own link is surfaced
     # separately by the caller so he can sign immediately.
     link = next((l for l in links if l.get("signerId") == "client"), links[0])
     # Only when this document actually has his signature line on it. A
@@ -212,7 +214,6 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
         signer_name=signer_name[:120],
         signer_email=signer_email[:200],
         signer_ref=link.get("signerId"),
-        signing_url=link.get("url"),
         form_json=_json.dumps(form) if form else None,
         revision_of_id=revision_of.id if revision_of else None,
         status=reply.get("status", "sent"),
@@ -428,15 +429,46 @@ def contract_resend(id):
         flash(f"Could not send a new link: {exc}", "error")
         return redirect(url_for("contracts.contract_detail", id=id))
 
-    row.signing_url = reply.get("url") or row.signing_url
     row.mail_mode = reply.get("mailMode") or row.mail_mode
     db.session.commit()
     if reply.get("emailed") and reply.get("mailMode") == "smtp":
         flash(f"A fresh signing link is on its way to {row.signer_email}.", "success")
     else:
-        flash("A fresh signing link is ready below - SignaDoc has no mail server, "
-              "so send it to them yourself.", "warning")
+        flash("SignaDoc has no mail server, so nothing was emailed. Press Copy link "
+              "and send it to them yourself.", "warning")
     return redirect(url_for("contracts.contract_detail", id=id))
+
+
+@contracts_bp.route("/<int:id>/link", methods=["POST"])
+@login_required
+def contract_link(id):
+    """One signer's link, minted fresh at the portal at the click, for the clipboard.
+
+    Ported from Talent Booker's signing_link (its review of 2026-10-06, LM-145).
+    The link signs in AS the signer for fourteen days, so it is handed back once
+    and never stored, never put in a page and never logged; the log says who
+    asked, not what came back. Earlier links keep working, so minting one
+    cannot strand an email already sent.
+    """
+    row = db.session.get(SignatureRequest, id) or abort(404)
+
+    def answer(body, status=200):
+        resp = jsonify(body)
+        resp.status_code = status
+        resp.headers["Cache-Control"] = "no-store, private"
+        return resp
+
+    if row.status not in ("sent",) or not row.signer_ref:
+        return answer({"error": "There is no one waiting to sign this."}, 409)
+    try:
+        reply = signadoc.resend(row.envelope_id, row.signer_ref, email=False)
+    except SignaDocError as exc:
+        return answer({"error": f"SignaDoc did not give a link: {exc}"}, 502)
+    url = str((reply or {}).get("url") or "") if isinstance(reply, dict) else ""
+    if not url.startswith(("https://", "http://")):
+        return answer({"error": "SignaDoc answered without a link. Try again."}, 502)
+    current_app.logger.info("Contracts: a signing link was copied for request %s", row.id)
+    return answer({"url": url})
 
 
 @contracts_bp.route("/<int:id>/void", methods=["POST"])
@@ -594,10 +626,12 @@ def sent_message(row):
     waiting on Michael - and saying "sent to them" would be the same lie one
     step earlier.
     """
-    own = getattr(row, "own_signing_url", None)
-    if own:
-        return (f"Ready for your signature. Sign it here and it goes to "
-                f"{row.signer_name} the moment you are done: {own}")
+    # His own link is not repeated here. finish_send already takes him to it,
+    # and a flash waits for the next page he opens here, which would print a
+    # live sign-in link on it long after it was any use (Talent Booker LM-145).
+    if getattr(row, "own_signing_url", None):
+        return (f"Ready for your signature. It goes to {row.signer_name} the "
+                f"moment you are done.")
     if row.mail_mode == "smtp":
         return f"Sent to {row.signer_email} - they have a one-click link to sign."
     return (f"Envelope created for {row.signer_name}. SignaDoc has no mail server "
@@ -783,19 +817,22 @@ def _script_font(pdf_family_owner):
 
 
 def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page_h,
-             client, project=None):
+             client, project=None, party_name=None):
     """Show it first, then send it if asked, otherwise hand back the download.
 
     Unless the form says the document has already been read, this stops here
     and puts it on screen. Nothing about the document changes between the
     preview and the send - pressing Send replays the same form through the same
     route, with `previewed` set.
+
+    `party_name` names the other side when it is not a client, so the preview
+    says who it is for instead of "No client".
     """
     if not request.form.get("previewed"):
         token = stash_preview(
             pdf_bytes, form=request.form, endpoint=request.endpoint, kind=kind,
             filename=filename, title=title,
-            client_name=client.name if client else "")
+            client_name=client.name if client else (party_name or ""))
         return redirect(url_for("contracts.preview", token=token))
 
     fields = signadoc.fields_for(client_anchors, page_w, page_h)
@@ -1100,6 +1137,50 @@ def generate_partnership():
                     f"{label} - {venture}", "partnership", own, cli, w, h, client)
 
 
+# ── Profit share with an individual ──────────────────────
+#
+# 1% of Data Dungeon's monthly profit to a named person, as a gift Michael can
+# end. The terms are fixed in contract_docs; the form asks only for the three
+# things that differ from one person to the next. The person is not a client
+# and is not made one: a client is somebody Built by Bean does work for, and a
+# row on the clients list for each of these would be four wrong rows.
+
+
+@contracts_bp.route("/new/profit-share", methods=["GET"])
+@login_required
+def profit_share_form():
+    return render_template(
+        "pm/contracts/profit_share_form.html",
+        today=datetime.now(timezone.utc).date().isoformat(),
+        business=contract_docs.PROFIT_SHARE_BUSINESS,
+        pct=contract_docs.PROFIT_SHARE_PCT,
+    )
+
+
+@contracts_bp.route("/new/profit-share", methods=["POST"])
+@login_required
+def generate_profit_share():
+    name = (request.form.get("participant_name") or "").strip()
+    address = " ".join((request.form.get("participant_address") or "").split())
+    email = (request.form.get("participant_email") or "").strip()
+    if not name or not address or not email:
+        flash("Their full legal name, current address and personal email all go on "
+              "this one.", "warning")
+        return redirect(url_for("contracts.profit_share_form"))
+
+    pdf_bytes, own, cli, w, h = contract_docs.build_profit_share(
+        participant_name=name,
+        participant_address=address,
+        date_str=_fmt(request.form.get("date")),
+        countersign=wants_send(),
+    )
+    business = contract_docs.PROFIT_SHARE_BUSINESS
+    return _deliver(pdf_bytes,
+                    f"{_safe(business)}_ProfitShare_{_safe(name)}.pdf",
+                    f"Profit Share Agreement - {business} - {name}",
+                    "profit_share", own, cli, w, h, None, party_name=name)
+
+
 def _fmt(raw):
     """A form date as "September 01, 2026", or whatever was typed."""
     raw = (raw or "").strip()
@@ -1202,12 +1283,16 @@ def preview(token):
         if client:
             signer_name = signer_name or client.name
             signer_email = signer_email or (client.email or "").strip()
+        # A document for somebody who is not a client carries them on its own
+        # form instead.
+        signer_name = signer_name or (form.get("participant_name") or "").strip()
+        signer_email = signer_email or (form.get("participant_email") or "").strip()
 
     return render_template("pm/contracts/preview.html", token=token, meta=meta,
                            form=form, configured=signadoc.configured(),
                            signer_name=signer_name, signer_email=signer_email,
                            countersigned=meta.get("kind") in ("sow", "addon", "addendum",
-                                                             "partnership"))
+                                                             "partnership", "profit_share"))
 
 
 @contracts_bp.route("/preview/<token>/file.pdf")
@@ -1249,6 +1334,7 @@ FORM_ENDPOINTS = {
     "addon": "contracts.addon_form",
     "addendum": "contracts.addendum_form",
     "partnership": "contracts.partnership_form",
+    "profit_share": "contracts.profit_share_form",
 }
 
 

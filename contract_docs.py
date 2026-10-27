@@ -366,11 +366,17 @@ def _facts(style, rows):
     pdf.ln(6)
 
 
-def _signatures(style, client_name, date_str, countersign, script_font=None):
+def _signatures(style, client_name, date_str, countersign, script_font=None,
+                client_labels=None, client_prefill=None):
     """Both parties, kept on one page, with fields when it is signed online.
 
     Returns (own_anchors, client_anchors) - empty for whichever party is
     pre-filled, which is Built by Bean on a printed copy.
+
+    `client_labels` replaces the other party's lines: an individual signing
+    for themselves has no Title, and a Title line under their name invites
+    them to write something there. `client_prefill` typesets the lines that
+    are already known, such as their printed name.
     """
     pdf = style.pdf
     # Heading, intro and two blocks together. Two parties signing an agreement
@@ -386,12 +392,12 @@ def _signatures(style, client_name, date_str, countersign, script_font=None):
     pdf.ln(2)
     style.body("By signing below, both parties agree to the terms set out above.")
 
-    def block(party, prefill=None, anchors=None):
+    def block(party, prefill=None, anchors=None, labels=None):
         pdf.set_font(style.family, "B", 10)
         pdf.set_text_color(*contract_style.INK)
         pdf.cell(0, 7, contract_style.sanitize(party), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
-        for label in SIGN_LABELS:
+        for label in labels or SIGN_LABELS:
             pdf.set_font(style.family, "", 10)
             pdf.set_text_color(*contract_style.INK)
             if prefill and label in prefill:
@@ -418,7 +424,8 @@ def _signatures(style, client_name, date_str, countersign, script_font=None):
         block("Built by Bean LLC", prefill={
             "Signature": "Michael Bean", "Printed Name": "Michael Bean",
             "Title": "Owner, Built by Bean LLC", "Date": date_str})
-    block(client_name, anchors=client_anchors)
+    block(client_name, prefill=client_prefill, anchors=client_anchors,
+          labels=client_labels)
     return own_anchors, client_anchors
 
 
@@ -1272,3 +1279,315 @@ def build_partnership(*, partner_name, venture, share_pct, basis="net_profit",
 
     own, client = _signatures(style, partner_name, date_str, countersign, script_font)
     return bytes(pdf.output()), own, client, pdf.w, pdf.h
+
+
+# ── Profit share with an individual ──────────────────────
+#
+# The Data Dungeon profit share: 1% of the business's monthly profit to a
+# named person, given in appreciation rather than for work, and ended
+# whenever Michael chooses. It is not the revenue share above. That one is a
+# commercial deal with somebody who sells the product and owes duties back;
+# this one asks nothing of the person signing it, so it carries none of the
+# restraints, duties or audit rights, and its money runs one way only.
+#
+# The terms were agreed clause by clause with Michael on 2026-10-26 and 27
+# (the "Data Dungeon Profit Share Agreement" doc). They are constants rather
+# than form fields on purpose: four people are getting the same agreement, and
+# the only things that differ between them are who they are and where they
+# live. Changing a term here changes it for the next one sent, never for one
+# already signed.
+
+PROFIT_SHARE_BUSINESS = "Data Dungeon"
+PROFIT_SHARE_PCT = "1"
+
+
+def profit_share_sections(business=PROFIT_SHARE_BUSINESS, pct=PROFIT_SHARE_PCT):
+    """Every numbered section after the opening, as (heading, clauses).
+
+    A function rather than a list so the business name and the percentage are
+    written in one place each. tools/test_profit_share_contract.py reads the
+    finished page to prove the no-cap and no-ownership clauses are on it.
+    """
+    share = f"{pct}%"
+    return [
+        ("2. Definitions", [
+            f"\"Business\" means the {business} product and service, including its "
+            f"website, web app, mobile apps, subscriptions and any related products the "
+            f"Company sells under the {business} name. The Business does not include any "
+            f"other work, clients or products of the Company.",
+
+            "\"Revenue\" means the money the Company actually receives from the Business "
+            "in a calendar month, after app-store fees, payment-processor fees, refunds, "
+            "chargebacks and sales taxes are taken out. Money is counted in the month the "
+            "Company receives it.",
+
+            "\"Expenses\" means all costs the Company pays in operating, maintaining and "
+            "growing the Business in that month, as the Company determines in good faith. "
+            "This includes hosting, software, services, contractors, employees, "
+            "marketing, legal and accounting fees, and equipment. Where a cost is shared "
+            "between the Business and other Company work, the Company will allocate a "
+            "fair share to the Business. Expenses do not include any salary, draws or "
+            "distributions paid to the Company's owner, or payments under this Agreement "
+            "or any similar agreement.",
+
+            "\"Profit Pool\" for a month means Revenue minus Expenses, minus any "
+            "Unrecovered Loss (defined in Section 3).",
+
+            "\"Sale\" means any of the following: (a) a sale or transfer of all or "
+            "substantially all of the assets of the Business; (b) a sale or transfer of "
+            "more than 50% of the ownership of the Company; or (c) a merger or similar "
+            "transaction after which the Company's current owner no longer controls the "
+            "Business.",
+        ]),
+        ("3. The Profit Share", [
+            f"Share. For each full calendar month this Agreement is in effect, starting "
+            f"with the first full month after the Effective Date, the Company will pay "
+            f"the Participant {share} of that month's Profit Pool (the \"Profit Share\").",
+
+            f"No cap. There is no cap, ceiling or maximum on the Profit Share. It is "
+            f"{share} of the entire Profit Pool, however large. For example, if the "
+            f"Profit Pool totals $20,000,000 in a year, the Participant's Profit Share "
+            f"for that year is $200,000.",
+
+            "No payment in a loss month. If the Profit Pool for a month is zero or less, "
+            "no Profit Share is owed for that month. The Participant never owes the "
+            "Company money.",
+
+            "Losses carry forward. If Revenue minus Expenses is negative in a month, "
+            "that shortfall (an \"Unrecovered Loss\") is subtracted from later months' "
+            "Profit Pool until it is used up. Losses from before the Effective Date are "
+            "not carried forward.",
+
+            "When paid. The Company will pay each month's Profit Share within 45 days "
+            "after that month ends. The extra time allows for app-store payout delays.",
+
+            "How paid. Payment will be made by ACH bank transfer or another method the "
+            "parties agree on, to the account the Participant designates in writing.",
+
+            "Small amounts. If a month's Profit Share is under $25, the Company may hold "
+            "it and add it to the next payment. Any held amount will be paid at least "
+            "once a year, or when this Agreement ends.",
+        ]),
+        ("4. Taxes and Statements", [
+            "Participant's taxes. The Participant is solely responsible for all taxes on "
+            "payments under this Agreement. The Company will not withhold taxes unless "
+            "the law requires it.",
+
+            "Tax forms. Before the first payment, the Participant will give the Company "
+            "a completed IRS Form W-9. The Company will issue any tax forms the law "
+            "requires, such as a Form 1099.",
+
+            "Statements. With each payment, the Company will give the Participant a "
+            "short statement showing that month's Revenue, Expenses, any Unrecovered "
+            "Loss, the Profit Pool and the Profit Share.",
+
+            "Company's figures are final. The Company keeps the books of the Business. "
+            "Its good-faith calculation of each amount is final and binding, except for "
+            "an obvious arithmetic error, which the Company will correct in the next "
+            "payment. The Participant has no right to audit or inspect the Company's "
+            "books.",
+        ]),
+        ("5. No Ownership, Employment or Control", [
+            "Not ownership. This Agreement is a contract right to payments only. It does "
+            "not give the Participant any ownership, membership interest, equity, stock, "
+            "option or other interest in the Company or the Business.",
+
+            "Not employment or partnership. The Participant is not an employee, partner, "
+            "joint venturer, agent or officer of the Company. Nothing here creates any "
+            "of those relationships. The Participant has no authority to act for or bind "
+            "the Company.",
+
+            "No say in the Business. The Participant has no right to vote on, approve, "
+            "be consulted on or direct any decision about the Company or the Business.",
+
+            "Company runs the Business freely. The Company alone decides how to run the "
+            "Business, including pricing, spending, hiring, pay, reinvestment, "
+            "partnerships, pausing or shutting down any part of it, and whether to sell "
+            "it. The Company owes the Participant no duty to make or maximize profit. "
+            "The Participant will have no claim against the Company because any "
+            "decision lowers or eliminates the Profit Pool.",
+        ]),
+        ("6. Term, Termination and Sale", [
+            "Term. This Agreement starts on the Effective Date and continues with no "
+            "fixed end date until it ends under this Section.",
+
+            "Owner's right to cancel. The Company's owner reserves the right to cancel "
+            "this Agreement at any time, for any reason or no reason, by written notice "
+            "to the Participant. It ends on the date stated in the notice, or on the "
+            "date the notice is sent if no date is stated.",
+
+            "Automatic end on a Sale. This Agreement ends automatically, with no notice "
+            "needed, on the date a Sale closes, except for the Sale Payment below.",
+
+            f"Sale Payment. If a Sale closes while this Agreement is in effect, the "
+            f"Company will pay the Participant {share} of the Sale Profit (the \"Sale "
+            f"Payment\"). \"Sale Profit\" means the total cash, plus the fair value of "
+            f"any other property, received by the Company or its owner for the Business "
+            f"in the Sale, minus: (a) transaction costs, such as broker, legal and "
+            f"accounting fees; and (b) debts of the Business paid off at closing. If the "
+            f"Sale includes other assets or businesses of the Company, only the part of "
+            f"the price fairly allocable to the Business counts. There is no cap, "
+            f"ceiling or maximum on the Sale Payment: it is {share} of the entire Sale "
+            f"Profit, however large. A Sale Payment is owed only once.",
+
+            f"When the Sale Payment is paid. The Company will pay the Sale Payment "
+            f"within 30 days after it receives the proceeds. If proceeds arrive later "
+            f"(installments, earn-outs or escrow releases), the Participant's {share} of "
+            f"each later amount is paid within 30 days after the Company receives it. If "
+            f"part of the price is paid in stock or other non-cash property, the Company "
+            f"may pay the Participant's share in that same property, or in cash when the "
+            f"Company sells it.",
+
+            "Investments are not a Sale. No payment is owed on any investment in, loan "
+            "to or financing of the Company that is not a Sale.",
+
+            "Final payment. When this Agreement ends for any reason, the Company will "
+            "pay the Profit Share for each full calendar month completed before the end "
+            "date that has not yet been paid, on the normal schedule. No Profit Share is "
+            "owed for any partial month or any later period.",
+
+            "Termination by the Participant. The Participant may end this Agreement at "
+            "any time by written notice to the Company.",
+        ]),
+        ("7. Inheritance and Transfer", [
+            "Passes to children. If the Participant dies while this Agreement is in "
+            "effect, the Participant's rights under this Agreement, including any Sale "
+            "Payment, pass to the Participant's children, divided equally among those "
+            "living at the Participant's death (each a \"Successor\"). If the "
+            "Participant has no living children, this Agreement ends on the "
+            "Participant's death.",
+
+            "Named beneficiary instead. The Participant may instead name one or more "
+            "beneficiaries by signed written notice to the Company. A later notice "
+            "replaces an earlier one. A named beneficiary is a Successor.",
+
+            f"Successors take the same terms. Each Successor receives their portion "
+            f"subject to every term of this Agreement, including the owner's right to "
+            f"cancel it and its automatic end on a Sale. Successors' portions together "
+            f"never exceed the Participant's {share}.",
+
+            "Further passing. If a Successor dies, that Successor's portion passes to "
+            "their own children in the same way.",
+
+            "Minors. A payment owed to a Successor under 18 may be paid to the "
+            "Successor's parent, guardian or a custodian under the applicable Uniform "
+            "Transfers to Minors Act. That payment fully satisfies the Company's "
+            "obligation.",
+
+            "Proof. Before paying a Successor, the Company may ask for reasonable proof "
+            "of death, identity and relationship, and a Form W-9. The Company may hold "
+            "payments until it receives them.",
+
+            "No other transfers. Except as stated in this Section, the Participant may "
+            "not sell, assign, pledge or otherwise transfer any right under this "
+            "Agreement. Any attempt to do so is void.",
+        ]),
+        ("8. General Terms", [
+            "Confidentiality. The Participant will keep the monthly statements and any "
+            "other non-public financial information about the Company or the Business "
+            "confidential, and will not share it except with the Participant's own tax, "
+            "legal or financial advisers.",
+
+            "Limit on liability. The Company's total liability under this Agreement is "
+            "limited to Profit Share and Sale Payment amounts that are owed and unpaid.",
+
+            "Governing law. This Agreement is governed by the laws of the State of "
+            "Texas, without regard to its conflict-of-law rules.",
+
+            "Entire agreement. This is the complete agreement between the parties on "
+            "this subject. It replaces any earlier conversations, promises or "
+            "understandings about sharing profits from the Business.",
+
+            "Changes. This Agreement may be changed only in a writing signed by both "
+            "parties. The Company's owner may cancel it under Section 6 without the "
+            "Participant's signature.",
+
+            "Notices. Notices must be in writing and may be delivered by email to the "
+            "address each party signs this Agreement from, or by hand or mail to the "
+            "address in Section 1, or to a new address a party gives by notice.",
+
+            "Severability. If any part of this Agreement is found unenforceable, the "
+            "rest stays in effect.",
+
+            "Counterparts and e-signatures. This Agreement may be signed in counterparts "
+            "and by electronic signature, each of which counts as an original.",
+        ]),
+    ]
+
+
+def _clauses(style, number, items, size=9.5):
+    """Numbered clauses, 3.1, 3.2 and on, with a hanging indent.
+
+    style.bullets with the dash swapped for the clause number, because a
+    clause somebody will cite in an email needs a number to cite.
+    """
+    p = style.pdf
+    indent = 9.0
+    width = style.RIGHT - style.LEFT - indent
+    for i, item in enumerate(items, 1):
+        style._font("", size)
+        p.set_text_color(*contract_style.BODY)
+        lines = p.multi_cell(width, 5.2, contract_style.sanitize(item),
+                             dry_run=True, output="LINES")
+        style.space_needed(len(lines) * 5.2 + 2)
+        y = p.get_y()
+        p.set_xy(style.LEFT, y)
+        style._font("B", size)
+        p.set_text_color(*contract_style.INK)
+        p.cell(indent, 5.2, f"{number}.{i}")
+        style._font("", size)
+        p.set_text_color(*contract_style.BODY)
+        p.set_xy(style.LEFT + indent, y)
+        p.multi_cell(width, 5.2, contract_style.sanitize(item), align="L")
+        p.ln(1.6)
+    p.ln(2)
+
+
+def build_profit_share(*, participant_name, participant_address, date_str="",
+                       business=PROFIT_SHARE_BUSINESS, pct=PROFIT_SHARE_PCT,
+                       countersign=False, script_font=None):
+    """The profit share agreement for one named person.
+
+    Returns (pdf_bytes, own_anchors, participant_anchors, page_w, page_h), the
+    same shape as every other builder here, so it sends through _deliver.
+    """
+    title = "Profit Share Agreement"
+    pdf, style = _document(title)
+    pdf.add_page()
+
+    style.eyebrow("Built by Bean LLC", partner=business)
+    style.rule(gap=1)
+    pdf.ln(6)
+    style.title(title, f"{business} - Built by Bean LLC and {participant_name}")
+    _facts(style, [
+        ("Business:", business),
+        ("Between:", f"Built by Bean LLC and {participant_name}"),
+        ("Prepared:", date_str),
+        ("Share:", f"{pct}% of monthly profit, no cap"),
+    ])
+
+    style.section_heading("1. Parties and Purpose")
+    style.lead(
+        f"This Profit Share Agreement (the \"Agreement\") takes effect on the date both "
+        f"parties have signed it (the \"Effective Date\") between Built by Bean LLC, a "
+        f"Texas limited liability company, acting for its {business} business (the "
+        f"\"Company\"), and {participant_name}, an individual residing at "
+        f"{participant_address} (the \"Participant\").")
+    style.body(
+        f"The Company wishes to share a small part of the {business} business's "
+        f"profits, and of its sale price if it is sold, with the Participant, in "
+        f"appreciation of the Participant's support of the business. The Participant "
+        f"has not paid anything for this arrangement and is not owed it. The Company's "
+        f"owner may end it at any time, as set out in Section 6. The parties agree as "
+        f"follows.")
+
+    for heading, items in profit_share_sections(business, pct):
+        style.section_heading(heading)
+        _clauses(style, heading.split(".", 1)[0], items)
+
+    own, participant = _signatures(
+        style, participant_name, date_str, countersign, script_font,
+        client_labels=["Signature", "Printed Name", "Date"],
+        client_prefill={"Printed Name": participant_name},
+    )
+    return bytes(pdf.output()), own, participant, pdf.w, pdf.h

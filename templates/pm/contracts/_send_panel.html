@@ -47,7 +47,9 @@
             <div class="space-y-4">
                 <div class="rounded-lg bg-surface-900/60 border border-white/10 px-3 py-2.5">
                     <p class="text-xs text-surface-400">Goes to</p>
-                    <p class="text-sm text-white mt-0.5">
+                    {# break-all: a long address is one unbreakable word, and it
+                       pushed every contract form 20px sideways at 375px. #}
+                    <p class="text-sm text-white mt-0.5 break-all">
                         <span x-text="chosen.name"></span>
                         <span class="text-surface-400" x-show="chosen.email">
                             &lt;<span x-text="chosen.email"></span>&gt;

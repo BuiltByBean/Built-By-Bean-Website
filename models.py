@@ -1261,9 +1261,10 @@ class SignatureRequest(db.Model):
     signer_email = db.Column(db.String(200), nullable=False)
     # The portal's per-signer id, needed to mint a fresh link for them later.
     signer_ref = db.Column(db.String(64), nullable=True)
-    # The one-click link that signs them in and opens the ceremony. Kept
-    # because without SMTP it is the only way the client ever gets it, and
-    # because "resend the link" is the most common thing anyone asks for.
+    # No longer written or read (migration a6c3e19d4b70 emptied it). A signer's
+    # link signs in AS them for fourteen days, so Copy link mints a fresh one
+    # from signer_ref at the press instead. Kept as a column only so an older
+    # deploy rolled back onto this database still loads.
     signing_url = db.Column(db.Text, nullable=True)
 
     status = db.Column(db.String(20), nullable=False, default="sent")
@@ -1347,6 +1348,7 @@ class SignatureRequest(db.Model):
             "addendum": "Addendum",
             "hosting": "Hosting agreement",
             "partnership": "Revenue share",
+            "profit_share": "Profit share",
         }.get(self.kind, "Document")
 
     def __repr__(self):

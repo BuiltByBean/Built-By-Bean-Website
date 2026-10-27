@@ -1,0 +1,73 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  The Data Dungeon profit share, one person at a time.
+
+  Every term is fixed in contract_docs.build_profit_share, so the only blanks
+  are the three things that change from one person to the next: who they are,
+  where they live and where the signing request goes. Not a client picker:
+  these people are not clients, and nothing here makes them one.
+
+  The send panel reads `chosen` for who it goes to. Here that is whatever is
+  typed above it rather than a client record, kept in step by x-effect so the
+  name and email fields cannot say two different things.
+#}
+
+{% block title %}New profit share agreement - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
+{% block page_title %}New profit share agreement{% endblock %}
+{% block page_subtitle %}{{ pct }}% of {{ business }}'s profit, no cap{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('contracts.generate_profit_share') }}"
+      x-data='{ name: "", email: "", chosen: { name: "", email: "" } }'
+      x-effect="chosen = { name: name.trim(), email: email.trim() }">
+
+    {% include "pm/contracts/_prefill.html" %}
+
+    <div class="glass-card relative z-30 p-5 sm:p-6 space-y-5 max-w-3xl">
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="participant_name" class="block text-sm font-medium text-surface-300 mb-1.5">Full legal name *</label>
+                <input type="text" id="participant_name" name="participant_name" required
+                       x-model="name" autocomplete="off"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label for="participant_email" class="block text-sm font-medium text-surface-300 mb-1.5">Personal email *</label>
+                <input type="email" id="participant_email" name="participant_email" required
+                       x-model="email" autocomplete="off"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="name@example.com">
+            </div>
+        </div>
+
+        <div>
+            <label for="participant_address" class="block text-sm font-medium text-surface-300 mb-1.5">Current address *</label>
+            <input type="text" id="participant_address" name="participant_address" required
+                   autocomplete="off"
+                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                   placeholder="Street, city, state ZIP">
+        </div>
+
+        <div class="sm:w-1/2">
+            <label for="date" class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
+            <input type="date" id="date" name="date" required value="{{ today }}"
+                   class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+        </div>
+
+        {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                Preview it
+            </button>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="inline-flex items-center min-h-[44px] px-3 text-sm text-surface-400 hover:text-surface-200">Cancel</a>
+        </div>
+    </div>
+</form>
+{% endblock %}
