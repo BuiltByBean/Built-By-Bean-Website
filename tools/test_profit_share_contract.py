@@ -6,9 +6,10 @@ What is proved:
   1. The form asks for exactly three things about the person - full legal name,
      current address, personal email - and refuses to build without all three.
   2. The words Michael agreed are on the page: 1% of the Profit Pool, NO CAP
-     with the $20,000,000 / $200,000 example, the same for a sale, his own pay
-     not an expense, no ownership or say, his right to cancel at any time,
-     inheritance to children, Texas.
+     with a $1,000,000 / $10,000 example, the same for a sale with a
+     $20,000,000 / $200,000 example, his own pay not an expense, no ownership
+     or say from this agreement (with future roles not ruled out), his right
+     to cancel at any time, inheritance to children, Texas.
   3. It goes to Michael first and then to the person, at the email typed on
      the form, and it is not turned into a client.
   4. Ported from Talent Booker (its LM-145, 2026-10-06): no signer's link is
@@ -167,9 +168,15 @@ if fitz:
             (ADDRESS, "their current address"),
             ("1% of that month's Profit Pool", "1% of the monthly profit pool"),
             ("There is no cap, ceiling or maximum on the Profit Share", "NO CAP on the monthly share"),
-            ("totals $20,000,000 in a year, the Participant's Profit Share for that year is $200,000",
-             "the $20M -> $200K example"),
+            ("totals $1,000,000 in a year, the Participant's Profit Share for that year is $10,000",
+             "the $1M -> $10K example"),
             ("There is no cap, ceiling or maximum on the Sale Payment", "NO CAP on a sale"),
+            ("sold for a Sale Profit of $20,000,000, the Participant's Sale Payment would be $200,000",
+             "the $20M sale -> $200K example"),
+            ("1% of profits, paid monthly", "the share line says 1% of profits, paid monthly"),
+            ("Nothing in this Agreement prevents the Participant from later being offered or "
+             "receiving employment, ownership, equity, stock, options",
+             "future employment or ownership is not ruled out"),
             ("1% of the Sale Profit", "1% of the sale"),
             ("do not include any salary, draws or distributions paid to the Company's owner",
              "his own pay is not an expense"),
@@ -183,7 +190,7 @@ if fitz:
             ("laws of the State of Texas", "Texas law")):
         check(what, phrase in text, phrase)
     check("no tax deduction from the pool any more", "Taxes for a month" not in text)
-    check("no em dash anywhere", "—" not in text)
+    check("no em dash anywhere", "\N{EM DASH}" not in text)
     check("Michael's block keeps its Title line", "Title:" in text)
 
 

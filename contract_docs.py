@@ -1346,8 +1346,8 @@ def profit_share_sections(business=PROFIT_SHARE_BUSINESS, pct=PROFIT_SHARE_PCT):
 
             f"No cap. There is no cap, ceiling or maximum on the Profit Share. It is "
             f"{share} of the entire Profit Pool, however large. For example, if the "
-            f"Profit Pool totals $20,000,000 in a year, the Participant's Profit Share "
-            f"for that year is $200,000.",
+            f"Profit Pool totals $1,000,000 in a year, the Participant's Profit Share "
+            f"for that year is $10,000.",
 
             "No payment in a loss month. If the Profit Pool for a month is zero or less, "
             "no Profit Share is owed for that month. The Participant never owes the "
@@ -1406,6 +1406,13 @@ def profit_share_sections(business=PROFIT_SHARE_BUSINESS, pct=PROFIT_SHARE_PCT):
             "it. The Company owes the Participant no duty to make or maximize profit. "
             "The Participant will have no claim against the Company because any "
             "decision lowers or eliminates the Profit Pool.",
+
+            "Future arrangements are not ruled out. Nothing in this Agreement prevents "
+            "the Participant from later being offered or receiving employment, "
+            "ownership, equity, stock, options or any other role or interest in the "
+            "Company or the Business. This Section only makes clear that this Agreement "
+            "does not itself create any of them. Any such arrangement would be made "
+            "separately, in its own written agreement.",
         ]),
         ("6. Term, Termination and Sale", [
             "Term. This Agreement starts on the Effective Date and continues with no "
@@ -1428,7 +1435,9 @@ def profit_share_sections(business=PROFIT_SHARE_BUSINESS, pct=PROFIT_SHARE_PCT):
             f"Sale includes other assets or businesses of the Company, only the part of "
             f"the price fairly allocable to the Business counts. There is no cap, "
             f"ceiling or maximum on the Sale Payment: it is {share} of the entire Sale "
-            f"Profit, however large. A Sale Payment is owed only once.",
+            f"Profit, however large. For example, if the Business were sold for a Sale "
+            f"Profit of $20,000,000, the Participant's Sale Payment would be $200,000. "
+            f"A Sale Payment is owed only once.",
 
             f"When the Sale Payment is paid. The Company will pay the Sale Payment "
             f"within 30 days after it receives the proceeds. If proceeds arrive later "
@@ -1563,7 +1572,7 @@ def build_profit_share(*, participant_name, participant_address, date_str="",
         ("Business:", business),
         ("Between:", f"Built by Bean LLC and {participant_name}"),
         ("Prepared:", date_str),
-        ("Share:", f"{pct}% of monthly profit, no cap"),
+        ("Share:", f"{pct}% of profits, paid monthly"),
     ])
 
     style.section_heading("1. Parties and Purpose")

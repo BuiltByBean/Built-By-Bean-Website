@@ -17,7 +17,7 @@
 {% block title %}New profit share agreement - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
 {% block page_title %}New profit share agreement{% endblock %}
-{% block page_subtitle %}{{ pct }}% of {{ business }}'s profit, no cap{% endblock %}
+{% block page_subtitle %}{{ pct }}% of {{ business }}'s profits, paid monthly{% endblock %}
 
 {% block content %}
 <form method="POST" action="{{ url_for('contracts.generate_profit_share') }}"
