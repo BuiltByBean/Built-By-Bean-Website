@@ -221,6 +221,51 @@ SQLite returns rows in rowid order when nothing else decides it, so the fault
 does not reproduce against the database the suite runs on and a behavioural
 test alone would pass on the broken code.
 
+## Sales tax
+
+`/admin/taxes/sales` (`pm/tax_routes.py`, arithmetic in `sales_tax.py`). The
+accountant's reading, 2026-10-27: software sold as a service is a data
+processing service in Texas, 20% of the charge is exempt, so the tax is 8.25%
+on 80% = **6.6% of every dollar billed**. `SalesTaxSetting` keeps the two
+facts (rate, taxable share) rather than the 6.6, and `effective_percent`
+rounds the product to four places because 8.25 x 0.8 is 6.6000000000000005
+in floating point and it becomes a Stripe tax rate.
+
+Most invoices went out without it, and the tax was owed when the sale was
+made whether or not it was on the bill. So each sent or paid invoice owes 6.6%
+of its pre-tax amount, `short` is that less the tax Stripe charged, and a
+client's "to bill" is the sum of their shorts less what a **catch-up invoice**
+has already billed back. A catch-up is a draft the board writes in Stripe with
+metadata `bbb_sales_tax=catchup`, one line per project, no tax of its own; it
+is read and sent from its own page like any other invoice, and paying it is
+what clears the balance. Nothing on this page sends anything.
+
+The hole is closed in three places, each a press: invoices raised from the
+board carry the rate automatically (`invoice_create`, skipped for an exempt
+client); a client's pre-written drafts get it with "Tax N drafts"
+(`Invoice.modify(default_tax_rates=...)`, drafts only, since Stripe will not
+edit a finalised invoice); and a subscription gets it with "Tax the
+subscription", which changes what the client pays next cycle and so asks first.
+Stripe will not change a tax rate's percentage, so a change in settings makes a
+new rate and archives the old one.
+
+Exemption is a fact about the buyer (`Client.sales_tax_exempt`: out of state,
+a certificate on file, Michael's own row) or one invoice the accountant says is
+not a sale (`Invoice.sales_tax_exempt`). Both are board-owned and an import
+never touches them. With two or more projects an unassigned invoice is NOT
+guessed onto one, because that would move tax between builds; with exactly one
+it is that project's.
+
+`Invoice.tax` was never filled in by the importer, and `sync_invoice_from_stripe`
+read `si.tax`, a field newer Stripe API versions removed - so on those versions
+that line raised and the WHOLE sync failed on one attribute. Tax is now
+`total - total_excluding_tax` (`stripe_service.invoice_tax_cents`), which every
+version since 2022 answers, and the importer no longer copies the total into an
+empty subtotal, which counted tax as part of the sale. `issued_on` is the day
+Stripe finalised the invoice, because `created_at` on an imported row is the day
+of the import and says nothing about which quarter's return it belongs on.
+`tools/test_sales_tax.py`.
+
 ## Tickets travel both ways
 
 Tickets are PUSHED here by each client app's outbox, and `hub.fetch` is

@@ -60,13 +60,31 @@ MIGRATION_CHECKS = (
      "\"Constraint must have a name\". Name it on the model: "
      "db.ForeignKey(..., name=\"fk_<table>_<column>\")."),
 
-    (re.compile(r"add_column\((?![^\n]*server_default)[^\n]*nullable=False"),
+    # Read per CALL, not per line. A column written over two lines, with
+    # server_default under nullable=False, is the correct shape, and the
+    # line-at-a-time regex this replaced reported it as the fault.
+    (lambda text: any("nullable=False" in body and "server_default" not in body
+                      for body in _call_bodies(text, "add_column")),
      None,
      "adds a NOT NULL column with no server_default. It succeeds on an empty "
      "table and fails on a populated one, so local passes and production "
      "does not. Give the model a server_default and test against a "
      "populated database."),
 )
+
+
+def _call_bodies(text, name):
+    """The argument text of every `name(...)` call, parentheses balanced."""
+    for m in re.finditer(r"\b" + re.escape(name) + r"\(", text):
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            depth += {"(": 1, ")": -1}.get(text[i], 0)
+            i += 1
+        yield text[m.end():i - 1]
+
+
+def _hits(check, text):
+    return check(text) if callable(check) else bool(check.search(text))
 
 
 def lint_migration(path):
@@ -77,7 +95,7 @@ def lint_migration(path):
         return []
     found = []
     for pattern, unless, message in MIGRATION_CHECKS:
-        if pattern.search(text) and not (unless and unless.search(text)):
+        if _hits(pattern, text) and not (unless and unless.search(text)):
             found.append(message)
     return found
 

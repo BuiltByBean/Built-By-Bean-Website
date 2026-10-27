@@ -224,6 +224,27 @@
             {% endif %}
         </div>
 
+        {# Only when there is something to say: a client with no invoices, or
+           an exempt one, has no sales tax line at all. #}
+        {% if sales_tax and not sales_tax.exempt and (sales_tax.short or sales_tax.drafts_missing_tax) %}
+        <div class="glass-card p-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-amber-400 mb-1">Sales tax</p>
+                <p class="text-sm text-white break-words">
+                    {% if sales_tax.to_bill %}{{ sales_tax.to_bill | format_currency }} to bill
+                    {%- elif sales_tax.short %}{{ sales_tax.short | format_currency }} never charged, billed back
+                    {%- else %}Square{% endif %}
+                    {%- if sales_tax.drafts_missing_tax %}
+                    <span class="text-surface-400">&middot; {{ sales_tax.drafts_missing_tax | length }} draft{{ '' if sales_tax.drafts_missing_tax|length == 1 else 's' }} untaxed</span>
+                    {%- endif %}
+                </p>
+            </div>
+            <a href="{{ url_for('taxes.sales_tax_index', open=client.id) }}"
+               class="shrink-0 inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition-colors">
+                Sales tax</a>
+        </div>
+        {% endif %}
+
         <!-- Projects -->
         <div class="glass-card p-6">
             <div class="flex items-center justify-between mb-4">

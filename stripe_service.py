@@ -9,6 +9,26 @@ def init_stripe(app):
         stripe.api_key = key
 
 
+# The metadata key the board writes on what it makes for sales tax: "rate" on
+# its Stripe tax rate, "catchup" on an invoice that bills tax missed earlier.
+SALES_TAX_META = "bbb_sales_tax"
+
+
+def invoice_tax_cents(inv):
+    """The tax on a Stripe invoice, in cents, whichever API version sent it.
+
+    `tax` was the field until Stripe removed it from the invoice; reading it
+    on a newer version raises, which is how sync_invoice_from_stripe came to
+    fail as a whole on a single attribute. `total_excluding_tax` has been on
+    every version since 2022 and the difference is the tax by definition.
+    """
+    total = getattr(inv, "total", 0) or 0
+    excluding = getattr(inv, "total_excluding_tax", None)
+    if excluding is not None:
+        return max(0, total - excluding)
+    return getattr(inv, "tax", 0) or 0
+
+
 # ── Customer Management ─────────────────────────────────────
 
 
@@ -128,18 +148,27 @@ def get_or_create_price(rate_type):
 # ── Invoice Management ──────────────────────────────────────
 
 
-def create_stripe_invoice(client, line_items, due_days=30, memo=""):
+def create_stripe_invoice(client, line_items, due_days=30, memo="",
+                          tax_rate_ids=None, metadata=None):
+    """A draft invoice for `client`. Nothing is sent.
+
+    `tax_rate_ids` become the invoice's default tax rates, so Stripe adds the
+    sales tax to every line and shows it on the bill as its own row.
+    """
     if not stripe.api_key or not client.stripe_customer_id:
         return None, "Client not synced to Stripe"
 
     try:
-        invoice = stripe.Invoice.create(
+        params = dict(
             customer=client.stripe_customer_id,
             collection_method="send_invoice",
             days_until_due=due_days,
             auto_advance=False,
-            metadata={"pm_client_id": str(client.id)},
+            metadata={"pm_client_id": str(client.id), **(metadata or {})},
         )
+        if tax_rate_ids:
+            params["default_tax_rates"] = list(tax_rate_ids)
+        invoice = stripe.Invoice.create(**params)
 
         if memo:
             stripe.Invoice.modify(invoice.id, description=memo)
@@ -196,9 +225,13 @@ def sync_invoice_from_stripe(local_invoice):
         local_invoice.invoice_number = si.number
         local_invoice.stripe_invoice_url = si.hosted_invoice_url
         local_invoice.stripe_pdf_url = si.invoice_pdf
-        local_invoice.subtotal = (si.subtotal or 0) / 100.0
-        local_invoice.tax = (si.tax or 0) / 100.0
+        local_invoice.tax = invoice_tax_cents(si) / 100.0
         local_invoice.total = (si.total or 0) / 100.0
+        local_invoice.subtotal = round(local_invoice.total - local_invoice.tax, 2)
+        transitions = getattr(si, "status_transitions", None)
+        issued = (getattr(transitions, "finalized_at", None) if transitions else None)             or getattr(si, "created", None)
+        if issued:
+            local_invoice.issued_on = datetime.fromtimestamp(issued, timezone.utc).date()
         local_invoice.amount_paid = (si.amount_paid or 0) / 100.0
         local_invoice.amount_due = (si.amount_due or 0) / 100.0
         if si.status == "paid" and not local_invoice.paid_at:
@@ -226,6 +259,141 @@ def _mark_client_active(invoice):
     if client is None or client.stage == "active_client":
         return
     client.stage = "active_client"
+
+# ── Sales tax ───────────────────────────────────────────────
+
+
+def ensure_sales_tax_rate(settings):
+    """The Stripe tax rate for `settings`, made the first time it is needed.
+
+    Returns (rate_id, error). Stripe will not change a tax rate's percentage,
+    so a rate made at 6.6% stays 6.6% forever; when the settings move, a new
+    one is made and the old one is archived so nothing new picks it up.
+    Invoices already carrying the old rate keep it, which is correct: that is
+    what they were billed at. The caller commits.
+    """
+    if not stripe.api_key:
+        return None, "Stripe is not configured"
+    percent = settings.effective_percent
+    if settings.stripe_tax_rate_id and settings.stripe_tax_rate_percent == percent:
+        return settings.stripe_tax_rate_id, None
+    try:
+        rate = stripe.TaxRate.create(
+            display_name="Sales tax",
+            description=(f"Texas sales tax, {settings.rate_percent:g}% on "
+                         f"{settings.taxable_share:g}% of the charge"),
+            percentage=percent,
+            inclusive=False,
+            country="US",
+            state="TX",
+            jurisdiction="TX",
+            tax_type="sales_tax",
+            metadata={SALES_TAX_META: "rate"},
+        )
+    except Exception as e:
+        current_app.logger.error(f"Stripe tax rate create error: {e}")
+        return None, str(e)
+    old = settings.stripe_tax_rate_id
+    if old and old != rate.id:
+        try:
+            stripe.TaxRate.modify(old, active=False)
+        except Exception as e:  # an old rate left active is untidy, not wrong
+            current_app.logger.warning(f"Stripe tax rate archive error: {e}")
+    settings.stripe_tax_rate_id = rate.id
+    settings.stripe_tax_rate_percent = percent
+    return rate.id, None
+
+
+def add_tax_rate_to_draft(stripe_invoice_id, rate_id):
+    """Put the sales tax on a draft. Returns an error string or None.
+
+    Drafts only: Stripe refuses to change a finalised invoice, and a sent one
+    is settled by a catch-up invoice instead.
+    """
+    try:
+        stripe.Invoice.modify(stripe_invoice_id, default_tax_rates=[rate_id])
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Stripe draft tax error: {e}")
+        return str(e)
+
+
+_tax_subs_cache = {"ts": 0, "data": None}
+
+# A subscription that will bill again. Canceled and ended ones will not, so
+# there is nothing to put the tax on.
+_BILLING_SUB_STATUSES = ("active", "trialing", "past_due", "unpaid", "incomplete")
+
+
+def get_subscriptions_for_tax(ttl=300):
+    """Every subscription that will bill again, and whether it carries tax.
+
+    A subscription writes its own invoices each cycle, so the tax has to be on
+    the subscription; putting it on one of its invoices fixes one month.
+    """
+    import time
+
+    if not stripe.api_key:
+        return []
+    now = time.time()
+    if _tax_subs_cache["data"] is not None and (now - _tax_subs_cache["ts"] < ttl):
+        return _tax_subs_cache["data"]
+
+    def _ids(rates):
+        return [getattr(r, "id", r) for r in (rates or [])]
+
+    rows = []
+    try:
+        for sub in stripe.Subscription.list(status="all", limit=100).auto_paging_iter():
+            status = getattr(sub, "status", None)
+            if status not in _BILLING_SUB_STATUSES:
+                continue
+            # Subscripted, as everywhere else here: `items` collides with the
+            # dict method on the SDK versions where StripeObject is a dict.
+            items = sub["items"].data
+            amount, interval, rate_ids = 0, None, _ids(getattr(sub, "default_tax_rates", None))
+            for item in items:
+                price = getattr(item, "price", None)
+                amount += (getattr(price, "unit_amount", 0) or 0) * (getattr(item, "quantity", 1) or 1)
+                recurring = getattr(price, "recurring", None)
+                interval = interval or getattr(recurring, "interval", None)
+                rate_ids += _ids(getattr(item, "tax_rates", None))
+            customer = getattr(sub, "customer", None)
+            rows.append({
+                "id": getattr(sub, "id", None),
+                "customer_id": customer if isinstance(customer, str) else getattr(customer, "id", None),
+                "status": status,
+                "amount": amount / 100.0,
+                "interval": interval or "month",
+                "rate_ids": rate_ids,
+            })
+    except Exception as e:
+        current_app.logger.error(f"Stripe subscriptions for tax error: {e}")
+        return _tax_subs_cache["data"] or []
+
+    _tax_subs_cache.update({"ts": now, "data": rows})
+    return rows
+
+
+def add_tax_rate_to_subscription(subscription_id, rate_id):
+    """Charge the sales tax on every invoice this subscription writes from now.
+
+    Returns an error string or None. It changes what the client is charged
+    next cycle, which is why the page asks before pressing it.
+    """
+    try:
+        stripe.Subscription.modify(subscription_id, default_tax_rates=[rate_id])
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Stripe subscription tax error: {e}")
+        return str(e)
+
+
+def forget_sales_tax_caches():
+    """Read Stripe fresh on the next ask, after the board changed something."""
+    _invoice_cache["ts"] = 0
+    _tax_subs_cache["ts"] = 0
+
 
 # ── Dashboard Data ──────────────────────────────────────────
 
@@ -357,18 +525,26 @@ def get_stripe_invoices(ttl=300):
 
             transitions = getattr(inv, "status_transitions", None)
             invoice_id = getattr(inv, "id", None)
+            total_cents = getattr(inv, "total", 0) or 0
+            meta = getattr(inv, "metadata", None)
             rows.append({
                 "id": invoice_id,
                 "number": getattr(inv, "number", None),
                 "status": getattr(inv, "status", None),
                 "customer_id": customer_id,
                 "customer_name": customer_name,
-                "total": (getattr(inv, "total", 0) or 0) / 100.0,
+                "total": total_cents / 100.0,
+                "tax": invoice_tax_cents(inv) / 100.0,
                 "amount_due": (getattr(inv, "amount_due", 0) or 0) / 100.0,
                 "amount_paid": (getattr(inv, "amount_paid", 0) or 0) / 100.0,
                 "created_at": _at(getattr(inv, "created", None)),
                 "due_date": _at(getattr(inv, "due_date", None)),
                 "paid_at": _at(getattr(transitions, "paid_at", None) if transitions else None),
+                # The day of the sale: finalised, which is when it stopped
+                # being a draft and became a bill. A draft has only created.
+                "issued_at": _at((getattr(transitions, "finalized_at", None) if transitions else None)
+                                 or getattr(inv, "created", None)),
+                "catchup": (getattr(meta, SALES_TAX_META, None) if meta is not None else None) == "catchup",
                 "description": getattr(inv, "description", None),
                 # The line items, as far as a list call returns them - the
                 # first ten, which is more than any invoice this business
@@ -472,8 +648,18 @@ def import_invoices_from_stripe(ttl=0):
         local.total = row.get("total") or 0.0
         local.amount_due = row.get("amount_due") or 0.0
         local.amount_paid = row.get("amount_paid") or 0.0
-        if local.subtotal in (None, 0.0):
-            local.subtotal = local.total
+        # Tax is Stripe's to say, and the subtotal is the total without it:
+        # the old rule of copying the total in when the subtotal was empty
+        # counted the tax as part of the sale, which is the one thing the
+        # sales tax ledger must not do.
+        local.tax = row.get("tax") or 0.0
+        local.subtotal = round(local.total - local.tax, 2)
+        if row.get("issued_at"):
+            local.issued_on = row["issued_at"].date()
+        # Only ever set, never cleared: the flag is the board's, written into
+        # Stripe's metadata when the board raised it.
+        if row.get("catchup"):
+            local.sales_tax_catchup = True
         if row.get("due_date"):
             local.due_date = row["due_date"].date() if hasattr(row["due_date"], "date") else row["due_date"]
         if row.get("paid_at") and not local.paid_at:

@@ -1,0 +1,355 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+
+{#
+  Texas sales tax, client by client.
+
+  The arithmetic is sales_tax.build. Every invoice that went out owed
+  effective_percent of its pre-tax amount; whatever Stripe did not put on it
+  is "never charged", and that, less anything already billed back on a
+  catch-up invoice, is what is left to bill. Each client opens to the presses
+  that close their gap: draft the catch-up, put the tax on the drafts still
+  waiting to go out, put it on the subscription.
+
+  openId lives OUTSIDE the live region, so a press that swaps the ledger does
+  not shut the client being worked on. The open card alone takes relative
+  z-30 (LM-1): its invoice rows carry project pickers whose panels would
+  otherwise be painted over by the next card.
+#}
+
+
+{% block title %}Sales tax - Built By Bean{% endblock %}
+{% block page_title %}Taxes{% endblock %}
+{% block page_subtitle %}Texas sales tax{% endblock %}
+
+{% block content %}
+{% set STATUS = {
+    'draft': ('Draft', 'bg-surface-800 text-surface-300'),
+    'open': ('Sent', 'bg-sky-900/30 text-sky-300'),
+    'paid': ('Paid', 'bg-emerald-900/30 text-emerald-400'),
+    'void': ('Void', 'bg-surface-800 text-surface-500'),
+    'uncollectible': ('Uncollectible', 'bg-red-900/30 text-red-400'),
+} %}
+{% set pct = '%g'|format(settings.effective_percent) %}
+<div class="space-y-4 stagger-in">
+
+    <div class="flex flex-wrap gap-2">
+        <a href="{{ url_for('taxes.taxes_index') }}"
+           class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
+            Income tax</a>
+        <a href="{{ url_for('taxes.sales_tax_index') }}" aria-current="page"
+           class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl btn-brand">
+            Sales tax</a>
+    </div>
+
+    <div data-live="sales-tiles" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card p-4 sm:p-5 min-w-0">
+            <p class="text-xs sm:text-sm font-medium text-surface-400">Due on sales</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1 break-words">{{ totals.due | format_currency }}</p>
+            <p class="text-xs text-surface-500 mt-1 break-words">{{ pct }}% of {{ totals.sales | format_currency }}</p>
+        </div>
+        <div class="glass-card p-4 sm:p-5 min-w-0">
+            <p class="text-xs sm:text-sm font-medium text-surface-400">Charged</p>
+            <p class="text-xl sm:text-2xl font-bold text-emerald-300 mt-1 break-words">{{ totals.charged | format_currency }}</p>
+            <p class="text-xs text-surface-500 mt-1">on {{ totals.count | commas }} invoice{{ '' if totals.count == 1 else 's' }}</p>
+        </div>
+        <div class="glass-card p-4 sm:p-5 min-w-0">
+            <p class="text-xs sm:text-sm font-medium text-surface-400">Never charged</p>
+            <p class="text-xl sm:text-2xl font-bold {{ 'text-amber-300' if totals.short else 'text-white' }} mt-1 break-words">{{ totals.short | format_currency }}</p>
+            <p class="text-xs text-surface-500 mt-1 break-words">{{ totals.collected | format_currency }} collected back</p>
+        </div>
+        <div class="glass-card p-4 sm:p-5 min-w-0">
+            <p class="text-xs sm:text-sm font-medium text-surface-400">Left to bill</p>
+            <p class="text-xl sm:text-2xl font-bold {{ 'text-amber-300' if totals.to_bill else 'text-white' }} mt-1 break-words">{{ totals.to_bill | format_currency }}</p>
+            <p class="text-xs text-surface-500 mt-1 break-words">
+                {{ totals.billed | format_currency }} sent, unpaid
+                {%- if totals.drafted %}; {{ totals.drafted | format_currency }} drafted{% endif %}</p>
+        </div>
+    </div>
+
+    {% if orphans %}
+    {# Money Stripe holds that no client here carries the customer id for.
+       Named rather than dropped, the importer's own rule. #}
+    <div class="glass-card p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 border-amber-500/30">
+        <p class="text-sm text-surface-200 min-w-0 break-words">
+            {{ orphans | length }} Stripe invoice{{ '' if orphans|length == 1 else 's' }} on no client:
+            <span class="text-surface-400">{{ orphans[:6] | join(', ') }}{% if orphans|length > 6 %} and {{ orphans|length - 6 }} more{% endif %}</span>
+        </p>
+        <a href="{{ url_for('pm.clients_list') }}"
+           class="shrink-0 inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">
+            Clients</a>
+    </div>
+    {% endif %}
+
+    <div x-data='{ openId: {{ open_id | tojson }} }'>
+    <div data-live="sales-ledger" class="space-y-3">
+        {% for e in ledger.clients %}
+        {% set c = e.client %}
+        <div id="client-{{ c.id }}" class="glass-card min-w-0"
+             :class="openId === {{ c.id }} ? 'relative z-30' : 'relative z-0'">
+            <button type="button"
+                    @click="openId = (openId === {{ c.id }} ? null : {{ c.id }})"
+                    :aria-expanded="openId === {{ c.id }}"
+                    class="w-full min-h-[44px] p-4 sm:p-5 flex items-center gap-3 text-left">
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <span class="font-semibold text-white break-words min-w-0">{{ c.name }}</span>
+                        {% if e.exempt %}
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-300">Exempt</span>
+                        {% elif e.to_bill %}
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-500/15 text-amber-300">{{ e.to_bill | format_currency }} to bill</span>
+                        {% elif e.drafted or e.billed %}
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-sky-900/30 text-sky-300">Billed back</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-emerald-900/30 text-emerald-400">Square</span>
+                        {% endif %}
+                        {% if e.drafts_missing_tax %}
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">
+                            {{ e.drafts_missing_tax | length }} draft{{ '' if e.drafts_missing_tax|length == 1 else 's' }} untaxed</span>
+                        {% endif %}
+                        {% if e.subs_missing_tax %}
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">Subscription untaxed</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-surface-400 mt-1 break-words">
+                        {% if e.exempt %}{{ c.sales_tax_exempt_reason or 'No Texas sales tax' }}
+                        {% else %}{{ e.sales | format_currency }} sold, {{ e.due | format_currency }} due,
+                        {{ e.charged | format_currency }} charged{% endif %}
+                    </p>
+                </div>
+                <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform"
+                     :class="openId === {{ c.id }} ? 'rotate-180' : ''"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div x-show="openId === {{ c.id }}" x-cloak class="px-4 sm:px-5 pb-5 space-y-5 border-t border-white/5 pt-4">
+
+                {# The presses, on the trailing edge. Each one that changes
+                   Stripe asks first, in place. #}
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    {% if not e.exempt and e.subs_missing_tax %}
+                    <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_subscriptions', id=c.id) }}">
+                        {{ confirm_button(label='Tax the subscription', question='Add ' ~ pct ~ '% from the next bill?', tone='brand',
+                            btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors') }}
+                    </form>
+                    {% endif %}
+                    {% if not e.exempt and e.drafts_missing_tax %}
+                    {% set n = e.drafts_missing_tax | length %}
+                    <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_drafts', id=c.id) }}">
+                        {{ confirm_button(label='Tax ' ~ n ~ ' draft' ~ ('' if n == 1 else 's'), question='Add ' ~ pct ~ '% to ' ~ ('it' if n == 1 else 'all ' ~ n) ~ '?', tone='brand',
+                            btn_class='min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors') }}
+                    </form>
+                    {% endif %}
+                    {% if not e.exempt and e.to_bill %}
+                    <form method="POST" action="{{ url_for('taxes.sales_tax_catchup', id=c.id) }}">
+                        {{ confirm_button(label='Draft ' ~ (e.to_bill | format_currency) ~ ' invoice', question='Draft it in Stripe?', tone='brand',
+                            btn_class='min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand text-white') }}
+                    </form>
+                    {% endif %}
+                </div>
+
+                {% if e.groups %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">By project</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-surface-700">
+                                    {% for h in ['Project', 'Sold', 'Due', 'Charged', 'Never charged'] %}
+                                    <th class="{{ 'text-left' if loop.first else 'text-right' }} py-2 px-2 text-xs font-semibold text-surface-400 whitespace-nowrap">{{ h }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for g in e.groups %}
+                                <tr class="border-b border-surface-800">
+                                    <td class="py-2 px-2 text-white">
+                                        {% if g.project %}{{ g.project.name }}{% else %}<span class="text-surface-400">No project</span>{% endif %}</td>
+                                    <td class="py-2 px-2 text-right text-surface-200 whitespace-nowrap">{{ g.sales | format_currency }}</td>
+                                    <td class="py-2 px-2 text-right text-surface-200 whitespace-nowrap">{{ g.due | format_currency }}</td>
+                                    <td class="py-2 px-2 text-right text-emerald-300 whitespace-nowrap">{{ g.charged | format_currency }}</td>
+                                    <td class="py-2 px-2 text-right font-semibold whitespace-nowrap {{ 'text-amber-300' if g.short else 'text-surface-400' }}">{{ g.short | format_currency }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if e.catchups %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Billed back</h4>
+                    <div class="space-y-2">
+                        {% for inv in e.catchups %}
+                        {% set st = STATUS.get(inv.status, (inv.status, 'bg-surface-800 text-surface-300')) %}
+                        <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-800/40">
+                            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ st[1] }}">{{ st[0] }}</span>
+                                <span class="text-sm text-surface-300">{{ inv.issued_on | format_date }}</span>
+                            </div>
+                            <div class="flex items-center gap-3 shrink-0">
+                                <span class="text-sm font-semibold text-white">{{ inv.total | format_currency }}</span>
+                                <a href="{{ url_for('stripe.invoice_detail', id=inv.id) }}"
+                                   class="inline-flex items-center min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                                    {{ inv.invoice_number or 'Open' }}</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if e.invoices %}
+                <div>
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Invoices</h4>
+                    <div class="space-y-2">
+                        {% for r in e.invoices %}
+                        {% set inv = r.invoice %}
+                        {% set st = STATUS.get(inv.status, (inv.status, 'bg-surface-800 text-surface-300')) %}
+                        <div class="relative focus-within:z-30 p-3 rounded-xl bg-surface-800/40 space-y-2 {{ '' if r.counted or r.draft_missing_tax else 'opacity-70' }}">
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                                    <a href="{{ url_for('stripe.invoice_detail', id=inv.id) }}"
+                                       class="inline-flex items-center min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                                        {{ inv.invoice_number or 'Open' }}</a>
+                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ st[1] }}">{{ st[0] }}</span>
+                                    <span class="text-xs text-surface-400 whitespace-nowrap">{{ inv.issued_on | format_date }}</span>
+                                    {% if r.excluded %}
+                                    <span class="px-2 py-0.5 text-[11px] font-medium rounded-md bg-surface-900 text-surface-400">{{ r.excluded }}</span>
+                                    {% elif r.draft_missing_tax %}
+                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No tax on it</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-right text-xs text-surface-400 leading-5">
+                                    <div><span class="text-surface-200">{{ r.base | format_currency }}</span> {{ 'drafted' if inv.status == 'draft' else 'billed' }}</div>
+                                    <div>{{ r.due | format_currency }} due, <span class="text-emerald-300">{{ r.charged | format_currency }}</span> charged</div>
+                                    {% if r.short and r.counted %}
+                                    <div class="font-semibold text-amber-300">{{ r.short | format_currency }} never charged</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-end gap-2">
+                                {% if e.projects | length > 1 %}
+                                <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_invoice_project', id=inv.id) }}"
+                                      class="min-w-0 flex-1 sm:flex-none sm:w-64">
+                                    {% set project_options = [('', 'No project')] %}
+                                    {% for p in e.projects %}{% set _ = project_options.append((p.id | string, p.name)) %}{% endfor %}
+                                    {{ select_dropdown('project_id', project_options,
+                                        (inv.project_id | string) if inv.project_id else '',
+                                        'Project', full_width=true,
+                                        on_change="$el.closest('form').requestSubmit()") }}
+                                </form>
+                                {% endif %}
+                                {% if not e.exempt %}
+                                <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_invoice_taxable', id=inv.id) }}">
+                                    <button type="submit"
+                                            class="min-h-[44px] px-3 text-xs font-medium rounded-xl border transition-colors
+                                                   {{ 'border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300' if inv.sales_tax_exempt else 'border-white/10 text-surface-400 hover:border-amber-500/40 hover:text-amber-300' }}">
+                                        {{ 'Make taxable' if inv.sales_tax_exempt else 'Not taxable' }}</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_client_exempt', id=c.id) }}"
+                      class="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-white/5">
+                    {% if e.exempt %}
+                    <button type="submit"
+                            class="min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        Charge them sales tax</button>
+                    {% else %}
+                    <input type="text" name="reason" maxlength="200" aria-label="Why they are exempt"
+                           placeholder="Out of state, certificate on file"
+                           class="min-w-0 flex-1 sm:flex-none sm:w-72 input-ring px-3 py-2.5 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500">
+                    <button type="submit"
+                            class="min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-amber-500/40 hover:text-amber-300 transition-colors">
+                        Mark exempt</button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="glass-card p-8 text-center">
+            <p class="text-surface-300">No invoices yet.</p>
+        </div>
+        {% endfor %}
+    </div>
+    </div>
+
+    {% if ledger.quarters %}
+    {# What goes on the state return: total sales, the taxable part, the tax. #}
+    <div data-live="sales-quarters" class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">By quarter</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-surface-700">
+                        {% for h in ['Quarter', 'Sales', 'Taxable', 'Tax due', 'Charged'] %}
+                        <th class="{{ 'text-left' if loop.first else 'text-right' }} py-2 px-2 text-xs font-semibold text-surface-400 whitespace-nowrap">{{ h }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in ledger.quarters %}
+                    <tr class="border-b border-surface-800">
+                        <td class="py-2 px-2 font-semibold text-white whitespace-nowrap">{{ q.label }}</td>
+                        <td class="py-2 px-2 text-right text-surface-200 whitespace-nowrap">{{ q.sales | format_currency }}</td>
+                        <td class="py-2 px-2 text-right text-surface-200 whitespace-nowrap">{{ q.taxable | format_currency }}</td>
+                        <td class="py-2 px-2 text-right font-semibold text-white whitespace-nowrap">{{ q.due | format_currency }}</td>
+                        <td class="py-2 px-2 text-right text-emerald-300 whitespace-nowrap">{{ q.charged | format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="glass-card p-5 sm:p-6 min-w-0">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">Rate</h3>
+        <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_settings') }}" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label for="st-rate" class="block text-sm font-medium text-surface-300 mb-1.5">Local rate</label>
+                    <div class="relative">
+                        <input id="st-rate" type="number" step="0.001" min="0" max="100" name="rate_percent"
+                               value="{{ '%g'|format(settings.rate_percent) }}" inputmode="decimal"
+                               class="w-full min-w-0 input-ring px-4 py-3 pr-9 text-sm bg-surface-800 text-white">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
+                    </div>
+                </div>
+                <div>
+                    <label for="st-share" class="block text-sm font-medium text-surface-300 mb-1.5">Taxable share</label>
+                    <div class="relative">
+                        <input id="st-share" type="number" step="1" min="0" max="100" name="taxable_share"
+                               value="{{ '%g'|format(settings.taxable_share) }}" inputmode="decimal"
+                               class="w-full min-w-0 input-ring px-4 py-3 pr-9 text-sm bg-surface-800 text-white">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
+                    </div>
+                </div>
+                <div>
+                    <label for="st-from" class="block text-sm font-medium text-surface-300 mb-1.5">Count sales from</label>
+                    <input id="st-from" type="date" name="count_from"
+                           value="{{ settings.count_from.isoformat() if settings.count_from else '' }}"
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white">
+                </div>
+            </div>
+            <div data-live="sales-rate" class="flex flex-wrap items-center justify-between gap-3">
+                <span class="text-sm text-surface-300">{{ pct }}% of every dollar</span>
+                <button type="submit"
+                        class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-medium rounded-xl btn-brand transition-all">
+                    Save</button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

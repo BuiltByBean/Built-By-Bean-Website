@@ -38,6 +38,15 @@
 
 <div class="space-y-4 stagger-in">
 
+    <div class="flex flex-wrap gap-2">
+        <a href="{{ url_for('taxes.taxes_index') }}" aria-current="page"
+           class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl btn-brand">
+            Income tax</a>
+        <a href="{{ url_for('taxes.sales_tax_index') }}"
+           class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
+            Sales tax</a>
+    </div>
+
     <div class="glass-card p-4 sm:p-5 border-amber-500/40">
         <p class="text-sm text-surface-200">
             <span class="font-semibold text-white">An estimate, not a return.</span>

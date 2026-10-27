@@ -1102,10 +1102,18 @@ def create_app():
         # up in front of him rather than nearly adding up.
         total_profit = total_revenue - total_expenses
         documents = client.documents.order_by(Document.uploaded_at.desc()).all()
+        # The same arithmetic as the sales tax page, over the local rows only:
+        # this page makes no Stripe call, and the importer keeps the rows
+        # current nightly and whenever the sales tax page is opened.
+        from models import SalesTaxSetting
+        import sales_tax
+        sales_tax_entry = sales_tax.client_balance(
+            SalesTaxSetting.get(), client, list(client.invoices))
         return render_template("pm/clients/detail.html",
             client=client, projects=projects, documents=documents,
             total_hours=total_hours, total_revenue=total_revenue, total_expenses=total_expenses,
             total_invoiced=total_invoiced, total_profit=total_profit,
+            sales_tax=sales_tax_entry,
             contact_form=ContactLogForm(), stage_choices=CLIENT_STAGE_CHOICES,
             today_iso=date.today().isoformat())
 

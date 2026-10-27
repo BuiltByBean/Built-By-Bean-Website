@@ -380,8 +380,26 @@ def invoice_create():
             flash("No line items selected.", "error")
             return redirect(url_for("stripe.invoice_create"))
 
+        # Texas sales tax goes on at the moment of writing, because every
+        # invoice that went out without it became a balance to chase the
+        # client for afterwards. An exempt client gets none. If the rate
+        # cannot be made the draft is still written and the sales tax page
+        # lists it as a draft missing tax, rather than the press failing.
+        tax_rate_ids = None
+        if not client.sales_tax_exempt:
+            from models import SalesTaxSetting
+            from stripe_service import ensure_sales_tax_rate
+            sales_settings = SalesTaxSetting.get()
+            rate_id, rate_err = ensure_sales_tax_rate(sales_settings)
+            if rate_id:
+                db.session.commit()
+                tax_rate_ids = [rate_id]
+            else:
+                flash(f"Drafted without sales tax: {rate_err}", "warning")
+
         stripe_invoice, stripe_line_items = create_stripe_invoice(
-            client, line_items_data, due_days=due_days, memo=notes
+            client, line_items_data, due_days=due_days, memo=notes,
+            tax_rate_ids=tax_rate_ids,
         )
 
         if not stripe_invoice:

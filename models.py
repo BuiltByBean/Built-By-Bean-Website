@@ -154,6 +154,15 @@ class Client(db.Model):
     hub_pulled_at = db.Column(db.DateTime, nullable=True)
     hub_pull_note = db.Column(db.String(300), default="")
 
+    # Texas sales tax is owed on what is sold TO them, so whether it applies
+    # is a fact about the buyer: out of state, a resale or exemption
+    # certificate on file, or Built by Bean's own row. False is the default
+    # because every client so far is in Texas and a missed exemption costs a
+    # refund, while a missed charge costs the tax out of pocket.
+    sales_tax_exempt = db.Column(db.Boolean, nullable=False, default=False,
+                                 server_default=db.false())
+    sales_tax_exempt_reason = db.Column(db.String(200), default="")
+
     stage = db.Column(db.String(30), default="lead")
     contract_revenue = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -801,6 +810,21 @@ class Invoice(db.Model):
     notes = db.Column(db.Text, default="")
     sent_at = db.Column(db.DateTime, nullable=True)
     paid_at = db.Column(db.DateTime, nullable=True)
+    # The day the sale happened as far as the state is concerned: when Stripe
+    # finalised it, or created it for a draft. created_at is when THIS row was
+    # written, which for an invoice imported from Stripe is the day of the
+    # import and says nothing about which quarter's return it belongs on.
+    issued_on = db.Column(db.Date, nullable=True)
+    # An invoice that bills sales tax missed on earlier invoices. It is tax,
+    # not a sale, so nothing is owed ON it, and paying it is what clears the
+    # client's balance. Mirrored from the Stripe metadata the board writes,
+    # so an invoice made here and imported again keeps the flag.
+    sales_tax_catchup = db.Column(db.Boolean, nullable=False, default=False,
+                                  server_default=db.false())
+    # One invoice that the accountant says is not a taxable sale, on a client
+    # who otherwise is. Board-owned: an import never touches it.
+    sales_tax_exempt = db.Column(db.Boolean, nullable=False, default=False,
+                                 server_default=db.false())
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -1202,6 +1226,57 @@ class TaxSetting(db.Model):
 
     def __repr__(self):
         return f"<TaxSetting {self.filing_status} wages={self.household_income}>"
+
+
+class SalesTaxSetting(db.Model):
+    """The two numbers Texas sales tax on this business comes down to.
+
+    Software sold as a service is a data processing service in Texas, and 20%
+    of a data processing charge is exempt, so the tax is the local rate on 80%
+    of the bill: 8.25% x 80% = 6.6% of every dollar. Kept as the two facts
+    rather than the 6.6, because the rate is the one that changes (a client in
+    a city with a different local rate, or the state moving it) and the
+    product of the two is not something anybody can check by eye.
+
+    The Stripe tax rate is remembered with the percentage it was made at.
+    Stripe will not edit a tax rate's percentage, so a change here makes a new
+    one and retires the old, rather than charging the old figure forever.
+    """
+
+    __tablename__ = "sales_tax_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    rate_percent = db.Column(db.Float, nullable=False, default=8.25)
+    taxable_share = db.Column(db.Float, nullable=False, default=80.0)
+    # Sales before this day are not counted. Null counts everything, which is
+    # the honest default: the obligation began with the first sale, whether
+    # or not anybody was tracking it.
+    count_from = db.Column(db.Date, nullable=True)
+    stripe_tax_rate_id = db.Column(db.String(100), nullable=True)
+    stripe_tax_rate_percent = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    @classmethod
+    def get(cls):
+        row = cls.query.first()
+        if row is None:
+            row = cls()
+            db.session.add(row)
+            db.session.commit()
+        return row
+
+    @property
+    def effective_percent(self):
+        """Tax per dollar billed, as a percent. 6.6 at the defaults.
+
+        Rounded to four places because it becomes a Stripe tax rate, and
+        8.25 x 0.8 in floating point is 6.6000000000000005.
+        """
+        return round((self.rate_percent or 0) * (self.taxable_share or 0) / 100.0, 4)
+
+    def __repr__(self):
+        return f"<SalesTaxSetting {self.effective_percent}%>"
 
 
 # Statuses come from the portal, which is the only place they are decided.
