@@ -304,6 +304,25 @@ def ensure_sales_tax_rate(settings):
     return rate.id, None
 
 
+def mark_invoice_catchup(stripe_invoice_id, on):
+    """Write (or remove) the catch-up mark in the invoice's Stripe metadata.
+
+    For a back-tax invoice written by hand in the Stripe dashboard, which the
+    board could only take for an ordinary sale. Metadata stays editable after
+    an invoice is finalised or paid, and an empty string deletes the key, so
+    unmarking leaves nothing behind. Returns an error string or None.
+    """
+    if not stripe.api_key:
+        return "Stripe is not configured"
+    try:
+        stripe.Invoice.modify(stripe_invoice_id,
+                              metadata={SALES_TAX_META: "catchup" if on else ""})
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Stripe catch-up mark error: {e}")
+        return str(e)
+
+
 def add_tax_rate_to_draft(stripe_invoice_id, rate_id):
     """Put the sales tax on a draft. Returns an error string or None.
 

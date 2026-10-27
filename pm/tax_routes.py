@@ -194,7 +194,7 @@ from stripe_service import (  # noqa: E402
     SALES_TAX_META, add_tax_rate_to_draft, add_tax_rate_to_subscription,
     create_stripe_customer, create_stripe_invoice, ensure_sales_tax_rate,
     forget_sales_tax_caches, get_subscriptions_for_tax,
-    import_invoices_from_stripe, sync_invoice_from_stripe,
+    import_invoices_from_stripe, mark_invoice_catchup, sync_invoice_from_stripe,
 )
 
 
@@ -298,6 +298,32 @@ def sales_tax_invoice_taxable(id):
     inv = db.session.get(Invoice, id) or abort(404)
     inv.sales_tax_exempt = not inv.sales_tax_exempt
     db.session.commit()
+    return _back(inv.client_id)
+
+
+@tax_bp.route("/sales/invoices/<int:id>/back-tax", methods=["POST"])
+@login_required
+def sales_tax_invoice_back_tax(id):
+    """Say that an invoice bills back missed tax, or take that back.
+
+    For a catch-up written by hand in the Stripe dashboard: without the mark
+    it reads as a sale, owes 6.6% of itself and clears nothing. The mark goes
+    into Stripe's metadata as well as onto the row, because the importer
+    takes the flag from Stripe and a mark kept only here would be the board's
+    word against Stripe's. Stripe first: if it refuses, nothing changes here.
+    """
+    inv = db.session.get(Invoice, id) or abort(404)
+    on = not inv.sales_tax_catchup
+    if inv.stripe_invoice_id:
+        err = mark_invoice_catchup(inv.stripe_invoice_id, on)
+        if err:
+            flash(f"Stripe error: {err}", "error")
+            return _back(inv.client_id)
+    inv.sales_tax_catchup = on
+    db.session.commit()
+    forget_sales_tax_caches()
+    label = inv.invoice_number or f"#{inv.id}"
+    flash(f"{label} is {'back tax' if on else 'an ordinary sale'}.", "success")
     return _back(inv.client_id)
 
 

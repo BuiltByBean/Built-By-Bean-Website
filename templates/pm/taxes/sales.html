@@ -191,11 +191,15 @@
                                 <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ st[1] }}">{{ st[0] }}</span>
                                 <span class="text-sm text-surface-300">{{ inv.issued_on | format_date }}</span>
                             </div>
-                            <div class="flex items-center gap-3 shrink-0">
+                            <div class="flex flex-wrap items-center justify-end gap-2">
                                 <span class="text-sm font-semibold text-white">{{ inv.total | format_currency }}</span>
                                 <a href="{{ url_for('stripe.invoice_detail', id=inv.id) }}"
                                    class="inline-flex items-center min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
                                     {{ inv.invoice_number or 'Open' }}</a>
+                                <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_invoice_back_tax', id=inv.id) }}">
+                                    {{ confirm_button(label='Not back tax', question='Count it as a sale?',
+                                        btn_class='min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                                </form>
                             </div>
                         </div>
                         {% endfor %}
@@ -250,6 +254,15 @@
                                             class="min-h-[44px] px-3 text-xs font-medium rounded-xl border transition-colors
                                                    {{ 'border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300' if inv.sales_tax_exempt else 'border-white/10 text-surface-400 hover:border-amber-500/40 hover:text-amber-300' }}">
                                         {{ 'Make taxable' if inv.sales_tax_exempt else 'Not taxable' }}</button>
+                                </form>
+                                {% endif %}
+                                {# For a back-tax invoice written by hand in Stripe, which
+                                   otherwise reads as a sale. Writes Stripe's metadata, so
+                                   it asks first like every press that touches Stripe. #}
+                                {% if inv.status != 'void' %}
+                                <form method="POST" data-live-action action="{{ url_for('taxes.sales_tax_invoice_back_tax', id=inv.id) }}">
+                                    {{ confirm_button(label='Back tax', question='Mark as back tax?', tone='brand',
+                                        btn_class='min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors') }}
                                 </form>
                                 {% endif %}
                             </div>

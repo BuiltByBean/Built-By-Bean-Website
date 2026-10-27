@@ -318,6 +318,60 @@ with application.app_context():
     check("the settings save", s.count_from == date(2026, 1, 1) and s.effective_percent == 6.6)
 
 
+print("\nA BACK-TAX INVOICE WRITTEN BY HAND IN STRIPE:")
+# Cason was billed $231.00 of back tax straight from the Stripe dashboard, so
+# the board took it for a $231.00 SALE: it owed 6.6% of itself and cleared
+# nothing. The Back tax press is what tells the board otherwise.
+marks = []
+routes.mark_invoice_catchup = lambda sid, on: marks.append((sid, on))
+with application.app_context():
+    cason = Client(name="Cason Kuper", email="c@example.test", stripe_customer_id="cus_c")
+    db.session.add(cason)
+    db.session.flush()
+    db.session.add(Project(name="Kuper Plumbing", client_id=cason.id))
+    db.session.add(Invoice(client_id=cason.id, status="paid", total=3500.0, tax=0.0, subtotal=3500.0,
+                           amount_paid=3500.0, issued_on=date(2026, 6, 15), stripe_invoice_id="in_sale"))
+    bt = Invoice(client_id=cason.id, status="paid", total=231.0, tax=0.0, subtotal=231.0,
+                 amount_paid=231.0, issued_on=date(2026, 10, 28), stripe_invoice_id="in_bt",
+                 invoice_number="BT-1")
+    db.session.add(bt)
+    db.session.commit()
+    cason_id, bt_id = cason.id, bt.id
+
+
+def cason_entry():
+    with application.app_context():
+        st_ = SalesTaxSetting.get()
+        cl = db.session.get(Client, cason_id)
+        return sales_tax.client_balance(st_, cl, list(cl.invoices))
+
+
+e = cason_entry()
+check("unmarked, the back tax reads as a sale that owes tax on itself",
+      e["to_bill"] == 246.25 and e["collected"] == 0.0, (e["to_bill"], e["collected"]))
+c.post(f"/admin/taxes/sales/invoices/{bt_id}/back-tax")
+e = cason_entry()
+check("marked, it is collected back and the client is square",
+      e["to_bill"] == 0.0 and e["collected"] == 231.0 and e["short"] == 231.0,
+      (e["to_bill"], e["collected"], e["short"]))
+check("the mark is written into Stripe too", marks == [("in_bt", True)], marks)
+FAKE[:] = [{"id": "in_bt", "number": "BT-1", "status": "paid", "customer_id": "cus_c", "total": 231.0,
+            "tax": 0.0, "amount_due": 0.0, "amount_paid": 231.0, "due_date": None, "paid_at": None,
+            "issued_at": datetime(2026, 10, 28, tzinfo=timezone.utc), "catchup": False}]
+with application.app_context():
+    stripe_service.import_invoices_from_stripe()
+    check("a later import does not undo it", db.session.get(Invoice, bt_id).sales_tax_catchup)
+r = c.get("/admin/taxes/sales")
+check("the page offers to undo it", b"Not back tax" in r.data)
+c.post(f"/admin/taxes/sales/invoices/{bt_id}/back-tax")
+check("and undoing it puts it back as a sale", cason_entry()["to_bill"] == 246.25)
+check("undoing clears it in Stripe too", marks[-1] == ("in_bt", False), marks)
+routes.mark_invoice_catchup = lambda sid, on: "card declined"
+c.post(f"/admin/taxes/sales/invoices/{bt_id}/back-tax")
+with application.app_context():
+    check("if Stripe refuses, nothing changes here", not db.session.get(Invoice, bt_id).sales_tax_catchup)
+
+
 print("\nAN INVOICE THE BOARD RAISES:")
 import pm.stripe_routes as sroutes  # noqa: E402
 import stripe_service as svc  # noqa: E402
