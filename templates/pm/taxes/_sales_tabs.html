@@ -1,0 +1,15 @@
+{# The tabs over every sales tax page: Income and Sales, then the three
+   halves of sales tax. `here` names the page drawing them. #}
+{% set tab = 'inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors' %}
+{% set off = 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' %}
+<div class="flex flex-wrap gap-2">
+    <a href="{{ url_for('taxes.taxes_index') }}" class="{{ tab }} {{ off }}">Income tax</a>
+    <a href="{{ url_for('taxes.sales_tax_index') }}" {% if here == 'ledger' %}aria-current="page"{% endif %}
+       class="{{ tab }} {{ 'btn-brand' if here == 'ledger' else off }}">Sales tax</a>
+    {% if current_user.is_ceo | default(false) %}
+    <a href="{{ url_for('businesses.returns_index') }}" {% if here == 'returns' %}aria-current="page"{% endif %}
+       class="{{ tab }} {{ 'btn-brand' if here == 'returns' else off }}">Returns</a>
+    <a href="{{ url_for('businesses.guide') }}" {% if here == 'guide' %}aria-current="page"{% endif %}
+       class="{{ tab }} {{ 'btn-brand' if here == 'guide' else off }}">How to file</a>
+    {% endif %}
+</div>

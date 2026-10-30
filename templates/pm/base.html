@@ -1009,6 +1009,18 @@
                     {%- endif %}
                 </span>
             </a>
+            {# The command center: every business owned, above the work of
+               any one of them. CEO only, like Users, because it carries the
+               numbers that link a tax account to an eSystems login. #}
+            {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
+            <a href="{{ url_for('businesses.index') }}"
+               class="sidebar-link {% if request.endpoint in ('businesses.index', 'businesses.new', 'businesses.edit') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+                </svg>
+                Businesses
+            </a>
+            {% endif %}
             <div class="my-2 border-t border-white/10"></div>
 
             {# The work, first, because it is what the day is. The list of
@@ -1110,7 +1122,7 @@
                 Dashboard
             </a>
             <a href="{{ url_for('taxes.taxes_index') }}"
-               class="sidebar-link {% if request.endpoint and 'taxes' in request.endpoint %}active{% endif %}">
+               class="sidebar-link {% if request.endpoint and ('taxes' in request.endpoint or (request.endpoint.startswith('businesses.') and request.endpoint not in ('businesses.index', 'businesses.new', 'businesses.edit'))) %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 6h.008v.008h-.008V15zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
                 </svg>

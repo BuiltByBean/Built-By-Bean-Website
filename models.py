@@ -1279,6 +1279,260 @@ class SalesTaxSetting(db.Model):
         return f"<SalesTaxSetting {self.effective_percent}%>"
 
 
+class Business(db.Model):
+    """A company Michael owns, and what the state knows it by.
+
+    The board began as Built by Bean's and is now the command center over
+    every business he runs: EntertainHQ LLC is the second, and a partner in
+    one of them still works in that business's own admin site. So the facts a
+    filing needs live here once, and a business's own app asks for them over
+    the hub rather than keeping a copy that drifts.
+
+    The two WebFile numbers are not interchangeable. Sales tax is RT plus six
+    digits, franchise tax XT plus six, and eSystems "Assign Tax/Fees" asks for
+    the one that matches the tax being linked. On 2026-10-30 the sales tax
+    account would not link with anything else, and for a new registration
+    the number arrives by mail weeks later, or from 800-252-8880 the same day.
+
+    `sales_source` says where a quarter's sales come from: "board" is the
+    invoices on this board (Built by Bean's own), "hub" is the business's app
+    answering /api/hub/tax/sales, and "manual" is nothing to compute, so the
+    figures are typed when the return is recorded.
+    """
+
+    __tablename__ = "businesses"
+
+    SALES_SOURCES = (
+        ("board", "This board's invoices"),
+        ("hub", "Its own app"),
+        ("manual", "Typed in"),
+    )
+    FREQUENCIES = (("quarterly", "Quarterly"), ("monthly", "Monthly"), ("yearly", "Yearly"))
+
+    id = db.Column(db.Integer, primary_key=True)
+    # The legal name, exactly as the Comptroller prints it on a return.
+    name = db.Column(db.String(200), nullable=False)
+    short_name = db.Column(db.String(80), default="")
+    slug = db.Column(db.String(40), nullable=False, unique=True)
+    texas_taxpayer_number = db.Column(db.String(11), default="")
+    sos_file_number = db.Column(db.String(20), default="")
+    formed_on = db.Column(db.Date, nullable=True)
+    franchise_tax_webfile = db.Column(db.String(20), default="")
+
+    sales_tax_webfile = db.Column(db.String(20), default="")
+    sales_tax_registered_on = db.Column(db.Date, nullable=True)
+    # The obligation began with the first taxable sale, whether or not the
+    # permit existed yet, so the returns owed are counted from here.
+    sales_tax_first_sale = db.Column(db.Date, nullable=True)
+    sales_tax_frequency = db.Column(db.String(12), nullable=False, default="quarterly",
+                                    server_default="quarterly")
+    # Share of a sale that is taxable. 80 for software sold as a service,
+    # which Texas taxes as a data processing service with 20% exempt.
+    taxable_share = db.Column(db.Float, nullable=False, default=80.0, server_default="80")
+    naics_code = db.Column(db.String(10), default="")
+    sales_source = db.Column(db.String(12), nullable=False, default="manual",
+                             server_default="manual")
+
+    # Its own admin site, where a partner in it works.
+    admin_url = db.Column(db.String(300), default="")
+    # The hub, as Client has it: who it says it is, where it answers, and the
+    # secret both ends sign with. Nullable and unique for the same reason as
+    # Client.origin_slug: most businesses have no app, and null never collides.
+    hub_slug = db.Column(db.String(40), nullable=True, unique=True)
+    hub_base_url = db.Column(db.String(300), default="")
+    hub_secret = db.Column(db.String(120), default="")
+    hub_pulled_at = db.Column(db.DateTime, nullable=True)
+    hub_pull_note = db.Column(db.String(300), default="")
+
+    notes = db.Column(db.Text, default="")
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    locations = db.relationship("BusinessLocation", back_populates="business",
+                                cascade="all, delete-orphan",
+                                order_by="BusinessLocation.opened_on")
+    filings = db.relationship("SalesTaxFiling", back_populates="business",
+                              cascade="all, delete-orphan")
+
+    @property
+    def label(self):
+        return self.short_name or self.name
+
+    def location_on(self, day):
+        """The place a sale on `day` was made from, or None.
+
+        A return is filed per location, and a sale belongs to the place the
+        business was trading from that day: Built by Bean sold from Fort Worth
+        until 2026-09-17 and from Paris from the 18th, so September's sales
+        split across two lines of the same return.
+        """
+        for loc in self.locations:
+            if loc.opened_on and day < loc.opened_on:
+                continue
+            if loc.closed_on and day > loc.closed_on:
+                continue
+            return loc
+        return None
+
+    def filing_for(self, year, quarter):
+        for f in self.filings:
+            if f.year == year and f.quarter == quarter:
+                return f
+        return None
+
+    def __repr__(self):
+        return f"<Business {self.slug}>"
+
+
+class BusinessLocation(db.Model):
+    """One place a business sells from, as its sales tax permit lists it.
+
+    `webfile_number` is the five digit location number WebFile prints beside
+    each address on the Taxable Sales page (00001, 00002). It is the Comptroller's
+    number, not ours: Paris came out 00001 and Fort Worth 00002 although Fort
+    Worth opened first. A location the business has left keeps its row with
+    `closed_on`, because the returns that cover its last days still need it;
+    `closure_filed` is whether the Comptroller has been told, which is a
+    separate step and until it is done WebFile keeps asking for a line for it.
+    """
+
+    __tablename__ = "business_locations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey("businesses.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    webfile_number = db.Column(db.String(5), default="")
+    label = db.Column(db.String(100), nullable=False)
+    address = db.Column(db.String(300), default="")
+    county = db.Column(db.String(60), default="")
+    # Everything above the state's 6.25%: county, city, transit and special
+    # districts together. 2.0 for both of Built by Bean's so far.
+    local_rate = db.Column(db.Float, nullable=False, default=2.0, server_default="2")
+    opened_on = db.Column(db.Date, nullable=True)
+    closed_on = db.Column(db.Date, nullable=True)
+    closure_filed = db.Column(db.Boolean, nullable=False, default=False,
+                              server_default=db.false())
+
+    business = db.relationship("Business", back_populates="locations")
+
+    @property
+    def total_rate(self):
+        return round(6.25 + (self.local_rate or 0), 4)
+
+    def __repr__(self):
+        return f"<BusinessLocation {self.webfile_number} {self.label}>"
+
+
+class SalesTaxFiling(db.Model):
+    """One return as it was filed and paid, with WebFile's own numbers.
+
+    Written from the confirmation page, never worked out: the tax, penalty,
+    late filing penalty and interest are what the state charged, and the
+    figures per location are what was typed. `processing_fee` is the card
+    portal's charge on top, which an electronic check does not have ($9.86
+    and $16.89 on the first two returns, both paid by card).
+
+    One per business per period. An amended return is filed in WebFile
+    against the same period and recorded by editing this row, so the board
+    holds what was finally reported.
+    """
+
+    __tablename__ = "sales_tax_filings"
+    __table_args__ = (
+        db.UniqueConstraint("business_id", "year", "quarter", name="uq_sales_tax_filings_period"),
+    )
+
+    METHODS = (
+        ("electronic check", "Electronic check"),
+        ("credit card", "Credit card"),
+        ("none", "Filed, not paid"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey("businesses.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    year = db.Column(db.Integer, nullable=False)
+    quarter = db.Column(db.Integer, nullable=False)
+    # As WebFile printed it, which is Central time. A return's date is the
+    # day the state says it was filed, not the server's idea of that moment.
+    filed_at = db.Column(db.DateTime, nullable=True)
+    reference_number = db.Column(db.String(40), default="")
+    payment_reference = db.Column(db.String(40), default="")
+    trace_number = db.Column(db.String(40), default="")
+    payment_method = db.Column(db.String(20), default="electronic check")
+
+    total_sales = db.Column(db.Float, nullable=False, default=0.0)
+    taxable_sales = db.Column(db.Float, nullable=False, default=0.0)
+    tax_due = db.Column(db.Float, nullable=False, default=0.0)
+    penalty = db.Column(db.Float, nullable=False, default=0.0)
+    late_filing_penalty = db.Column(db.Float, nullable=False, default=0.0)
+    interest = db.Column(db.Float, nullable=False, default=0.0)
+    discount = db.Column(db.Float, nullable=False, default=0.0)
+    amount_paid = db.Column(db.Float, nullable=False, default=0.0)
+    processing_fee = db.Column(db.Float, nullable=False, default=0.0)
+    # What was typed per location: [{"number", "label", "total_sales",
+    # "taxable_sales", "state_tax", "local_tax"}].
+    locations_json = db.Column(db.Text, default="[]")
+    notes = db.Column(db.Text, default="")
+    recorded_by = db.Column(db.String(80), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", back_populates="filings")
+    files = db.relationship("SalesTaxFilingFile", back_populates="filing",
+                            cascade="all, delete-orphan",
+                            order_by="SalesTaxFilingFile.uploaded_at")
+
+    @property
+    def period_code(self):
+        return f"{self.year % 100:02d}{self.quarter}"
+
+    @property
+    def penalties(self):
+        return round((self.penalty or 0) + (self.late_filing_penalty or 0)
+                     + (self.interest or 0) - (self.discount or 0), 2)
+
+    @property
+    def total_charged(self):
+        return round((self.amount_paid or 0) + (self.processing_fee or 0), 2)
+
+    @property
+    def location_rows(self):
+        import json
+        try:
+            rows = json.loads(self.locations_json or "[]")
+        except ValueError:
+            return []
+        return rows if isinstance(rows, list) else []
+
+    def __repr__(self):
+        return f"<SalesTaxFiling {self.business_id} {self.period_code}>"
+
+
+class SalesTaxFilingFile(db.Model):
+    """A confirmation kept with its return: the page WebFile says to print.
+
+    Stored on the volume under UPLOAD_FOLDER/tax_filings by a random name, and
+    served back under the name it was uploaded with.
+    """
+
+    __tablename__ = "sales_tax_filing_files"
+
+    id = db.Column(db.Integer, primary_key=True)
+    filing_id = db.Column(db.Integer, db.ForeignKey("sales_tax_filings.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    stored_name = db.Column(db.String(100), nullable=False)
+    original_name = db.Column(db.String(300), nullable=False)
+    content_type = db.Column(db.String(100), default="application/pdf")
+    size = db.Column(db.Integer, default=0)
+    uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    filing = db.relationship("SalesTaxFiling", back_populates="files")
+
+
 # Statuses come from the portal, which is the only place they are decided.
 SIGNATURE_STATUS_LABELS = {
     "draft": "Draft",

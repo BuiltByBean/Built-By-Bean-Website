@@ -1,0 +1,42 @@
+{# The fields of one location, for both the edit rows and the add form.
+   `loc` is the row, or none for a new one. #}
+{% set field = 'w-full min-w-0 input-ring px-3 py-2.5 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
+{% set lbl = 'block text-xs font-medium text-surface-400 mb-1' %}
+{% set key = loc.id if loc else 'new' %}
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div>
+        <label for="l-num-{{ key }}" class="{{ lbl }}">WebFile loc #</label>
+        <input id="l-num-{{ key }}" name="webfile_number" inputmode="numeric" maxlength="5"
+               value="{{ loc.webfile_number if loc else '' }}" placeholder="00001" class="{{ field }} font-mono">
+    </div>
+    <div>
+        <label for="l-label-{{ key }}" class="{{ lbl }}">Town</label>
+        <input id="l-label-{{ key }}" name="label" required maxlength="100"
+               value="{{ loc.label if loc else '' }}" placeholder="Paris" class="{{ field }}">
+    </div>
+    <div class="col-span-2">
+        <label for="l-addr-{{ key }}" class="{{ lbl }}">Address</label>
+        <input id="l-addr-{{ key }}" name="address" maxlength="300"
+               value="{{ loc.address if loc else '' }}" placeholder="3244 Spaulding Dr, Paris, TX 75460" class="{{ field }}">
+    </div>
+    <div>
+        <label for="l-county-{{ key }}" class="{{ lbl }}">County</label>
+        <input id="l-county-{{ key }}" name="county" maxlength="60"
+               value="{{ loc.county if loc else '' }}" placeholder="Lamar" class="{{ field }}">
+    </div>
+    <div>
+        <label for="l-rate-{{ key }}" class="{{ lbl }}">Local rate %</label>
+        <input id="l-rate-{{ key }}" name="local_rate" type="number" step="0.001" min="0" max="10" inputmode="decimal"
+               value="{{ '%g'|format(loc.local_rate) if loc else '2' }}" class="{{ field }}">
+    </div>
+    <div>
+        <label for="l-open-{{ key }}" class="{{ lbl }}">Opened</label>
+        <input id="l-open-{{ key }}" name="opened_on" type="date"
+               value="{{ loc.opened_on.isoformat() if loc and loc.opened_on else '' }}" class="{{ field }}">
+    </div>
+    <div>
+        <label for="l-close-{{ key }}" class="{{ lbl }}">Closed</label>
+        <input id="l-close-{{ key }}" name="closed_on" type="date"
+               value="{{ loc.closed_on.isoformat() if loc and loc.closed_on else '' }}" class="{{ field }}">
+    </div>
+</div>

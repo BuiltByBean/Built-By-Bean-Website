@@ -266,6 +266,59 @@ Stripe finalised the invoice, because `created_at` on an imported row is the day
 of the import and says nothing about which quarter's return it belongs on.
 `tools/test_sales_tax.py`.
 
+## Every business, and the returns each one files
+
+Michael, 2026-10-30: "I'm not just Built by Bean anymore. I'm EntertainHQ also
+... I need a command center for all of it." So the board is the command
+center over every business he owns, and `/admin/businesses` is its front
+door (`pm/business_routes.py`, CEO only, first link under Needs attention).
+`Business` holds what the state knows a company by: the Texas taxpayer
+number, the SOS file number, and TWO WebFile numbers that are not
+interchangeable (sales tax is RT and six digits, franchise tax XT; eSystems
+"Assign Tax/Fees" refuses the wrong one). `BusinessLocation` is each place a
+permit lists, with WebFile's own five digit location number, which is the
+Comptroller's and not in opening order: Paris is 00001, Fort Worth 00002.
+
+A return is worked out, typed into WebFile by hand, and recorded from the
+confirmation page. `sales_tax.build_return` splits a period's sales by the
+location trading THAT DAY (`Business.location_on`) and rounds each line to
+the whole dollars WebFile takes; WebFile does every tax figure itself from
+the two numbers typed per location, so those two numbers are the whole job.
+It reproduces both returns Built by Bean filed on 2026-10-30 to the cent
+($339.90; then $165.00 Paris and $491.70 Fort Worth), and
+`tools/test_business_returns.py` holds it to that. A sale on a day no
+location covers is shown as unplaced, never dropped, because filing without
+it leaves a sale off the return. `SalesTaxFiling` is one row per business per
+period, written off the confirmation page and never computed: what the state
+charged, the three reference numbers, and the card fee on top. The
+confirmation PDF goes on the volume under `tax_filings/`, and the board can
+print its own record of any return (`record.pdf`) so a filed return is never
+here with nothing to print.
+
+Where a business's sales come from is `sales_source`: "board" is this
+board's invoices, counted by the ledger's own `invoice_row` (billed back tax
+is not a sale); "hub" is the business's app answering
+`POST /api/hub/tax/sales` with `{"sales": [{date, total, taxable, ref}]}`;
+"manual" is nothing to compute. **One store, two doors.** A business with an
+app of its own talks to the same rows over the hub, signed with ITS secret
+exactly as a client's tickets are: `/api/hub/tax/returns` (its periods, with
+figures for any sales it sends along), `/api/hub/tax/filings` (record one),
+`/api/hub/tax/files/put` and `/files/get` (base64, because the signature
+covers the body's bytes). The board never calls back into the app from
+inside a hub request, because two apps each waiting on the other is how a
+page hangs; and a WebFile number never crosses the wire, because it links a
+tax account to whoever's eSystems login types it. EntertainHQ's admin is
+the first app on the other end, so a partner there sees the return Michael
+recorded here and the other way round, with nothing kept twice.
+
+The lesson that cost money: a return that is not filed gets an ESTIMATED
+return from the state, set high on purpose ($1,158.93 and $2,202.53 where
+the real tax was $339.90 and $656.70), and it shows as a balance due on the
+account. Filing the real return replaces it; paying the estimate would have
+paid three times the tax. And a quarter with no sales is still a return to
+file. `/admin/taxes/sales/guide` is the whole routine in Michael's words,
+including how a new business gets registered and linked.
+
 ## Tickets travel both ways
 
 Tickets are PUSHED here by each client app's outbox, and `hub.fetch` is

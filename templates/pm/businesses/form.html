@@ -1,0 +1,214 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import delete_icon %}
+{% from "pm/components/copy_button.html" import copy_button %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One business: what the state knows it by, how its sales tax is filed, the
+  places its permit lists, and the hub its own app talks over.
+
+  The dropdown card carries relative z-30 (LM-1): its panels open over the
+  cards below. Locations are their own forms, one per row, outside the main
+  form, because forms do not nest.
+#}
+
+{% set field = 'w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
+{% set lbl = 'block text-sm font-medium text-surface-300 mb-1.5' %}
+
+{% block title %}{{ business.label if editing else 'New business' }} - Built By Bean{% endblock %}
+{% block page_title %}{{ business.label if editing else 'New business' }}{% endblock %}
+{% block page_subtitle %}{{ business.name if editing else 'Add a business you own' }}{% endblock %}
+{% block back %}{{ back_link(url_for('businesses.index'), 'Businesses') }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl">
+    <form method="POST" action="{{ url_for('businesses.edit', id=business.id) if editing else url_for('businesses.new') }}"
+          class="space-y-4">
+
+        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">The business</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="sm:col-span-2">
+                    <label for="b-name" class="{{ lbl }}">Legal name</label>
+                    <input id="b-name" name="name" required maxlength="200" value="{{ business.name or '' }}"
+                           placeholder="Built by Bean LLC" class="{{ field }}">
+                </div>
+                <div>
+                    <label for="b-short" class="{{ lbl }}">Short name</label>
+                    <input id="b-short" name="short_name" maxlength="80" value="{{ business.short_name or '' }}"
+                           placeholder="Built by Bean" class="{{ field }}">
+                </div>
+                <div>
+                    <label for="b-slug" class="{{ lbl }}">Web address name</label>
+                    <input id="b-slug" name="slug" maxlength="40" value="{{ business.slug or '' }}"
+                           placeholder="built-by-bean" class="{{ field }}">
+                </div>
+                <div>
+                    <label for="b-tpn" class="{{ lbl }}">Texas taxpayer number</label>
+                    <input id="b-tpn" name="texas_taxpayer_number" inputmode="numeric" maxlength="14"
+                           value="{{ business.texas_taxpayer_number or '' }}" placeholder="11 digits" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <label for="b-sos" class="{{ lbl }}">SOS file number</label>
+                    <input id="b-sos" name="sos_file_number" inputmode="numeric" maxlength="20"
+                           value="{{ business.sos_file_number or '' }}" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <label for="b-formed" class="{{ lbl }}">Formed on</label>
+                    <input id="b-formed" type="date" name="formed_on"
+                           value="{{ business.formed_on.isoformat() if business.formed_on else '' }}" class="{{ field }}">
+                </div>
+                <div>
+                    <label for="b-xt" class="{{ lbl }}">Franchise tax WebFile</label>
+                    <input id="b-xt" name="franchise_tax_webfile" maxlength="20" autocomplete="off"
+                           value="{{ business.franchise_tax_webfile or '' }}" placeholder="XT123456" class="{{ field }} font-mono">
+                </div>
+                <div class="sm:col-span-2">
+                    <label for="b-admin" class="{{ lbl }}">Its own admin site</label>
+                    <input id="b-admin" type="url" name="admin_url" maxlength="300"
+                           value="{{ business.admin_url or '' }}" placeholder="https://entertainhq.com/admin" class="{{ field }}">
+                </div>
+            </div>
+            {{ checkbox('is_active', checked=business.is_active, label='Active') }}
+        </div>
+
+        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Sales tax</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="b-rt" class="{{ lbl }}">Sales tax WebFile</label>
+                    <input id="b-rt" name="sales_tax_webfile" maxlength="20" autocomplete="off"
+                           value="{{ business.sales_tax_webfile or '' }}" placeholder="RT123456" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <label for="b-reg" class="{{ lbl }}">Registered on</label>
+                    <input id="b-reg" type="date" name="sales_tax_registered_on"
+                           value="{{ business.sales_tax_registered_on.isoformat() if business.sales_tax_registered_on else '' }}" class="{{ field }}">
+                </div>
+                <div>
+                    <label for="b-first" class="{{ lbl }}">First taxable sale</label>
+                    <input id="b-first" type="date" name="sales_tax_first_sale"
+                           value="{{ business.sales_tax_first_sale.isoformat() if business.sales_tax_first_sale else '' }}" class="{{ field }}">
+                </div>
+                <div>
+                    <p class="{{ lbl }}">Files</p>
+                    {{ select_dropdown('sales_tax_frequency', business.FREQUENCIES, business.sales_tax_frequency or 'quarterly', 'Quarterly', full_width=true) }}
+                </div>
+                <div>
+                    <label for="b-share" class="{{ lbl }}">Taxable share</label>
+                    <div class="relative">
+                        <input id="b-share" type="number" step="1" min="0" max="100" name="taxable_share" inputmode="decimal"
+                               value="{{ '%g'|format(business.taxable_share or 80) }}" class="{{ field }} pr-9">
+                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
+                    </div>
+                </div>
+                <div>
+                    <label for="b-naics" class="{{ lbl }}">NAICS code</label>
+                    <input id="b-naics" name="naics_code" inputmode="numeric" maxlength="10"
+                           value="{{ business.naics_code or '' }}" placeholder="541511" class="{{ field }} font-mono">
+                </div>
+                <div class="sm:col-span-2">
+                    <p class="{{ lbl }}">Sales come from</p>
+                    {{ select_dropdown('sales_source', business.SALES_SOURCES, business.sales_source or 'manual', 'Typed in', full_width=true) }}
+                </div>
+            </div>
+        </div>
+
+        <div id="hub" class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Its own app</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="b-hub" class="{{ lbl }}">Calls itself</label>
+                    <input id="b-hub" name="hub_slug" maxlength="40" value="{{ business.hub_slug or '' }}"
+                           placeholder="entertainhq" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <label for="b-hub-url" class="{{ lbl }}">Answers at</label>
+                    <input id="b-hub-url" type="url" name="hub_base_url" maxlength="300"
+                           value="{{ business.hub_base_url or '' }}" placeholder="https://entertainhq.com" class="{{ field }}">
+                </div>
+            </div>
+            {% if business.hub_pulled_at or business.hub_pull_note %}
+            <p class="text-xs text-surface-400 break-words">
+                Last asked {{ business.hub_pulled_at | format_date }}{% if business.hub_pull_note %}: {{ business.hub_pull_note }}{% endif %}</p>
+            {% endif %}
+        </div>
+
+        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+            <label for="b-notes" class="text-sm font-semibold uppercase tracking-wider text-surface-400">Notes</label>
+            <textarea id="b-notes" name="notes" rows="4" class="{{ field }}">{{ business.notes or '' }}</textarea>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit"
+                    class="inline-flex items-center justify-center min-h-[44px] px-6 text-sm font-semibold rounded-xl btn-brand text-white">
+                {{ 'Save' if editing else 'Add business' }}</button>
+        </div>
+    </form>
+
+    {% if editing %}
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Hub secret</h3>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            {% if business.hub_secret %}
+            <div x-data="{ show: false }" class="flex items-center gap-2 min-w-0 flex-1">
+                <input :type="show ? 'text' : 'password'" readonly value="{{ business.hub_secret }}" aria-label="Hub secret"
+                       class="min-w-0 flex-1 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl font-mono">
+                <button type="button" @click="show = !show"
+                        class="shrink-0 min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors"
+                        x-text="show ? 'Hide' : 'Show'">Show</button>
+                {{ copy_button('the secret', business.hub_secret) }}
+            </div>
+            {% else %}
+            <p class="text-sm text-surface-400">None yet.</p>
+            {% endif %}
+            <form method="POST" action="{{ url_for('businesses.new_secret', id=business.id) }}">
+                {% if business.hub_secret %}
+                {{ confirm_button(label='New secret', question='Break the old one?', tone='danger',
+                    btn_class='min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                {% else %}
+                <button type="submit"
+                        class="min-h-[44px] px-4 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                    Make a secret</button>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <div id="locations" class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Where it sells from</h3>
+        {% for loc in business.locations %}
+        <form method="POST" action="{{ url_for('businesses.location_save', id=business.id, loc_id=loc.id) }}"
+              class="p-4 rounded-xl bg-surface-800/40 space-y-3">
+            {% include "pm/businesses/_location_fields.html" %}
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                {{ checkbox('closure_filed', checked=loc.closure_filed, label='State told it closed') }}
+                <button type="submit"
+                        class="min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                    Save</button>
+            </div>
+        </form>
+        <form method="POST" action="{{ url_for('businesses.location_delete', id=business.id, loc_id=loc.id) }}"
+              class="flex justify-end -mt-2">
+            {{ delete_icon(question='Remove ' ~ loc.label ~ '?', label='Remove ' ~ loc.label) }}
+        </form>
+        {% endfor %}
+
+        {% set loc = none %}
+        <form method="POST" action="{{ url_for('businesses.location_add', id=business.id) }}"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3">
+            <p class="text-sm font-medium text-surface-200">Add a location</p>
+            {% include "pm/businesses/_location_fields.html" %}
+            <div class="flex justify-end">
+                <button type="submit"
+                        class="min-h-[44px] px-4 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                    Add location</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

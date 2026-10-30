@@ -1,0 +1,104 @@
+{% extends "pm/base.html" %}
+
+{#
+  How Texas sales tax is done here, end to end. Written 2026-10-30, the day
+  Built by Bean registered, filed its first two returns late and paid them,
+  so every line is something that happened rather than something read. The
+  house rule against explainer copy is about pages that do work; this page
+  is the write-up Michael asked for, and it is the work.
+#}
+
+{% set h = 'text-sm font-semibold uppercase tracking-wider text-surface-400' %}
+{% set li = 'text-sm text-surface-200 leading-relaxed' %}
+{% set em = 'font-semibold text-white' %}
+
+{% block title %}How to file sales tax - Built By Bean{% endblock %}
+{% block page_title %}Taxes{% endblock %}
+{% block page_subtitle %}How to file Texas sales tax{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-3xl">
+    {% with here = 'guide' %}{% include "pm/taxes/_sales_tabs.html" %}{% endwith %}
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">Every quarter</h3>
+        <ol class="list-decimal pl-5 space-y-2">
+            <li class="{{ li }}">Open <a href="{{ url_for('businesses.returns_index') }}" class="{{ em }} underline decoration-white/30 hover:text-brand-300">Returns</a>. Every return marked Due or Late shows exactly what to type.</li>
+            <li class="{{ li }}">Sign in to <a href="{{ esystems_url }}" target="_blank" rel="noopener" class="{{ em }} underline decoration-white/30 hover:text-brand-300">eSystems</a> with your one login, pick the business, then <span class="{{ em }}">Sales and Use Tax</span>, then <span class="{{ em }}">File Original Return</span>.</li>
+            <li class="{{ li }}">Pick the period by its code: the year's last two digits and the quarter. <span class="{{ em }}">264</span> is October to December 2026.</li>
+            <li class="{{ li }}">Credits: <span class="{{ em }}">No</span>. Customs broker refunds: <span class="{{ em }}">No</span>.</li>
+            <li class="{{ li }}">Type the two numbers the return page gives for each location, in whole dollars, with taxable purchases 0. A location with no sales gets the <span class="{{ em }}">No Sales or Purchases</span> tick.</li>
+            <li class="{{ li }}">Check the Review page's Total Tax Due against the return page, then pay by <span class="{{ em }}">Electronic Check</span>. A card adds about 2.3% that is not refunded.</li>
+            <li class="{{ li }}">On the confirmation page press <span class="{{ em }}">Print</span> and save it as a PDF.</li>
+            <li class="{{ li }}">Back on the return page, <span class="{{ em }}">Record it</span>: the reference number, payment reference and trace number, what the state charged, and the PDF.</li>
+        </ol>
+        <p class="{{ li }}">Or open a Claude session and say <span class="{{ em }}">"let's get my taxes paid"</span>. It reads this board, fills WebFile up to the payment, you pay, and it records the return here.</p>
+        <p class="{{ li }}">EntertainHQ's admin site shows the same returns: one marked filed there is recorded here, and one recorded here shows as filed there. The full research, with every rule's source, is the <a href="{{ url_for('playbooks.playbook_detail', slug='texas-sales-tax') }}" class="{{ em }} underline decoration-white/30 hover:text-brand-300">Texas sales tax playbook</a>.</p>
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">Dates and money</h3>
+        <ul class="list-disc pl-5 space-y-2">
+            <li class="{{ li }}">Quarterly returns are due the <span class="{{ em }}">20th</span> of April, July, October and January. A weekend or federal holiday moves it to the next working day. WebFile takes a payment until 11:59 p.m. Central that day.</li>
+            <li class="{{ li }}">File every quarter, <span class="{{ em }}">even with no sales</span>. A missing return is late whatever it would have said.</li>
+            <li class="{{ li }}">On time and paid, you keep <span class="{{ em }}">0.5%</span> of the tax as a timely filing discount.</li>
+            <li class="{{ li }}">Late is <span class="{{ em }}">5%</span> of the tax for the first 30 days, <span class="{{ em }}">10%</span> after, plus <span class="{{ em }}">$50</span> per late return, plus interest from the 61st day.</li>
+            <li class="{{ li }}">A return that is not filed gets an <span class="{{ em }}">Estimated Return</span>, a guess set high on purpose: $1,158.93 and $2,202.53 where the real tax was $339.90 and $656.70. Filing the real return replaces it. Never pay off the estimate.</li>
+        </ul>
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">What counts</h3>
+        <ul class="list-disc pl-5 space-y-2">
+            <li class="{{ li }}">Software sold as a service is a <span class="{{ em }}">data processing service</span> in Texas: 20% of it is exempt, so taxable sales are 80% of total sales.</li>
+            <li class="{{ li }}">Total Texas Sales is everything billed, before tax. Tax billed back to a client is the state's money, not a sale.</li>
+            <li class="{{ li }}">A sale counts the day it is <span class="{{ em }}">billed</span>, not the day it is paid. If a client never pays, the tax on it comes back as a credit on a later return.</li>
+            <li class="{{ li }}">No deductions for expenses, unlike income tax. What lowers it: the 20% exemption, customers using it outside Texas, and buyers with an exemption certificate. Mark those clients exempt on the Sales tax page.</li>
+            <li class="{{ li }}">The rate is set by where <span class="{{ em }}">you</span> sell from: 6.25% state plus local. Fort Worth and Paris are both 2% local (Paris is 0.5% Lamar County and 1.5% city), so 8.25%.</li>
+        </ul>
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">Moving</h3>
+        <ul class="list-disc pl-5 space-y-2">
+            <li class="{{ li }}">Each place on the permit has a five digit WebFile location number. A sale belongs to the place you were selling from that day, so the quarter you move splits across two lines.</li>
+            <li class="{{ li }}">Add the new place, then tell the Comptroller the old one closed. Until you do, WebFile keeps a line for it every quarter, which gets the No Sales or Purchases tick.</li>
+            <li class="{{ li }}">Keep the dates right on the business's page here: the returns are split by them.</li>
+        </ul>
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">A new business</h3>
+        <ol class="list-decimal pl-5 space-y-2">
+            <li class="{{ li }}">Form it with the Secretary of State. That gives the <span class="{{ em }}">SOS file number</span> and an 11 digit <span class="{{ em }}">Texas taxpayer number</span> (look it up on the Comptroller's Franchise Tax Account Status search).</li>
+            <li class="{{ li }}">Before the first sale, in eSystems choose <span class="{{ em }}">Register for Texas Sales and Use Tax</span>. One eSystems login covers every business you own. The owner types the SSN, EIN and driver's license. For software as a service: NAICS 541511, no tangible goods, each location with its start date and whether it is inside city limits.</li>
+            <li class="{{ li }}">The permit and the sales tax <span class="{{ em }}">WebFile number</span> (RT and six digits) come by mail in two to three weeks, or the same day from <span class="{{ em }}">800-252-8880</span>. Franchise tax has its own WebFile number, XT and six digits.</li>
+            <li class="{{ li }}">In eSystems: <span class="{{ em }}">Assign Tax/Fees</span>, the taxpayer number, <span class="{{ em }}">Sales and Use Tax</span>, the RT number, Electronic Only, role Owner, tick the box, <span class="{{ em }}">Assign</span>, then <span class="{{ em }}">Submit Changes</span>.</li>
+            <li class="{{ li }}">Here: <a href="{{ url_for('businesses.new') }}" class="{{ em }} underline decoration-white/30 hover:text-brand-300">Add a business</a> with both WebFile numbers, the first taxable sale and every location with its WebFile location number. Its returns start appearing on their own.</li>
+            <li class="{{ li }}">Charge the tax from the first invoice. Started selling first? File every back quarter at once, then ask for the penalty waiver.</li>
+        </ol>
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">Getting penalties back</h3>
+        <ul class="list-disc pl-5 space-y-2">
+            <li class="{{ li }}">Once every late return is filed and paid, ask for a waiver with <span class="{{ em }}">Form 89-224</span>, or by phone at 800-531-5441 ext. 3-4560.</li>
+            <li class="{{ li }}">It covers up to two late reports for a filer with no waiver in the last two years and good standing with the Secretary of State. "I didn't know" is not an exception to the tax itself, only to the penalties.</li>
+            <li class="{{ li }}">Paying the penalties first is fine: a granted waiver is refunded.</li>
+        </ul>
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="{{ h }}">Businesses on file</h3>
+        {% for b in businesses %}
+        <a href="{{ url_for('businesses.edit', id=b.id) }}"
+           class="flex flex-wrap items-center justify-between gap-2 p-3 min-h-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 transition-colors">
+            <span class="text-sm font-semibold text-white">{{ b.label }}</span>
+            <span class="text-xs text-surface-400 font-mono">{{ b.texas_taxpayer_number }}</span>
+        </a>
+        {% else %}
+        <p class="{{ li }}">None yet.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

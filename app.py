@@ -296,6 +296,10 @@ def create_app():
     from pm.tax_routes import tax_bp
     app.register_blueprint(tax_bp)
 
+    # ── Every business owned, and the returns each one files ─
+    from pm.business_routes import business_bp
+    app.register_blueprint(business_bp)
+
     # ── Signatures (SignaDoc) ───────────────────────────────
     from pm.contract_routes import contracts_bp, send_generated
     app.register_blueprint(contracts_bp)

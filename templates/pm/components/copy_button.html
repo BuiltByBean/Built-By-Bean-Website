@@ -1,0 +1,18 @@
+{#
+  A press that puts one value on the clipboard: a taxpayer number, a WebFile
+  figure, a reference number. Turns green for a moment so the press is seen.
+
+  Written as its own button rather than through icon_button's attrs, because
+  building the @click with `~` joins a Markup value to plain strings, and
+  Jinja then escapes the plain ones: the quotes came out as &#39; and every
+  copy button on the Businesses page was a syntax error. The value rides in
+  a SINGLE-quoted attribute through |tojson, the house rule for that filter.
+#}
+{% from "pm/components/icon_button.html" import icon_glyph %}
+{% macro copy_button(label, value) -%}
+<button type="button" aria-label="Copy {{ label }}" title="Copy {{ label }}"
+        x-data="{ done: false }"
+        @click='navigator.clipboard.writeText({{ value | string | tojson }}); done = true; setTimeout(() => done = false, 1500)'
+        :class="done ? '!border-emerald-500/50 !text-emerald-300' : ''"
+        class="inline-flex items-center justify-center w-11 h-11 rounded-xl transition-colors shrink-0 border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300">{{ icon_glyph('copy') }}</button>
+{%- endmacro %}

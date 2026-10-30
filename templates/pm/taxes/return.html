@@ -1,0 +1,436 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button, delete_icon %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One business's return for one period. Before it is filed: exactly what to
+  pick and type in WebFile, in the order WebFile asks, with the sales behind
+  each figure underneath so a number can be checked rather than trusted.
+  After: what the state charged, the references off the confirmation page,
+  and the confirmation itself.
+
+  The record form's card carries relative z-30 (LM-1) for its dropdown.
+#}
+
+{% from "pm/components/copy_button.html" import copy_button as copy_btn %}
+
+{% set PILL = {
+    'late': ('Late', 'bg-red-900/30 text-red-300'),
+    'due': ('Due', 'bg-amber-500/15 text-amber-300'),
+    'open': ('Building up', 'bg-surface-800 text-surface-300'),
+    'filed': ('Filed', 'bg-emerald-900/30 text-emerald-400'),
+} %}
+{% set pill = PILL[status] %}
+{% set field = 'w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
+{% set lbl = 'block text-sm font-medium text-surface-300 mb-1.5' %}
+{% set step = 'flex gap-3 min-w-0' %}
+{% set num = 'shrink-0 w-7 h-7 rounded-full bg-surface-800 text-surface-200 text-xs font-bold flex items-center justify-center' %}
+
+{% block title %}{{ business.label }} {{ label }} - Built By Bean{% endblock %}
+{% block page_title %}{{ business.label }}, {{ label }}{% endblock %}
+{% block page_subtitle %}Sales tax return, period {{ code }}{% endblock %}
+{% block back %}{{ back_link(url_for('businesses.returns_index'), 'Returns') }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl">
+
+    <div class="glass-card p-4 sm:p-5 min-w-0 flex flex-wrap items-end justify-between gap-4">
+        <div class="min-w-0 space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ pill[1] }}">{{ pill[0] }}</span>
+                <span class="text-sm text-surface-300 whitespace-nowrap">Due {{ due | format_date }}</span>
+            </div>
+            <p class="text-xs text-surface-400">{{ start | format_date }} to {{ end | format_date }}</p>
+        </div>
+        <div class="text-right">
+            {% if filing %}
+            <p class="text-2xl font-bold text-white">{{ filing.amount_paid | format_currency }}</p>
+            <p class="text-xs text-surface-400">paid {{ filing.filed_at | format_date }}</p>
+            {% elif figures %}
+            <p class="text-2xl font-bold text-white">{{ figures.tax | format_currency }}</p>
+            <p class="text-xs text-surface-400">{{ figures.state_tax | format_currency }} state, {{ figures.local_tax | format_currency }} local</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if note %}
+    <div class="glass-card p-4 min-w-0 border-amber-500/30">
+        <p class="text-sm text-amber-300 break-words">{{ note }}</p>
+    </div>
+    {% endif %}
+
+    {% if figures and figures.unplaced %}
+    <div class="glass-card p-4 min-w-0 border-red-500/30 space-y-2">
+        <p class="text-sm font-semibold text-red-300">
+            {{ figures.unplaced | length }} sale{{ '' if figures.unplaced|length == 1 else 's' }} on a day no location covers</p>
+        {% for s in figures.unplaced %}
+        <p class="text-xs text-surface-300">{{ s.date | format_date }} {{ s.ref }} {{ s.who }} {{ s.total | format_currency }}</p>
+        {% endfor %}
+        <a href="{{ url_for('businesses.edit', id=business.id) }}#locations"
+           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 transition-colors">
+            Fix the locations</a>
+    </div>
+    {% endif %}
+
+    {% if filing %}
+    {# ── Filed ── #}
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">As filed</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {% for lab, val in [('Reference number', filing.reference_number), ('Payment reference', filing.payment_reference), ('Trace number', filing.trace_number)] %}
+            <div class="min-w-0 p-3 rounded-xl bg-surface-800/40 flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <p class="text-xs text-surface-400">{{ lab }}</p>
+                    <p class="text-sm font-semibold text-white font-mono break-all">{{ val or 'None' }}</p>
+                </div>
+                {% if val %}{{ copy_btn(lab, val) }}{% endif %}
+            </div>
+            {% endfor %}
+            <div class="min-w-0 p-3 rounded-xl bg-surface-800/40">
+                <p class="text-xs text-surface-400">Filed</p>
+                <p class="text-sm font-semibold text-white">
+                    {% if filing.filed_at %}{{ filing.filed_at.strftime('%b %d, %Y %I:%M %p') | replace(' 0', ' ') }}{% endif %}
+                    {%- if filing.payment_method %}, {{ dict(methods).get(filing.payment_method, filing.payment_method) | lower }}{% endif %}</p>
+                {% if filing.recorded_by %}<p class="text-xs text-surface-400 break-words">Recorded by {{ filing.recorded_by }}</p>{% endif %}
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <tbody>
+                    {% set rows = [('Total Texas sales', filing.total_sales, ''), ('Taxable sales', filing.taxable_sales, ''), ('Tax', filing.tax_due, 'font-semibold text-white')] %}
+                    {% if filing.penalty %}{% set _ = rows.append(('Penalty', filing.penalty, 'text-amber-300')) %}{% endif %}
+                    {% if filing.late_filing_penalty %}{% set _ = rows.append(('Late filing penalty', filing.late_filing_penalty, 'text-amber-300')) %}{% endif %}
+                    {% if filing.interest %}{% set _ = rows.append(('Interest', filing.interest, 'text-amber-300')) %}{% endif %}
+                    {% if filing.discount %}{% set _ = rows.append(('Timely filing discount', -filing.discount, 'text-emerald-300')) %}{% endif %}
+                    {% set _ = rows.append(('Paid to the state', filing.amount_paid, 'font-semibold text-white')) %}
+                    {% if filing.processing_fee %}
+                    {% set _ = rows.append(('Card fee', filing.processing_fee, 'text-amber-300')) %}
+                    {% set _ = rows.append(('Charged in all', filing.total_charged, 'font-semibold text-white')) %}
+                    {% endif %}
+                    {% for lab, val, cls in rows %}
+                    <tr class="border-b border-surface-800">
+                        <td class="py-2 pr-2 text-surface-300">{{ lab }}</td>
+                        <td class="py-2 pl-2 text-right whitespace-nowrap {{ cls or 'text-surface-200' }}">{{ val | format_currency }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if filing.location_rows %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-surface-700">
+                        {% for h in ['Loc #', 'Location', 'Total sales', 'Taxable'] %}
+                        <th class="{{ 'text-left' if loop.index <= 2 else 'text-right' }} py-2 px-2 text-xs font-semibold text-surface-400 whitespace-nowrap">{{ h }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in filing.location_rows %}
+                    <tr class="border-b border-surface-800">
+                        <td class="py-2 px-2 font-mono text-surface-300">{{ line.number }}</td>
+                        <td class="py-2 px-2 text-white">{{ line.label }}</td>
+                        <td class="py-2 px-2 text-right text-surface-200">{{ '{:,.0f}'.format(line.total_sales or 0) }}</td>
+                        <td class="py-2 px-2 text-right text-surface-200">{{ '{:,.0f}'.format(line.taxable_sales or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        {% if filing.notes %}<p class="text-sm text-surface-300 whitespace-pre-line break-words">{{ filing.notes }}</p>{% endif %}
+    </div>
+
+    <div id="files" class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Confirmation</h3>
+            <a href="{{ url_for('businesses.filing_pdf', id=filing.id) }}" target="_blank" rel="noopener"
+               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                Board's record (PDF)</a>
+        </div>
+        {% for f in filing.files %}
+        <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-800/40">
+            <div class="min-w-0">
+                <p class="text-sm text-white break-all">{{ f.original_name }}</p>
+                <p class="text-xs text-surface-400">{{ f.uploaded_at | format_date }}, {{ '{:,.0f}'.format((f.size or 0) / 1024) }} KB</p>
+            </div>
+            <div class="flex items-center gap-2">
+                {{ icon_button('download', 'Open ' ~ f.original_name, href=url_for('businesses.file_download', id=f.id), target='_blank') }}
+                <form method="POST" action="{{ url_for('businesses.file_delete', id=f.id) }}">
+                    {{ delete_icon(question='Remove it?', label='Remove ' ~ f.original_name) }}
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-amber-300">The state's confirmation is not here yet.</p>
+        {% endfor %}
+        <form method="POST" action="{{ url_for('businesses.filing_upload', id=filing.id) }}" enctype="multipart/form-data">
+            <label class="flex items-center justify-center gap-2 min-h-[44px] px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
+                <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <span class="text-sm text-surface-300">Add the confirmation PDF</span>
+                <input type="file" name="confirmation" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden" onchange="this.form.submit()">
+            </label>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if not filing and status != 'open' %}
+    {# ── What to do in WebFile, in the order it asks ── #}
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">In WebFile</h3>
+        <ol class="space-y-4">
+            <li class="{{ step }}">
+                <span class="{{ num }}">1</span>
+                <div class="min-w-0 flex-1 flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-sm text-surface-200">Sign in to eSystems.</p>
+                    <a href="{{ esystems_url }}" target="_blank" rel="noopener"
+                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        Open eSystems</a>
+                </div>
+            </li>
+            <li class="{{ step }}">
+                <span class="{{ num }}">2</span>
+                <div class="min-w-0 flex-1 flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-sm text-surface-200 min-w-0">
+                        Pick <span class="font-semibold text-white">{{ business.name }}</span>,
+                        <span class="font-mono text-white">{{ business.texas_taxpayer_number }}</span>, then
+                        <span class="font-semibold text-white">Sales and Use Tax</span>.</p>
+                    {% if business.texas_taxpayer_number %}{{ copy_btn('taxpayer number', business.texas_taxpayer_number) }}{% endif %}
+                </div>
+            </li>
+            <li class="{{ step }}">
+                <span class="{{ num }}">3</span>
+                <p class="text-sm text-surface-200 min-w-0">
+                    <span class="font-semibold text-white">File Original Return</span>, period
+                    <span class="font-mono font-semibold text-white">{{ code }}</span>
+                    ({{ end | format_date }}), Continue past the save notice.</p>
+            </li>
+            <li class="{{ step }}">
+                <span class="{{ num }}">4</span>
+                <p class="text-sm text-surface-200 min-w-0">
+                    Taking credits: <span class="font-semibold text-white">No</span>.
+                    Customs broker refunds: <span class="font-semibold text-white">No</span>.</p>
+            </li>
+            <li class="{{ step }}">
+                <span class="{{ num }}">5</span>
+                <div class="min-w-0 flex-1 space-y-2">
+                    <p class="text-sm text-surface-200">Taxable Sales, whole dollars, taxable purchases 0.</p>
+                    {% if figures %}
+                    {% for line in figures.lines %}
+                    <div class="p-3 rounded-xl bg-surface-800/40 space-y-2">
+                        <p class="text-sm text-white"><span class="font-mono text-surface-400">{{ line.number }}</span> {{ line.label }}</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div class="flex items-center justify-between gap-2 min-w-0">
+                                <div class="min-w-0">
+                                    <p class="text-xs text-surface-400">Total Texas Sales</p>
+                                    <p class="text-lg font-bold text-white font-mono">{{ line.total_sales }}</p>
+                                </div>
+                                {{ copy_btn(line.label ~ ' total sales', line.total_sales) }}
+                            </div>
+                            <div class="flex items-center justify-between gap-2 min-w-0">
+                                <div class="min-w-0">
+                                    <p class="text-xs text-surface-400">Taxable Sales</p>
+                                    <p class="text-lg font-bold text-white font-mono">{{ line.taxable_sales }}</p>
+                                </div>
+                                {{ copy_btn(line.label ~ ' taxable sales', line.taxable_sales) }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    {% for loc in quiet %}
+                    <div class="p-3 rounded-xl bg-surface-800/40 flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-sm text-white"><span class="font-mono text-surface-400">{{ loc.webfile_number }}</span> {{ loc.label }}</p>
+                        <p class="text-sm font-semibold text-surface-200">Tick No Sales or Purchases</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </li>
+            {% if figures %}
+            <li class="{{ step }}">
+                <span class="{{ num }}">6</span>
+                <div class="min-w-0 flex-1 space-y-1">
+                    <p class="text-sm text-surface-200">The Review page should say
+                        <span class="font-semibold text-white">Total Tax Due {{ figures.tax | format_currency }}</span>.</p>
+                    {% if charges.late %}
+                    <p class="text-sm text-amber-300">
+                        Today it adds about {{ charges.penalty | format_currency }} penalty ({{ charges.penalty_rate }}%),
+                        {{ charges.late_fee | format_currency }} late filing{% if charges.interest_from and charges.interest_from <= today %},
+                        and interest{% endif %}.</p>
+                    {% elif charges.discount %}
+                    <p class="text-sm text-emerald-300">Paid by {{ due | format_date }}, it takes off about {{ charges.discount | format_currency }}.</p>
+                    {% endif %}
+                </div>
+            </li>
+            {% endif %}
+            <li class="{{ step }}">
+                <span class="{{ num }}">{{ 7 if figures else 6 }}</span>
+                <p class="text-sm text-surface-200 min-w-0">
+                    Pay by <span class="font-semibold text-white">Electronic Check</span>. A card adds about 2.3%.</p>
+            </li>
+            <li class="{{ step }}">
+                <span class="{{ num }}">{{ 8 if figures else 7 }}</span>
+                <p class="text-sm text-surface-200 min-w-0">
+                    On the confirmation page press <span class="font-semibold text-white">Print</span> and save it as a PDF, then record it below.</p>
+            </li>
+        </ol>
+    </div>
+    {% endif %}
+
+    {% if figures and figures.lines %}
+    {# The sales behind every figure, so a number can be checked. #}
+    <div x-data="{ open: false }" class="glass-card min-w-0">
+        <button type="button" @click="open = !open" :aria-expanded="open"
+                class="w-full min-h-[44px] p-4 sm:p-5 flex items-center justify-between gap-3 text-left">
+            <span class="text-sm font-semibold uppercase tracking-wider text-surface-400">The sales behind it</span>
+            <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform" :class="open ? 'rotate-180' : ''"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+        <div x-show="open" x-cloak class="px-4 sm:px-5 pb-5 space-y-4">
+            {% for line in figures.lines %}
+            <div class="space-y-1.5">
+                <p class="text-sm font-semibold text-white">{{ line.label }}</p>
+                {% for s in line.sales %}
+                <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span class="min-w-0 break-words text-surface-300">
+                        <span class="whitespace-nowrap">{{ s.date | format_date }}</span>
+                        {% if s.invoice_id %}<a href="{{ url_for('stripe.invoice_detail', id=s.invoice_id) }}"
+                           class="inline-flex items-center min-h-[44px] px-2 font-mono text-surface-200 underline decoration-white/20 hover:text-brand-300">{{ s.ref }}</a>
+                        {% else %}<span class="font-mono">{{ s.ref }}</span>{% endif %}
+                        {{ s.who }}</span>
+                    <span class="text-surface-200 whitespace-nowrap">{{ s.total | format_currency }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if status != 'open' or filing %}
+    {# ── Record it: off the confirmation page, never worked out ── #}
+    {% set f = filing %}
+    <div x-data="{ open: {{ 'false' if filing else 'true' }} }" class="glass-card min-w-0 relative z-30">
+        <button type="button" @click="open = !open" :aria-expanded="open"
+                class="w-full min-h-[44px] p-4 sm:p-5 flex items-center justify-between gap-3 text-left">
+            <span class="text-sm font-semibold uppercase tracking-wider text-surface-400">
+                {{ 'Correct the record' if filing else 'Record it' }}</span>
+            <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform" :class="open ? 'rotate-180' : ''"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+        <form x-show="open" x-cloak method="POST" enctype="multipart/form-data"
+              action="{{ url_for('businesses.return_record', slug=business.slug, year=year, quarter=quarter) }}"
+              class="px-4 sm:px-5 pb-5 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="r-ref" class="{{ lbl }}">Reference number</label>
+                    <input id="r-ref" name="reference_number" required maxlength="40" inputmode="numeric"
+                           value="{{ f.reference_number if f else '' }}" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <p class="{{ lbl }}">Paid by</p>
+                    {{ select_dropdown('payment_method', methods, f.payment_method if f else 'electronic check', 'Electronic check', full_width=true) }}
+                </div>
+                <div>
+                    <label for="r-pay" class="{{ lbl }}">Payment reference</label>
+                    <input id="r-pay" name="payment_reference" maxlength="40"
+                           value="{{ f.payment_reference if f else '' }}" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <label for="r-trace" class="{{ lbl }}">Trace number</label>
+                    <input id="r-trace" name="trace_number" maxlength="40"
+                           value="{{ f.trace_number if f else '' }}" class="{{ field }} font-mono">
+                </div>
+                <div>
+                    <label for="r-day" class="{{ lbl }}">Filed on</label>
+                    <input id="r-day" type="date" name="filed_on"
+                           value="{{ (f.filed_at.date() if f and f.filed_at else today).isoformat() }}" class="{{ field }}">
+                </div>
+                <div>
+                    <label for="r-time" class="{{ lbl }}">At</label>
+                    <input id="r-time" type="time" name="filed_time"
+                           value="{{ f.filed_at.strftime('%H:%M') if f and f.filed_at else '' }}" class="{{ field }}">
+                </div>
+            </div>
+
+            {% set amounts = [
+                ('total_sales', 'Total Texas sales', f.total_sales if f else (figures.total_sales if figures else none), ''),
+                ('taxable_sales', 'Taxable sales', f.taxable_sales if f else (figures.taxable_sales if figures else none), ''),
+                ('tax_due', 'Tax', f.tax_due if f else (figures.tax if figures else none), ''),
+                ('penalty', 'Penalty', f.penalty if f else none, (charges.penalty if charges and charges.late else '0')),
+                ('late_filing_penalty', 'Late filing penalty', f.late_filing_penalty if f else none, (charges.late_fee if charges and charges.late else '0')),
+                ('interest', 'Interest', f.interest if f else none, '0'),
+                ('discount', 'Timely filing discount', f.discount if f else none, (charges.discount if charges and not charges.late else '0')),
+                ('processing_fee', 'Card fee', f.processing_fee if f else none, '0'),
+                ('amount_paid', 'Paid to the state', f.amount_paid if f else none, 'Worked out if blank'),
+            ] %}
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {% for name, lab, val, ph in amounts %}
+                <div class="min-w-0">
+                    <label for="r-{{ name }}" class="{{ lbl }}">{{ lab }}</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">$</span>
+                        <input id="r-{{ name }}" name="{{ name }}" inputmode="decimal"
+                               value="{{ (val | commas) if val else '' }}" placeholder="{{ ph }}"
+                               class="{{ field }} pl-7">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% set lines = f.location_rows if f and f.location_rows else (figures.lines if figures else []) %}
+            {% for line in lines %}
+            <input type="hidden" name="loc_number" value="{{ line.number }}">
+            <input type="hidden" name="loc_label" value="{{ line.label }}">
+            <input type="hidden" name="loc_total" value="{{ line.total_sales }}">
+            <input type="hidden" name="loc_taxable" value="{{ line.taxable_sales }}">
+            <input type="hidden" name="loc_state" value="{{ line.state_tax }}">
+            <input type="hidden" name="loc_local" value="{{ line.local_tax }}">
+            {% endfor %}
+
+            <div>
+                <label for="r-notes" class="{{ lbl }}">Notes</label>
+                <textarea id="r-notes" name="notes" rows="2" class="{{ field }}">{{ f.notes if f else '' }}</textarea>
+            </div>
+
+            {% if not filing %}
+            <div x-data="{ names: '' }">
+                <label class="flex items-center justify-center gap-2 min-h-[44px] px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
+                    <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <span class="text-sm text-surface-300 break-all" x-text="names || 'Confirmation PDF'">Confirmation PDF</span>
+                    <input type="file" name="confirmation" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden"
+                           @change="names = Array.from($event.target.files).map(f => f.name).join(', ')">
+                </label>
+            </div>
+            {% endif %}
+
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <button type="submit"
+                        class="inline-flex items-center justify-center min-h-[44px] px-6 text-sm font-semibold rounded-xl btn-brand text-white">
+                    {{ 'Save the record' if filing else 'Record the return' }}</button>
+            </div>
+        </form>
+        {% if filing %}
+        <form x-show="open" x-cloak method="POST" action="{{ url_for('businesses.filing_delete', id=filing.id) }}"
+              class="px-4 sm:px-5 pb-5 flex justify-end">
+            {{ confirm_button(label='Remove this record', question='Remove it from the board?',
+                btn_class='min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

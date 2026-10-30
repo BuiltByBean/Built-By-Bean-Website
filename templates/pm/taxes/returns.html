@@ -1,0 +1,74 @@
+{% extends "pm/base.html" %}
+
+{#
+  Every period every business has owed a return for, newest first. A row
+  opens the return: what to type into WebFile before it is filed, and what
+  was paid, with its confirmation, after.
+#}
+
+{% set PILL = {
+    'late': ('Late', 'bg-red-900/30 text-red-300'),
+    'due': ('Due', 'bg-amber-500/15 text-amber-300'),
+    'open': ('Building up', 'bg-surface-800 text-surface-300'),
+    'filed': ('Filed', 'bg-emerald-900/30 text-emerald-400'),
+} %}
+
+{% block title %}Sales tax returns - Built By Bean{% endblock %}
+{% block page_title %}Taxes{% endblock %}
+{% block page_subtitle %}Sales tax returns{% endblock %}
+
+{% block content %}
+<div class="space-y-4 stagger-in">
+    {% with here = 'returns' %}{% include "pm/taxes/_sales_tabs.html" %}{% endwith %}
+
+    {% for g in groups %}
+    {% set b = g.business %}
+    <div class="glass-card p-4 sm:p-5 min-w-0 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+                <h3 class="font-semibold text-white break-words">{{ b.label }}</h3>
+                <p class="text-xs text-surface-400 font-mono">{{ b.texas_taxpayer_number or 'No taxpayer number on file' }}</p>
+            </div>
+            <a href="{{ url_for('businesses.edit', id=b.id) }}"
+               class="shrink-0 inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                Details</a>
+        </div>
+        {% if g.note %}
+        <p class="text-sm text-amber-300 break-words">{{ g.note }}</p>
+        {% endif %}
+        {% for p in g.periods %}
+        {% set pill = PILL[p.status] %}
+        <a href="{{ url_for('businesses.return_page', slug=b.slug, year=p.year, quarter=p.quarter) }}"
+           class="flex flex-wrap items-center justify-between gap-3 p-3 min-h-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 transition-colors">
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ pill[1] }}">{{ pill[0] }}</span>
+                <span class="text-sm font-semibold text-white whitespace-nowrap">{{ p.label }}</span>
+                <span class="text-xs text-surface-500 font-mono">{{ p.code }}</span>
+                <span class="text-xs text-surface-400 whitespace-nowrap">due {{ p.due | format_date }}</span>
+            </div>
+            <div class="text-right text-sm whitespace-nowrap">
+                {% if p.filing %}
+                <span class="font-semibold text-white">{{ p.filing.amount_paid | format_currency }}</span>
+                <span class="text-xs text-surface-400">paid</span>
+                {% elif p.figures %}
+                <span class="font-semibold text-white">{{ p.figures.tax | format_currency }}</span>
+                <span class="text-xs text-surface-400">tax{{ ' so far' if p.status == 'open' else '' }}</span>
+                {% else %}
+                <span class="text-xs text-surface-400">Open</span>
+                {% endif %}
+            </div>
+        </a>
+        {% else %}
+        <p class="text-sm text-surface-400">No taxable sales yet.</p>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="glass-card p-8 text-center">
+        <p class="text-surface-300">No businesses yet.</p>
+        <a href="{{ url_for('businesses.new') }}"
+           class="mt-4 inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">
+            Add a business</a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
