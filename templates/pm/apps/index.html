@@ -62,6 +62,8 @@
                 {% endfor %}
                 {% if app.stores.verdict == 'match' %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-900/30 text-emerald-400">Versions match</span>
+                {% elif app.stores.verdict == 'live' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-900/30 text-emerald-400">Live</span>
                 {% elif app.stores.verdict == 'differ' %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-900/30 text-amber-400">Versions differ</span>
                 {% else %}

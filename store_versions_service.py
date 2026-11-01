@@ -129,6 +129,7 @@ def summary(link):
 
     verdict: "match" when every live store shows the same version,
              "differ" when two live stores disagree,
+             "live" when the app is on its one registered store,
              "waiting" when a registered store does not list the app yet,
              None when the app has no store ids.
     """
@@ -142,7 +143,10 @@ def summary(link):
         return None
     live = [r[1].get("version") for r in rows if r[1].get("status") == "live"]
     if len(live) == len(rows) and live:
-        verdict = "match" if len(set(live)) == 1 else "differ"
+        if len(rows) == 1:
+            verdict = "live"
+        else:
+            verdict = "match" if len(set(live)) == 1 else "differ"
     else:
         verdict = "waiting"
     return {"rows": rows, "verdict": verdict, "checked_at": link.store_checked_at}
