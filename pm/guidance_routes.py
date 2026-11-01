@@ -40,6 +40,7 @@ from models import (db, Feature, Playbook, PlaybookStep, Product,
                     ServiceProvider, ServiceMapping, ServiceCostEntry,
                     ProviderInvoice)
 from models import AppLink  # the My Apps tile (register_app)
+import store_versions_service  # the two store pages' live versions for a phone app
 from pm.apps_routes import _normalise as _normalise_url, _refresh_icon as _refresh_app_icon
 
 guidance_bp = Blueprint("guidance", __name__, url_prefix="/api/guidance")
@@ -1123,9 +1124,24 @@ def _upsert_app(body, client, project):
     railway_url = _normalise_url(_cap(body.get("railway_url"), 500))
     if railway_url:
         link.railway_url = railway_url[:500]
+    # A phone app's store ids. Either one on its own is fine (a web-only app
+    # has neither); a changed id is asked about right away, and a store that
+    # does not answer never fails the registration.
+    stores_were = (link.app_store_bundle_id, link.play_package)
+    bundle = _cap(body.get("app_store_bundle_id") or body.get("bundle_id"), 200)
+    if bundle:
+        link.app_store_bundle_id = bundle
+    package = _cap(body.get("play_package") or body.get("package"), 200)
+    if package:
+        link.play_package = package
     if project is not None:
         link.project_id = project.id
     db.session.flush()
+    if (link.app_store_bundle_id, link.play_package) != stores_were:
+        try:
+            store_versions_service.refresh(link)
+        except Exception:
+            pass
     # The icon is the app's own, fetched once (see apps_routes). An icon somebody uploaded
     # by hand is never replaced by a fetch, and a failed fetch never fails the registration:
     # the tile with initials is still the tile, which is the whole point of this route.
@@ -1143,10 +1159,14 @@ def _upsert_app(body, client, project):
 
 
 def _app_summary(link, created, icon):
+    stores = store_versions_service.summary(link)
     return {"action": "created" if created else "updated", "id": link.id,
             "name": link.name, "url": link.url,
             "icon": ("fetched" if icon else ("kept" if link.icon_file else "none")),
-            "project": link.project.name if link.project else None}
+            "project": link.project.name if link.project else None,
+            "stores": ({"verdict": stores["verdict"],
+                        "versions": {label: row for label, row in stores["rows"]}}
+                       if stores else None)}
 
 
 @guidance_bp.route("/hosting-resources", methods=["POST"])

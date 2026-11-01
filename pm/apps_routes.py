@@ -20,6 +20,7 @@ from flask import (
 from flask_login import login_required
 
 import app_icon_service
+import store_versions_service
 from models import db, AppLink, Project
 
 apps_bp = Blueprint("apps", __name__, url_prefix="/admin/apps")
@@ -82,6 +83,15 @@ def index():
     does not move under the cursor when a project is attached or detached.
     """
     apps = AppLink.query.order_by(AppLink.id).all()
+    # A phone app's store versions are asked for on the way in when the last
+    # answer is older than FRESH_FOR - two short requests per such tile, so
+    # the board is never more than a few hours behind the store pages, and a
+    # store that is slow keeps its previous answer rather than blanking it.
+    stale = [a for a in apps if store_versions_service.is_stale(a)]
+    for a in stale:
+        store_versions_service.refresh(a)
+    if stale:
+        db.session.commit()
     return render_template(
         "pm/apps/index.html",
         groups=[
@@ -152,12 +162,15 @@ def edit(id=None):
         # address changed; it was chosen, not found.
         given = bool(link.icon_file) and link.icon_source is None
         moved = creating or link.url != url
+        stores_were = (link.app_store_bundle_id, link.play_package)
 
         link.name = name[:120]
         link.url = url[:500]
         link.description = (request.form.get("description") or "").strip()
         link.railway_url = _normalise(request.form.get("railway_url"))[:500] or None
         link.github_url = _normalise(request.form.get("github_url"))[:500] or None
+        link.app_store_bundle_id = (request.form.get("app_store_bundle_id") or "").strip()[:200] or None
+        link.play_package = (request.form.get("play_package") or "").strip()[:200] or None
         # Blank means unattached, which is the normal state for the half of
         # the board that is mine rather than a client's.
         chosen = request.form.get("project_id", type=int)
@@ -178,6 +191,14 @@ def edit(id=None):
             if not _refresh_icon(link) and moved:
                 flash(f"Saved. {name} offers no icon to fetch - "
                       f"upload one on this page, or it shows its initials.", "info")
+        # New or changed store ids are asked about right away, so the tile
+        # never shows a stale answer for an id it no longer has.
+        if (link.app_store_bundle_id, link.play_package) != stores_were or request.form.get("refresh_stores"):
+            if link.app_store_bundle_id or link.play_package:
+                store_versions_service.refresh(link)
+            else:
+                link.store_versions = None
+                link.store_checked_at = None
         db.session.commit()
         flash(f"{name} saved.", "success")
         return redirect(url_for("apps.index"))
@@ -200,6 +221,19 @@ def refresh_icon(id):
     db.session.commit()
     flash(f"Icon updated for {link.name}." if found
           else f"{link.name} offers no icon to fetch.", "success" if found else "warning")
+    return redirect(url_for("apps.index"))
+
+
+@apps_bp.route("/<int:id>/refresh-stores", methods=["POST"])
+@login_required
+def refresh_stores(id):
+    link = db.session.get(AppLink, id) or abort(404)
+    if not (link.app_store_bundle_id or link.play_package):
+        flash(f"{link.name} has no store ids to ask about.", "warning")
+        return redirect(url_for("apps.index"))
+    store_versions_service.refresh(link)
+    db.session.commit()
+    flash(f"Store versions checked for {link.name}.", "success")
     return redirect(url_for("apps.index"))
 
 

@@ -68,6 +68,19 @@ because one arrived as "Robinson &amp; Co." and was shown that way. The
 migration that folded the pairs together keeps the oldest name, the real
 domain, and every link and icon the others carried.
 
+A phone app's tile also carries its two store ids (`app_store_bundle_id`,
+`play_package`; `register_app` takes them as `app_store_bundle_id` /
+`play_package`, or `bundle_id` / `package`) and the last answer each PUBLIC
+store page gave for the live version (`store_versions_service`: Apple's
+lookup endpoint by bundle id, the Play listing page's data blob by package;
+no store credentials on purpose, so an app in review reads "not live" until
+the store publishes it). The board asks again when the answer is older than
+six hours, on the way into `/admin/apps`, and the tile says "Versions match"
+or "Versions differ" - the whole point, asked for 2026-11-01: one product,
+one version on both stores. A store that errors keeps its previous answer;
+the Play parse is a regex on the page blob (`]]],"1.2.3",null,`), so when
+Play changes its markup the tile reads "unreachable" rather than wrong.
+
 ## Needs attention
 
 `pm/attention_routes.py` is the mail waiting on a reply, and last month's

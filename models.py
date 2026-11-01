@@ -1720,6 +1720,16 @@ class AppLink(db.Model):
     railway_url = db.Column(db.String(500), nullable=True)
     github_url = db.Column(db.String(500), nullable=True)
 
+    # A phone app ships twice, and the two store pages show one product with
+    # one version. These are its two store ids and the last answer each
+    # PUBLIC store page gave (store_versions_service: no credentials, the
+    # same truth a customer sees). Null on the web-only tiles, which is most
+    # of the board.
+    app_store_bundle_id = db.Column(db.String(200), nullable=True)
+    play_package = db.Column(db.String(200), nullable=True)
+    store_versions = db.Column(db.Text, nullable=True)
+    store_checked_at = db.Column(db.DateTime, nullable=True)
+
     # The engagement this app belongs to, where there is one. Nullable because
     # half the board is mine - Bible Study, Pluralism, Data Dungeon - and those
     # have no client and no project behind them.
@@ -1741,6 +1751,13 @@ class AppLink(db.Model):
     def is_external(self):
         """Whether following this leaves the app, and so wants a new tab."""
         return self.url.startswith("http://") or self.url.startswith("https://")
+
+    @property
+    def stores(self):
+        """The store rows and the match verdict for the tile, None for a
+        tile with no store ids."""
+        import store_versions_service  # local: models must not import services at load
+        return store_versions_service.summary(self)
 
     @property
     def host(self):

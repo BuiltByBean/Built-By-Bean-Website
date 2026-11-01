@@ -53,6 +53,31 @@
                     </div>
                 </div>
 
+                {# Only a phone app has these. With one filled in, the tile
+                   shows what that store says the live version is, and with
+                   both, whether the two stores agree. #}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">App Store bundle id</label>
+                        <input type="text" name="app_store_bundle_id" maxlength="200"
+                               value="{{ link.app_store_bundle_id or '' if link else '' }}"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                               placeholder="io.datadungeon.app">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Google Play package</label>
+                        <input type="text" name="play_package" maxlength="200"
+                               value="{{ link.play_package or '' if link else '' }}"
+                               class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                               placeholder="io.datadungeon.app">
+                    </div>
+                </div>
+                {% if link and (link.app_store_bundle_id or link.play_package) %}
+                {% call checkbox(name='refresh_stores', extra_class='mt-1') %}
+                    <span class="text-xs text-surface-300">Ask the stores again when I save</span>
+                {% endcall %}
+                {% endif %}
+
                 <div>
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Project</label>
                     {#- Pairs are built in the route: Jinja has no zip. -#}
