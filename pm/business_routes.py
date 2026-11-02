@@ -332,7 +332,8 @@ def detail(id):
         return render_template(
             "pm/businesses/detail.html", business=business,
             revenue=lifetime_revenue(business, ask=True), next=None, late=0,
-            esystems_url=ESYSTEMS_URL, **_papers(business))
+            esystems_url=ESYSTEMS_URL, map_counts=_map_for(business)["counts"],
+            **_papers(business))
     today = date.today()
     # _board_rows brings Stripe's invoices in first, which the revenue reads too.
     board = _board_rows() if business.sales_source == "board" else None
@@ -346,7 +347,8 @@ def detail(id):
         revenue=lifetime_revenue(business, ask=True),
         next=urgent or next((p for p in periods if p["status"] == "open"), None),
         late=sum(1 for p in periods if p["status"] == "late"),
-        esystems_url=ESYSTEMS_URL, **_papers(business))
+        esystems_url=ESYSTEMS_URL, map_counts=_map_for(business)["counts"],
+            **_papers(business))
 
 
 # ── Its paperwork ────────────────────────────────────────────
@@ -1255,3 +1257,155 @@ def hub_get_file():
         encoded = base64.b64encode(fh.read()).decode("ascii")
     return jsonify({"name": row.original_name, "content_type": row.content_type,
                     "data": encoded})
+
+
+# ── The map: everything that makes one business run ─────────
+#
+# business_map.layout does the drawing; this fetches, edits and seeds. The
+# map page is the whole content area with the window never scrolling, so it
+# reads like the overlay Michael asked for and still has an address, a back
+# button and a place on the Businesses tile.
+
+import business_map  # noqa: E402
+from models import BusinessLink, BusinessNeed, BusinessNeedLink, BusinessService, Playbook  # noqa: E402
+
+
+def _map_for(business):
+    needs = BusinessNeed.query.order_by(BusinessNeed.sort_order, BusinessNeed.id).all()
+    return business_map.layout(business, needs, list(business.services), list(business.map_links),
+                               BusinessNeedLink.query.all())
+
+
+@business_bp.route("/admin/businesses/<int:id>/map")
+@ceo_required
+def map_page(id):
+    business = db.session.get(Business, id) or abort(404)
+    return render_template("pm/businesses/map.html", business=business, map=_map_for(business),
+                           layers=business_map.LAYERS)
+
+
+def _map_edit_context(business):
+    needs = BusinessNeed.query.order_by(BusinessNeed.sort_order, BusinessNeed.id).all()
+    playbooks = Playbook.query.filter_by(is_active=True).order_by(Playbook.display_name).all()
+    order = {key: i for i, (key, _l, _c) in enumerate(business_map.LAYERS)}
+    services = sorted(business.services, key=lambda s: (
+        order.get((s.need.layer if s.need else s.layer) or "operations", 99),
+        s.need.sort_order if s.need else 10_000, s.display_name.lower()))
+    return {
+        "business": business, "needs": needs, "playbooks": playbooks, "services": services,
+        "links": list(business.map_links), "layers": business_map.LAYERS,
+        "statuses": business_map.STATUSES,
+        "need_options": [("", "No particular need")] + [(str(n.id), f"{n.name} ({business_map.LAYER_LABEL[n.layer]})")
+                                                        for n in needs],
+        "playbook_options": [("", "No runbook")] + [(str(p.id), p.display_name) for p in playbooks],
+        "service_options": [(str(s.id), s.display_name) for s in services],
+        "layer_options": [(key, label) for key, label, _c in business_map.LAYERS],
+        "preselect_need": request.args.get("need", ""),
+        "preselect_id": next((str(n.id) for n in needs if n.slug == request.args.get("need", "")), ""),
+    }
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/edit")
+@ceo_required
+def map_edit(id):
+    business = db.session.get(Business, id) or abort(404)
+    return render_template("pm/businesses/map_edit.html", **_map_edit_context(business))
+
+
+def _fill_service(service):
+    """Copy the form onto a service. Returns an error string or None."""
+    need_id = request.form.get("need_id", type=int)
+    service.need_id = need_id if need_id and db.session.get(BusinessNeed, need_id) else None
+    pb_id = request.form.get("playbook_id", type=int)
+    service.playbook_id = pb_id if pb_id and db.session.get(Playbook, pb_id) else None
+    service.name = _text("name", 100)
+    if not service.name and service.playbook_id is None:
+        return "A service with no runbook needs a name."
+    layer = _text("layer", 20)
+    service.layer = layer if layer in business_map.LAYER_INDEX else "operations"
+    service.role = _text("role", 400)
+    status = _text("status", 12)
+    service.status = status if status in business_map.STATUS_LABEL else "running"
+    service.url = _text("url", 300)
+    service.notes = (request.form.get("notes") or "").strip()
+    return None
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/services", methods=["POST"])
+@ceo_required
+def service_add(id):
+    business = db.session.get(Business, id) or abort(404)
+    service = BusinessService(business_id=business.id)
+    error = _fill_service(service)
+    if error:
+        flash(error, "error")
+    else:
+        db.session.add(service)
+        db.session.commit()
+        flash(f"{service.display_name} is on the map.", "success")
+    return redirect(url_for("businesses.map_edit", id=business.id) + "#services")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/services/<int:sid>", methods=["POST"])
+@ceo_required
+def service_save(id, sid):
+    service = db.session.get(BusinessService, sid) or abort(404)
+    if service.business_id != id:
+        abort(404)
+    error = _fill_service(service)
+    if error:
+        db.session.rollback()
+        flash(error, "error")
+    else:
+        db.session.commit()
+        flash("Saved.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + f"#service-{sid}")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/services/<int:sid>/delete", methods=["POST"])
+@ceo_required
+def service_delete(id, sid):
+    service = db.session.get(BusinessService, sid) or abort(404)
+    if service.business_id != id:
+        abort(404)
+    name = service.display_name
+    # Its links go with it, by hand: SQLite does not enforce the cascade.
+    for link in list(BusinessLink.query.filter(
+            (BusinessLink.from_service_id == sid) | (BusinessLink.to_service_id == sid))):
+        db.session.delete(link)
+    db.session.delete(service)
+    db.session.commit()
+    flash(f"{name} is off the map.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + "#services")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/links", methods=["POST"])
+@ceo_required
+def link_add(id):
+    business = db.session.get(Business, id) or abort(404)
+    a = db.session.get(BusinessService, request.form.get("from_service_id", type=int) or 0)
+    b = db.session.get(BusinessService, request.form.get("to_service_id", type=int) or 0)
+    if not a or not b or a.business_id != id or b.business_id != id or a.id == b.id:
+        flash("Pick two different services on this map.", "error")
+        return redirect(url_for("businesses.map_edit", id=id) + "#links")
+    existing = BusinessLink.query.filter_by(business_id=id).filter(
+        ((BusinessLink.from_service_id == a.id) & (BusinessLink.to_service_id == b.id))
+        | ((BusinessLink.from_service_id == b.id) & (BusinessLink.to_service_id == a.id))).first()
+    link = existing or BusinessLink(business_id=id, from_service_id=a.id, to_service_id=b.id)
+    link.why = _text("why", 300)
+    db.session.add(link)
+    db.session.commit()
+    flash(f"{a.display_name} and {b.display_name} are connected.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + "#links")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/links/<int:lid>/delete", methods=["POST"])
+@ceo_required
+def link_delete(id, lid):
+    link = db.session.get(BusinessLink, lid) or abort(404)
+    if link.business_id != id:
+        abort(404)
+    db.session.delete(link)
+    db.session.commit()
+    flash("Connection removed.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + "#links")

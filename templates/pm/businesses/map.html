@@ -1,0 +1,310 @@
+{% extends "pm/base.html" %}
+{% from "pm/businesses/_logo.html" import business_logo %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/icon_button.html" import icon_button %}
+
+{#
+  Everything that makes this business run, as a map you can move around.
+
+  Columns are the layers a business is built in, left to right, so Stripe
+  sits in the same column on every business's map. Each vendor is its own
+  runbook's mark at the size the Businesses tile draws it, with no box behind
+  it (rule "An app icon is never put in a box"). A line between two says why
+  on hover; a dashed slot is an essential nobody has filled; a vendor with no
+  runbook says so, because that is the other kind of hole.
+
+  Hover shows the card; a tap or click pins it, because hover does not exist
+  on a phone and a map that only works with a mouse is half a map. The page
+  fills the content area and the window never scrolls (contained-scroll):
+  the map is what scrolls, by dragging it. Escape goes back.
+
+  The data rides in x-data through |tojson, in a SINGLE quoted attribute
+  (house rule: tojson leaves double quotes alone).
+#}
+
+{% block title %}{{ business.label }} map - Built By Bean{% endblock %}
+{% block page_title %}{{ business.label }}{% endblock %}
+{% block page_subtitle %}Everything that makes it run{% endblock %}
+{% block back %}{{ back_link(url_for('businesses.detail', id=business.id), business.label) }}{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+{{ icon_button('edit', 'Edit the map', href=url_for('businesses.map_edit', id=business.id)) }}
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 min-h-0 flex flex-col gap-3 -m-6 p-3 sm:p-4"
+     x-data='bizMap({{ map | tojson }})' x-init="init($refs.canvas)"
+     @keydown.escape.window='window.location.href = {{ url_for('businesses.detail', id=business.id) | tojson }}'>
+
+    <div class="shrink-0 flex flex-wrap items-center gap-2 min-w-0">
+        {{ business_logo(business, box='w-10 h-10', pad='p-0', text='text-sm') }}
+        <div class="hidden sm:flex flex-wrap items-center gap-1.5 min-w-0">
+            {% for c in map.columns %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold rounded-md bg-surface-800/70 text-surface-200">
+                <span class="w-2 h-2 rounded-full" style="background: {{ c.color }}"></span>{{ c.label }}</span>
+            {% endfor %}
+        </div>
+        <div class="ml-auto flex flex-wrap items-center gap-1.5">
+            <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-surface-800/70 text-surface-200 whitespace-nowrap">
+                {{ map.counts.services }} running it</span>
+            {% if map.counts.holes %}
+            <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-amber-500/15 text-amber-300 whitespace-nowrap">
+                {{ map.counts.holes }} hole{{ '' if map.counts.holes == 1 else 's' }}</span>
+            {% endif %}
+            {% if map.counts.no_runbook %}
+            <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300 whitespace-nowrap">
+                {{ map.counts.no_runbook }} without a runbook</span>
+            {% endif %}
+            <button type="button" @click="zoomBy(1.25)" aria-label="Zoom in" title="Zoom in"
+                    class="w-11 h-11 inline-flex items-center justify-center rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors text-lg font-bold">+</button>
+            <button type="button" @click="zoomBy(0.8)" aria-label="Zoom out" title="Zoom out"
+                    class="w-11 h-11 inline-flex items-center justify-center rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors text-lg font-bold">&minus;</button>
+            <button type="button" @click="fit()"
+                    class="min-h-[44px] px-3 inline-flex items-center rounded-xl border border-white/10 text-sm font-medium text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Fit</button>
+        </div>
+    </div>
+
+    {# touch-action none, or a finger's drag is the browser's scroll and the
+       pointer is cancelled under us: no pan, no pinch, no tap to pin. #}
+    <div x-ref="canvas" class="relative flex-1 min-h-0 rounded-2xl border border-white/10 bg-surface-900/60 overflow-hidden select-none touch-none"
+         style="touch-action: none"
+         :class="dragging ? 'cursor-grabbing' : 'cursor-grab'"
+         @wheel.prevent="onWheel($event)"
+         @pointerdown="onDown($event)" @pointermove="onMove($event)"
+         @pointerup="onUp($event)" @pointercancel="onUp($event)" @pointerleave="onUp($event)">
+        <svg class="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.06)"/>
+                </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#dots)"/>
+            <g :transform="'translate(' + tx + ' ' + ty + ') scale(' + k + ')'">
+                {% for c in map.columns %}
+                <text x="{{ c.x }}" y="48" text-anchor="middle" font-size="13" font-weight="700" letter-spacing="0.12em"
+                      fill="{{ c.color }}" style="text-transform: uppercase">{{ c.label | upper }}</text>
+                <line x1="{{ c.x }}" y1="62" x2="{{ c.x }}" y2="{{ map.height - 20 }}" stroke="{{ c.color }}" stroke-opacity="0.12" stroke-dasharray="2 6"/>
+                {% endfor %}
+
+                {% for e in map.edges %}
+                <g class="edge" data-pick="edge:{{ loop.index0 }}"
+                   @pointerenter="show('edge', {{ loop.index0 }}, $event)" @pointerleave="hide()">
+                    <path d="{{ e.path }}" fill="none" stroke="transparent" stroke-width="30"/>
+                    <path d="{{ e.path }}" fill="none"
+                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#c084fc' : '{{ '#8b5cf6' if not e.derived else 'rgba(255,255,255,0.28)' }}'"
+                          :stroke-width="isLit('edge', {{ loop.index0 }}) ? 3.5 : 2"
+                          stroke-linecap="round" style="transition: stroke 120ms, stroke-width 120ms"/>
+                </g>
+                {% endfor %}
+
+                {% for n in map.nodes %}
+                <g class="node" data-pick="node:{{ loop.index0 }}" transform="translate({{ n.x }} {{ n.y }})" style="cursor: pointer"
+                   @pointerenter="show('node', {{ loop.index0 }}, $event)" @pointerleave="hide()">
+                    {% if n.kind == 'hole' %}
+                    <circle r="30" fill="rgba(245,158,11,0.06)" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 5"/>
+                    <path d="M-9 0h18M0-9v18" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+                    {% else %}
+                    <circle r="36" fill="rgba(255,255,255,0.001)"/>
+                    {% if n.status != 'running' %}
+                    <circle r="34" fill="none" stroke="{{ '#f59e0b' if n.status == 'setting_up' else '#64748b' }}" stroke-width="2" stroke-dasharray="6 5"/>
+                    {% endif %}
+                    {% if n.mark %}
+                    <image href="{{ n.mark }}" x="-28" y="-28" width="56" height="56" preserveAspectRatio="xMidYMid meet"/>
+                    {% else %}
+                    <circle r="28" fill="rgba(139,92,246,0.18)"/>
+                    <text text-anchor="middle" dominant-baseline="central" font-size="18" font-weight="700" fill="#c4b5fd">{{ n.initials }}</text>
+                    {% endif %}
+                    {% if n.runbook_missing %}
+                    <circle cx="24" cy="-24" r="8" fill="#ef4444"/>
+                    <text x="24" y="-24" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="800" fill="#fff">!</text>
+                    {% endif %}
+                    {% endif %}
+                    {% set words = n.name.split(' ') %}
+                    {% if n.name | length > 16 and words | length > 1 %}
+                    {% set half = (words | length / 2) | round(0, 'ceil') | int %}
+                    <text y="52" text-anchor="middle" font-size="13" font-weight="600" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f1f5f9' }}">{{ words[:half] | join(' ') }}</text>
+                    <text y="68" text-anchor="middle" font-size="13" font-weight="600" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f1f5f9' }}">{{ words[half:] | join(' ') }}</text>
+                    {% else %}
+                    <text y="52" text-anchor="middle" font-size="13" font-weight="600" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f1f5f9' }}">{{ n.name }}</text>
+                    {% endif %}
+                </g>
+                {% endfor %}
+            </g>
+        </svg>
+
+        {# The card. One element, filled from whichever node or line is under
+           the pointer or was tapped, kept inside the canvas so it never
+           leaves the screen. #}
+        <div x-show="card" x-cloak x-transition.opacity.duration.120ms
+             class="absolute z-10 w-72 max-w-[calc(100%-1.5rem)] p-4 rounded-2xl border border-white/10 bg-surface-900/95 shadow-2xl pointer-events-auto"
+             :style="cardStyle" @click.stop @pointerenter="holdCard = true" @pointerleave="holdCard = false; if (!pinned) hide()">
+            <template x-if="card && card.kind === 'node'">
+                <div class="space-y-2 min-w-0">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <template x-if="card.item.kind === 'service' && card.item.mark">
+                            <img :src="card.item.mark" alt="" class="w-10 h-10 object-contain flex-shrink-0">
+                        </template>
+                        <template x-if="card.item.kind === 'service' && !card.item.mark">
+                            <span class="w-10 h-10 rounded-xl bg-brand-500/15 text-brand-300 font-bold flex items-center justify-center flex-shrink-0" x-text="card.item.initials"></span>
+                        </template>
+                        <template x-if="card.item.kind === 'hole'">
+                            <span class="w-10 h-10 rounded-full border-2 border-dashed border-amber-400 text-amber-300 font-bold flex items-center justify-center flex-shrink-0">+</span>
+                        </template>
+                        <div class="min-w-0">
+                            <p class="text-sm font-bold text-white break-words" x-text="card.item.kind === 'hole' ? 'Missing: ' + card.item.name : card.item.name"></p>
+                            <p class="text-xs text-surface-400 break-words" x-text="card.item.kind === 'hole' ? 'Every business needs one' : card.item.need"></p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md"
+                              :class="{'bg-emerald-900/30 text-emerald-400': card.item.status === 'running', 'bg-amber-500/15 text-amber-300': card.item.status === 'setting_up' || card.item.status === 'missing', 'bg-surface-800 text-surface-300': card.item.status === 'planned'}"
+                              x-text="card.item.status_label"></span>
+                        <span x-show="card.item.runbook_missing" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No runbook yet</span>
+                    </div>
+                    <p class="text-sm text-surface-200 break-words" x-show="card.item.role" x-text="card.item.role"></p>
+                    <template x-if="card.item.kind === 'hole' && card.item.suggestions && card.item.suggestions.length">
+                        <p class="text-xs text-surface-400 break-words">Fill it with
+                            <template x-for="(s, i) in card.item.suggestions" :key="s.slug">
+                                <span><span class="text-surface-200" x-text="s.name"></span><span x-show="i < card.item.suggestions.length - 1">, </span></span>
+                            </template></p>
+                    </template>
+                    <div class="flex flex-wrap gap-2 pt-1" x-show="pinned">
+                        <template x-if="card.item.kind === 'hole'">
+                            <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "?need=" + card.item.need_slug + "#add"'
+
+                               class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Fill it</a>
+                        </template>
+                        <template x-if="card.item.runbook">
+                            <a :href="card.item.runbook"
+                               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Runbook</a>
+                        </template>
+                        <template x-if="card.item.url">
+                            <a :href="card.item.url" target="_blank" rel="noopener"
+                               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Open</a>
+                        </template>
+                    </div>
+                </div>
+            </template>
+            <template x-if="card && card.kind === 'edge'">
+                <div class="space-y-1.5 min-w-0">
+                    <p class="text-sm font-bold text-white break-words" x-text="card.item.label"></p>
+                    <p class="text-sm text-surface-200 break-words" x-text="card.item.why || 'Connected.'"></p>
+                    <p class="text-[11px] text-surface-500" x-show="card.item.derived">From the business playbook</p>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('bizMap', (map) => ({
+        map, tx: 0, ty: 0, k: 1, dragging: false, moved: false,
+        pointers: new Map(), pinchStart: null, downPick: '',
+        hover: null, pinned: null, holdCard: false, canvas: null,
+        init(canvas) {
+            this.canvas = canvas;
+            this.$nextTick(() => this.fit());
+            window.addEventListener('resize', () => { if (!this.pinned) this.fit(); });
+        },
+        /* The whole drawing inside the canvas, with a margin, never above 1.6x
+           or the marks go soft, never under 0.35x or the names go. */
+        fit() {
+            const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+            if (!w || !h) return;
+            const k = Math.max(0.35, Math.min(1.6, Math.min((w - 40) / this.map.width, (h - 40) / this.map.height)));
+            this.k = k;
+            this.tx = (w - this.map.width * k) / 2;
+            this.ty = (h - this.map.height * k) / 2;
+        },
+        zoomAt(factor, cx, cy) {
+            const k2 = Math.max(0.25, Math.min(3, this.k * factor));
+            this.tx = cx - (cx - this.tx) * (k2 / this.k);
+            this.ty = cy - (cy - this.ty) * (k2 / this.k);
+            this.k = k2;
+        },
+        zoomBy(factor) { this.zoomAt(factor, this.canvas.clientWidth / 2, this.canvas.clientHeight / 2); },
+        onWheel(e) {
+            const r = this.canvas.getBoundingClientRect();
+            this.zoomAt(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - r.left, e.clientY - r.top);
+        },
+        onDown(e) {
+            if (e.target.closest && e.target.closest('[x-show=card]')) return;
+            this.canvas.setPointerCapture?.(e.pointerId);
+            this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            this.dragging = true; this.moved = false;
+            const pick = e.target.closest ? e.target.closest('[data-pick]') : null;
+            this.downPick = pick ? pick.getAttribute('data-pick') : '';
+            if (this.pointers.size === 2) {
+                const [a, b] = [...this.pointers.values()];
+                this.pinchStart = { d: Math.hypot(a.x - b.x, a.y - b.y), k: this.k };
+            }
+        },
+        onMove(e) {
+            if (!this.pointers.has(e.pointerId)) return;
+            const prev = this.pointers.get(e.pointerId);
+            const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+            this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (Math.abs(dx) + Math.abs(dy) > 2) this.moved = true;
+            if (this.pointers.size === 2 && this.pinchStart) {
+                const [a, b] = [...this.pointers.values()];
+                const d = Math.hypot(a.x - b.x, a.y - b.y);
+                const r = this.canvas.getBoundingClientRect();
+                const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
+                const target = this.pinchStart.k * (d / this.pinchStart.d);
+                this.zoomAt(target / this.k, cx, cy);
+                return;
+            }
+            this.tx += dx; this.ty += dy;
+        },
+        onUp(e) {
+            if (!this.pointers.has(e.pointerId)) return;
+            this.pointers.delete(e.pointerId);
+            if (this.pointers.size < 2) this.pinchStart = null;
+            if (this.pointers.size === 0) {
+                this.dragging = false;
+                if (!this.moved) {
+                    if (this.downPick) {
+                        const [kind, i] = this.downPick.split(':');
+                        this.pin(kind, +i, e);
+                    } else {
+                        this.pinned = null;
+                    }
+                }
+            }
+            this.downPick = '';
+        },
+        /* Hover follows the pointer; a pin stays where it was tapped. */
+        show(kind, i, e) {
+            if (this.pinned) return;
+            this.hover = { kind, i, x: e.clientX, y: e.clientY };
+        },
+        hide() { if (!this.holdCard) this.hover = null; },
+        pin(kind, i, e) {
+            const same = this.pinned && this.pinned.kind === kind && this.pinned.i === i;
+            this.pinned = same ? null : { kind, i, x: e.clientX, y: e.clientY };
+            this.hover = null;
+        },
+        isLit(kind, i) {
+            const c = this.pinned || this.hover;
+            return !!c && c.kind === kind && c.i === i;
+        },
+        get card() {
+            const c = this.pinned || this.hover;
+            if (!c) return null;
+            return { kind: c.kind, item: c.kind === 'node' ? this.map.nodes[c.i] : this.map.edges[c.i] };
+        },
+        get cardStyle() {
+            const c = this.pinned || this.hover;
+            if (!c || !this.canvas) return '';
+            const r = this.canvas.getBoundingClientRect();
+            let x = c.x - r.left + 16, y = c.y - r.top + 16;
+            if (x + 300 > r.width) x = Math.max(8, c.x - r.left - 300);
+            if (y + 260 > r.height) y = Math.max(8, r.height - 270);
+            return `left:${x}px; top:${y}px`;
+        },
+    }));
+});
+</script>
+{% endblock %}

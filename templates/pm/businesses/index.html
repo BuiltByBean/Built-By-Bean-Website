@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/businesses/_logo.html" import business_logo %}
+{% from "pm/components/icon_button.html" import icon_glyph %}
 
 {#
   Every business Michael owns, as a business: its logo, its name, when it
@@ -34,8 +35,14 @@
 #}
 {% macro tile(t) %}
 {% set b = t.business %}
+{# The map button sits in the tile's top right, above the face link: a link
+   cannot hold a link, so the face is a sibling that covers the card. #}
+<div class="relative min-w-0 {{ '' if b.is_active else 'opacity-70' }}">
+<a href="{{ url_for('businesses.map_page', id=b.id) }}" aria-label="Map of {{ b.label }}" title="Map of {{ b.label }}"
+   class="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors bg-surface-900/60">
+    {{ icon_glyph('map') }}</a>
 <a href="{{ url_for('businesses.detail', id=b.id) }}"
-   class="glass-card p-5 min-w-0 flex flex-col gap-5 border border-white/10 hover:border-brand-500/40 transition-colors {{ '' if b.is_active else 'opacity-70' }}">
+   class="glass-card p-5 pr-16 min-w-0 flex flex-col gap-5 border border-white/10 hover:border-brand-500/40 transition-colors">
     <div class="flex items-center gap-4 min-w-0">
         {{ business_logo(b) }}
         <div class="min-w-0">
@@ -71,6 +78,7 @@
         </div>
     </div>
 </a>
+</div>
 {% endmacro %}
 
 {% if families %}

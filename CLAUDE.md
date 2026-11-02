@@ -395,6 +395,35 @@ articles a Certificate of Formation; a DBA's lawful footing is an Assumed Name
 Certificate), stored on the volume under `business_documents/` exactly as a
 return's confirmation is. `tools/test_business_papers.py`.
 
+**The map: everything that makes a business run** (Michael, 2026-11-02:
+"here's everything that's running everything ... also a way to quickly see
+what holes do we have"). `/admin/businesses/<id>/map`, drawn by
+`business_map.layout`, pure. Two layers of truth: `BusinessNeed` is the
+business playbook, one row per thing a business has to have, in the layer it
+gets built in (`LAYERS`: legal, money, infrastructure, product, operations,
+comms, growth, intelligence), essential or optional, with `fills_with` naming
+the runbooks that fill it and `BusinessNeedLink` the connection that follows
+once two needs are both filled, with its why written once. `BusinessService`
+is what one business actually uses for a need: its runbook when the catalogue
+has one, else a name (Mercury arrived that way), `role` being the sentence
+the hover shows. A `BusinessLink` is a connection in the business's own
+words and wins over the template's on the same pair. A hole is an essential
+need nobody filled, drawn as a dashed slot that opens the edit page with the
+need preselected; a vendor with no runbook wears a red mark, except on an
+`in_house` need (the app, this board), which has no vendor.
+
+Columns, not a force layout: Stripe sits in the same column on every
+business's map, so maps can be compared. Hover shows the card and a tap or
+click PINS it, because hover does not exist on a phone. Two things the first
+cut got wrong: the canvas captures the pointer to keep a drag going past a
+node, and a captured pointer's `click` lands on the canvas, never on the node,
+so a pin is read on pointerup without movement (`downPick`), never from
+click; and without `touch-action: none` a finger's drag is the browser's
+scroll and the pointer is cancelled, so no pan, pinch or tap worked on a
+phone. `|tojson` rides in single-quoted attributes (house rule). Migration
+`c7f2a9e41d05` seeds the needs, their links, and each business's services
+off its own repo's config. `tools/test_business_map.py`.
+
 A return is worked out, typed into WebFile by hand, and recorded from the
 confirmation page. `sales_tax.build_return` splits a period's sales by the
 location trading THAT DAY (`Business.location_on`) and rounds each line to

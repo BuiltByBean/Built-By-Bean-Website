@@ -1,0 +1,179 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/icon_button.html" import delete_icon %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  What this business runs on, one service per row, and the connections it
+  draws in its own words. Each row is its own form, outside any other,
+  because forms do not nest. A row that holds an open dropdown paints on top
+  (focus-within:z-30, LM-7), and the add card carries relative z-30 so its
+  pickers open over the rows below (LM-1).
+
+  A hole on the map arrives here with ?need=<slug>, which preselects the
+  need in the add form, so filling a hole is one press and a vendor.
+#}
+
+{% set field = 'w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
+{% set lbl = 'block text-sm font-medium text-surface-300 mb-1.5' %}
+{% set btn = 'min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors' %}
+
+{% block title %}Edit {{ business.label }} map - Built By Bean{% endblock %}
+{% block page_title %}{{ business.label }}{% endblock %}
+{% block page_subtitle %}What it runs on{% endblock %}
+{% block back %}{{ back_link(url_for('businesses.map_page', id=business.id), 'The map') }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl">
+
+    {# The add card first when a hole sent us here, so the press lands on it. #}
+    <div id="add" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30 {{ 'order-first' if preselect_need else '' }}">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Add a service</h3>
+        <form method="POST" action="{{ url_for('businesses.service_add', id=business.id) }}" class="space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="min-w-0">
+                    <p class="{{ lbl }}">Need it fills</p>
+                    {{ select_dropdown('need_id', need_options, preselect_id, 'No particular need', full_width=true) }}
+                </div>
+                <div class="min-w-0">
+                    <p class="{{ lbl }}">Runbook</p>
+                    {{ select_dropdown('playbook_id', playbook_options, '', 'No runbook', full_width=true) }}
+                </div>
+                <div class="min-w-0">
+                    <label for="add-name" class="{{ lbl }}">Name</label>
+                    <input id="add-name" name="name" maxlength="100" placeholder="Needed when there is no runbook" class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <p class="{{ lbl }}">Status</p>
+                    {{ select_dropdown('status', statuses, 'running', 'Running', full_width=true) }}
+                </div>
+                <div class="sm:col-span-2 min-w-0">
+                    <label for="add-role" class="{{ lbl }}">What it does for this business</label>
+                    <input id="add-role" name="role" maxlength="400" placeholder="One sentence, for the hover" class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <label for="add-url" class="{{ lbl }}">Where to open it</label>
+                    <input id="add-url" type="url" name="url" maxlength="300" placeholder="https://" class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <p class="{{ lbl }}">Column, if no need</p>
+                    {{ select_dropdown('layer', layer_options, 'operations', 'Operations', full_width=true) }}
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">Put it on the map</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="services" class="space-y-3">
+        {% set ns = namespace(layer=None) %}
+        {% for s in services %}
+        {% set layer = (s.need.layer if s.need else s.layer) or 'operations' %}
+        {% if layer != ns.layer %}
+        {% set ns.layer = layer %}
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400 pt-2">{{ dict(layer_options).get(layer, layer) }}</h3>
+        {% endif %}
+        <div id="service-{{ s.id }}" class="glass-card p-4 sm:p-5 min-w-0 relative focus-within:z-30">
+            <form method="POST" action="{{ url_for('businesses.service_save', id=business.id, sid=s.id) }}" class="space-y-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    {% if s.mark_url %}
+                    <img src="{{ s.mark_url }}" alt="" class="w-10 h-10 object-contain flex-shrink-0">
+                    {% else %}
+                    <span class="w-10 h-10 rounded-xl bg-brand-500/15 text-brand-300 text-sm font-bold flex items-center justify-center flex-shrink-0">{{ s.initials }}</span>
+                    {% endif %}
+                    <div class="min-w-0 flex-1">
+                        <p class="text-base font-bold text-white break-words">{{ s.display_name }}</p>
+                        {% if s.playbook_id is none %}
+                        <span class="inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No runbook yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="min-w-0">
+                        <p class="{{ lbl }}">Need it fills</p>
+                        {{ select_dropdown('need_id', need_options, s.need_id | string if s.need_id else '', 'No particular need', full_width=true) }}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="{{ lbl }}">Runbook</p>
+                        {{ select_dropdown('playbook_id', playbook_options, s.playbook_id | string if s.playbook_id else '', 'No runbook', full_width=true) }}
+                    </div>
+                    <div class="min-w-0">
+                        <label for="name-{{ s.id }}" class="{{ lbl }}">Name</label>
+                        <input id="name-{{ s.id }}" name="name" maxlength="100" value="{{ s.name or '' }}" class="{{ field }}">
+                    </div>
+                    <div class="min-w-0">
+                        <p class="{{ lbl }}">Status</p>
+                        {{ select_dropdown('status', statuses, s.status, 'Running', full_width=true) }}
+                    </div>
+                    <div class="sm:col-span-2 min-w-0">
+                        <label for="role-{{ s.id }}" class="{{ lbl }}">What it does for this business</label>
+                        <input id="role-{{ s.id }}" name="role" maxlength="400" value="{{ s.role or '' }}" class="{{ field }}">
+                    </div>
+                    <div class="min-w-0">
+                        <label for="url-{{ s.id }}" class="{{ lbl }}">Where to open it</label>
+                        <input id="url-{{ s.id }}" type="url" name="url" maxlength="300" value="{{ s.url or '' }}" class="{{ field }}">
+                    </div>
+                    <div class="min-w-0">
+                        <p class="{{ lbl }}">Column, if no need</p>
+                        {{ select_dropdown('layer', layer_options, s.layer or 'operations', 'Operations', full_width=true) }}
+                    </div>
+                    <div class="sm:col-span-2 min-w-0">
+                        <label for="notes-{{ s.id }}" class="{{ lbl }}">Notes</label>
+                        <textarea id="notes-{{ s.id }}" name="notes" rows="2" class="{{ field }}">{{ s.notes or '' }}</textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="{{ btn }}">Save</button>
+                </div>
+            </form>
+            <form method="POST" action="{{ url_for('businesses.service_delete', id=business.id, sid=s.id) }}" class="flex justify-end -mt-11 mr-20">
+                {{ delete_icon(question='Take ' ~ s.display_name ~ ' off?', label='Remove ' ~ s.display_name) }}
+            </form>
+        </div>
+        {% else %}
+        <div class="glass-card p-8 text-center"><p class="text-surface-300">Nothing on the map yet.</p></div>
+        {% endfor %}
+    </div>
+
+    <div id="links" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Connections in your own words</h3>
+        {% if links %}
+        <div class="space-y-2">
+            {% for l in links %}
+            <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-800/40 min-w-0">
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-white break-words">{{ l.from_service.display_name }} and {{ l.to_service.display_name }}</p>
+                    <p class="text-xs text-surface-300 break-words">{{ l.why or 'Connected.' }}</p>
+                </div>
+                <form method="POST" action="{{ url_for('businesses.link_delete', id=business.id, lid=l.id) }}">
+                    {{ delete_icon(question='Remove it?', label='Remove the connection') }}
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if service_options | length >= 2 %}
+        <form method="POST" action="{{ url_for('businesses.link_add', id=business.id) }}" class="space-y-3 p-4 rounded-xl border border-dashed border-white/15">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="min-w-0">
+                    <p class="{{ lbl }}">From</p>
+                    {{ select_dropdown('from_service_id', service_options, service_options[0][0], 'Pick one', full_width=true) }}
+                </div>
+                <div class="min-w-0">
+                    <p class="{{ lbl }}">To</p>
+                    {{ select_dropdown('to_service_id', service_options, service_options[1][0], 'Pick one', full_width=true) }}
+                </div>
+                <div class="sm:col-span-2 min-w-0">
+                    <label for="link-why" class="{{ lbl }}">Why this connection is here</label>
+                    <input id="link-why" name="why" maxlength="300" placeholder="Stripe pays out to this account" class="{{ field }}">
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="{{ btn }}">Connect them</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

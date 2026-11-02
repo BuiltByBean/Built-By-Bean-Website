@@ -1,5 +1,5 @@
 {% extends "pm/base.html" %}
-{% from "pm/components/icon_button.html" import icon_button %}
+{% from "pm/components/icon_button.html" import icon_button, icon_glyph %}
 {% from "pm/components/copy_button.html" import copy_button %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/businesses/_logo.html" import business_logo %}
@@ -49,6 +49,7 @@
 {% if b.admin_url %}
 {{ icon_button('external', 'Open ' ~ b.label ~ ' admin', href=b.admin_url, target='_blank') }}
 {% endif %}
+{{ icon_button('map', 'Map of ' ~ b.label, href=url_for('businesses.map_page', id=b.id)) }}
 {{ icon_button('edit', 'Edit ' ~ b.label, href=url_for('businesses.edit', id=b.id)) }}
 {% endblock %}
 
@@ -104,6 +105,21 @@
         <span class="inline-flex mt-3 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
         {% endif %}
     </div>
+
+    {# Everything that makes it run, in numbers; the map itself is a page. #}
+    <a href="{{ url_for('businesses.map_page', id=b.id) }}"
+       class="glass-card p-5 sm:p-6 min-w-0 flex flex-wrap items-center justify-between gap-3 border border-white/10 hover:border-brand-500/40 transition-colors">
+        <div class="min-w-0">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">What runs it</h3>
+            <p class="text-sm text-white mt-1 break-words">
+                {{ map_counts.services }} service{{ '' if map_counts.services == 1 else 's' }}
+                {%- if map_counts.holes %}, <span class="text-amber-300">{{ map_counts.holes }} hole{{ '' if map_counts.holes == 1 else 's' }}</span>{% endif %}
+                {%- if map_counts.no_runbook %}, <span class="text-red-300">{{ map_counts.no_runbook }} without a runbook</span>{% endif %}
+            </p>
+        </div>
+        <span class="shrink-0 inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">
+            {{ icon_glyph('map', 'w-4 h-4') }} Open the map</span>
+    </a>
 
     {# Its paperwork: what LegalZoom filed and the IRS sent back. relative
        z-30 (LM-1), because the kind picker opens over the cards below. #}

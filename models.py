@@ -1514,6 +1514,182 @@ class BusinessLocation(db.Model):
         return f"<BusinessLocation {self.webfile_number} {self.label}>"
 
 
+class BusinessNeed(db.Model):
+    """One thing a business has to have: the business playbook, one row each.
+
+    Michael, 2026-11-02: "if I want to create me a new business, I want to be
+    able to just have it start to finish every little thing that I need to set
+    up." A need is that thing, in the layer a business gets built in (LAYERS
+    in business_map), marked essential when every business needs it and
+    optional when it is a pathway some take. `fills_with` names the runbooks
+    that can fill it, so a hole on a map can say what would fill it.
+
+    Catalogue, not per business: every business's map reads the same list, so
+    the holes are counted against one standard and a new business starts from
+    the whole of it.
+    """
+
+    __tablename__ = "business_needs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(40), nullable=False, unique=True)
+    name = db.Column(db.String(100), nullable=False)
+    layer = db.Column(db.String(20), nullable=False, default="operations", index=True)
+    essential = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # The business's own thing rather than a vendor's: the app itself, the
+    # board it is run from. Nothing to buy, so no runbook to be missing.
+    in_house = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    description = db.Column(db.String(400), default="")
+    # Runbook slugs, comma separated, in the order to suggest them.
+    fills_with = db.Column(db.String(300), default="")
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+    @property
+    def fill_slugs(self):
+        return [s.strip() for s in (self.fills_with or "").split(",") if s.strip()]
+
+    @property
+    def suggestions(self):
+        """The runbooks that could fill this, by name, where the board has them."""
+        if not self.fill_slugs:
+            return []
+        rows = Playbook.query.filter(Playbook.slug.in_(self.fill_slugs)).all()
+        by_slug = {p.slug: p for p in rows}
+        return [{"slug": s, "name": by_slug[s].display_name if s in by_slug else s.replace("-", " ").title()}
+                for s in self.fill_slugs]
+
+    def __repr__(self):
+        return f"<BusinessNeed {self.slug}>"
+
+
+class BusinessNeedLink(db.Model):
+    """A connection that follows once two needs are both filled, and why.
+
+    Payments pay out to the bank; the domain's DNS points at the hosting. The
+    why is written once here, so every business whose map has both ends gets
+    the line and its explanation without anybody typing it per business.
+    """
+
+    __tablename__ = "business_need_links"
+    __table_args__ = (
+        db.UniqueConstraint("from_need_id", "to_need_id", name="uq_business_need_link"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    from_need_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_needs.id", ondelete="CASCADE", name="fk_business_need_links_from"),
+        nullable=False, index=True)
+    to_need_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_needs.id", ondelete="CASCADE", name="fk_business_need_links_to"),
+        nullable=False, index=True)
+    why = db.Column(db.String(300), default="")
+
+
+class BusinessService(db.Model):
+    """What one business uses for one need: the vendor, and what it does here.
+
+    `playbook_id` is the runbook when the catalogue has one; a vendor with no
+    runbook yet (Mercury, on 2026-11-02) is still on the map by `name`, and
+    the map says it has no runbook, which is itself a hole. `role` is the
+    sentence the hover shows: what this thing is doing for this business.
+    """
+
+    __tablename__ = "business_services"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(
+        db.Integer,
+        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_services_business_id"),
+        nullable=False, index=True)
+    need_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_needs.id", ondelete="SET NULL", name="fk_business_services_need_id"),
+        nullable=True, index=True)
+    playbook_id = db.Column(
+        db.Integer,
+        db.ForeignKey("playbooks.id", ondelete="SET NULL", name="fk_business_services_playbook_id"),
+        nullable=True, index=True)
+    name = db.Column(db.String(100), default="")
+    # Where it sits when it answers no need, so a custom service still lands
+    # in a column.
+    layer = db.Column(db.String(20), default="operations")
+    role = db.Column(db.String(400), default="")
+    status = db.Column(db.String(12), nullable=False, default="running", server_default="running")
+    url = db.Column(db.String(300), default="")
+    notes = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "services", cascade="all, delete-orphan", order_by="BusinessService.id"))
+    need = db.relationship("BusinessNeed")
+    playbook = db.relationship("Playbook")
+
+    @property
+    def display_name(self):
+        if self.name:
+            return self.name
+        if self.playbook is not None:
+            return self.playbook.display_name
+        return self.need.name if self.need is not None else "?"
+
+    @property
+    def initials(self):
+        parts = [p for p in (self.display_name or "?").split() if p]
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return (parts[0][:2] if parts else "?").upper()
+
+    @property
+    def mark_url(self):
+        """The vendor's own mark, from its runbook, or None for initials."""
+        from flask import url_for
+        pb = self.playbook
+        if pb is None:
+            return None
+        if pb.logo_path:
+            return url_for("static", filename=pb.logo_path)
+        if pb.icon_file:
+            return url_for("playbooks.icon", slug=pb.slug)
+        return None
+
+    @property
+    def runbook_url(self):
+        from flask import url_for
+        return url_for("playbooks.playbook_detail", slug=self.playbook.slug) if self.playbook else ""
+
+
+class BusinessLink(db.Model):
+    """A connection on one business's map, written by hand, with its why.
+
+    Wins over a template connection between the same two services, so a
+    business can say in its own words why its Stripe talks to its bank.
+    """
+
+    __tablename__ = "business_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(
+        db.Integer,
+        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_links_business_id"),
+        nullable=False, index=True)
+    from_service_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_services.id", ondelete="CASCADE", name="fk_business_links_from"),
+        nullable=False, index=True)
+    to_service_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_services.id", ondelete="CASCADE", name="fk_business_links_to"),
+        nullable=False, index=True)
+    why = db.Column(db.String(300), default="")
+
+    business = db.relationship("Business", backref=db.backref(
+        "map_links", cascade="all, delete-orphan", order_by="BusinessLink.id"))
+    from_service = db.relationship("BusinessService", foreign_keys=[from_service_id])
+    to_service = db.relationship("BusinessService", foreign_keys=[to_service_id])
+
+
 class SalesTaxFiling(db.Model):
     """One return as it was filed and paid, with WebFile's own numbers.
 
