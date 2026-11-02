@@ -58,7 +58,7 @@
             <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                 {% for label, row in app.stores.rows %}
                 <span class="text-surface-400 whitespace-nowrap">{{ label }}
-                    <span class="text-white tabular-nums">{% if row.status == 'live' %}{{ row.version }}{% elif row.status == 'not_listed' %}not live{% elif row.status == 'unknown' %}unchecked{% else %}unreachable{% endif %}</span></span>
+                    <span class="text-white tabular-nums">{% if row.status == 'live' %}{{ row.version or 'varies by device' }}{% elif row.status == 'not_listed' %}not live{% elif row.status == 'unknown' %}unchecked{% else %}unreachable{% endif %}</span></span>
                 {% endfor %}
                 {% if app.stores.verdict == 'match' %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-900/30 text-emerald-400">Versions match</span>

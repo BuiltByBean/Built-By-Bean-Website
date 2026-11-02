@@ -355,6 +355,15 @@ APPENDABLE = {"summary", "gold_standard_md", "pitfalls_md", "client_only_md",
               "access_grant_md", "your_steps_md", "traps_md", "verify_md",
               "prompt_intro", "steps"}
 
+# The most one proposal's text may carry, and past it the door refuses
+# rather than cuts. An append grows a field without limit, so a replace has
+# to be able to carry a whole grown field back. The old bound was 6000 and
+# it truncated quietly: on 2026-11-01 the App Store runbook's traps had
+# reached 14,005 characters, so a rewrite of them would have landed in the
+# inbox already missing its tail, and accepting it would have deleted the
+# end of the field while the inbox said the change was in.
+TEXT_MAX = 60000
+
 # Which prose field a bare lesson lands in when the entry already exists.
 LESSON_FIELD = {"feature": "pitfalls_md", "rule": "pitfalls_md",
                 "playbook": "traps_md", "product": "summary"}
@@ -736,6 +745,11 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
 @guidance_bp.route("/proposals", methods=["POST"])
 def propose():
     body = request.get_json(silent=True) or {}
+    text = str(body.get("text") or "")
+    if len(text) > TEXT_MAX:
+        return jsonify({"error": f"text is {len(text):,} characters and a "
+                                 f"proposal carries at most {TEXT_MAX:,}; "
+                                 "nothing was recorded"}), 400
     kind = _cap(body.get("kind"), 10).lower()
     if kind == "features":
         kind = "feature"
@@ -750,7 +764,7 @@ def propose():
         slug=_slugify(body.get("slug") or ""),
         field=_cap(body.get("field"), 40),
         mode=_cap(body.get("mode"), 10).lower(),
-        text=_cap(body.get("text"), 6000),
+        text=_cap(text, TEXT_MAX),
         reason=_cap(body.get("reason"), 1000),
         project=_cap(body.get("project"), 120),
         payload=payload,

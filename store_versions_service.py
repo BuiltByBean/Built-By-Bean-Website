@@ -14,9 +14,18 @@ state the tile should show.
     App Store: https://itunes.apple.com/lookup?bundleId=<bundle id>
                (JSON; resultCount 0 while the app is not live)
     Google Play: https://play.google.com/store/apps/details?id=<package>
-               (HTML; 404 while not live; the version sits in the page's
-               data blob as ]]],"1.2.3",null, right after the icon URL, and
-               the "Updated on" date is in the visible markup)
+               (HTML; 404 while not live; the live version sits in the
+               page's About blob as [[["1.2.3"]],[[[<targetSdk>]],[[[<minSdk>,
+               "<Android>"]], and the "Updated on" date is in the visible
+               markup)
+
+The Play page also carries ]]],"1.2.3",null, once per REVIEW: the version
+that reviewer had installed. The first version of this module read that, and
+on 2026-11-01 it gave Firefox as 135.0.1 against a live 159.0 and Signal as
+7.28.4 against 8.33.2; an app with no reviews yet matched nothing and stayed
+"not live" after it launched. A listing that ships per-device builds has no
+single version in the About blob ([[null,[]],...), which is live with no
+version to compare, never a guess.
 
 Each lookup is one request with a short timeout, and a failure keeps the
 previous answer rather than blanking it: a store that is slow for a minute
@@ -36,7 +45,8 @@ USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.3
 # How long a store answer is trusted before the board asks again.
 FRESH_FOR = timedelta(hours=6)
 
-_PLAY_VERSION_RE = re.compile(r'\]\]\],"(\d+(?:\.\d+){1,3})",null,')
+_PLAY_VERSION_RE = re.compile(r'\[\[\["([^"\[\]]{1,60})"\]\],\[\[\[\d+\]\],\[\[\[\d+,"')
+_PLAY_VARIES_RE = re.compile(r'\[\[null,\[\]\],\[\[\[\d+\]\],\[null,\[\]\]\]\]')
 _PLAY_UPDATED_RE = re.compile(r'Updated on</div><div class="[^"]*">([^<]{6,40})</div>')
 _PLAY_TITLE_RE = re.compile(r"<title>([^<]*?)(?: - Apps on Google Play)?</title>")
 
@@ -77,12 +87,16 @@ def lookup_play(package):
         return {"status": "error"}
     html = resp.text
     m = _PLAY_VERSION_RE.search(html)
-    if not m:
+    if m:
+        version = m.group(1)
+    elif _PLAY_VARIES_RE.search(html):
+        version = ""  # per-device builds: live, with no one version to show
+    else:
         # The page exists but the blob moved: say so rather than guess.
         return {"status": "error"}
     updated = _PLAY_UPDATED_RE.search(html)
     title = _PLAY_TITLE_RE.search(html)
-    return {"status": "live", "version": m.group(1),
+    return {"status": "live", "version": version,
             "name": title.group(1).strip() if title else None,
             "url": f"{PLAY_LISTING}?id={package}",
             "released": updated.group(1).strip() if updated else None}
@@ -129,7 +143,8 @@ def summary(link):
 
     verdict: "match" when every live store shows the same version,
              "differ" when two live stores disagree,
-             "live" when the app is on its one registered store,
+             "live" when the app is on its one registered store, or on
+                 every store but one of them names no single version,
              "waiting" when a registered store does not list the app yet,
              None when the app has no store ids.
     """
@@ -143,7 +158,7 @@ def summary(link):
         return None
     live = [r[1].get("version") for r in rows if r[1].get("status") == "live"]
     if len(live) == len(rows) and live:
-        if len(rows) == 1:
+        if len(rows) == 1 or not all(live):
             verdict = "live"
         else:
             verdict = "match" if len(set(live)) == 1 else "differ"

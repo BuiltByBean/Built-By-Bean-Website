@@ -31,7 +31,11 @@ assuming any session can file anything. Neither travels with a repo or
 an account, so the MVP build prompt now carries the loop itself: it
 tells the session to consult the live board, to stop and say so if the
 tools are missing, and to file what it learns as it goes. The write path appends with attribution and refuses duplicates,
-because reporting sessions retry like any other API client.
+because reporting sessions retry like any other API client. A proposal's
+text is kept whole up to `TEXT_MAX` (60,000) and refused past it, never cut:
+appends grow a field without limit, and the old 6000 bound truncated a
+replace in silence, so accepting a rewrite of a grown field would have
+deleted its tail while the inbox said it was in.
 
 The catalogue grows itself through the same door, with the policy set by
 the SHAPE of a change, not by trust in the sender. Everything a session
@@ -78,8 +82,16 @@ the store publishes it). The board asks again when the answer is older than
 six hours, on the way into `/admin/apps`, and the tile says "Versions match"
 or "Versions differ" - the whole point, asked for 2026-11-01: one product,
 one version on both stores. A store that errors keeps its previous answer;
-the Play parse is a regex on the page blob (`]]],"1.2.3",null,`), so when
-Play changes its markup the tile reads "unreachable" rather than wrong.
+the Play parse is a regex on the page's About blob
+(`[[["1.2.3"]],[[[<targetSdk>]],[[[<minSdk>,`), so when Play changes its
+markup the tile reads "unreachable" rather than wrong. It shipped reading
+`]]],"1.2.3",null,` instead, which is the end of every REVIEW and carries the
+version that reviewer had installed: Firefox read 135.0.1 against a live
+159.0, and an app with no reviews (every app on its launch day) matched
+nothing and would have stayed "not live". A listing with per-device builds
+has no single version and reads "varies by device", which never counts as a
+difference. `tools/test_store_versions.py`, and `--live` reads Firefox's real
+page.
 
 ## Needs attention
 
