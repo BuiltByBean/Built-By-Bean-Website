@@ -65,7 +65,13 @@
                 <label class="block text-sm font-medium text-surface-300 mb-1">API Token</label>
                 <input type="password" name="railway_api_token" value="{{ creds.api_token if editing else '' }}"
                        class="w-full input-ring px-4 py-2.5 text-sm bg-surface-800 text-white" placeholder="railway_token_...">
-                <p class="text-xs text-surface-400 mt-1">Generate at railway.com > Account Settings > Tokens</p>
+                <p class="text-xs text-surface-400 mt-1">railway.com > Account Settings > Tokens, with no workspace chosen</p>
+            </div>
+            <div>
+                <label for="railway-workspace" class="block text-sm font-medium text-surface-300 mb-1">Workspace</label>
+                <input id="railway-workspace" name="railway_workspace_id" value="{{ creds.workspace_id if editing and creds.workspace_id else '' }}"
+                       autocomplete="off" class="w-full min-w-0 input-ring px-4 py-2.5 text-sm bg-surface-800 text-white font-mono"
+                       placeholder="74c67a5d-...">
             </div>
         </div>
 

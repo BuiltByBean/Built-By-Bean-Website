@@ -159,7 +159,11 @@ def _extract_credentials(name):
             "region": request.form.get("region", "us-east-2").strip(),
         }
     elif name == "railway":
-        return {"api_token": request.form.get("railway_api_token", "").strip()}
+        # The workspace says which Railway account's bills this provider books;
+        # two providers can hold the same account token (Built by Bean's
+        # workspace and EntertainHQ's, one login).
+        return {"api_token": request.form.get("railway_api_token", "").strip(),
+                "workspace_id": request.form.get("railway_workspace_id", "").strip()}
     elif name == "twilio":
         return {
             "account_sid": request.form.get("twilio_account_sid", "").strip(),
@@ -202,7 +206,7 @@ def _reconcile_ownership(provider):
         attributed = ((entry.mapping.client_id if entry.mapping else None)
                       or provider.account_client_id)
         entry.description = base if attributed else base + " [unallocated]"
-        if provider.account_client_id:
+        if not provider.is_ours:
             if entry.expense_id:
                 _drop_expense(entry)
                 touched += 1
@@ -381,7 +385,13 @@ def provider_edit(id):
                         f"that account is on {who}'s card.")
             elif moved:
                 note = f" {moved} charge{'s' if moved != 1 else ''} booked back to you."
-        flash(f"{provider.display_name} updated.{note}", "success")
+        # A Railway account that can read its own bills pulls them on the
+        # press, so the months it fills are there before anybody looks again.
+        if provider.name == "railway" and creds.get("api_token") and creds.get("workspace_id"):
+            count, error = sync_provider(provider.id)
+            note += (f" Railway could not be read: {error}" if error
+                     else f" Bills pulled from Railway, {count} project entr{'ies' if count != 1 else 'y'} written.")
+        flash(f"{provider.display_name} updated.{note}", "success" if "could not" not in note else "warning")
         return redirect(url_for("service_costs.providers_list"))
 
     creds = json.loads(provider.credentials_json) if provider.credentials_json else {}
@@ -603,8 +613,10 @@ def api_costs_by_provider():
 def provider_monthly(id):
     """Enter what a vendor's resources actually cost this month.
 
-    Railway is the case that made this: the API will not report money, so once
-    a month the numbers get copied off the Railway usage screen. One input per
+    Railway is the case that made this: the board believed its API would not
+    report money, so once a month the numbers were copied off the Railway usage
+    screen. A Railway provider that names its workspace now fills its months
+    itself (service_costs_service._sync_railway); this page still corrects them. One input per
     project, saving upserts a ServiceCostEntry keyed on the calendar month and
     the resource so a second save this month corrects rather than doubles.
     """

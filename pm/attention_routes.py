@@ -14,6 +14,7 @@ or dismiss it - and dismissing is archiving the whole inbound thread, which is
 a fact about the mail rather than about this page, so it holds however the row
 was reached and whatever the next sync brings.
 """
+import json
 import time
 from datetime import date, timedelta
 
@@ -55,10 +56,11 @@ def _bills_to_enter(force=False):
     cost entry and no invoice has never cost anything here, and nagging about
     it would make this list noise rather than a list to clear.
 
-    And only vendors that MUST be typed in. Railway is the one whose API will
-    not report money, which is why its figures are copied off a screen by
-    hand and why its ledger could hold two populations at once and double
-    count. Cloudflare and Twilio read their own billing history and usage
+    And only vendors that MUST be typed in. Railway was, until its bills
+    turned out to be readable with an account token (2026-11-01); a Railway
+    account that names its workspace now pulls them, and is given a month's
+    grace below. Hand typing is why its ledger could once hold two
+    populations at once and double count. Cloudflare and Twilio read their own billing history and usage
     records straight from the vendor, so there is nothing for anybody to
     enter, and asking would be inventing a monthly chore for the two vendors
     that already do it themselves.
@@ -85,7 +87,19 @@ def _bills_to_enter(force=False):
                 continue
             have = {r.period_month for r in
                     ProviderInvoice.query.filter_by(provider_id=p.id).all()}
-            missing = [m for m in _months_between(min(starts), this_month)
+            # A Railway account that names its workspace pulls its own bills
+            # (service_costs_service._sync_railway), and its billing month
+            # need not start on the 1st: EntertainHQ's runs 16th to 16th, so
+            # its October bill does not exist until November 16. Ask about
+            # those only once a whole further month has passed, which is
+            # when a missing one means the pull has stopped working.
+            stop = this_month
+            try:
+                if json.loads(p.credentials_json or "{}").get("workspace_id"):
+                    stop = (this_month - timedelta(days=1)).replace(day=1)
+            except ValueError:
+                pass
+            missing = [m for m in _months_between(min(starts), stop)
                        if m not in have]
             if missing:
                 out.append({"provider": p, "missing": missing,

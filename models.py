@@ -890,9 +890,9 @@ class ServiceProvider(db.Model):
     display_name = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     credentials_json = db.Column(db.Text, nullable=True)
-    # For a vendor whose API will not report spend. Railway's schema is all
-    # CPU, memory, disk and network and has no measurement denominated in
-    # money, so the only way to book it is a figure set here once.
+    # For a vendor whose API will not report spend: a figure set here once.
+    # Never Railway's: its usage is in units, but its bills are readable with
+    # an account token and its months are pulled or typed per project.
     monthly_cost = db.Column(db.Float, nullable=True)
     # Day of the month the charge lands, for a flat provider. A vendor whose
     # API reports real charges carries their dates already and leaves this null.
@@ -923,6 +923,17 @@ class ServiceProvider(db.Model):
     # sync. A SID is not an answer to "whose is this" and nobody can read one.
     account_label = db.Column(db.String(200), nullable=True)
 
+    # Or another of Michael's own businesses. EntertainHQ LLC pays for its own
+    # Railway Pro workspace since 2026-09-16 (Michael, 2026-11-01: "a separate
+    # pro account for entertainhq specifically"), so its bill is EntertainHQ's
+    # money, not Built by Bean's: recorded and attributed like a client's
+    # account, never an Expense on this ledger.
+    account_business_id = db.Column(
+        db.Integer,
+        db.ForeignKey("businesses.id", ondelete="SET NULL",
+                      name="fk_service_providers_account_business_id"),
+        nullable=True, index=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -932,11 +943,13 @@ class ServiceProvider(db.Model):
     cost_entries = db.relationship("ServiceCostEntry", back_populates="provider",
                                    cascade="all, delete-orphan", lazy="dynamic")
     account_client = db.relationship("Client", foreign_keys=[account_client_id])
+    account_business = db.relationship("Business", foreign_keys=[account_business_id])
 
     @property
     def is_ours(self):
-        """Whether money spent here is this business's money."""
-        return self.account_client_id is None
+        """Whether money spent here is this business's money: not a client's
+        account, and not one another of Michael's businesses pays for."""
+        return self.account_client_id is None and self.account_business_id is None
 
     def __repr__(self):
         return f"<ServiceProvider {self.display_name}>"

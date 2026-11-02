@@ -4,7 +4,7 @@ import boto3
 from datetime import datetime, timezone, date, timedelta
 from flask import current_app
 
-from models import db, ServiceProvider, ServiceMapping, ServiceCostEntry, Expense
+from models import db, ServiceProvider, ServiceMapping, ServiceCostEntry, Expense, ProviderInvoice
 
 
 def _get_credentials(provider):
@@ -462,7 +462,7 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
         entry.description = description if attributed else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
-        if owner:
+        if not provider.is_ours:
             # Their account, their card. The cost is worth recording and worth
             # seeing against them; it is not money this business spent, so it
             # never becomes an Expense. Any expense a previous sync wrote for
@@ -477,55 +477,195 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
 # ── Railway ─────────────────────────────────────────────────
 
 
+RAILWAY_API = "https://backboard.railway.com/graphql/v2"
+
+# Railway's published prices, per unit its usage API reports in: vCPU-minutes,
+# GB-minutes of memory and of volume, GB sent out. They only WEIGH one project
+# against another; every month is scaled to the invoice, which is the real
+# figure. They match the unit prices on Railway's own invoice lines (memory
+# 2.3148148e-07 a MB-minute, volume 3.4722e-06 a GB-minute).
+RAILWAY_RATES = {
+    "CPU_USAGE": 20.0 / 43200,          # $20 a vCPU-month
+    "MEMORY_USAGE_GB": 10.0 / 43200,    # $10 a GB-month
+    "DISK_USAGE_GB": 0.15 / 43200,      # $0.15 a GB-month of volume
+    "NETWORK_TX_GB": 0.05,              # $0.05 a GB out
+}
+# A recorded invoice this sync wrote, and so may correct. One typed off the
+# bill by hand carries any other note and is never touched.
+RAILWAY_NOTE = "From Railway"
+RAILWAY_SPLIT_SOURCE = "railway-api"
+
+_WORKSPACE_BILLING = """
+query($w: String!) { workspace(workspaceId: $w) {
+  name
+  projects { edges { node { id name } } }
+  customer { invoices { invoiceId periodStart periodEnd total status } }
+} }"""
+_WORKSPACE_USAGE = """
+query($w: String!, $s: DateTime!, $e: DateTime!) {
+  usage(workspaceId: $w, startDate: $s, endDate: $e, includeDeleted: true,
+        measurements: [CPU_USAGE, MEMORY_USAGE_GB, DISK_USAGE_GB, NETWORK_TX_GB],
+        groupBy: [PROJECT_ID]) { measurement value tags { projectId } }
+}"""
+
+
+def _railway_gql(token, query, variables=None, timeout=30):
+    resp = requests.post(RAILWAY_API, json={"query": query, "variables": variables or {}},
+                         headers={"Authorization": f"Bearer {token}",
+                                  "Content-Type": "application/json"}, timeout=timeout)
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        raise ValueError(f"Railway API error: {data['errors'][0].get('message', 'Unknown error')}")
+    return data.get("data") or {}
+
+
+def _railway_when(raw):
+    return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+
+
 def _sync_railway(provider):
+    """Railway's bills, each month's split across its projects by usage.
+
+    The comment that stood here from 2026-08-31 said Railway's API will not
+    tell you what you are spending, and for the token it was probed with that
+    was true: a token scoped below the account cannot see billing at all. An
+    ACCOUNT token can (2026-11-01): `workspace.customer.invoices` is every bill
+    with its period and total in cents, and `usage` grouped by project is what
+    each project used over any range. So once a month nobody types anything:
+
+      - each finished invoice lands in ProviderInvoice under the month its
+        period starts (the convention the hand-typed rows already used: the
+        bill for Aug 1 to Sep 1 is August's). A row somebody typed by hand is
+        left exactly as it is; only rows this sync wrote are corrected;
+      - that month's bill is split across the workspace's projects in
+        proportion to what each used, priced at RAILWAY_RATES and scaled so
+        the projects add up to the invoice to the cent. A month already
+        broken down by hand is left alone.
+
+    `workspace_id` in the credentials says which workspace this provider is.
+    Without one the sync only proves the token works, as before.
+    """
     creds = _get_credentials(provider)
     token = creds.get("api_token", "")
     if not token:
         raise ValueError("Railway API token not configured")
+    workspace_id = (creds.get("workspace_id") or "").strip()
+    if not workspace_id:
+        _railway_gql(token, "query { projects { edges { node { id } } } }")
+        return 0
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-    url = "https://backboard.railway.com/graphql/v2"
+    try:
+        ws = _railway_gql(token, _WORKSPACE_BILLING, {"w": workspace_id}).get("workspace")
+    except ValueError as exc:
+        if "authorized" in str(exc).lower():
+            raise ValueError("This Railway token cannot read the workspace's bills. Use an "
+                             "account token: Railway, Account Settings, Tokens, with no "
+                             "workspace chosen.") from exc
+        raise
+    if not ws:
+        raise ValueError(f"No Railway workspace {workspace_id} for this token")
+    provider.account_label = (ws.get("name") or "")[:200] or provider.account_label
+    projects = {e["node"]["id"]: e["node"]["name"]
+                for e in (ws.get("projects") or {}).get("edges") or []}
+    _adopt_sibling_mappings(provider, projects)
 
-    # Get all projects (Railway public API schema)
-    query = """
-    query {
-        projects {
-            edges {
-                node {
-                    id
-                    name
-                    description
-                    createdAt
-                }
-            }
-        }
-    }
-    """
-    resp = requests.post(url, json={"query": query}, headers=headers, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
+    now = datetime.now(timezone.utc)
+    months = {}
+    for inv in (ws.get("customer") or {}).get("invoices") or []:
+        if inv.get("status") not in ("paid", "open"):
+            continue
+        start, end = _railway_when(inv["periodStart"]), _railway_when(inv["periodEnd"])
+        if end > now:
+            continue  # the period is still running; it is billed when it closes
+        months.setdefault(start.date().replace(day=1), []).append((start, end, inv))
 
-    if "errors" in data:
-        error_msg = data["errors"][0].get("message", "Unknown error") if data["errors"] else "Unknown error"
-        raise ValueError(f"Railway API error: {error_msg}")
+    written = 0
+    for month, invs in sorted(months.items()):
+        amount = round(sum((inv.get("total") or 0) for _, _, inv in invs) / 100.0, 2)
+        dates = ", ".join(f"{s:%b %d} to {e:%b %d}" for s, e, _ in sorted(invs, key=lambda x: x[0]))
+        note = f"{RAILWAY_NOTE}: {len(invs)} invoice{'s' if len(invs) != 1 else ''}, {dates}"
+        row = ProviderInvoice.query.filter_by(provider_id=provider.id, period_month=month).first()
+        if row is None:
+            row = ProviderInvoice(provider_id=provider.id, period_month=month)
+            db.session.add(row)
+        elif not (row.note or "").startswith(RAILWAY_NOTE):
+            continue  # typed off the bill by hand: a fact somebody recorded
+        row.amount = amount
+        row.note = note[:300]
+        db.session.flush()
+        written += _split_railway_month(provider, token, workspace_id, month, invs,
+                                        amount, projects)
+    return written
 
-    # Railway's API will not tell you what you are spending. Its
-    # MetricMeasurement enum is CPU_USAGE, MEMORY_USAGE_GB, DISK_USAGE_GB,
-    # NETWORK_TX_GB and friends, and not one value in it is denominated in
-    # money. Probed 2026-08-31 with the account's own token; `me` and the
-    # workspace queries are Not Authorized for a project token, so the
-    # workspace level billing is out of reach as well.
-    #
-    # Costs come in through the Monthly Costs page instead: once a month, per
-    # Railway project, the amount off the Railway usage screen. The request
-    # above still runs, because it is what proves the token works and it is
-    # what the mapping picker reads its project list from, but nothing here
-    # books money. A flat provider figure and a per mapping monthly_cost would
-    # both charge the same amount every month, which is not how Railway bills.
-    return 0
+
+def _adopt_sibling_mappings(provider, projects):
+    """A Railway project keeps its id when it moves to another workspace, so a
+    mapping made for it under one Railway account is the same answer under the
+    other. Copied, never guessed from a name: EntertainHQ's project moved to its
+    own workspace on 2026-09-16 and was already mapped to its project here."""
+    for pid in projects:
+        rid = f"railway:{pid}"
+        if ServiceMapping.query.filter_by(provider_id=provider.id, resource_identifier=rid).first():
+            continue
+        siblings = (ServiceMapping.query.join(ServiceProvider)
+                    .filter(ServiceProvider.name == "railway",
+                            ServiceProvider.id != provider.id,
+                            ServiceMapping.resource_identifier == rid,
+                            ServiceMapping.is_active.is_(True)).all())
+        for m in siblings:
+            db.session.add(ServiceMapping(
+                provider_id=provider.id, resource_identifier=rid,
+                resource_label=m.resource_label or projects[pid], client_id=m.client_id,
+                project_id=m.project_id, split_percentage=m.split_percentage, is_active=True))
+    db.session.flush()
+
+
+def _split_railway_month(provider, token, workspace_id, month, invs, amount, projects):
+    """One month's bill across its projects. Returns how many entries it wrote."""
+    if amount <= 0:
+        return 0
+    m_start, m_end = _month_bounds(month)
+    for e in ServiceCostEntry.query.filter_by(provider_id=provider.id, period_start=m_start,
+                                              period_end=m_end).all():
+        try:
+            source = json.loads(e.raw_data_json or "{}").get("source")
+        except ValueError:
+            source = None
+        if source != RAILWAY_SPLIT_SOURCE:
+            return 0  # broken down by hand already
+    start = min(s for s, _, _ in invs)
+    end = max(e for _, e, _ in invs)
+    rows = _railway_gql(token, _WORKSPACE_USAGE, {
+        "w": workspace_id, "s": start.isoformat().replace("+00:00", "Z"),
+        "e": end.isoformat().replace("+00:00", "Z")}, timeout=60).get("usage") or []
+    weight = {}
+    for r in rows:
+        pid = (r.get("tags") or {}).get("projectId")
+        rate = RAILWAY_RATES.get(r.get("measurement"))
+        if pid and rate:
+            weight[pid] = weight.get(pid, 0.0) + (r.get("value") or 0.0) * rate
+    weight = {pid: w for pid, w in weight.items() if w > 0}
+    span = {"period": [start.date().isoformat(), end.date().isoformat()]}
+    if not weight:
+        _record_cost_entry(provider, f"{provider.name}:other", m_start, m_end, amount,
+                           f"{provider.display_name} - Not broken down",
+                           {"source": RAILWAY_SPLIT_SOURCE, "label": "Not broken down", **span})
+        return 1
+    total = sum(weight.values())
+    cents = {pid: int(round(amount * 100 * w / total)) for pid, w in weight.items()}
+    # Whole cents that add up to the bill exactly: the rounding goes on the
+    # largest share, where a cent is the smallest part of anything.
+    largest = max(cents, key=lambda pid: weight[pid])
+    cents[largest] += int(round(amount * 100)) - sum(cents.values())
+    for pid, c in cents.items():
+        if c <= 0:
+            continue
+        label = projects.get(pid) or f"Deleted project {pid[:8]}"
+        _record_cost_entry(provider, f"railway:{pid}", m_start, m_end, c / 100.0,
+                           f"{provider.display_name} - {label}",
+                           {"source": RAILWAY_SPLIT_SOURCE, "label": label, **span})
+    return len(cents)
 
 
 # ── Twilio ──────────────────────────────────────────────────
@@ -775,12 +915,26 @@ def list_provider_resources(provider):
         elif provider.name == "railway":
             token = creds.get("api_token", "")
             headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-            query = '{ projects { edges { node { id name } } } }'
-            resp = requests.post("https://backboard.railway.com/graphql/v2",
-                                 json={"query": query}, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                data = resp.json()
-                for edge in data.get("data", {}).get("projects", {}).get("edges", []):
+            # This provider's own workspace when it names one, so two Railway
+            # accounts never list each other's projects; the token-wide list
+            # otherwise, or when the token cannot read the workspace yet.
+            edges = None
+            if creds.get("workspace_id"):
+                try:
+                    ws = _railway_gql(token, "query($w: String!) { workspace(workspaceId: $w) "
+                                      "{ projects { edges { node { id name } } } } }",
+                                      {"w": creds["workspace_id"]}, timeout=15).get("workspace")
+                    edges = ((ws or {}).get("projects") or {}).get("edges")
+                except Exception:
+                    edges = None
+            if edges is None:
+                query = '{ projects { edges { node { id name } } } }'
+                resp = requests.post("https://backboard.railway.com/graphql/v2",
+                                     json={"query": query}, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    edges = resp.json().get("data", {}).get("projects", {}).get("edges", [])
+            if edges is not None:
+                for edge in edges:
                     node = edge.get("node", {})
                     resources.append({
                         "id": f"railway:{node.get('id', '')}",

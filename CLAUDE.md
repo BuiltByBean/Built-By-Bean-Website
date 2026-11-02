@@ -240,6 +240,29 @@ calls the account, read back on each Twilio sync, because a SID answers
 nobody's question about whose it is and the answer decides whose money it
 was. `tools/test_whose_account.py`.
 
+`account_business_id` is the same answer for another of Michael's own
+businesses: EntertainHQ LLC pays for its own Railway Pro workspace since
+2026-09-16, so "Railway (EntertainHQ)" records and attributes its costs and
+writes no Expense here. `is_ours` is both columns null, and every place that
+decides whether a cost is this business's money asks `is_ours`, never one
+column; the hosting page's all-time Railway figure reads only the provider
+that is ours.
+
+**Railway's bills pull themselves.** The board believed from 2026-08-31 that
+Railway's API would not report money, because the token it was probed with
+was scoped below the account. An ACCOUNT token reads `workspace.customer.invoices`
+(each bill, period and total in cents) and `usage` grouped by project. A Railway
+provider whose credentials carry `workspace_id` records each finished bill in
+`ProviderInvoice` under the month its period starts (the convention the typed
+rows used: Aug 1 to Sep 1 is August), and splits the month across projects by
+usage priced at `RAILWAY_RATES`, scaled so the projects add up to the bill to
+the cent. Never touched: a bill typed by hand (any note not starting "From
+Railway") and a month broken down by hand. Never written: a period still
+running. A project that moves workspace keeps its Railway id, so the other
+account's mapping is copied rather than guessed. EntertainHQ bills 16th to
+16th, which is why Needs attention gives a pulled account a month's grace.
+Saving a Railway provider with a token pulls at once. `tools/test_railway_billing.py`.
+
 Chasing that one found a second, unrelated fault on the same page. The ledger
 ordered by `Expense.date.desc()` and nothing else, and every vendor charge for
 a month is dated the last day of it, so far more than twenty rows share a date.

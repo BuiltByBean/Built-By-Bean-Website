@@ -348,7 +348,11 @@ def _railway_all_time():
     tile says which of the two it is showing rather than presenting a guess
     as a fact.
     """
-    provider = ServiceProvider.query.filter_by(name="railway").first()
+    # Built by Bean's own Railway account. EntertainHQ's workspace is a second
+    # Railway provider since 2026-11-01, and its bill is EntertainHQ LLC's.
+    provider = (ServiceProvider.query
+                .filter_by(name="railway", account_client_id=None, account_business_id=None)
+                .order_by(ServiceProvider.id).first())
     if provider is None:
         return {"amount": 0.0, "source": "none", "months": 0}
     recorded = (db.session.query(db.func.coalesce(db.func.sum(ProviderInvoice.amount), 0.0),

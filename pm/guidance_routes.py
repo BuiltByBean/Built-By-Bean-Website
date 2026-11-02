@@ -224,9 +224,11 @@ def costs():
                 prefix, which is a guess, and is the shape that double
                 counted Railway when two things wrote rows that both matched.
 
-    Railway is the only vendor whose API will not report money, which is why
-    it is the only one entered by hand and the only one that could break this
-    way. Calling a synced figure "derived" reads as "this number is a guess"
+    Railway was believed to be the only vendor whose API will not report
+    money, which is why it was entered by hand and the only one that could
+    break this way. Its API does report bills to an account token (2026-11-01),
+    and a Railway provider that names its workspace now pulls them; one
+    without still waits to be typed in. Calling a synced figure "derived" reads as "this number is a guess"
     and would have had somebody typing in invoices for two vendors that
     already do it themselves.
     """
