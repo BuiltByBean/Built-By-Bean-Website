@@ -221,7 +221,11 @@ class Client(db.Model):
 
     @property
     def total_revenue(self):
-        return sum(inv.amount_paid for inv in self.invoices if inv.status == "paid")
+        """Earned from this client: each paid invoice less its sales tax, and
+        nothing from a catch-up invoice, which bills back tax. The same reading
+        as the dashboard's Total Revenue (stripe_service.get_stripe_invoice_totals)."""
+        return sum((inv.amount_paid or 0.0) - (inv.tax or 0.0) for inv in self.invoices
+                   if inv.status == "paid" and not inv.sales_tax_catchup)
 
     # No total_profit here on purpose. Client.total_expenses and the sum of
     # the projects' expenses are not the same number, so a profit property on

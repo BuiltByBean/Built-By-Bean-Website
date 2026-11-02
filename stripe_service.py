@@ -486,11 +486,13 @@ def _empty_invoice_totals():
     apart. Callers add the buckets they mean.
     """
     return {
-        "paid": 0.0,          # collected
+        "paid": 0.0,          # collected, sales tax and all: cash in
+        "revenue": 0.0,       # collected and earned: paid less its tax, no back tax
         "open": 0.0,          # sent, still owed
         "draft": 0.0,         # written, possibly dated, not sent yet
         "open_count": 0,      # how many invoices are sitting sent and unpaid
         "paid_by_customer": {},
+        "revenue_by_customer": {},
         "open_by_customer": {},
         "draft_by_customer": {},
     }
@@ -704,6 +706,13 @@ def get_stripe_invoice_totals(ttl=300):
     `amount_due`, so a part-paid invoice contributes only what has actually
     landed to one and only what is still owed to the other. `draft` uses the
     invoice total, since nothing has been paid against it by definition.
+
+    `revenue` is what the business earned out of `paid`: each paid invoice's
+    amount less the sales tax on it, and nothing from a catch-up invoice,
+    which bills back tax and sells nothing. Sales tax is the state's money
+    passing through. The dashboard's Total Revenue, its per-client revenue,
+    its Profit before tax and the Businesses page all read this one (Michael,
+    2026-11-01: "take tax out"); `paid` stays for the pages that mean cash in.
     """
     out = _empty_invoice_totals()
     for inv in get_stripe_invoices(ttl=ttl):
@@ -721,6 +730,12 @@ def get_stripe_invoice_totals(ttl=300):
             out["paid"] += inv["amount_paid"]
             if customer:
                 out["paid_by_customer"][customer] = out["paid_by_customer"].get(customer, 0.0) + inv["amount_paid"]
+            if not inv.get("catchup"):
+                earned = inv["amount_paid"] - (inv.get("tax") or 0.0)
+                out["revenue"] += earned
+                if customer:
+                    out["revenue_by_customer"][customer] = (
+                        out["revenue_by_customer"].get(customer, 0.0) + earned)
         elif status == "open":
             out["open"] += inv["amount_due"]
             out["open_count"] += 1

@@ -846,7 +846,9 @@ def create_app():
             get_overdue_invoices, get_stalled_subscriptions,
         )
         stripe_totals = get_stripe_invoice_totals()
-        stripe_by_customer = stripe_totals["paid_by_customer"]
+        # Revenue is earned money: paid less its sales tax, no back-tax
+        # invoices (get_stripe_invoice_totals). Profit below is built on it.
+        stripe_by_customer = stripe_totals["revenue_by_customer"]
 
         # Only clients count toward the forward figure. A Stripe subscriber
         # with no client record is somebody else's line of business.
@@ -859,7 +861,7 @@ def create_app():
             client_customer_ids
         )
 
-        total_revenue = stripe_totals["paid"]
+        total_revenue = stripe_totals["revenue"]
         total_awaiting = stripe_totals["open"]
         total_invoiced = (
             stripe_totals["open"] + stripe_totals["draft"] + scheduled_subscriptions

@@ -320,10 +320,20 @@ the tax numbers, the next return and the locations live. The logo is an
 uploaded image or a My Apps tile's icon (`logo_file`, `logo_app_id`), one or
 the other. Lifetime revenue (`business_routes.lifetime_revenue`) for the
 business the board bills from IS the dashboard's Total Revenue, read from the
-same `get_stripe_invoice_totals()["paid"]`. It shipped as the board's invoice
-rows less tax and back tax, and the owner found the two pages disagreeing the
-same evening: one business's takings are one number, so if revenue is ever to
-leave tax out it changes in one place for both. A business on its own app shows what the app last reported
+same `get_stripe_invoice_totals()["revenue"]`. It shipped as the board's
+invoice rows while the dashboard read Stripe's cash total, and the owner found
+the two pages disagreeing the same evening: one business's takings are one
+number.
+
+**Revenue is earned money, never sales tax** (owner, 2026-11-01, "take tax
+out"). Every revenue figure is paid less the tax on it, with nothing from a
+catch-up invoice: `get_stripe_invoice_totals()["revenue"]` (and
+`revenue_by_customer`) for the dashboard's Total Revenue, its per-client
+column, its Profit before tax and the Businesses tile; `Client.total_revenue`,
+the same reading over the local rows, for the client page and its profit.
+`paid` stays as cash in, tax and all, for the pages that mean cash, and the
+guidance API's `paid` key keeps that meaning. A new revenue figure reads one of
+those two, never `amount_paid` raw. A business on its own app shows what the app last reported
 (`revenue_total`); the list never asks the app, the business's page asks with
 a six second wait when the answer is an hour old, and "App not reporting" is
 said rather than $0.00. `tools/test_business_pages.py`.

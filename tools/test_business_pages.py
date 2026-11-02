@@ -8,9 +8,12 @@ and proves:
 
   1. The list shows each business's name, start date and lifetime revenue, and
      no WebFile or taxpayer number; each tile opens its business.
-  2. Lifetime revenue for the business the board bills from is the
-     dashboard's Total Revenue, the same figure on both pages (they disagreed
-     the evening this shipped). A business on its app shows what the app last
+  2. Revenue is earned money: paid less its sales tax, nothing from a
+     back-tax invoice. The Businesses tile, the dashboard's Total Revenue, its
+     per-client column, its Profit before tax and the client page all read
+     that same figure (they disagreed the evening this shipped, and then
+     Michael chose to take the tax out). The API's "paid" stays cash in.
+     A business on its app shows what the app last
      said, the list never asks the app, and the business's page asks only when
      that answer is old. A business with nothing to count says so.
   3. The business's page carries its tax: the numbers, the next return, eSystems.
@@ -34,6 +37,7 @@ sys.path.insert(0, str(ROOT))
 TMP = tempfile.mkdtemp(prefix="board-business-pages-")
 os.environ["DATABASE_URL"] = "sqlite:///" + (pathlib.Path(TMP) / "board.db").as_posix()
 os.environ["UPLOAD_FOLDER"] = TMP
+os.environ["GUIDANCE_API_KEY"] = "test-key"
 os.environ.setdefault("SECRET_KEY", "test")
 
 try:
@@ -81,6 +85,7 @@ stripe_service.get_stripe_invoices = lambda ttl=300: [
 application = create_app()
 application.config["UPLOAD_FOLDER"] = TMP
 application.config["WTF_CSRF_ENABLED"] = False
+application.config["GUIDANCE_API_KEY"] = "test-key"
 FAIL = []
 PNG = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 120)
 
@@ -95,7 +100,7 @@ with application.app_context():
     db.create_all()
     boss = User(username="mb", email="mb@example.test", first_name="Michael", role="ceo")
     boss.set_password("x")
-    client = Client(name="J&D Entertainment", email="jd@example.test")
+    client = Client(name="J&D Entertainment", email="jd@example.test", stripe_customer_id="cus_1")
     db.session.add_all([boss, client])
     db.session.flush()
     site = AppLink(name="Built By Bean", url="https://builtbybeans.com", icon_file="bbb.png")
@@ -120,7 +125,7 @@ with application.app_context():
                                issued_on=date(2026, 10, n), sales_tax_catchup=catchup,
                                stripe_invoice_id=f"in_{n}"))
     db.session.commit()
-    ids = dict(boss=boss.id, bbb=bbb.id, ehq=ehq.id, shelf=shelf.id, site=site.id,
+    ids = dict(client=client.id, boss=boss.id, bbb=bbb.id, ehq=ehq.id, shelf=shelf.id, site=site.id,
                ehq_app=ehq_app.id, bare=bare.id)
 
     print("The migration")
@@ -153,9 +158,19 @@ check("with its start date", "Jan 17, 2024" in html and "Oct 05, 2026" in html,
 dash = c.get("/admin/finances").get_data(as_text=True)
 m = re.search(r"Total Revenue.*?(\$[\d,]+\.\d\d)", dash, re.S)
 dash_total = m.group(1) if m else None
-check("the dashboard's Total Revenue is what Stripe says was paid", dash_total == "$13,165.10", dash_total)
+check("the dashboard's Total Revenue is paid less tax, no back tax: $12,350.00", dash_total == "$12,350.00", dash_total)
 check("and the Businesses tile shows the same figure", dash_total and dash_total in html,
       re.findall(r"\$[\d,]+\.\d\d", html))
+m = re.search(r"Profit before tax.*?(-?\$[\d,]+\.\d\d)", dash, re.S)
+check("Profit before tax is built on it (no expenses here)", m and m.group(1) == "$12,350.00", m and m.group(1))
+m = re.search(r"J&amp;D Entertainment.*?text-emerald-400\">(\$[\d,]+\.\d\d)", dash, re.S)
+check("the dashboard's per-client revenue leaves the tax out too", m and m.group(1) == "$12,350.00", m and m.group(1))
+client_page = c.get(f"/admin/clients/{ids['client']}").get_data(as_text=True)
+m = re.search(r"Total Revenue</p>\s*<p[^>]*>(\$[\d,]+\.\d\d)", client_page)
+check("the client page's Total Revenue is the same reading", m and m.group(1) == "$12,350.00", m and m.group(1))
+costs = c.get("/api/guidance/costs", headers={"Authorization": "Bearer test-key"}).get_json() or {}
+paid = next((x.get("paid") for x in costs.get("clients", []) if x.get("name") == "J&D Entertainment"), None)
+check("the API's paid is still cash in, tax and back tax included", paid == 13165.1, paid)
 check("a business on its app that has not reported says so", "App not reporting" in html)
 check("a business with nothing to count says so", "Not tracked" in html)
 check("no tax numbers up front", "32093304155" not in html and "RT000000" not in html)

@@ -226,19 +226,19 @@ def periods_for(business, today, board=None):
 # ── The businesses, and each one ─────────────────────────────
 
 def lifetime_revenue(business, ask=False):
-    """Everything the business has been paid, or None when nothing counts it.
+    """Everything the business has earned, or None when nothing counts it.
 
-    "board" is the dashboard's Total Revenue, read from the same call: what
-    Stripe says was paid on every invoice, tax included. It shipped on
-    2026-11-01 as the board's own invoice rows less tax and back tax, and that
-    evening Michael found it did not match the dashboard. A business's takings
-    are one number, so the two pages read one function; if revenue is ever to
-    leave the tax out, it changes there, for both. "hub" is what the
+    "board" is the dashboard's Total Revenue, read from the same call: paid
+    less its sales tax, no back-tax invoices. It shipped on 2026-11-01 as the
+    board's own invoice rows while the dashboard read Stripe's cash total, and
+    that evening Michael found the two did not match; then he chose revenue
+    without the tax, for both. One business's takings are one number, so the
+    two pages read one function. "hub" is what the
     business's own app last said, asked again only when `ask` and the answer
     is older than REVENUE_FRESH_SECONDS. "manual" has nothing to count.
     """
     if business.sales_source == "board":
-        return round(get_stripe_invoice_totals()["paid"], 2)
+        return round(get_stripe_invoice_totals()["revenue"], 2)
     if business.sales_source == "hub":
         if ask:
             age = None
