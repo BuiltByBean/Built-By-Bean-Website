@@ -1304,7 +1304,7 @@ def _map_edit_context(business):
         "edges": list(business.edges),
         "need_options": [("", "No particular need")] + [(str(n.id), f"{n.name} ({layer_label.get(n.layer, n.layer)})")
                                                         for n in needs],
-        "playbook_options": [("", "No runbook")] + [(str(p.id), p.display_name) for p in playbooks],
+        "playbook_options": [("", "No playbook")] + [(str(p.id), p.display_name) for p in playbooks],
         "node_options": [(str(n.id), f"{n.display_name} ({n.kind_label})") for n in nodes],
         "preselect_kind": "service" if want else request.args.get("kind", "service"),
         "preselect_need": want,
@@ -1339,8 +1339,15 @@ def _fill_node(node):
         node.need_id = need_id if need_id and db.session.get(BusinessNeed, need_id) else None
         pb_id = request.form.get("playbook_id", type=int)
         node.playbook_id = pb_id if pb_id and db.session.get(Playbook, pb_id) else None
+        if node.playbook_id is None and node.name:
+            # Typed "Mercury" with no playbook picked, and there is one: it is
+            # that playbook's, which is what the map's red mark is asking for.
+            want = re.sub(r"[^a-z0-9]+", "-", node.name.lower()).strip("-")
+            match = next((p for p in Playbook.query.all()
+                          if p.slug == want or re.sub(r"[^a-z0-9]+", "-", (p.display_name or "").lower()).strip("-") == want), None)
+            node.playbook_id = match.id if match else None
         if not node.name and node.playbook_id is None:
-            return "A service with no runbook needs a name."
+            return "A service with no playbook needs a name."
     else:
         node.need_id = None
         node.playbook_id = None

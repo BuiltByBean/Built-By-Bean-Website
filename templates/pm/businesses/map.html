@@ -10,7 +10,7 @@
   each, the services that power it; further out the outcomes a partner asks
   about; on the outside the people who use it. Every line says why on hover.
   A dashed amber slot is an essential nobody has filled; a red mark is a
-  vendor with no runbook; an outcome's colour is its status.
+  vendor with no playbook; an outcome's colour is its status.
 
   The tiles are HTML at real pixel size, placed from the same pan and zoom
   the SVG lines use, so a logo is sharp at every zoom. Hover shows the card;
@@ -79,7 +79,7 @@
             {% endif %}
             {% if map.counts.no_runbook %}
             <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300 whitespace-nowrap">
-                {{ map.counts.no_runbook }} without a runbook</span>
+                {{ map.counts.no_runbook }} without a playbook</span>
             {% endif %}
             <button type="button" @click="zoomBy(1.25)" aria-label="Zoom in" title="Zoom in"
                     class="w-11 h-11 inline-flex items-center justify-center rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors text-lg font-bold">+</button>
@@ -230,7 +230,7 @@
                                        'bg-red-900/30 text-red-300': card.item.status === 'missing' && card.item.kind === 'outcome',
                                        'bg-surface-800 text-surface-300': card.item.status === 'planned'}"
                               x-text="card.item.status_label"></span>
-                        <span x-show="card.item.runbook_missing" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No runbook yet</span>
+                        <span x-show="card.item.runbook_missing" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No playbook yet</span>
                     </div>
                     <p class="text-sm text-surface-200 break-words" x-show="card.item.role" x-text="card.item.role"></p>
                     <template x-if="card.item.kind === 'hole' && card.item.suggestions && card.item.suggestions.length">
@@ -255,7 +255,7 @@
                                class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Edit</a>
                         </template>
                         <template x-if="card.item.runbook">
-                            <a :href="card.item.runbook" class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Runbook</a>
+                            <a :href="card.item.runbook" class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Playbook</a>
                         </template>
                         <template x-if="card.item.url">
                             <a :href="card.item.url" target="_blank" rel="noopener" class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Open</a>

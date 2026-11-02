@@ -58,6 +58,7 @@ application.config["WTF_CSRF_ENABLED"] = False
 FAIL = []
 MIGRATIONS = ("c7f2a9e41d05_the_business_map", "e5a3c7b19d42_media_is_on_railway_not_aws",
               "f1d6b8c3a924_what_the_map_delivers", "a2c9e7d14b58_the_map_is_a_network")
+LATER = ("b6d1f3a8c729_more_questions_a_partner_asks", "c0e4b7d2a915_tiles_adopt_their_playbook")
 
 
 def check(name, cond, detail=""):
@@ -152,6 +153,17 @@ with application.test_request_context():
     run_migration(MIGRATIONS[3])
     check("running it again adds nothing", len(db.session.get(Business, ids["ehq"]).nodes) == len(e.nodes))
 
+    # The playbook filed after the seed, and the tile that should wear it.
+    db.session.add(Playbook(slug="mercury", display_name="Mercury", is_active=True))
+    db.session.commit()
+    for name in LATER:
+        run_migration(name)
+    e = db.session.get(Business, ids["ehq"])
+    merc = next(n for n in e.nodes if n.display_name == "Mercury")
+    check("Mercury's tile adopted the Mercury playbook", merc.playbook is not None and merc.playbook.slug == "mercury")
+    check("Zapier, which EntertainHQ does not use, is off the map", not any(n.display_name == "Zapier" for n in e.nodes))
+    check("the eight later outcomes are on it", any(n.name == "Talent gets paid" and n.status == "missing" for n in e.nodes))
+
     print("\nTHE LAYOUT:")
     m = br._map_for(db.session.get(Business, ids["ehq"]))
     nodes = {n["key"]: n for n in m["nodes"]}
@@ -245,8 +257,8 @@ with application.test_request_context():
     m = br._map_for(db.session.get(Business, ids["ehq"]))
     check("and the new person sits outside the new surface", near(next(n for n in m["nodes"] if n["name"] == "Investors"),
                                                                  next(n for n in m["nodes"] if n["name"] == "Partner portal"), 1.0))
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "service", "role": "no name, no runbook"}, follow_redirects=True)
-check("a service with neither a runbook nor a name is refused", b"needs a name" in r.data)
+r = c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "service", "role": "no name, no playbook"}, follow_redirects=True)
+check("a service with neither a playbook nor a name is refused", b"needs a name" in r.data)
 c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "service", "need_id": acct, "name": "QuickBooks", "status": "setting_up",
                                                           "role": "The books."})
 with application.test_request_context():

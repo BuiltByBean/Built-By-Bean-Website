@@ -114,7 +114,7 @@
             <p class="text-sm text-white mt-1 break-words">
                 {{ map_counts.services }} service{{ '' if map_counts.services == 1 else 's' }}
                 {%- if map_counts.holes %}, <span class="text-amber-300">{{ map_counts.holes }} hole{{ '' if map_counts.holes == 1 else 's' }}</span>{% endif %}
-                {%- if map_counts.no_runbook %}, <span class="text-red-300">{{ map_counts.no_runbook }} without a runbook</span>{% endif %}
+                {%- if map_counts.no_runbook %}, <span class="text-red-300">{{ map_counts.no_runbook }} without a playbook</span>{% endif %}
             </p>
         </div>
         <span class="shrink-0 inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">

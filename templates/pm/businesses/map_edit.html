@@ -30,7 +30,7 @@
     <div class="min-w-0">
         <label for="nm-{{ n.id if n else 'new' }}" class="{{ lbl }}">Name</label>
         <input id="nm-{{ n.id if n else 'new' }}" name="name" maxlength="120" value="{{ n.name if n else '' }}"
-               placeholder="Needed unless a runbook names it" class="{{ field }}">
+               placeholder="Needed unless a playbook names it" class="{{ field }}">
     </div>
     <div class="min-w-0" x-show="{{ kind_model }} === 'surface'">
         <p class="{{ lbl }}">What kind of surface</p>
@@ -41,8 +41,8 @@
         {{ select_dropdown('need_id', need_options, (n.need_id | string if n and n.need_id else preselect_id if not n else ''), 'No particular need', full_width=true) }}
     </div>
     <div class="min-w-0" x-show="{{ kind_model }} === 'service'">
-        <p class="{{ lbl }}">Runbook</p>
-        {{ select_dropdown('playbook_id', playbook_options, (n.playbook_id | string if n and n.playbook_id else ''), 'No runbook', full_width=true) }}
+        <p class="{{ lbl }}">Playbook</p>
+        {{ select_dropdown('playbook_id', playbook_options, (n.playbook_id | string if n and n.playbook_id else ''), 'No playbook', full_width=true) }}
     </div>
     <div class="min-w-0" x-show="{{ kind_model }} === 'surface'">
         <p class="{{ lbl }}">Status</p>
@@ -115,7 +115,7 @@
                     <div class="min-w-0 flex-1">
                         <p class="text-base font-bold text-white break-words">{{ n.display_name }}</p>
                         {% if n.kind == 'service' and n.playbook_id is none and not (n.need and n.need.in_house) %}
-                        <span class="inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No runbook yet</span>
+                        <span class="inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No playbook yet</span>
                         {% endif %}
                     </div>
                 </div>
