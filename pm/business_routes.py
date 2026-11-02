@@ -1261,52 +1261,65 @@ def hub_get_file():
 
 # ── The map: everything that makes one business run ─────────
 #
-# business_map.layout does the drawing; this fetches, edits and seeds. The
-# map page is the whole content area with the window never scrolling, so it
-# reads like the overlay Michael asked for and still has an address, a back
-# button and a place on the Businesses tile.
+# business_map.layout does the drawing; this fetches, edits and fetches
+# marks. The map page is the whole content area with the window never
+# scrolling, so it reads like the overlay Michael asked for and still has an
+# address, a back button and a place on the Businesses tile. Every kind of
+# thing on it is a BusinessNode and every line a BusinessEdge with its why.
 
 import business_map  # noqa: E402
-from models import (BusinessCapability, BusinessCapabilityLink, BusinessLink, BusinessNeed,  # noqa: E402
-                    BusinessNeedLink, BusinessService, Playbook)
+from models import BusinessEdge, BusinessNeed, BusinessNeedLink, BusinessNode, Playbook  # noqa: E402
+
+# The folder is the one the first version used for a service's own mark, so
+# every file fetched before the nodes table existed is still where its row
+# says it is.
+NODE_ICON_DIR = "service_icons"
+MARK_BATCH = 8
 
 
 def _map_for(business):
     needs = BusinessNeed.query.order_by(BusinessNeed.sort_order, BusinessNeed.id).all()
-    return business_map.layout(business, needs, list(business.services), list(business.map_links),
-                               BusinessNeedLink.query.all(), list(business.capabilities))
+    return business_map.layout(business, list(business.nodes), list(business.edges), needs,
+                               BusinessNeedLink.query.all())
 
 
 @business_bp.route("/admin/businesses/<int:id>/map")
 @ceo_required
 def map_page(id):
     business = db.session.get(Business, id) or abort(404)
-    return render_template("pm/businesses/map.html", business=business, map=_map_for(business),
-                           layers=business_map.LAYERS)
+    return render_template("pm/businesses/map.html", business=business, map=_map_for(business))
 
 
 def _map_edit_context(business):
     needs = BusinessNeed.query.order_by(BusinessNeed.sort_order, BusinessNeed.id).all()
     playbooks = Playbook.query.filter_by(is_active=True).order_by(Playbook.display_name).all()
-    order = {key: i for i, (key, _l, _c) in enumerate(business_map.LAYERS)}
-    services = sorted(business.services, key=lambda s: (
-        order.get((s.need.layer if s.need else s.layer) or "operations", 99),
-        s.need.sort_order if s.need else 10_000, s.display_name.lower()))
+    order = {k: i for i, (k, _l) in enumerate(BusinessNode.KINDS)}
+    nodes = sorted(business.nodes, key=lambda n: (order.get(n.kind, 9), n.sort_order, n.display_name.lower()))
+    by_kind = {k: [n for n in nodes if n.kind == k] for k, _l in BusinessNode.KINDS}
+    layer_label = dict((k, l) for k, l, _c in business_map_layers())
+    want = request.args.get("need", "")
     return {
-        "business": business, "needs": needs, "playbooks": playbooks, "services": services,
-        "links": list(business.map_links), "layers": business_map.LAYERS,
-        "statuses": business_map.STATUSES,
-        "need_options": [("", "No particular need")] + [(str(n.id), f"{n.name} ({business_map.LAYER_LABEL[n.layer]})")
+        "business": business, "needs": needs, "playbooks": playbooks, "nodes": nodes, "by_kind": by_kind,
+        "kinds": BusinessNode.KINDS, "statuses": BusinessNode.STATUSES, "surface_kinds": BusinessNode.SURFACE_KINDS,
+        "edges": list(business.edges),
+        "need_options": [("", "No particular need")] + [(str(n.id), f"{n.name} ({layer_label.get(n.layer, n.layer)})")
                                                         for n in needs],
         "playbook_options": [("", "No runbook")] + [(str(p.id), p.display_name) for p in playbooks],
-        "service_options": [(str(s.id), s.display_name) for s in services],
-        "layer_options": [(key, label) for key, label, _c in business_map.LAYERS],
-        "preselect_need": request.args.get("need", ""),
-        "preselect_id": next((str(n.id) for n in needs if n.slug == request.args.get("need", "")), ""),
-        "capabilities": list(business.capabilities),
-        "capability_statuses": BusinessCapability.STATUSES,
-        "marks_waiting": sum(1 for s in business.services if s.wants_mark),
+        "node_options": [(str(n.id), f"{n.display_name} ({n.kind_label})") for n in nodes],
+        "preselect_kind": "service" if want else request.args.get("kind", "service"),
+        "preselect_need": want,
+        "preselect_id": next((str(n.id) for n in needs if n.slug == want), ""),
+        "marks_waiting": sum(1 for n in business.nodes if n.wants_mark),
     }
+
+
+def business_map_layers():
+    """The business playbook's layers, for the need picker's labels."""
+    return (
+        ("legal", "Legal", ""), ("money", "Money", ""), ("infrastructure", "Infrastructure", ""),
+        ("product", "Product", ""), ("operations", "Operations", ""), ("comms", "Comms", ""),
+        ("growth", "Growth", ""), ("intelligence", "Intelligence", ""),
+    )
 
 
 @business_bp.route("/admin/businesses/<int:id>/map/edit")
@@ -1316,130 +1329,50 @@ def map_edit(id):
     return render_template("pm/businesses/map_edit.html", **_map_edit_context(business))
 
 
-def _fill_service(service):
-    """Copy the form onto a service. Returns an error string or None."""
-    need_id = request.form.get("need_id", type=int)
-    service.need_id = need_id if need_id and db.session.get(BusinessNeed, need_id) else None
-    pb_id = request.form.get("playbook_id", type=int)
-    service.playbook_id = pb_id if pb_id and db.session.get(Playbook, pb_id) else None
-    service.name = _text("name", 100)
-    if not service.name and service.playbook_id is None:
-        return "A service with no runbook needs a name."
-    layer = _text("layer", 20)
-    service.layer = layer if layer in business_map.LAYER_INDEX else "operations"
-    service.role = _text("role", 400)
+def _fill_node(node):
+    """Copy the form onto a node. Returns an error string or None."""
+    kind = _text("kind", 12) or node.kind or "service"
+    node.kind = kind if kind in dict(BusinessNode.KINDS) else "service"
+    node.name = _text("name", 120)
+    if node.kind == "service":
+        need_id = request.form.get("need_id", type=int)
+        node.need_id = need_id if need_id and db.session.get(BusinessNeed, need_id) else None
+        pb_id = request.form.get("playbook_id", type=int)
+        node.playbook_id = pb_id if pb_id and db.session.get(Playbook, pb_id) else None
+        if not node.name and node.playbook_id is None:
+            return "A service with no runbook needs a name."
+    else:
+        node.need_id = None
+        node.playbook_id = None
+        if not node.name:
+            return "It needs a name."
+    node.role = _text("role", 400)
+    allowed = dict(BusinessNode.STATUSES.get(node.kind, ()))
     status = _text("status", 12)
-    service.status = status if status in business_map.STATUS_LABEL else "running"
-    service.url = _text("url", 300)
-    service.notes = (request.form.get("notes") or "").strip()
+    node.status = status if status in allowed else (next(iter(allowed), "") if allowed else "")
+    node.url = _text("url", 300)
+    sk = _text("surface_kind", 12)
+    node.surface_kind = sk if node.kind == "surface" and sk in dict(BusinessNode.SURFACE_KINDS) else ""
+    node.notes = (request.form.get("notes") or "").strip()
     return None
 
 
-@business_bp.route("/admin/businesses/<int:id>/map/services", methods=["POST"])
-@ceo_required
-def service_add(id):
-    business = db.session.get(Business, id) or abort(404)
-    service = BusinessService(business_id=business.id)
-    error = _fill_service(service)
-    if error:
-        flash(error, "error")
-    else:
-        db.session.add(service)
-        db.session.flush()
-        if service.wants_mark:
-            fetch_service_mark(service)
-        db.session.commit()
-        flash(f"{service.display_name} is on the map.", "success")
-    return redirect(url_for("businesses.map_edit", id=business.id) + "#services")
+# ── Marks ────────────────────────────────────────────────────
 
-
-@business_bp.route("/admin/businesses/<int:id>/map/services/<int:sid>", methods=["POST"])
-@ceo_required
-def service_save(id, sid):
-    service = db.session.get(BusinessService, sid) or abort(404)
-    if service.business_id != id:
-        abort(404)
-    error = _fill_service(service)
-    if error:
-        db.session.rollback()
-        flash(error, "error")
-    else:
-        if service.wants_mark:
-            fetch_service_mark(service)
-        db.session.commit()
-        flash("Saved.", "success")
-    return redirect(url_for("businesses.map_edit", id=id) + f"#service-{sid}")
-
-
-@business_bp.route("/admin/businesses/<int:id>/map/services/<int:sid>/delete", methods=["POST"])
-@ceo_required
-def service_delete(id, sid):
-    service = db.session.get(BusinessService, sid) or abort(404)
-    if service.business_id != id:
-        abort(404)
-    name = service.display_name
-    # Its links go with it, by hand: SQLite does not enforce the cascade.
-    for link in list(BusinessLink.query.filter(
-            (BusinessLink.from_service_id == sid) | (BusinessLink.to_service_id == sid))):
-        db.session.delete(link)
-    db.session.delete(service)
-    db.session.commit()
-    flash(f"{name} is off the map.", "success")
-    return redirect(url_for("businesses.map_edit", id=id) + "#services")
-
-
-@business_bp.route("/admin/businesses/<int:id>/map/links", methods=["POST"])
-@ceo_required
-def link_add(id):
-    business = db.session.get(Business, id) or abort(404)
-    a = db.session.get(BusinessService, request.form.get("from_service_id", type=int) or 0)
-    b = db.session.get(BusinessService, request.form.get("to_service_id", type=int) or 0)
-    if not a or not b or a.business_id != id or b.business_id != id or a.id == b.id:
-        flash("Pick two different services on this map.", "error")
-        return redirect(url_for("businesses.map_edit", id=id) + "#links")
-    existing = BusinessLink.query.filter_by(business_id=id).filter(
-        ((BusinessLink.from_service_id == a.id) & (BusinessLink.to_service_id == b.id))
-        | ((BusinessLink.from_service_id == b.id) & (BusinessLink.to_service_id == a.id))).first()
-    link = existing or BusinessLink(business_id=id, from_service_id=a.id, to_service_id=b.id)
-    link.why = _text("why", 300)
-    db.session.add(link)
-    db.session.commit()
-    flash(f"{a.display_name} and {b.display_name} are connected.", "success")
-    return redirect(url_for("businesses.map_edit", id=id) + "#links")
-
-
-@business_bp.route("/admin/businesses/<int:id>/map/links/<int:lid>/delete", methods=["POST"])
-@ceo_required
-def link_delete(id, lid):
-    link = db.session.get(BusinessLink, lid) or abort(404)
-    if link.business_id != id:
-        abort(404)
-    db.session.delete(link)
-    db.session.commit()
-    flash("Connection removed.", "success")
-    return redirect(url_for("businesses.map_edit", id=id) + "#links")
-
-
-# ── Outcomes, and a service's own mark ───────────────────────
-
-SERVICE_ICON_DIR = "service_icons"
-MARK_BATCH = 8
-
-
-def _service_icon_folder():
-    path = os.path.join(current_app.config["UPLOAD_FOLDER"], SERVICE_ICON_DIR)
+def _node_icon_folder():
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], NODE_ICON_DIR)
     os.makedirs(path, exist_ok=True)
     return path
 
 
-def fetch_service_mark(service):
-    """Fetch and keep this service's mark off its URL. Returns whether one came.
+def fetch_node_mark(node):
+    """Fetch and keep this node's mark off its URL. Returns whether one came.
 
     Best effort, as the runbooks' and My Apps' fetches are: a site that is
     down leaves the tile on its initials. Stamped either way, so a URL with
     no icon is not asked again on every press.
     """
-    url = (service.url or "").strip()
+    url = (node.url or "").strip()
     if not url:
         return False
     if not url.startswith(("http://", "https://")):
@@ -1455,28 +1388,28 @@ def fetch_service_mark(service):
             got = app_icon_service.fetch_by_domain(host) if "." in host else None
         except Exception:
             got = None
-    service.icon_fetched_at = datetime.now(timezone.utc)
+    node.icon_fetched_at = datetime.now(timezone.utc)
     if not got:
         return False
     data, ext, source = got
-    old = service.icon_file
-    service.icon_file = app_icon_service.store(data, ext, _service_icon_folder())
-    service.icon_source = source[:500] if source else None
-    if old and old != service.icon_file:
+    old = node.icon_file
+    node.icon_file = app_icon_service.store(data, ext, _node_icon_folder())
+    node.icon_source = source[:500] if source else None
+    if old and old != node.icon_file:
         try:
-            os.remove(os.path.join(_service_icon_folder(), old))
+            os.remove(os.path.join(_node_icon_folder(), old))
         except OSError:
             pass
     return True
 
 
-@business_bp.route("/admin/businesses/<int:id>/map/services/<int:sid>/icon")
+@business_bp.route("/admin/businesses/<int:id>/map/nodes/<int:nid>/icon")
 @ceo_required
-def service_icon(id, sid):
-    service = db.session.get(BusinessService, sid) or abort(404)
-    if service.business_id != id or not service.icon_file:
+def node_icon(id, nid):
+    node = db.session.get(BusinessNode, nid) or abort(404)
+    if node.business_id != id or not node.icon_file:
         abort(404)
-    resp = send_from_directory(_service_icon_folder(), service.icon_file, max_age=86400)
+    resp = send_from_directory(_node_icon_folder(), node.icon_file, max_age=86400)
     # Fetched from somebody else's server, and an SVG can carry script.
     resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
     resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -1486,90 +1419,109 @@ def service_icon(id, sid):
 @business_bp.route("/admin/businesses/<int:id>/map/marks", methods=["POST"])
 @ceo_required
 def marks_fetch(id):
-    """Go and get the marks for the services still showing initials.
-
-    On a press, not on render: a network call to somebody else's server
-    must never be what a page waits on.
-    """
+    """Go and get the marks still showing initials. On a press, never on render."""
     business = db.session.get(Business, id) or abort(404)
-    waiting = [s for s in business.services if s.wants_mark]
+    waiting = [n for n in business.nodes if n.wants_mark]
     batch = waiting[:MARK_BATCH]
-    missed = [s.display_name for s in batch if not fetch_service_mark(s)]
+    missed = [n.display_name for n in batch if not fetch_node_mark(n)]
     db.session.commit()
     found, asked = len(batch) - len(missed), len(batch)
     if not asked:
-        flash("Every service with a URL already has its mark.", "info")
+        flash("Everything with a URL already has its mark.", "info")
     elif not missed:
         flash(f"Got all {found}." + (f" {len(waiting) - asked} still to ask." if len(waiting) > asked else ""),
               "success")
     else:
         flash(f"Got {found} of {asked}. Nothing found for " + ", ".join(missed[:5]) + ".",
               "warning" if found else "error")
-    return redirect(url_for("businesses.map_edit", id=business.id) + "#services")
+    return redirect(url_for("businesses.map_edit", id=business.id))
 
 
-def _fill_capability(cap, business):
-    """Copy the form onto an outcome. Returns an error string or None."""
-    cap.name = _text("name", 120)
-    if not cap.name:
-        return "An outcome needs a name: what the customer gets."
-    cap.how = _text("how", 400)
-    status = _text("status", 12)
-    cap.status = status if status in dict(BusinessCapability.STATUSES) else "delivered"
-    wanted = {int(v) for v in request.form.getlist("service_ids") if v.isdigit()}
-    mine = {s.id for s in business.services}
-    wanted &= mine
-    have = {l.service_id: l for l in cap.links}
-    for sid in list(have):
-        if sid not in wanted:
-            db.session.delete(have[sid])
-    for sid in wanted:
-        if sid not in have:
-            cap.links.append(BusinessCapabilityLink(service_id=sid))
-    return None
+# ── Nodes ────────────────────────────────────────────────────
 
-
-@business_bp.route("/admin/businesses/<int:id>/map/outcomes", methods=["POST"])
+@business_bp.route("/admin/businesses/<int:id>/map/nodes", methods=["POST"])
 @ceo_required
-def outcome_add(id):
+def node_add(id):
     business = db.session.get(Business, id) or abort(404)
-    last = max([c.sort_order for c in business.capabilities] or [0])
-    cap = BusinessCapability(business_id=business.id, sort_order=last + 10)
-    db.session.add(cap)
-    error = _fill_capability(cap, business)
+    node = BusinessNode(business_id=business.id)
+    error = _fill_node(node)
     if error:
-        db.session.rollback()
         flash(error, "error")
-    else:
-        db.session.commit()
-        flash(f"{cap.name} is on the map.", "success")
-    return redirect(url_for("businesses.map_edit", id=business.id) + "#outcomes")
+        return redirect(url_for("businesses.map_edit", id=business.id) + "#add")
+    node.sort_order = max([n.sort_order for n in business.nodes if n.kind == node.kind] or [0]) + 10
+    db.session.add(node)
+    db.session.flush()
+    if node.wants_mark:
+        fetch_node_mark(node)
+    db.session.commit()
+    flash(f"{node.display_name} is on the map.", "success")
+    return redirect(url_for("businesses.map_edit", id=business.id) + f"#node-{node.id}")
 
 
-@business_bp.route("/admin/businesses/<int:id>/map/outcomes/<int:cid>", methods=["POST"])
+@business_bp.route("/admin/businesses/<int:id>/map/nodes/<int:nid>", methods=["POST"])
 @ceo_required
-def outcome_save(id, cid):
-    cap = db.session.get(BusinessCapability, cid) or abort(404)
-    if cap.business_id != id:
+def node_save(id, nid):
+    node = db.session.get(BusinessNode, nid) or abort(404)
+    if node.business_id != id:
         abort(404)
-    error = _fill_capability(cap, cap.business)
+    error = _fill_node(node)
     if error:
         db.session.rollback()
         flash(error, "error")
     else:
+        if node.wants_mark:
+            fetch_node_mark(node)
         db.session.commit()
         flash("Saved.", "success")
-    return redirect(url_for("businesses.map_edit", id=id) + f"#outcome-{cid}")
+    return redirect(url_for("businesses.map_edit", id=id) + f"#node-{nid}")
 
 
-@business_bp.route("/admin/businesses/<int:id>/map/outcomes/<int:cid>/delete", methods=["POST"])
+@business_bp.route("/admin/businesses/<int:id>/map/nodes/<int:nid>/delete", methods=["POST"])
 @ceo_required
-def outcome_delete(id, cid):
-    cap = db.session.get(BusinessCapability, cid) or abort(404)
-    if cap.business_id != id:
+def node_delete(id, nid):
+    node = db.session.get(BusinessNode, nid) or abort(404)
+    if node.business_id != id:
         abort(404)
-    name = cap.name
-    db.session.delete(cap)
+    name = node.display_name
+    # Its lines go with it, by hand: SQLite does not enforce the cascade.
+    for edge in list(BusinessEdge.query.filter(
+            (BusinessEdge.from_node_id == nid) | (BusinessEdge.to_node_id == nid))):
+        db.session.delete(edge)
+    db.session.delete(node)
     db.session.commit()
     flash(f"{name} is off the map.", "success")
-    return redirect(url_for("businesses.map_edit", id=id) + "#outcomes")
+    return redirect(url_for("businesses.map_edit", id=id))
+
+
+# ── Edges ────────────────────────────────────────────────────
+
+@business_bp.route("/admin/businesses/<int:id>/map/edges", methods=["POST"])
+@ceo_required
+def edge_add(id):
+    business = db.session.get(Business, id) or abort(404)
+    a = db.session.get(BusinessNode, request.form.get("from_node_id", type=int) or 0)
+    b = db.session.get(BusinessNode, request.form.get("to_node_id", type=int) or 0)
+    if not a or not b or a.business_id != id or b.business_id != id or a.id == b.id:
+        flash("Pick two different things on this map.", "error")
+        return redirect(url_for("businesses.map_edit", id=id) + "#edges")
+    existing = BusinessEdge.query.filter_by(business_id=id).filter(
+        ((BusinessEdge.from_node_id == a.id) & (BusinessEdge.to_node_id == b.id))
+        | ((BusinessEdge.from_node_id == b.id) & (BusinessEdge.to_node_id == a.id))).first()
+    edge = existing or BusinessEdge(business_id=id, from_node_id=a.id, to_node_id=b.id)
+    edge.why = _text("why", 300)
+    db.session.add(edge)
+    db.session.commit()
+    flash(f"{a.display_name} and {b.display_name} are connected.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + "#edges")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/edges/<int:eid>/delete", methods=["POST"])
+@ceo_required
+def edge_delete(id, eid):
+    edge = db.session.get(BusinessEdge, eid) or abort(404)
+    if edge.business_id != id:
+        abort(404)
+    db.session.delete(edge)
+    db.session.commit()
+    flash("Line removed.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + "#edges")

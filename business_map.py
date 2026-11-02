@@ -1,217 +1,271 @@
-"""Everything that makes one business run, as a map.
+"""Everything that makes one business run, as a radial map.
 
-Michael, 2026-11-02, of EntertainHQ: "the amount of services, aka playbooks,
-that are making this whole thing run, I mean, it's insane. And I would just
-love to see that mapping ... here's everything that's running everything ...
-also a way to quickly see what holes do we have."
+Michael, 2026-11-02: "a network of everything that's making this product
+run ... here's everything that's running everything ... a way to quickly see
+what holes do we have ... to truly be able to answer all questions from any
+of the business partners: do we have a process in place for X?" And what
+belongs on it: "the thing we don't need is anything explaining how messages
+get sent to each other inside the app ... but how does this product let our
+customers know there's an outage? That is connected to a system outside the
+app itself." An outcome is something the product does that leans on a
+system outside the app, answered by the lines to those systems.
 
-Two layers of truth feed it. The NEED is the business playbook: a thing every
-business (or this kind of business) has to have, such as a bank account or a
-domain, with the vendors that can fill it and the connections that follow
-once two needs are both filled. The SERVICE is what one business actually
-uses for a need: its vendor, with a runbook when the catalogue has one, and
-what it is doing for this business in a sentence. A need with no service is a
-HOLE, drawn as an empty slot, which is the second thing the map is for.
+The business sits in the middle. Around it, on the first ring, the SURFACES
+people touch: the marketing site, the app, the portals, the phone apps, the
+status site, the admin board. Behind each surface, on the second ring, the
+SERVICES that power it, each drawn once and placed between the surfaces it
+serves. Further out, the OUTCOMES a partner asks about, each wired to what
+delivers it. On the outside, the AUDIENCES: who uses what. Every line is an
+edge with its why, which the hover shows.
 
-Pure: takes rows, returns the dicts the page draws. The layout is columns in
-the order a business gets built, left to right, so the map reads the same way
-a business playbook does, and every vendor lands in the same column on every
-business's map. A force layout would be prettier for one business and
-different for each, which is the wrong trade for a map meant to be compared.
+Placement is by angle: a surface takes an even slice of the circle; anything
+else sits at the mean angle of what it is connected to, on its own ring, and
+things on a ring that would overlap are pushed apart. Deterministic, so the
+same business draws the same map every time and two businesses compare.
+
+Holes still come from the business playbook: an essential need no service
+fills is drawn as an empty slot on the services ring, in the sector of the
+admin board, because that is where the owner goes to fill it.
+
+Pure: takes rows, returns the dicts the page draws.
 """
+import math
 
-# Columns, in the order a business is built. The key is what a need carries.
-LAYERS = (
-    ("legal", "Legal", "#f59e0b"),
-    ("money", "Money", "#10b981"),
-    ("infrastructure", "Infrastructure", "#38bdf8"),
-    ("product", "Product", "#a78bfa"),
-    ("operations", "Operations", "#fb7185"),
-    ("comms", "Comms", "#22d3ee"),
-    ("growth", "Growth", "#a3e635"),
-    ("intelligence", "Intelligence", "#e879f9"),
-)
-# The column on the right: what all of it adds up to for a customer, in
-# plain words, so "do we have a process for X?" is read off the map.
-OUTCOMES = ("outcomes", "What it delivers", "#f8fafc")
-LAYER_INDEX = {key: i for i, (key, _label, _color) in enumerate(LAYERS + (OUTCOMES,))}
-LAYER_LABEL = {key: label for key, label, _color in LAYERS + (OUTCOMES,)}
-LAYER_COLOR = {key: color for key, _label, color in LAYERS + (OUTCOMES,)}
-CAPABILITY_COLOR = {"delivered": "#34d399", "in_progress": "#fbbf24", "missing": "#f87171"}
+KIND_COLOR = {
+    "audience": "#f8fafc",
+    "surface": "#a78bfa",
+    "service": "#38bdf8",
+    "outcome": "#34d399",
+    "hole": "#f59e0b",
+    "center": "#c4b5fd",
+}
+STATUS_COLOR = {
+    "delivered": "#34d399", "in_progress": "#fbbf24", "missing": "#f87171",
+    "live": "#34d399", "building": "#fbbf24", "planned": "#94a3b8",
+    "running": "#34d399", "setting_up": "#fbbf24",
+}
+SURFACE_GLYPH = {
+    "site": "globe", "app": "app", "portal": "door", "phone": "phone",
+    "status": "pulse", "admin": "board", "inbox": "mail", "other": "dot",
+}
 
-STATUSES = (
-    ("running", "Running"),
-    ("setting_up", "Setting up"),
-    ("planned", "Planned"),
-)
-STATUS_LABEL = dict(STATUSES)
-
-# Geometry, in SVG units. A node is a 56px mark (the icon at the size the
-# Businesses tile draws it, with no box behind it) and its name underneath.
-NODE_R = 32
-COL_W = 250
-ROW_H = 150
-LEFT = 150
-TOP = 130
+# Rings, in map units from the centre. A tile is 64 wide with its labels
+# under it, an outcome pill about 220 wide, so the gaps between rings are
+# what keep lines from running through labels.
+RING = {"surface": 300, "service": 540, "outcome": 760, "audience": 960}
+NODE_WIDTH = {"surface": 170, "service": 150, "outcome": 230, "audience": 160, "hole": 150}
+CENTER = (1120, 1060)
 
 
-def _sort_key(need):
-    return (need.sort_order if need is not None else 10_000, need.name if need is not None else "")
+def _mean_angle(angles):
+    if not angles:
+        return None
+    x = sum(math.cos(a) for a in angles)
+    y = sum(math.sin(a) for a in angles)
+    if abs(x) < 1e-9 and abs(y) < 1e-9:
+        return angles[0]
+    return math.atan2(y, x)
 
 
-def layout(business, needs, services, links, need_links, capabilities=()):
+def _spread(items, radius, width):
+    """Push nodes on one ring apart until none overlap, keeping their order.
+
+    The minimum gap is the node width as an angle at this radius. Relaxation
+    rather than arithmetic, because a crowded sector must borrow room from an
+    empty one without reshuffling who sits next to whom. When the ring cannot
+    hold them all at that width they are spaced evenly instead.
+    """
+    n = len(items)
+    if n < 2:
+        return
+    gap = min(width / radius, 2 * math.pi / n)
+    for _ in range(300):
+        items.sort(key=lambda d: d["angle"])
+        moved = False
+        for i in range(n):
+            a, b = items[i], items[(i + 1) % n]
+            d = (b["angle"] - a["angle"]) if i < n - 1 else (b["angle"] + 2 * math.pi - a["angle"])
+            if d < gap - 1e-6:
+                push = (gap - d) / 2
+                a["angle"] -= push
+                b["angle"] += push
+                moved = True
+        if not moved:
+            break
+
+
+def layout(business, nodes, edges, needs=(), need_links=()):
     """The whole map for `business`.
 
-    needs         every BusinessNeed in the catalogue
-    services      this business's BusinessService rows
-    links         this business's BusinessLink rows (explicit, with a why)
-    need_links    every BusinessNeedLink (the template's connections)
-    capabilities  this business's BusinessCapability rows, each wired to the
-                  services that deliver it
+    nodes       BusinessNode rows (audience, surface, service, outcome)
+    edges       BusinessEdge rows, each with its why
+    needs       every BusinessNeed, for the holes
+    need_links  every BusinessNeedLink: the connection that follows between
+                two services whose needs the playbook joins, with its why,
+                drawn unless the business wrote its own line for the pair
     """
-    need_by_id = {n.id: n for n in needs}
+    cx, cy = CENTER
+    by_id = {n.id: n for n in nodes}
+    out = {}
 
-    # One node per service, and one per essential need nobody has filled.
-    nodes = []
-    for s in services:
-        need = need_by_id.get(s.need_id)
-        layer = (need.layer if need else s.layer) or "operations"
-        nodes.append({
-            "key": f"s{s.id}",
-            "kind": "service",
-            "id": s.id,
-            "layer": layer if layer in LAYER_INDEX else "operations",
-            "sort": _sort_key(need) + (s.name or "",),
-            "name": s.display_name,
-            "need": need.name if need else "",
-            "need_slug": need.slug if need else "",
-            "role": s.role or "",
-            "status": s.status or "running",
-            "status_label": STATUS_LABEL.get(s.status or "running", "Running"),
-            "url": s.url or "",
-            "notes": s.notes or "",
-            "initials": s.initials,
-            "mark": s.mark_url,
-            "runbook": s.runbook_url,
-            "runbook_missing": s.playbook_id is None and not (need is not None and need.in_house),
-        })
-    filled = {s.need_id for s in services if s.need_id}
-    for n in needs:
-        if n.essential and n.id not in filled:
-            nodes.append({
-                "key": f"n{n.id}",
-                "kind": "hole",
-                "id": n.id,
-                "layer": n.layer if n.layer in LAYER_INDEX else "operations",
-                "sort": _sort_key(n) + ("",),
-                "name": n.name,
-                "need": n.name,
-                "need_slug": n.slug,
-                "role": n.description or "",
-                "status": "missing",
-                "status_label": "Missing",
-                "suggestions": n.suggestions,
-            })
-    for i, c in enumerate(capabilities):
-        nodes.append({
-            "key": f"c{c.id}",
-            "kind": "outcome",
-            "id": c.id,
-            "layer": "outcomes",
-            "sort": (c.sort_order, i, c.name),
-            "name": c.name,
-            "need": "",
-            "need_slug": "",
-            "role": c.how or "",
-            "status": c.status,
-            "status_label": c.status_label,
-            "color": CAPABILITY_COLOR.get(c.status, CAPABILITY_COLOR["delivered"]),
-            "delivered_by": [],
-        })
+    def add(key, kind, **fields):
+        d = {"key": key, "kind": kind, "angle": None, "x": None, "y": None, "neighbours": []}
+        d.update(fields)
+        out[key] = d
+        return d
 
-    # Columns: only the layers something sits in, in build order.
-    present = sorted({n["layer"] for n in nodes}, key=lambda k: LAYER_INDEX[k])
-    col_x = {key: LEFT + i * COL_W + (60 if key == "outcomes" else 0) for i, key in enumerate(present)}
-    rows = {key: 0 for key in present}
-    for node in sorted(nodes, key=lambda n: (LAYER_INDEX[n["layer"]], n["sort"])):
-        node["x"] = col_x[node["layer"]]
-        node["y"] = TOP + rows[node["layer"]] * ROW_H
-        rows[node["layer"]] += 1
-        node.pop("sort", None)
+    add("center", "center", name=business.label, role=business.name, mark=getattr(business, "map_mark", None),
+        initials=business.initials, status="", status_label="", url=business.admin_url or "",
+        color=KIND_COLOR["center"], glyph="", runbook="", runbook_missing=False, need="", need_slug="")
 
-    by_key = {n["key"]: n for n in nodes}
-    service_nodes = {n["id"]: n for n in nodes if n["kind"] == "service"}
+    for n in nodes:
+        add(f"n{n.id}", n.kind, id=n.id, name=n.display_name, role=n.role or "", status=n.status or "",
+            status_label=n.status_label, url=n.url or "", notes=n.notes or "", initials=n.initials,
+            mark=n.mark_url, runbook=n.runbook_url,
+            need=(n.need.name if n.need else ""), need_slug=(n.need.slug if n.need else ""),
+            runbook_missing=(n.kind == "service" and n.playbook_id is None
+                             and not (n.need is not None and n.need.in_house)),
+            glyph=SURFACE_GLYPH.get(n.surface_kind or "other", "dot") if n.kind == "surface" else "",
+            color=(STATUS_COLOR.get(n.status or "", KIND_COLOR[n.kind]) if n.kind == "outcome"
+                   else KIND_COLOR[n.kind]))
 
-    # Edges: the template's connections between any two filled needs, then
-    # this business's own, which win over a template edge on the same pair.
-    edges = {}
-    by_need = {}
-    for s in services:
-        if s.need_id:
-            by_need.setdefault(s.need_id, []).append(s)
+    # Holes: an essential need no service fills.
+    filled = {n.need_id for n in nodes if n.kind == "service" and n.need_id}
+    holes = []
+    for need in needs:
+        if need.essential and need.id not in filled:
+            holes.append(add(f"h{need.id}", "hole", id=need.id, name=need.name, role=need.description or "",
+                             status="missing", status_label="Missing", need=need.name, need_slug=need.slug,
+                             suggestions=need.suggestions, url="", mark=None, initials="+", runbook="",
+                             runbook_missing=False, color=KIND_COLOR["hole"], glyph=""))
+
+    # Edges: the business's own, then the playbook's between two services
+    # whose needs it joins, unless the business already drew that pair.
+    drawn = {}
+    for e in edges:
+        a, b = by_id.get(e.from_node_id), by_id.get(e.to_node_id)
+        if a is None or b is None or a.id == b.id:
+            continue
+        pair = tuple(sorted((a.id, b.id)))
+        drawn[pair] = {"a": f"n{a.id}", "b": f"n{b.id}", "why": e.why or "", "derived": False, "id": e.id,
+                       "kinds": tuple(sorted((a.kind, b.kind)))}
+    services_by_need = {}
+    for n in nodes:
+        if n.kind == "service" and n.need_id:
+            services_by_need.setdefault(n.need_id, []).append(n)
     for nl in need_links:
-        for a in by_need.get(nl.from_need_id, []):
-            for b in by_need.get(nl.to_need_id, []):
+        for a in services_by_need.get(nl.from_need_id, []):
+            for b in services_by_need.get(nl.to_need_id, []):
                 pair = tuple(sorted((a.id, b.id)))
-                edges[pair] = {"a": f"s{a.id}", "b": f"s{b.id}", "why": nl.why or "", "derived": True}
-    for l in links:
-        if l.from_service_id in service_nodes and l.to_service_id in service_nodes:
-            pair = tuple(sorted((l.from_service_id, l.to_service_id)))
-            edges[pair] = {"a": f"s{l.from_service_id}", "b": f"s{l.to_service_id}",
-                           "why": l.why or "", "derived": False, "id": l.id}
+                if pair not in drawn and a.id != b.id:
+                    drawn[pair] = {"a": f"n{a.id}", "b": f"n{b.id}", "why": nl.why or "", "derived": True,
+                                   "kinds": ("service", "service")}
+    for e in drawn.values():
+        out[e["a"]]["neighbours"].append(e["b"])
+        out[e["b"]]["neighbours"].append(e["a"])
 
-    # An outcome's lines: from each service that delivers it.
-    for c in capabilities:
-        for l in c.links:
-            if l.service_id in service_nodes:
-                key = (f"s{l.service_id}", f"c{c.id}")
-                edges[key] = {"a": key[0], "b": key[1], "why": c.how or "", "derived": False,
-                              "outcome": True}
-                by_key[f"c{c.id}"]["delivered_by"].append(service_nodes[l.service_id]["name"])
+    # Angles. Surfaces take even slices, from the top, in their sort order.
+    surfaces = [out[f"n{n.id}"] for n in nodes if n.kind == "surface"]
+    for i, s in enumerate(surfaces):
+        s["angle"] = -math.pi / 2 + i * 2 * math.pi / max(1, len(surfaces))
+    anchor = {s["key"]: s["angle"] for s in surfaces}
+    admin = next((s for s in surfaces if s.get("glyph") == "board"), surfaces[0] if surfaces else None)
+    base = admin["angle"] if admin else -math.pi / 2
 
+    def settle(kind, radius):
+        ring = [d for d in out.values() if d["kind"] == kind]
+        loose = []
+        for d in ring:
+            a = _mean_angle([anchor[k] for k in d["neighbours"] if k in anchor])
+            if a is None:
+                loose.append(d)
+            else:
+                d["angle"] = a
+        # Nothing to lean on: spread through the admin board's sector.
+        for i, d in enumerate(loose):
+            d["angle"] = base + (i - (len(loose) - 1) / 2) * (NODE_WIDTH[kind] / radius)
+        _spread(ring, radius, NODE_WIDTH[kind])
+        for d in ring:
+            anchor[d["key"]] = d["angle"]
+
+    settle("service", RING["service"])
+    if holes:
+        for i, h in enumerate(holes):
+            h["angle"] = base + (i - (len(holes) - 1) / 2) * (NODE_WIDTH["hole"] / RING["service"])
+        ring = [d for d in out.values() if d["kind"] in ("service", "hole")]
+        _spread(ring, RING["service"], NODE_WIDTH["service"])
+        for d in ring:
+            anchor[d["key"]] = d["angle"]
+    settle("outcome", RING["outcome"])
+    settle("audience", RING["audience"])
+
+    for d in out.values():
+        if d["kind"] == "center":
+            d["x"], d["y"] = cx, cy
+            continue
+        r = RING["service"] if d["kind"] == "hole" else RING[d["kind"]]
+        d["x"] = round(cx + r * math.cos(d["angle"]), 1)
+        d["y"] = round(cy + r * math.sin(d["angle"]), 1)
+
+    # Every surface hangs off the centre; the rest are the drawn pairs.
     out_edges = []
-    for pair, e in edges.items():
-        a, b = by_key[e["a"]], by_key[e["b"]]
-        e["path"] = _path(a, b)
-        e["label"] = f"{a['name']} to {b['name']}"
-        # A line wears the colour of the column it leaves, so the eye can
-        # follow money lines from money and comms lines from comms.
-        left = a if a["x"] <= b["x"] else b
-        e["color"] = LAYER_COLOR[left["layer"]]
+    for s in surfaces:
+        out_edges.append({"a": "center", "b": s["key"], "why": s["role"] or "", "derived": True,
+                          "kinds": ("center", "surface"), "color": KIND_COLOR["surface"]})
+    for e in drawn.values():
+        a, b = out[e["a"]], out[e["b"]]
+        kinds = e["kinds"]
+        if "outcome" in kinds:
+            o = a if a["kind"] == "outcome" else b
+            e["color"] = o["color"]
+        elif "audience" in kinds:
+            e["color"] = KIND_COLOR["audience"]
+        elif "surface" in kinds:
+            e["color"] = KIND_COLOR["surface"]
+        else:
+            e["color"] = KIND_COLOR["service"]
         out_edges.append(e)
+    for e in out_edges:
+        a, b = out[e["a"]], out[e["b"]]
+        e["path"] = _path(a, b, cx, cy)
+        e["label"] = f"{a['name']} and {b['name']}"
+        e["outcome"] = "outcome" in e.get("kinds", ())
+        e.pop("kinds", None)
 
-    width = (LEFT + len(present) * COL_W + (120 if "outcomes" in present else 0)) if present else LEFT + COL_W
-    height = TOP + (max(rows.values()) if rows else 1) * ROW_H + 40
-    holes = [n for n in nodes if n["kind"] == "hole"]
-    no_runbook = [n for n in nodes if n["kind"] == "service" and n["runbook_missing"]]
-    gaps = [n for n in nodes if n["kind"] == "outcome" and n["status"] != "delivered"]
+    node_list = list(out.values())
+    for d in node_list:
+        d.pop("neighbours", None)
+        d.pop("angle", None)
     return {
-        "nodes": nodes,
+        "nodes": node_list,
         "edges": out_edges,
-        "columns": [{"key": k, "label": LAYER_LABEL[k], "color": LAYER_COLOR[k], "x": col_x[k]}
-                    for k in present],
-        "width": width,
-        "height": height,
-        "counts": {"services": len(services), "holes": len(holes),
-                   "no_runbook": len(no_runbook), "edges": len(out_edges),
-                   "outcomes": len(capabilities), "gaps": len(gaps)},
+        "width": 2 * CENTER[0],
+        "height": 2 * CENTER[1],
+        "center": {"x": cx, "y": cy},
+        "rings": RING,
+        "legend": [{"kind": k, "label": l, "color": KIND_COLOR[k]} for k, l in
+                   (("audience", "People"), ("surface", "What they use"),
+                    ("service", "What powers it"), ("outcome", "What it delivers"), ("hole", "Hole"))],
+        "counts": {
+            "surfaces": len(surfaces),
+            "services": sum(1 for n in nodes if n.kind == "service"),
+            "audiences": sum(1 for n in nodes if n.kind == "audience"),
+            "outcomes": sum(1 for n in nodes if n.kind == "outcome"),
+            "gaps": sum(1 for n in nodes if n.kind == "outcome" and n.status != "delivered"),
+            "holes": len(holes),
+            "no_runbook": sum(1 for d in node_list if d["kind"] == "service" and d["runbook_missing"]),
+            "edges": len(out_edges),
+        },
     }
 
 
-def _path(a, b):
-    """A cubic between two nodes.
+def _path(a, b, cx, cy):
+    """A gentle curve between two nodes, bowed toward the centre.
 
-    Left column to right column leaves the right side of one and enters the
-    left side of the other. Two nodes in one column are joined by an arc that
-    bulges to the right, so it never runs through the nodes between them.
+    Straight spokes read as a wheel; a slight bow toward the middle keeps
+    lines from stacking on the same radius and makes each one easy to
+    follow with a pointer.
     """
-    if a["x"] == b["x"]:
-        top, bottom = (a, b) if a["y"] <= b["y"] else (b, a)
-        bulge = a["x"] + NODE_R + 48
-        return (f"M {top['x'] + NODE_R} {top['y']} C {bulge} {top['y']}, "
-                f"{bulge} {bottom['y']}, {bottom['x'] + NODE_R} {bottom['y']}")
-    left, right = (a, b) if a["x"] < b["x"] else (b, a)
-    x1, y1 = left["x"] + NODE_R, left["y"]
-    x2, y2 = right["x"] - NODE_R, right["y"]
-    dx = max(60, (x2 - x1) / 2)
-    return f"M {x1} {y1} C {x1 + dx} {y1}, {x2 - dx} {y2}, {x2} {y2}"
+    mx, my = (a["x"] + b["x"]) / 2, (a["y"] + b["y"]) / 2
+    qx, qy = mx + (cx - mx) * 0.18, my + (cy - my) * 0.18
+    return f"M {a['x']} {a['y']} Q {qx} {qy} {b['x']} {b['y']}"

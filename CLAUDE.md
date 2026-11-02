@@ -395,53 +395,52 @@ articles a Certificate of Formation; a DBA's lawful footing is an Assumed Name
 Certificate), stored on the volume under `business_documents/` exactly as a
 return's confirmation is. `tools/test_business_papers.py`.
 
-**The map: everything that makes a business run** (Michael, 2026-11-02:
-"here's everything that's running everything ... also a way to quickly see
-what holes do we have"). `/admin/businesses/<id>/map`, drawn by
-`business_map.layout`, pure. Two layers of truth: `BusinessNeed` is the
-business playbook, one row per thing a business has to have, in the layer it
-gets built in (`LAYERS`: legal, money, infrastructure, product, operations,
-comms, growth, intelligence), essential or optional, with `fills_with` naming
-the runbooks that fill it and `BusinessNeedLink` the connection that follows
-once two needs are both filled, with its why written once. `BusinessService`
-is what one business actually uses for a need: its runbook when the catalogue
-has one, else a name (Mercury arrived that way), `role` being the sentence
-the hover shows. A `BusinessLink` is a connection in the business's own
-words and wins over the template's on the same pair. A hole is an essential
-need nobody filled, drawn as a dashed slot that opens the edit page with the
-need preselected; a vendor with no runbook wears a red mark, except on an
-`in_house` need (the app, this board), which has no vendor.
+**The map: a network of everything that makes a business run**
+(`/admin/businesses/<id>/map`, `business_map.layout`, pure). Three versions
+shipped on 2026-11-02 before it was right, and the owner's words on the first
+two are the spec: a vendor list in columns is "the weakest version of a map I
+have ever seen ... nothing properly shows what we're using for what purpose";
+a prettier one "is still just not as comprehensive ... you don't even list on
+here that we have a marketing site, that we have an admin portal, that we have
+a status site ... you've also just got everything in columns, and it's a
+mess". And what belongs on it: "the thing we don't need is anything explaining
+how messages get sent to each other inside the app ... but how does this
+product let our customers know there's an outage? That is connected to a
+system outside the app itself."
 
-**The right-hand column is what it delivers** (Michael, same day: "how do
-our customers charge their clients? Stripe payments ... do we have a process
-in place for X?"). `BusinessCapability` is an outcome in plain words with a
-status (delivered, in progress, missing) and `BusinessCapabilityLink` the
-services that deliver it, drawn as dashed lines into a pill; the card says
-"Delivered by". A missing outcome is a question with no process, which is
-the honest answer to "do we have one". Migration `f1d6b8c3a924` seeded a
-first set per business off its docs, plus EntertainHQ's phone apps and push.
+So the map is a graph on two tables. `BusinessNode` is every kind of thing:
+an AUDIENCE (tenants, talent, partners, Michael, Texas), a SURFACE people
+touch (the marketing site, the app, the portals, the phone apps, the status
+site at status.entertainhq.com which is a Cloudflare Worker outside Railway,
+the admin board, the inbox), a SERVICE (a vendor, with its need on the
+business playbook and its runbook), or an OUTCOME (something the product
+does that leans on a system outside the app, with a status: delivered, in
+progress, missing). `BusinessEdge` is every line, with its why. The layout
+is radial: the business in the middle, surfaces evenly round it, every other
+node on its own ring at the mean angle of what it connects to, pushed apart
+along the ring until nothing overlaps (`_spread`; its first version treated
+two identical angles as a full circle apart and stacked a whole sector on one
+point). Hover or pin anything and the rest dims to its lines. A hole is an
+essential need no service fills, drawn in the admin board's sector. The
+playbook's lines between two services (Stripe to the bank) are drawn faint
+unless the business wrote its own for the pair. Migration `a2c9e7d14b58`
+moved every row of the four earlier tables into nodes and edges and dropped
+them; the seed put EntertainHQ's ten surfaces and seven audiences on, with
+the lines, and the two outcomes that cross the boundary.
 
-**The tiles are HTML, the lines are SVG.** The first cut drew logos as SVG
-`<image>` under the pan-and-zoom transform, and Chrome rasterises those once
-and stretches them, so every mark went blurry the moment the map zoomed;
-square logos also sat inside circles. Each node is now an `<img>` laid out
-at its real pixel size from the same `tx, ty, k` the lines use (`nodeStyle`,
-`px()`), so it is rasterised at the size it is shown, in an app-icon tile the
-logo fills edge to edge. A service with no runbook gets its own mark fetched
-off its URL (`fetch_service_mark`, served by `service_icon`, nosniff), on a
-press or on save, never on render.
-
-Columns, not a force layout: Stripe sits in the same column on every
-business's map, so maps can be compared. Hover shows the card and a tap or
-click PINS it, because hover does not exist on a phone. Two things the first
-cut got wrong: the canvas captures the pointer to keep a drag going past a
-node, and a captured pointer's `click` lands on the canvas, never on the node,
-so a pin is read on pointerup without movement (`downPick`), never from
-click; and without `touch-action: none` a finger's drag is the browser's
-scroll and the pointer is cancelled, so no pan, pinch or tap worked on a
-phone. `|tojson` rides in single-quoted attributes (house rule). Migration
-`c7f2a9e41d05` seeds the needs, their links, and each business's services
-off its own repo's config. `tools/test_business_map.py`.
+**The tiles are HTML, the lines are SVG.** An SVG `<image>` under the
+pan-and-zoom transform is rasterised once and stretched, so every logo
+blurred when zoomed. Each node is an `<img>` laid out at its real pixel size
+from the same `tx, ty, k` the lines use (`nodeStyle`, `px()`), in an app-icon
+tile the logo fills edge to edge; a square logo is never put inside a
+circle. A surface or service with a URL and no runbook gets its own mark
+fetched off that URL (`fetch_node_mark`, served by `node_icon`, nosniff), on
+a press or on save, never on render. A pin is read on pointerup without
+movement, never from `click`, because the canvas captures the pointer and a
+captured pointer's click lands on the canvas; `touch-action: none`, or a
+finger's drag is the browser's scroll. `|tojson` rides in single-quoted
+attributes. `tools/test_business_map.py` runs the four migrations in the
+order production did.
 
 A return is worked out, typed into WebFile by hand, and recorded from the
 confirmation page. `sales_tax.build_return` splits a period's sales by the

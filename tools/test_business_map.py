@@ -1,31 +1,37 @@
 # -*- coding: utf-8 -*-
-"""The business map: everything that makes a business run, and the holes.
+"""The business map: a network of everything that makes a business run.
 
-Michael, 2026-11-02: a map of every service running a business, with hover
-on the lines saying why, and the holes showing; and under it a business
-playbook of every need. This boots the board on a throwaway SQLite database
-and proves:
+Michael, 2026-11-02: "a network of everything that's making this product
+run", with the surfaces people touch (marketing site, app, portals, phone
+apps, status site, admin board), who uses them, the vendors behind each,
+and the outcomes that cross the app's boundary ("how does this product let
+our customers know there's an outage?"), each answered by its lines.
 
-  1. The migration seeds the needs, their connections and each business's
-     services off its repo; Mercury lands with no runbook and its name; a
-     second run adds nothing, and a business with a map of its own is left alone.
-  2. The layout: columns in build order, every service in its need's column,
-     an essential nobody filled drawn as a hole, a template connection drawn
-     between two filled needs with its why, a hand-written one winning over
-     it, and a same-column line drawn as an arc that leaves the column.
-  3. The pages draw (map, edit, business page with the counts, the tile's
-     map button), the data rides in a single-quoted x-data, and the presses:
-     fill a hole from the map, save, connect two, remove one and its links,
-     and never touch another business's service.
+This boots the board on a throwaway SQLite database, runs the four map
+migrations in order, and proves:
+
+  1. The seed: needs and their connections; each business's services off
+     its repo; the correction (Railway bucket, not AWS); then the network:
+     surfaces, audiences, the outcomes that cross the boundary, and every
+     old row carried into nodes and edges before the old tables went.
+  2. The layout: the business in the middle, surfaces on the first ring,
+     services behind the surfaces they power, audiences outside, outcomes
+     between; nothing on a ring overlapping; a hole for an unfilled
+     essential; every line with its why; a service's playbook line drawn
+     unless the business wrote its own.
+  3. The pages draw, the data rides in single-quoted x-data, and the
+     presses: add a surface and an audience, connect them, save, remove a
+     node and its lines, fetch a mark off a URL once, and never reach
+     another business's node.
 
 Run: python tools/test_business_map.py
 """
 import importlib.util
+import math
 import os
 import pathlib
 import sys
 import tempfile
-from datetime import date
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -40,8 +46,7 @@ except Exception:
     pass
 
 from app import create_app  # noqa: E402
-from models import (db, Business, BusinessLink, BusinessNeed, BusinessNeedLink,  # noqa: E402
-                    BusinessService, Playbook, User)
+from models import db, Business, BusinessEdge, BusinessNeed, BusinessNode, Playbook, User  # noqa: E402
 import business_map  # noqa: E402
 import pm.business_routes as br  # noqa: E402
 
@@ -51,6 +56,8 @@ br.get_stripe_invoice_totals = lambda ttl=300: {"revenue": 0.0}
 application = create_app()
 application.config["WTF_CSRF_ENABLED"] = False
 FAIL = []
+MIGRATIONS = ("c7f2a9e41d05_the_business_map", "e5a3c7b19d42_media_is_on_railway_not_aws",
+              "f1d6b8c3a924_what_the_map_delivers", "a2c9e7d14b58_the_map_is_a_network")
 
 
 def check(name, cond, detail=""):
@@ -59,9 +66,8 @@ def check(name, cond, detail=""):
         FAIL.append(name)
 
 
-def run_migration():
-    spec = importlib.util.spec_from_file_location(
-        "mig", ROOT / "migrations/versions/c7f2a9e41d05_the_business_map.py")
+def run_migration(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / f"migrations/versions/{name}.py")
     mig = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mig)
     from alembic.migration import MigrationContext
@@ -73,153 +79,128 @@ def run_migration():
     return mig
 
 
+def table_names():
+    import sqlalchemy as sa
+    return set(sa.inspect(db.engine).get_table_names())
+
+
 with application.test_request_context():
     db.create_all()
     boss = User(username="mb", email="mb@example.test", first_name="Michael", role="ceo")
     boss.set_password("x")
-    for slug, name, logo in (("stripe", "Stripe", "img/playbooks/stripe.svg"), ("railway", "Railway", ""),
-                             ("postgres", "PostgreSQL", ""), ("github", "GitHub", ""),
-                             ("resend", "Resend", ""), ("legalzoom", "LegalZoom", "")):
+    for slug, name, logo in (("stripe", "Stripe", "pm/logos/stripe.svg"), ("railway", "Railway", ""),
+                             ("postgres", "PostgreSQL", ""), ("github", "GitHub", ""), ("resend", "Resend", ""),
+                             ("cloudflare", "Cloudflare", ""), ("signadoc", "Signadoc", ""), ("twilio", "Twilio", ""),
+                             ("apns", "APNs", ""), ("app-store", "App Store", ""), ("aws", "AWS", "")):
         db.session.add(Playbook(slug=slug, display_name=name, logo_path=logo, is_active=True))
-    ehq = Business(name="EntertainHQ LLC", short_name="EntertainHQ", slug="entertainhq", sales_source="manual")
+    ehq = Business(name="EntertainHQ LLC", short_name="EntertainHQ", slug="entertainhq", sales_source="manual",
+                   admin_url="https://entertainhq.com/admin")
     other = Business(name="Other Co", slug="other-co", sales_source="manual")
     db.session.add_all([boss, ehq, other])
     db.session.commit()
-    db.session.add(BusinessService(business_id=other.id, name="Already here", role="Typed by hand"))
-    db.session.commit()
     ids = dict(boss=boss.id, ehq=ehq.id, other=other.id)
 
+    # The old tables are built by create_all no more (the models are gone), so
+    # the first three migrations make them, fill them, and the fourth moves
+    # everything across: exactly the path production took.
     print("THE SEED:")
-    mig = run_migration()
-    needs = BusinessNeed.query.all()
-    check("the needs are on file", len(needs) == len(mig.NEEDS), (len(needs), len(mig.NEEDS)))
-    check("in build order, with the legal entity first",
-          BusinessNeed.query.order_by(BusinessNeed.sort_order).first().slug == "legal-entity")
-    check("with their connections", BusinessNeedLink.query.count() == len(mig.NEED_LINKS))
+    for name in MIGRATIONS[:3]:
+        run_migration(name)
+    import sqlalchemy as sa
+    with db.engine.begin() as conn:
+        before_services = conn.execute(sa.text("SELECT COUNT(*) FROM business_services WHERE business_id = :b"), {"b": ids["ehq"]}).scalar()
+        before_caps = conn.execute(sa.text("SELECT COUNT(*) FROM business_capabilities WHERE business_id = :b"), {"b": ids["ehq"]}).scalar()
+        before_links = conn.execute(sa.text("SELECT COUNT(*) FROM business_capability_links")).scalar()
+        conn.execute(sa.text("INSERT INTO business_services (business_id, name, role, status, notes) VALUES (:b, 'Hand typed', 'Typed by hand', 'running', '')"),
+                     {"b": ids["other"]})
+    mig = run_migration(MIGRATIONS[3])
+    tables = table_names()
+    check("the old tables are gone", not ({"business_services", "business_capabilities", "business_links",
+                                             "business_capability_links"} & tables), tables & {"business_services"})
     e = db.session.get(Business, ids["ehq"])
-    check("EntertainHQ has its services", len(e.services) == len(mig.SERVICES["entertainhq"]), len(e.services))
-    mercury = next((s for s in e.services if s.name == "Mercury"), None)
-    check("Mercury is on it by name, with no runbook", mercury is not None and mercury.playbook_id is None)
-    stripe = next((s for s in e.services if s.playbook and s.playbook.slug == "stripe"), None)
-    check("Stripe is on it through its runbook", stripe is not None and stripe.display_name == "Stripe")
-    twilio = next((s for s in e.services if s.need and s.need.slug == "texting"), None)
-    check("a runbook the board lacks still lands by name", twilio is not None and twilio.name == "Twilio"
-          and twilio.playbook_id is None, twilio and (twilio.name, twilio.playbook_id))
-    run_migration()
-    check("running it again adds nothing", len(db.session.get(Business, ids["ehq"]).services)
-          == len(mig.SERVICES["entertainhq"]))
-    o = db.session.get(Business, ids["other"])
-    check("a business with a map already is left alone", len(o.services) == 1 and o.services[0].name == "Already here")
-
-    # The correction that followed: the media is a Railway bucket, not AWS.
-    db.session.add(Playbook(slug="aws", display_name="AWS", is_active=True))
-    db.session.commit()
-    spec2 = importlib.util.spec_from_file_location(
-        "mig2", ROOT / "migrations/versions/e5a3c7b19d42_media_is_on_railway_not_aws.py")
-    mig2 = importlib.util.module_from_spec(spec2)
-    spec2.loader.exec_module(mig2)
-    aws_id = Playbook.query.filter_by(slug="aws").one().id
-    storage = next(s for s in db.session.get(Business, ids["ehq"]).services if s.need and s.need.slug == "storage")
-    storage.playbook_id = aws_id
-    db.session.commit()
-    from alembic.migration import MigrationContext
-    from alembic.operations import Operations
-    with db.engine.begin() as conn:
-        mig2.op = Operations(MigrationContext.configure(conn))
-        mig2.upgrade()
-    db.session.expire_all()
-    storage = db.session.get(BusinessService, storage.id)
-    check("EntertainHQ's file storage is the Railway bucket, not AWS",
-          storage.name == "Railway bucket" and storage.playbook.slug == "railway" and "not AWS" in storage.role)
-    storage.notes = "Michael checked this one."
-    storage.playbook_id = aws_id
-    db.session.commit()
-    with db.engine.begin() as conn:
-        mig2.op = Operations(MigrationContext.configure(conn))
-        mig2.upgrade()
-    db.session.expire_all()
-    check("a row somebody edited is left alone", db.session.get(BusinessService, storage.id).playbook.slug == "aws")
-    storage.playbook_id = Playbook.query.filter_by(slug="railway").one().id
-    storage.name = "Railway bucket"
-    db.session.commit()
-
-    print("\nWHAT IT DELIVERS:")
-    spec3 = importlib.util.spec_from_file_location(
-        "mig3", ROOT / "migrations/versions/f1d6b8c3a924_what_the_map_delivers.py")
-    mig3 = importlib.util.module_from_spec(spec3)
-    spec3.loader.exec_module(mig3)
-    with db.engine.begin() as conn:
-        mig3.op = Operations(MigrationContext.configure(conn))
-        mig3.upgrade()
-    db.session.expire_all()
-    e = db.session.get(Business, ids["ehq"])
-    caps = {c.name: c for c in e.capabilities}
-    check("EntertainHQ's outcomes are on file", len(caps) == len(mig3.CAPABILITIES["entertainhq"]), len(caps))
-    check("the phone apps and push joined its map",
-          {s.need.slug for s in e.services if s.need} >= {"mobile-apps", "push"})
-    charge = caps["Customers charge their clients"]
-    check("'Customers charge their clients' is delivered by Stripe",
-          [l.service.display_name for l in charge.links] == ["Stripe"], [l.service.display_name for l in charge.links])
-    heard = caps["Talent hears about a booking"]
-    check("'Talent hears about a booking' is wired to texting, email and push",
-          len(heard.links) == 3, [l.service.display_name for l in heard.links])
-    with db.engine.begin() as conn:
-        mig3.op = Operations(MigrationContext.configure(conn))
-        mig3.upgrade()
-    db.session.expire_all()
-    check("running it again adds nothing", len(db.session.get(Business, ids["ehq"]).capabilities) == len(caps))
-    m = br._map_for(db.session.get(Business, ids["ehq"]))
-    outcomes = [n for n in m["nodes"] if n["kind"] == "outcome"]
-    check("outcomes are the last column", m["columns"][-1]["key"] == "outcomes" and all(n["layer"] == "outcomes" for n in outcomes))
-    o = next(n for n in outcomes if n["name"] == "Customers charge their clients")
-    check("an outcome says who delivers it", o["delivered_by"] == ["Stripe"], o["delivered_by"])
-    check("and is wired by a line from that service",
-          any(x["b"] == o["key"] and x.get("outcome") and "Stripe" in x["label"] for x in m["edges"]))
-    check("the counts say how many are delivered", m["counts"]["outcomes"] == len(caps) and m["counts"]["gaps"] == 2, m["counts"])
+    kinds = {}
+    for n in e.nodes:
+        kinds.setdefault(n.kind, []).append(n)
+    check("every service moved across", len(kinds.get("service", [])) == before_services, (len(kinds.get("service", [])), before_services))
+    check("every outcome moved across, plus the two that cross the boundary",
+          len(kinds.get("outcome", [])) == before_caps + 2, (len(kinds.get("outcome", [])), before_caps))
+    check("a business the seed does not know keeps its hand-typed row",
+          [n.name for n in db.session.get(Business, ids["other"]).nodes] == ["Hand typed"])
+    names = {n.name for n in kinds.get("surface", [])}
+    check("the surfaces are on it: the site, the app, the portals, the phones, the status site, the board",
+          {"Marketing site", "The app", "Staff portal", "Talent portal", "Client portal", "iOS app", "Android app",
+           "Status site", "Admin board", "Support inbox"} <= names, names)
+    status = next(n for n in kinds["surface"] if n.name == "Status site")
+    check("the status site has its address", status.url == "https://status.entertainhq.com" and status.surface_kind == "status")
+    check("the people are on it", {"Tenants", "Talent", "Tenant staff", "Partners", "Michael", "Texas"} <= {n.name for n in kinds.get("audience", [])})
+    outage = next(n for n in kinds["outcome"] if n.name == "Tenants are told about an outage")
+    check("an outcome that crosses the boundary is honest about its state", outage.status == "in_progress")
+    by_id = {n.id: n for n in e.nodes}
+    touching = {by_id[x.from_node_id if x.to_node_id == outage.id else x.to_node_id].display_name
+                for x in e.edges if outage.id in (x.from_node_id, x.to_node_id)}
+    check("and is wired to the status site, Cloudflare and the tenants", {"Status site", "Cloudflare", "Tenants"} <= touching, touching)
+    proposals = next(n for n in kinds["outcome"] if n.name == "Tenants send proposals to their clients")
+    touching = {by_id[x.from_node_id if x.to_node_id == proposals.id else x.to_node_id].display_name
+                for x in e.edges if proposals.id in (x.from_node_id, x.to_node_id)}
+    check("proposals are answered by the client portal, Resend, Signadoc and Stripe",
+          {"Client portal", "Resend", "Signadoc", "Stripe"} <= touching, touching)
+    stripe = next(n for n in kinds["service"] if n.playbook and n.playbook.slug == "stripe")
+    check("an old outcome's lines came across as edges",
+          any({x.from_node_id, x.to_node_id} == {stripe.id, next(n for n in kinds["outcome"] if n.name == "Customers charge their clients").id}
+              for x in e.edges))
+    check("no edge joins a thing to itself", all(x.from_node_id != x.to_node_id for x in e.edges))
+    run_migration(MIGRATIONS[3])
+    check("running it again adds nothing", len(db.session.get(Business, ids["ehq"]).nodes) == len(e.nodes))
 
     print("\nTHE LAYOUT:")
-    m = br._map_for(e)
-    cols = [c["key"] for c in m["columns"]]
-    check("columns run in build order", cols == sorted(cols, key=lambda k: business_map.LAYER_INDEX[k]), cols)
-    check("legal comes first and comms after infrastructure",
-          cols[0] == "legal" and cols.index("infrastructure") < cols.index("comms"), cols)
-    by_name = {n["name"]: n for n in m["nodes"]}
-    check("Stripe sits in the Money column", by_name["Stripe"]["layer"] == "money")
-    check("accounting, essential and unfilled, is a hole",
-          "Accounting" in by_name and by_name["Accounting"]["kind"] == "hole")
-    check("the hole says what would fill it",
-          any(s["slug"] == "quickbooks-online" for s in by_name["Accounting"]["suggestions"]))
-    check("an optional need unfilled is not a hole", "Error monitoring" not in by_name)
-    check("every hole is in its need's column", all(n["layer"] == "money" for n in m["nodes"]
-                                                   if n["kind"] == "hole" and n["name"] == "Accounting"))
-    check("Mercury carries the no-runbook flag", by_name["Mercury"]["runbook_missing"])
-    check("the app itself does not, being in house", not by_name["EntertainHQ"]["runbook_missing"])
-    check("Stripe carries its runbook's mark and page",
-          by_name["Stripe"]["mark"].endswith("stripe.svg") and "/admin/playbooks/stripe" in by_name["Stripe"]["runbook"])
-    sm = f"s{stripe.id}"
-    pay_bank = next((x for x in m["edges"] if {x["a"], x["b"]} == {sm, f"s{mercury.id}"}), None)
-    check("Stripe and Mercury are connected by the playbook, with its why",
-          pay_bank is not None and pay_bank["derived"] and "Payouts land here" in pay_bank["why"], pay_bank)
-    check("nothing connects to a hole", all(not x["a"].startswith("n") and not x["b"].startswith("n") for x in m["edges"]))
-    check("the counts add up", m["counts"]["services"] == len(e.services) and m["counts"]["holes"] >= 1
-          and m["counts"]["no_runbook"] >= 2, m["counts"])
+    m = br._map_for(db.session.get(Business, ids["ehq"]))
+    nodes = {n["key"]: n for n in m["nodes"]}
+    cx, cy = m["center"]["x"], m["center"]["y"]
+    check("the business is in the middle", nodes["center"]["x"] == cx and nodes["center"]["y"] == cy)
 
-    db.session.add(BusinessLink(business_id=e.id, from_service_id=mercury.id, to_service_id=stripe.id,
-                                why="Stripe pays into Mercury every Tuesday."))
+    def ring_of(n):
+        return math.hypot(n["x"] - cx, n["y"] - cy)
+
+    for kind, r in business_map.RING.items():
+        ok = all(abs(ring_of(n) - r) < 1 for n in m["nodes"] if n["kind"] == kind)
+        check(f"every {kind} sits on its ring", ok)
+    check("a hole sits on the services ring", all(abs(ring_of(n) - business_map.RING["service"]) < 1 for n in m["nodes"] if n["kind"] == "hole"))
+    for kind in ("surface", "service", "outcome", "audience"):
+        ring = [n for n in m["nodes"] if n["kind"] in ((kind, "hole") if kind == "service" else (kind,))]
+        too_close = []
+        for i in range(len(ring)):
+            for j in range(i + 1, len(ring)):
+                d = math.hypot(ring[i]["x"] - ring[j]["x"], ring[i]["y"] - ring[j]["y"])
+                if d < business_map.NODE_WIDTH[kind] * 0.9:
+                    too_close.append((ring[i]["name"], ring[j]["name"], round(d)))
+        check(f"no two {kind}s overlap", not too_close, too_close[:3])
+
+    def angle(n):
+        return math.atan2(n["y"] - cy, n["x"] - cx)
+
+    def near(a, b, tol=1.2):
+        d = abs((angle(a) - angle(b) + math.pi) % (2 * math.pi) - math.pi)
+        return d < tol
+
+    status_s = next(n for n in m["nodes"] if n["name"] == "Status site")
+    tenants = next(n for n in m["nodes"] if n["name"] == "Tenants")
+    cf = next(n for n in m["nodes"] if n["name"] == "Cloudflare")
+    powered = [next(n for n in m["nodes"] if n["name"] == s) for s in ("Marketing site", "The app", "Status site")]
+    check("a service sits behind a surface it powers", any(near(cf, s, 1.2) for s in powered))
+    check("an audience sits outside what it uses", near(tenants, next(n for n in m["nodes"] if n["name"] == "The app"), 1.6)
+          or near(tenants, status_s, 1.6))
+    check("a hole is drawn for the unfilled essential", any(n["kind"] == "hole" and n["name"] == "Accounting" for n in m["nodes"]))
+    check("every line says why", all(e["why"] for e in m["edges"] if not e["derived"]), [e for e in m["edges"] if not e["derived"] and not e["why"]][:2])
+    merc = next(n for n in m["nodes"] if n["name"] == "Mercury")
+    pb = next((e for e in m["edges"] if {e["a"], e["b"]} == {f"n{stripe.id}", merc["key"]}), None)
+    check("the playbook's line between Stripe and Mercury is drawn, with its why", pb is not None and pb["derived"] and "Payouts" in pb["why"], pb)
+    db.session.add(BusinessEdge(business_id=ids["ehq"], from_node_id=stripe.id, to_node_id=merc["id"], why="Every Tuesday."))
     db.session.commit()
     m = br._map_for(db.session.get(Business, ids["ehq"]))
-    pay_bank = next((x for x in m["edges"] if {x["a"], x["b"]} == {sm, f"s{mercury.id}"}), None)
-    check("a hand-written connection wins over the playbook's",
-          pay_bank is not None and not pay_bank["derived"] and "Tuesday" in pay_bank["why"], pay_bank)
-
-    # Two nodes in one column: the line arcs out past the column rather than
-    # running through whatever sits between them.
-    a = {"x": 140, "y": 120}
-    b = {"x": 140, "y": 380}
-    arc = business_map._path(a, b)
-    check("a same-column line arcs to the right", "C 220 120, 220 380" in arc, arc)
-    across = business_map._path({"x": 140, "y": 120}, {"x": 380, "y": 250})
-    check("a cross-column line leaves the right side and enters the left", across.startswith("M 172 120") and across.endswith("348 250"), across)
+    pb = next(e for e in m["edges"] if {e["a"], e["b"]} == {f"n{stripe.id}", merc["key"]})
+    check("the business's own line wins over the playbook's", not pb["derived"] and "Tuesday" in pb["why"])
+    check("the counts add up", m["counts"]["surfaces"] == len(kinds["surface"]) and m["counts"]["holes"] >= 1
+          and m["counts"]["gaps"] >= 1, m["counts"])
 
 c = application.test_client()
 with c.session_transaction() as s:
@@ -232,102 +213,72 @@ page = r.get_data(as_text=True)
 check("the map draws", r.status_code == 200, r.status_code)
 check("its data rides in a single-quoted x-data", "x-data='bizMap({" in page)
 check("it never scrolls the window", "contained-scroll" in page)
-check("Mercury and the accounting hole are on it", "Mercury" in page and "Accounting" in page)
-check("it counts the holes in the bar", "hole" in page and "without a runbook" in page)
+check("the status site and the outage question are on it", "Status site" in page and "told about an outage" in page)
 check("no em dash on it", chr(0x2014) not in page)
 page = c.get(f"/admin/businesses/{ids['ehq']}").get_data(as_text=True)
-check("the business page carries the counts and opens the map",
-      "What runs it" in page and f"/admin/businesses/{ids['ehq']}/map" in page)
-page = c.get("/admin/businesses").get_data(as_text=True)
-check("each tile has a map button", f'aria-label="Map of EntertainHQ"' in page)
+check("the business page carries the counts and opens the map", "What runs it" in page and f"/admin/businesses/{ids['ehq']}/map" in page)
 r = c.get(f"/admin/businesses/{ids['ehq']}/map/edit?need=accounting")
 page = r.get_data(as_text=True)
-check("the edit page draws", r.status_code == 200, r.status_code)
-check("a hole preselects its need", 'value="' in page and "Accounting (Money)" in page)
+check("the edit page draws, grouped by kind", r.status_code == 200 and "What they use" in page and "What it delivers" in page, r.status_code)
+check("a hole preselects its need", "Accounting (Money)" in page)
 
 print("\nTHE PRESSES:")
 with application.test_request_context():
-    acct_need = BusinessNeed.query.filter_by(slug="accounting").one().id
-    stripe_id = BusinessService.query.filter_by(business_id=ids["ehq"]).join(Playbook).filter(Playbook.slug == "stripe").one().id
-    mercury_id = BusinessService.query.filter_by(business_id=ids["ehq"], name="Mercury").one().id
-    other_id = BusinessService.query.filter_by(business_id=ids["other"]).one().id
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/services",
-           data={"need_id": acct_need, "name": "QuickBooks", "role": "The books.", "status": "setting_up",
-                 "url": "https://quickbooks.intuit.com"}, follow_redirects=True)
+    other_node = db.session.get(Business, ids["other"]).nodes[0].id
+    acct = BusinessNeed.query.filter_by(slug="accounting").one().id
+r = c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "surface", "name": "Partner portal", "surface_kind": "portal",
+                                                              "status": "building", "role": "Where partners read the numbers.",
+                                                              "url": ""}, follow_redirects=True)
 with application.test_request_context():
-    qb = BusinessService.query.filter_by(business_id=ids["ehq"], name="QuickBooks").first()
-    check("filling the hole puts the service on the map", qb is not None and qb.need_id == acct_need
-          and qb.status == "setting_up")
+    portal = BusinessNode.query.filter_by(business_id=ids["ehq"], name="Partner portal").first()
+    check("a surface can be added", portal is not None and portal.kind == "surface" and portal.status == "building" and portal.surface_kind == "portal")
+    portal_id = portal.id
+c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "audience", "name": "Investors", "role": "Who might put money in."})
+with application.test_request_context():
+    inv = BusinessNode.query.filter_by(business_id=ids["ehq"], name="Investors").first()
+    check("a person can be added", inv is not None and inv.kind == "audience" and inv.status == "")
+    inv_id = inv.id
+c.post(f"/admin/businesses/{ids['ehq']}/map/edges", data={"from_node_id": inv_id, "to_node_id": portal_id, "why": "They read the numbers here."})
+with application.test_request_context():
+    edge = BusinessEdge.query.filter_by(from_node_id=inv_id, to_node_id=portal_id).first()
+    check("two things can be connected with a why", edge is not None and "numbers" in edge.why)
     m = br._map_for(db.session.get(Business, ids["ehq"]))
-    check("and the hole is gone", not any(n["kind"] == "hole" and n["name"] == "Accounting" for n in m["nodes"]))
-    check("with a dashed ring while it is being set up",
-          next(n for n in m["nodes"] if n["name"] == "QuickBooks")["status"] == "setting_up")
-    qb_id = qb.id
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/services", data={"role": "no name, no runbook"}, follow_redirects=True)
+    check("and the new person sits outside the new surface", near(next(n for n in m["nodes"] if n["name"] == "Investors"),
+                                                                 next(n for n in m["nodes"] if n["name"] == "Partner portal"), 1.0))
+r = c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "service", "role": "no name, no runbook"}, follow_redirects=True)
 check("a service with neither a runbook nor a name is refused", b"needs a name" in r.data)
-c.post(f"/admin/businesses/{ids['ehq']}/map/services/{qb_id}", data={"need_id": acct_need, "name": "QuickBooks Online",
-                                                                     "role": "The books, reconciled monthly.", "status": "running"})
+c.post(f"/admin/businesses/{ids['ehq']}/map/nodes", data={"kind": "service", "need_id": acct, "name": "QuickBooks", "status": "setting_up",
+                                                          "role": "The books."})
 with application.test_request_context():
-    check("a service saves", db.session.get(BusinessService, qb_id).name == "QuickBooks Online")
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/services/{other_id}", data={"name": "Hijacked"})
-with application.test_request_context():
-    check("another business's service cannot be reached", r.status_code == 404
-          and db.session.get(BusinessService, other_id).name == "Already here")
-c.post(f"/admin/businesses/{ids['ehq']}/map/links", data={"from_service_id": qb_id, "to_service_id": mercury_id,
-                                                          "why": "Statements import nightly."})
-with application.test_request_context():
-    link = BusinessLink.query.filter_by(from_service_id=qb_id).first()
-    check("two services can be connected with a why", link is not None and "nightly" in link.why)
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/links", data={"from_service_id": qb_id, "to_service_id": qb_id, "why": "x"},
-           follow_redirects=True)
-check("a service cannot be connected to itself", b"two different services" in r.data)
-# Outcomes: add one wired to two services, save it, remove it.
-with application.test_request_context():
-    svc_ids = [s.id for s in db.session.get(Business, ids["ehq"]).services][:2]
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/outcomes",
-           data={"name": "Partners see the books", "how": "A monthly statement.", "status": "missing",
-                 "service_ids": [str(svc_ids[0]), str(svc_ids[1])]}, follow_redirects=True)
-with application.test_request_context():
-    from models import BusinessCapability
-    cap = BusinessCapability.query.filter_by(business_id=ids["ehq"], name="Partners see the books").first()
-    check("an outcome can be added, wired to its services", cap is not None and cap.service_ids == set(svc_ids))
-    cap_id = cap.id
     m = br._map_for(db.session.get(Business, ids["ehq"]))
-    check("a missing outcome is drawn red", next(n for n in m["nodes"] if n["key"] == f"c{cap_id}")["color"] == "#f87171")
-c.post(f"/admin/businesses/{ids['ehq']}/map/outcomes/{cap_id}", data={"name": "Partners see the books", "status": "delivered",
-                                                                     "service_ids": [str(svc_ids[0])]})
+    check("filling the hole closes it", not any(n["kind"] == "hole" and n["name"] == "Accounting" for n in m["nodes"]))
+    qb_id = BusinessNode.query.filter_by(business_id=ids["ehq"], name="QuickBooks").one().id
+c.post(f"/admin/businesses/{ids['ehq']}/map/nodes/{portal_id}", data={"kind": "surface", "name": "Partner portal", "surface_kind": "portal",
+                                                                      "status": "live", "role": "Live now."})
 with application.test_request_context():
-    cap = db.session.get(BusinessCapability, cap_id)
-    check("saving rewires it", cap.status == "delivered" and cap.service_ids == {svc_ids[0]})
-c.post(f"/admin/businesses/{ids['ehq']}/map/outcomes/{cap_id}/delete")
+    check("a node saves", db.session.get(BusinessNode, portal_id).status == "live")
+r = c.post(f"/admin/businesses/{ids['ehq']}/map/nodes/{other_node}", data={"kind": "service", "name": "Hijacked"})
 with application.test_request_context():
-    check("removing it removes it", db.session.get(BusinessCapability, cap_id) is None)
-page = c.get(f"/admin/businesses/{ids['ehq']}/map").get_data(as_text=True)
-check("the map page carries the outcomes", "Customers charge their clients" in page)
-page = c.get(f"/admin/businesses/{ids['ehq']}/map/edit").get_data(as_text=True)
-check("the edit page lists them with their services ticked", "What it delivers" in page and 'name="service_ids"' in page)
+    check("another business's node cannot be reached", r.status_code == 404 and db.session.get(BusinessNode, other_node).name == "Hand typed")
+c.post(f"/admin/businesses/{ids['ehq']}/map/nodes/{portal_id}/delete")
+with application.test_request_context():
+    check("removing a node removes it and its lines", db.session.get(BusinessNode, portal_id) is None
+          and BusinessEdge.query.filter_by(to_node_id=portal_id).count() == 0)
 
-# Marks: a service with a URL and no runbook asks for its own, once.
 fetched = []
 br.app_icon_service.fetch = lambda url: (fetched.append(url) or (b"\x89PNG" + b"0" * 100, "png", url))
-r = c.post(f"/admin/businesses/{ids['ehq']}/map/marks", follow_redirects=True)
+c.post(f"/admin/businesses/{ids['ehq']}/map/marks", follow_redirects=True)
 with application.test_request_context():
-    merc = BusinessService.query.filter_by(business_id=ids["ehq"], name="Mercury").one()
-    check("the press fetches a mark for Mercury off its URL", merc.icon_file is not None and any("mercury.com" in u for u in fetched), fetched)
-    check("and the tile shows it", merc.mark_url.endswith(f"/map/services/{merc.id}/icon"))
-    mark_url = merc.mark_url
+    status_node = BusinessNode.query.filter_by(business_id=ids["ehq"], name="Status site").one()
+    check("the press fetches a mark for the status site off its URL", status_node.icon_file is not None
+          and any("status.entertainhq.com" in u for u in fetched), fetched[:3])
+    mark_url = status_node.mark_url
+    check("and the tile shows it", mark_url.endswith(f"/map/nodes/{status_node.id}/icon"))
 r = c.get(mark_url)
 check("served with nosniff", r.status_code == 200 and r.headers.get("X-Content-Type-Options") == "nosniff")
 before = len(fetched)
 c.post(f"/admin/businesses/{ids['ehq']}/map/marks", follow_redirects=True)
-check("a service already asked is not asked again", all("mercury" not in u for u in fetched[before:]))
-
-c.post(f"/admin/businesses/{ids['ehq']}/map/services/{qb_id}/delete")
-with application.test_request_context():
-    check("removing a service removes it", db.session.get(BusinessService, qb_id) is None)
-    check("and its connections", BusinessLink.query.filter_by(from_service_id=qb_id).count() == 0)
-    m = br._map_for(db.session.get(Business, ids["ehq"]))
-    check("and the hole comes back", any(n["kind"] == "hole" and n["name"] == "Accounting" for n in m["nodes"]))
+check("a thing already asked is not asked again", all("status.entertainhq" not in u for u in fetched[before:]))
 
 print()
 if FAIL:

@@ -1425,6 +1425,16 @@ class Business(db.Model):
         return self.parent_id is not None
 
     @property
+    def map_mark(self):
+        """The logo for the middle of its map: uploaded, else its app's icon."""
+        from flask import url_for
+        if self.logo_file:
+            return url_for("businesses.logo", id=self.id)
+        if self.logo_app is not None and self.logo_app.icon_file:
+            return url_for("apps.icon", id=self.logo_app_id)
+        return None
+
+    @property
     def milestone(self):
         """(label, day) for the date the tile leads with, or None.
 
@@ -1587,48 +1597,74 @@ class BusinessNeedLink(db.Model):
     why = db.Column(db.String(300), default="")
 
 
-class BusinessService(db.Model):
-    """What one business uses for one need: the vendor, and what it does here.
+class BusinessNode(db.Model):
+    """One thing on a business's map: a person, a surface, a service, an outcome.
 
-    `playbook_id` is the runbook when the catalogue has one; a vendor with no
-    runbook yet (Mercury, on 2026-11-02) is still on the map by `name`, and
-    the map says it has no runbook, which is itself a hole. `role` is the
-    sentence the hover shows: what this thing is doing for this business.
+    Michael, 2026-11-02, after two maps that were vendor inventories: the map
+    is "a network of everything that's making this product run", end to end.
+    So every kind of thing is a node on one table and every line is an edge
+    with its why, and the layout is radial: the business in the middle, the
+    SURFACES people touch around it (the marketing site, the app, the
+    portals, the phone apps, the status site, the admin board), the SERVICES
+    that power each surface behind it, the AUDIENCES who use it on the
+    outside, and the OUTCOMES a partner asks about sitting on the lines
+    between a person and what answers them.
+
+    `need_id` and `playbook_id` are a service's: the need it fills on the
+    business playbook, and its runbook. A surface or a service with a URL
+    and no runbook gets its own mark fetched off that URL.
     """
 
-    __tablename__ = "business_services"
+    __tablename__ = "business_nodes"
+
+    KINDS = (
+        ("audience", "People"),
+        ("surface", "What they use"),
+        ("service", "What powers it"),
+        ("outcome", "What it delivers"),
+    )
+    STATUSES = {
+        "audience": (),
+        "surface": (("live", "Live"), ("building", "Building"), ("planned", "Planned")),
+        "service": (("running", "Running"), ("setting_up", "Setting up"), ("planned", "Planned")),
+        "outcome": (("delivered", "Delivered"), ("in_progress", "In progress"), ("missing", "Missing")),
+    }
+    # What a surface is, which picks its glyph when it has no mark of its own.
+    SURFACE_KINDS = (
+        ("site", "Website"), ("app", "App"), ("portal", "Portal"), ("phone", "Phone app"),
+        ("status", "Status site"), ("admin", "Admin"), ("inbox", "Inbox"), ("other", "Other"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(
         db.Integer,
-        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_services_business_id"),
+        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_nodes_business_id"),
         nullable=False, index=True)
+    kind = db.Column(db.String(12), nullable=False, default="service", server_default="service", index=True)
+    name = db.Column(db.String(120), nullable=False, default="")
+    # What it is doing for this business, in a sentence: the hover.
+    role = db.Column(db.String(400), default="")
+    status = db.Column(db.String(12), default="")
+    url = db.Column(db.String(300), default="")
+    # A surface's shape; empty for the other kinds.
+    surface_kind = db.Column(db.String(12), default="")
     need_id = db.Column(
         db.Integer,
-        db.ForeignKey("business_needs.id", ondelete="SET NULL", name="fk_business_services_need_id"),
+        db.ForeignKey("business_needs.id", ondelete="SET NULL", name="fk_business_nodes_need_id"),
         nullable=True, index=True)
     playbook_id = db.Column(
         db.Integer,
-        db.ForeignKey("playbooks.id", ondelete="SET NULL", name="fk_business_services_playbook_id"),
+        db.ForeignKey("playbooks.id", ondelete="SET NULL", name="fk_business_nodes_playbook_id"),
         nullable=True, index=True)
-    name = db.Column(db.String(100), default="")
-    # Where it sits when it answers no need, so a custom service still lands
-    # in a column.
-    layer = db.Column(db.String(20), default="operations")
-    role = db.Column(db.String(400), default="")
-    status = db.Column(db.String(12), nullable=False, default="running", server_default="running")
-    url = db.Column(db.String(300), default="")
-    notes = db.Column(db.Text, default="")
-    # Its own mark, fetched off `url` the way a My Apps tile gets its icon,
-    # for a service with no runbook to borrow one from (Mercury, Zapier, the
-    # app itself). Null until asked for; icon_fetched_at stops the asking.
     icon_file = db.Column(db.String(120), nullable=True)
     icon_source = db.Column(db.String(500), nullable=True)
     icon_fetched_at = db.Column(db.DateTime, nullable=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    notes = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     business = db.relationship("Business", backref=db.backref(
-        "services", cascade="all, delete-orphan", order_by="BusinessService.id"))
+        "nodes", cascade="all, delete-orphan", order_by="BusinessNode.sort_order, BusinessNode.id"))
     need = db.relationship("BusinessNeed")
     playbook = db.relationship("Playbook")
 
@@ -1648,8 +1684,16 @@ class BusinessService(db.Model):
         return (parts[0][:2] if parts else "?").upper()
 
     @property
+    def kind_label(self):
+        return dict(self.KINDS).get(self.kind, self.kind)
+
+    @property
+    def status_label(self):
+        return dict(self.STATUSES.get(self.kind, ())).get(self.status, "")
+
+    @property
     def mark_url(self):
-        """The vendor's mark: its runbook's, else one fetched for this row, else None."""
+        """Its runbook's mark, else one fetched for this row, else None."""
         from flask import url_for
         pb = self.playbook
         if pb is not None:
@@ -1658,119 +1702,51 @@ class BusinessService(db.Model):
             if pb.icon_file:
                 return url_for("playbooks.icon", slug=pb.slug)
         if self.icon_file:
-            return url_for("businesses.service_icon", id=self.business_id, sid=self.id)
+            return url_for("businesses.node_icon", id=self.business_id, nid=self.id)
         return None
 
     @property
     def wants_mark(self):
         """Worth a network call: no mark, a URL to ask, not asked already."""
-        return (self.mark_url is None and bool((self.url or "").strip())
-                and self.icon_fetched_at is None)
+        return (self.kind in ("surface", "service") and self.mark_url is None
+                and bool((self.url or "").strip()) and self.icon_fetched_at is None)
 
     @property
     def runbook_url(self):
         from flask import url_for
         return url_for("playbooks.playbook_detail", slug=self.playbook.slug) if self.playbook else ""
 
+    def __repr__(self):
+        return f"<BusinessNode {self.kind} {self.display_name!r}>"
 
-class BusinessLink(db.Model):
-    """A connection on one business's map, written by hand, with its why.
 
-    Wins over a template connection between the same two services, so a
-    business can say in its own words why its Stripe talks to its bank.
-    """
+class BusinessEdge(db.Model):
+    """A line on a business's map, and why it is there."""
 
-    __tablename__ = "business_links"
+    __tablename__ = "business_edges"
+    __table_args__ = (
+        db.UniqueConstraint("from_node_id", "to_node_id", name="uq_business_edge"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(
         db.Integer,
-        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_links_business_id"),
+        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_edges_business_id"),
         nullable=False, index=True)
-    from_service_id = db.Column(
+    from_node_id = db.Column(
         db.Integer,
-        db.ForeignKey("business_services.id", ondelete="CASCADE", name="fk_business_links_from"),
+        db.ForeignKey("business_nodes.id", ondelete="CASCADE", name="fk_business_edges_from"),
         nullable=False, index=True)
-    to_service_id = db.Column(
+    to_node_id = db.Column(
         db.Integer,
-        db.ForeignKey("business_services.id", ondelete="CASCADE", name="fk_business_links_to"),
+        db.ForeignKey("business_nodes.id", ondelete="CASCADE", name="fk_business_edges_to"),
         nullable=False, index=True)
     why = db.Column(db.String(300), default="")
 
     business = db.relationship("Business", backref=db.backref(
-        "map_links", cascade="all, delete-orphan", order_by="BusinessLink.id"))
-    from_service = db.relationship("BusinessService", foreign_keys=[from_service_id])
-    to_service = db.relationship("BusinessService", foreign_keys=[to_service_id])
-
-
-class BusinessCapability(db.Model):
-    """One thing the business can do for its customers, and whether it does.
-
-    Michael, 2026-11-02: "how do our customers charge their clients? That's
-    done through Stripe payments ... to truly be able to answer all questions
-    from any of the business partners, if they ask, do we have a process in
-    place for X?" A capability is the question's answer in plain words, with
-    the services that deliver it drawn as its lines. Its status is the
-    honest state: delivered, in progress, or missing, which is a question
-    with no process yet.
-    """
-
-    __tablename__ = "business_capabilities"
-
-    STATUSES = (
-        ("delivered", "Delivered"),
-        ("in_progress", "In progress"),
-        ("missing", "Missing"),
-    )
-
-    id = db.Column(db.Integer, primary_key=True)
-    business_id = db.Column(
-        db.Integer,
-        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_capabilities_business_id"),
-        nullable=False, index=True)
-    name = db.Column(db.String(120), nullable=False)
-    how = db.Column(db.String(400), default="")
-    status = db.Column(db.String(12), nullable=False, default="delivered", server_default="delivered")
-    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default="0")
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    business = db.relationship("Business", backref=db.backref(
-        "capabilities", cascade="all, delete-orphan",
-        order_by="BusinessCapability.sort_order, BusinessCapability.id"))
-    links = db.relationship("BusinessCapabilityLink", back_populates="capability",
-                            cascade="all, delete-orphan")
-
-    @property
-    def status_label(self):
-        return dict(self.STATUSES).get(self.status, "Delivered")
-
-    @property
-    def service_ids(self):
-        return {l.service_id for l in self.links}
-
-
-class BusinessCapabilityLink(db.Model):
-    """A service that delivers a capability."""
-
-    __tablename__ = "business_capability_links"
-    __table_args__ = (
-        db.UniqueConstraint("capability_id", "service_id", name="uq_business_capability_link"),
-    )
-
-    id = db.Column(db.Integer, primary_key=True)
-    capability_id = db.Column(
-        db.Integer,
-        db.ForeignKey("business_capabilities.id", ondelete="CASCADE",
-                      name="fk_business_capability_links_capability_id"),
-        nullable=False, index=True)
-    service_id = db.Column(
-        db.Integer,
-        db.ForeignKey("business_services.id", ondelete="CASCADE",
-                      name="fk_business_capability_links_service_id"),
-        nullable=False, index=True)
-
-    capability = db.relationship("BusinessCapability", back_populates="links")
-    service = db.relationship("BusinessService")
+        "edges", cascade="all, delete-orphan", order_by="BusinessEdge.id"))
+    from_node = db.relationship("BusinessNode", foreign_keys=[from_node_id])
+    to_node = db.relationship("BusinessNode", foreign_keys=[to_node_id])
 
 
 class SalesTaxFiling(db.Model):

@@ -4,26 +4,20 @@
 {% from "pm/components/icon_button.html" import icon_button %}
 
 {#
-  Everything that makes this business run, as a map you can move around.
+  Everything that makes this business run, as a network you can move around.
 
-  Columns are the layers a business is built in, left to right, and the
-  last column is what all of it delivers: the outcomes a partner asks about,
-  each wired to the services that deliver it. Lines are solid, coloured by
-  the column they leave, and say why on hover; a dashed slot is an essential
-  nobody has filled; a red mark is a vendor with no runbook.
+  The business in the middle. Around it the surfaces people touch; behind
+  each, the services that power it; further out the outcomes a partner asks
+  about; on the outside the people who use it. Every line says why on hover.
+  A dashed amber slot is an essential nobody has filled; a red mark is a
+  vendor with no runbook; an outcome's colour is its status.
 
-  The nodes are HTML, not SVG, laid out from the same pan and zoom: each
-  tile is an <img> at its real pixel size, so a logo is rasterised at the
-  size it is shown and never blurs (an SVG <image> under a scale transform
-  is drawn once and stretched). The lines stay in SVG under them. A tile is
-  the shape of an app icon and the logo fills it edge to edge (rule "An app
-  icon is never put in a box").
-
-  Hover shows the card; a tap or click pins it (read on pointerup without
-  movement, never click: the canvas captures the pointer). touch-action
-  none, or a finger's drag is the browser's scroll. The window never
-  scrolls (contained-scroll). Escape goes back. |tojson rides in a
-  single-quoted attribute.
+  The tiles are HTML at real pixel size, placed from the same pan and zoom
+  the SVG lines use, so a logo is sharp at every zoom. Hover shows the card;
+  a tap or click pins it (read on pointerup without movement, never click:
+  the canvas captures the pointer). touch-action none, or a finger's drag is
+  the browser's scroll. The window never scrolls. Escape goes back. |tojson
+  rides in single-quoted attributes.
 #}
 
 {% block title %}{{ business.label }} map - Built By Bean{% endblock %}
@@ -42,16 +36,15 @@
      @keydown.escape.window='window.location.href = {{ url_for('businesses.detail', id=business.id) | tojson }}'>
 
     <div class="shrink-0 flex flex-wrap items-center gap-2 min-w-0">
-        {{ business_logo(business, box='w-10 h-10', pad='p-0', text='text-sm') }}
         <div class="hidden sm:flex flex-wrap items-center gap-1.5 min-w-0">
-            {% for c in map.columns %}
+            {% for l in map.legend %}
             <span class="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold rounded-md bg-surface-800/70 text-surface-200">
-                <span class="w-2 h-2 rounded-full" style="background: {{ c.color }}"></span>{{ c.label }}</span>
+                <span class="w-2 h-2 rounded-full" style="background: {{ l.color }}"></span>{{ l.label }}</span>
             {% endfor %}
         </div>
         <div class="ml-auto flex flex-wrap items-center gap-1.5">
             <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-surface-800/70 text-surface-200 whitespace-nowrap">
-                {{ map.counts.services }} running it</span>
+                {{ map.counts.services }} services, {{ map.counts.surfaces }} surfaces</span>
             {% if map.counts.outcomes %}
             <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-emerald-900/30 text-emerald-300 whitespace-nowrap">
                 {{ map.counts.outcomes - map.counts.gaps }} of {{ map.counts.outcomes }} delivered</span>
@@ -80,7 +73,6 @@
          @pointerdown="onDown($event)" @pointermove="onMove($event)"
          @pointerup="onUp($event)" @pointercancel="onUp($event)" @pointerleave="onUp($event)">
 
-        {# The lines and the column bands, in SVG under the tiles. #}
         <svg class="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -89,36 +81,41 @@
             </defs>
             <rect width="100%" height="100%" fill="url(#dots)"/>
             <g :transform="'translate(' + tx + ' ' + ty + ') scale(' + k + ')'">
-                {% for c in map.columns %}
-                <rect x="{{ c.x - (140 if c.key == 'outcomes' else 110) }}" y="20" width="{{ 280 if c.key == 'outcomes' else 220 }}" height="{{ map.height - 30 }}" rx="18"
-                      fill="{{ c.color }}" fill-opacity="{{ 0.03 if c.key == 'outcomes' else 0.05 }}" stroke="{{ c.color }}" stroke-opacity="0.18"/>
-                <text x="{{ c.x }}" y="56" text-anchor="middle" font-size="13" font-weight="800" letter-spacing="0.14em"
-                      fill="{{ c.color }}">{{ c.label | upper }}</text>
+                {# The rings, faint, so the eye reads the layers. #}
+                {% for key, r in map.rings.items() %}
+                <circle cx="{{ map.center.x }}" cy="{{ map.center.y }}" r="{{ r }}" fill="none"
+                        stroke="rgba(255,255,255,0.07)" stroke-dasharray="3 9"/>
                 {% endfor %}
                 {% for e in map.edges %}
                 <g class="edge" data-pick="edge:{{ loop.index0 }}"
                    @pointerenter="show('edge', {{ loop.index0 }}, $event)" @pointerleave="hide()">
                     <path d="{{ e.path }}" fill="none" stroke="transparent" stroke-width="30"/>
                     <path d="{{ e.path }}" fill="none" stroke-linecap="round"
-                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ '#a78bfa' if (not e.derived and not e.outcome) else e.color }}'"
-                          :stroke-opacity="isLit('edge', {{ loop.index0 }}) ? 1 : {{ 0.95 if not e.derived else 0.75 }}"
-                          :stroke-width="isLit('edge', {{ loop.index0 }}) ? 4.5 : {{ 3.2 if not e.derived else 2.4 }}"
+                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ e.color }}'"
+                          :stroke-opacity="isLit('edge', {{ loop.index0 }}) ? 1 : (dim && !near({{ loop.index0 }}) ? 0.08 : {{ 0.22 if e.derived else (0.9 if e.outcome else 0.6) }})"
+                          :stroke-width="isLit('edge', {{ loop.index0 }}) ? 4.5 : {{ 1.6 if e.derived else 2.4 }}"
                           {% if e.outcome %}stroke-dasharray="7 5"{% endif %}
-                          style="transition: stroke 120ms, stroke-width 120ms"/>
+                          style="transition: stroke 120ms, stroke-width 120ms, stroke-opacity 120ms"/>
                 </g>
                 {% endfor %}
             </g>
         </svg>
 
-        {# The tiles, in HTML at real pixel size. One element per node, placed
-           from the same tx, ty and k the lines use. #}
         <div class="absolute inset-0 pointer-events-none">
             <template x-for="(n, i) in map.nodes" :key="n.key">
                 <div class="absolute pointer-events-auto flex flex-col items-center text-center cursor-pointer"
                      :style="nodeStyle(n)" :data-pick="'node:' + i"
+                     :class="dim && !nearNode(n.key) ? 'opacity-30' : ''"
                      @pointerenter="show('node', i, $event)" @pointerleave="hide()">
 
-                    {# An outcome is a pill in its status colour. #}
+                    <template x-if="n.kind === 'center'">
+                        <div class="rounded-3xl bg-[#0b0b14] ring-2 ring-brand-400/60 flex items-center justify-center overflow-hidden"
+                             :style="'width:' + px(104) + '; height:' + px(104) + '; box-shadow: 0 0 0 ' + px(10) + ' rgba(167,139,250,0.12)'">
+                            <template x-if="n.mark"><img :src="n.mark" alt="" draggable="false" class="w-full h-full object-contain"></template>
+                            <template x-if="!n.mark"><span class="font-bold text-brand-200" :style="'font-size:' + px(34)" x-text="n.initials"></span></template>
+                        </div>
+                    </template>
+
                     <template x-if="n.kind === 'outcome'">
                         <div class="w-full rounded-2xl border-2 bg-[#0b0b14] flex items-center gap-2 text-left"
                              :style="'padding:' + px(10) + ' ' + px(14) + '; border-color:' + n.color + '; box-shadow: 0 0 0 ' + px(4) + ' ' + n.color + '22'">
@@ -127,28 +124,41 @@
                         </div>
                     </template>
 
-                    {# A hole is a dashed empty tile. #}
+                    <template x-if="n.kind === 'audience'">
+                        <div class="rounded-full bg-[#0b0b14] border-2 border-white/70 flex items-center justify-center"
+                             :style="'width:' + px(64) + '; height:' + px(64)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#f8fafc" stroke-width="1.6" :style="'width:' + px(32) + '; height:' + px(32)">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                        </div>
+                    </template>
+
                     <template x-if="n.kind === 'hole'">
                         <div class="rounded-2xl border-2 border-dashed border-amber-400 bg-amber-400/10 flex items-center justify-center text-amber-300 font-bold"
                              :style="'width:' + px(64) + '; height:' + px(64) + '; font-size:' + px(30)">+</div>
                     </template>
 
-                    {# A service is its mark, filling an app-icon tile. #}
-                    <template x-if="n.kind === 'service'">
-                        <div class="relative" :style="'width:' + px(64) + '; height:' + px(64)">
+                    <template x-if="n.kind === 'surface' || n.kind === 'service'">
+                        <div class="relative" :style="'width:' + px(n.kind === 'surface' ? 72 : 64) + '; height:' + px(n.kind === 'surface' ? 72 : 64)">
                             <template x-if="n.mark">
-                                <img :src="n.mark" alt="" draggable="false"
-                                     class="w-full h-full object-contain bg-[#0b0b14]"
-                                     :style="'border-radius:' + px(14)">
+                                <img :src="n.mark" alt="" draggable="false" class="w-full h-full object-contain bg-[#0b0b14]"
+                                     :style="'border-radius:' + px(16) + (n.kind === 'surface' ? '; box-shadow: 0 0 0 ' + px(2) + ' #a78bfa' : '')">
                             </template>
-                            <template x-if="!n.mark">
+                            <template x-if="!n.mark && n.kind === 'surface'">
+                                <div class="w-full h-full bg-[#0b0b14] flex items-center justify-center"
+                                     :style="'border-radius:' + px(16) + '; box-shadow: 0 0 0 ' + px(2) + ' #a78bfa'">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+                                         :style="'width:' + px(36) + '; height:' + px(36)"><path :d="glyph(n.glyph)"/></svg>
+                                </div>
+                            </template>
+                            <template x-if="!n.mark && n.kind === 'service'">
                                 <div class="w-full h-full bg-brand-500/25 flex items-center justify-center font-bold text-brand-200"
                                      :style="'border-radius:' + px(14) + '; font-size:' + px(20)" x-text="n.initials"></div>
                             </template>
-                            <template x-if="n.status !== 'running'">
+                            <template x-if="n.status && !['running', 'live'].includes(n.status)">
                                 <div class="absolute border-2 border-dashed pointer-events-none"
-                                     :class="n.status === 'setting_up' ? 'border-amber-400' : 'border-slate-400'"
-                                     :style="'inset:' + px(-5) + '; border-radius:' + px(18)"></div>
+                                     :class="['setting_up', 'building'].includes(n.status) ? 'border-amber-400' : 'border-slate-400'"
+                                     :style="'inset:' + px(-5) + '; border-radius:' + px(20)"></div>
                             </template>
                             <template x-if="n.runbook_missing">
                                 <div class="absolute rounded-full bg-red-500 text-white font-extrabold flex items-center justify-center"
@@ -157,82 +167,69 @@
                         </div>
                     </template>
 
-                    {# What it is, then what it is for. #}
                     <template x-if="n.kind !== 'outcome'">
                         <div class="w-full" :style="'margin-top:' + px(6)">
                             <p class="font-bold leading-tight break-words" :class="n.kind === 'hole' ? 'text-amber-300' : 'text-white'"
-                               :style="'font-size:' + px(13)" x-text="n.name"></p>
+                               :style="'font-size:' + px(n.kind === 'center' ? 16 : 13)" x-text="n.name"></p>
                             <p class="font-bold tracking-wider uppercase leading-tight break-words"
-                               :style="'font-size:' + px(10) + '; color:' + (n.kind === 'hole' ? '#f59e0b' : layerColor(n.layer))"
-                               x-text="n.kind === 'hole' ? 'Missing' : n.need"></p>
+                               :style="'font-size:' + px(10) + '; color:' + n.color"
+                               x-text="n.kind === 'hole' ? 'Missing' : (n.kind === 'service' ? n.need : (n.kind === 'surface' ? n.status_label : ''))"></p>
                         </div>
                     </template>
                 </div>
             </template>
         </div>
 
-        {# The card. One element, filled from whichever node or line is under
-           the pointer or was tapped, kept inside the canvas. #}
         <div x-show="card" x-cloak x-transition.opacity.duration.120ms
              class="absolute z-10 w-80 max-w-[calc(100%-1.5rem)] p-4 rounded-2xl border border-white/10 bg-surface-900/95 shadow-2xl pointer-events-auto"
              :style="cardStyle" @pointerenter="holdCard = true" @pointerleave="holdCard = false; if (!pinned) hide()">
             <template x-if="card && card.kind === 'node'">
                 <div class="space-y-2 min-w-0">
                     <div class="flex items-center gap-3 min-w-0">
-                        <template x-if="card.item.kind === 'service' && card.item.mark">
-                            <img :src="card.item.mark" alt="" class="w-10 h-10 object-contain rounded-xl flex-shrink-0">
-                        </template>
-                        <template x-if="card.item.kind === 'service' && !card.item.mark">
-                            <span class="w-10 h-10 rounded-xl bg-brand-500/25 text-brand-200 font-bold flex items-center justify-center flex-shrink-0" x-text="card.item.initials"></span>
-                        </template>
-                        <template x-if="card.item.kind === 'hole'">
-                            <span class="w-10 h-10 rounded-xl border-2 border-dashed border-amber-400 text-amber-300 font-bold flex items-center justify-center flex-shrink-0">+</span>
-                        </template>
-                        <template x-if="card.item.kind === 'outcome'">
-                            <span class="w-4 h-4 rounded-full flex-shrink-0" :style="'background:' + card.item.color"></span>
+                        <template x-if="card.item.mark"><img :src="card.item.mark" alt="" class="w-10 h-10 object-contain rounded-xl flex-shrink-0"></template>
+                        <template x-if="!card.item.mark">
+                            <span class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold"
+                                  :class="card.item.kind === 'hole' ? 'border-2 border-dashed border-amber-400 text-amber-300' : 'bg-brand-500/25 text-brand-200'"
+                                  x-text="card.item.kind === 'hole' ? '+' : (card.item.kind === 'outcome' ? '' : card.item.initials)"
+                                  :style="card.item.kind === 'outcome' ? 'background:' + card.item.color : ''"></span>
                         </template>
                         <div class="min-w-0">
                             <p class="text-sm font-bold text-white break-words" x-text="card.item.kind === 'hole' ? 'Missing: ' + card.item.name : card.item.name"></p>
-                            <p class="text-xs text-surface-400 break-words"
-                               x-text="card.item.kind === 'hole' ? 'Every business needs one' : (card.item.kind === 'outcome' ? 'What it delivers' : card.item.need)"></p>
+                            <p class="text-xs text-surface-400 break-words" x-text="kindLabel(card.item)"></p>
                         </div>
                     </div>
-                    <div class="flex flex-wrap gap-1.5">
-                        <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md"
-                              :class="{'bg-emerald-900/30 text-emerald-400': card.item.status === 'running' || card.item.status === 'delivered',
-                                       'bg-amber-500/15 text-amber-300': card.item.status === 'setting_up' || card.item.status === 'in_progress',
+                    <div class="flex flex-wrap gap-1.5" x-show="card.item.status_label || card.item.runbook_missing">
+                        <span x-show="card.item.status_label" class="px-2 py-0.5 text-[11px] font-semibold rounded-md"
+                              :class="{'bg-emerald-900/30 text-emerald-400': ['running', 'delivered', 'live'].includes(card.item.status),
+                                       'bg-amber-500/15 text-amber-300': ['setting_up', 'in_progress', 'building'].includes(card.item.status) || card.item.kind === 'hole',
                                        'bg-red-900/30 text-red-300': card.item.status === 'missing' && card.item.kind === 'outcome',
-                                       'bg-amber-500/15 text-amber-200': card.item.status === 'missing' && card.item.kind === 'hole',
                                        'bg-surface-800 text-surface-300': card.item.status === 'planned'}"
                               x-text="card.item.status_label"></span>
                         <span x-show="card.item.runbook_missing" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No runbook yet</span>
                     </div>
                     <p class="text-sm text-surface-200 break-words" x-show="card.item.role" x-text="card.item.role"></p>
-                    <template x-if="card.item.kind === 'outcome' && card.item.delivered_by && card.item.delivered_by.length">
-                        <p class="text-xs text-surface-400 break-words">Delivered by <span class="text-surface-200" x-text="card.item.delivered_by.join(', ')"></span></p>
-                    </template>
                     <template x-if="card.item.kind === 'hole' && card.item.suggestions && card.item.suggestions.length">
                         <p class="text-xs text-surface-400 break-words">Fill it with
                             <template x-for="(s, i) in card.item.suggestions" :key="s.slug">
                                 <span><span class="text-surface-200" x-text="s.name"></span><span x-show="i < card.item.suggestions.length - 1">, </span></span>
                             </template></p>
                     </template>
+                    <p class="text-xs text-surface-400 break-words" x-show="connected(card.item.key).length">Connected to
+                        <span class="text-surface-200" x-text="connected(card.item.key).join(', ')"></span></p>
                     <div class="flex flex-wrap gap-2 pt-1" x-show="pinned">
                         <template x-if="card.item.kind === 'hole'">
                             <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "?need=" + card.item.need_slug + "#add"'
                                class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Fill it</a>
                         </template>
-                        <template x-if="card.item.kind === 'outcome'">
-                            <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "#outcome-" + card.item.id'
+                        <template x-if="card.item.id && card.item.kind !== 'hole'">
+                            <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "#node-" + card.item.id'
                                class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Edit</a>
                         </template>
                         <template x-if="card.item.runbook">
-                            <a :href="card.item.runbook"
-                               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Runbook</a>
+                            <a :href="card.item.runbook" class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Runbook</a>
                         </template>
                         <template x-if="card.item.url">
-                            <a :href="card.item.url" target="_blank" rel="noopener"
-                               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Open</a>
+                            <a :href="card.item.url" target="_blank" rel="noopener" class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Open</a>
                         </template>
                     </div>
                 </div>
@@ -242,7 +239,6 @@
                     <p class="text-sm font-bold text-white break-words" x-text="card.item.label"></p>
                     <p class="text-sm text-surface-200 break-words" x-text="card.item.why || 'Connected.'"></p>
                     <p class="text-[11px] text-surface-500" x-show="card.item.derived">From the business playbook</p>
-                    <p class="text-[11px] text-surface-500" x-show="card.item.outcome">How the outcome is delivered</p>
                 </div>
             </template>
         </div>
@@ -251,8 +247,17 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
-    const COLORS = {{ map.columns | map(attribute='color') | list | tojson }};
-    const KEYS = {{ map.columns | map(attribute='key') | list | tojson }};
+    const GLYPHS = {
+        globe: 'M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.5-2.5 3.5-5.5 3.5-9S14.5 5.5 12 3m0 18c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3M3 12h18',
+        app: 'M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 4h16M8 4v6',
+        door: 'M5 3h10a1 1 0 011 1v16a1 1 0 01-1 1H5V3zm11 4h4v10h-4M12 12h.01',
+        phone: 'M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm3 17h2',
+        pulse: 'M3 12h4l2-6 4 12 2-6h6',
+        board: 'M4 5h16v12H4zM9 21h6m-3-4v4M8 13l3-3 2 2 3-4',
+        mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+        dot: 'M12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0',
+    };
+    const LABEL = { audience: 'People', surface: 'What they use', service: 'What powers it', outcome: 'What it delivers', hole: 'Every business needs one', center: 'The business' };
     Alpine.data('bizMap', (map) => ({
         map, tx: 0, ty: 0, k: 1, dragging: false, moved: false,
         pointers: new Map(), pinchStart: null, downPick: '',
@@ -263,24 +268,50 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('resize', () => { if (!this.pinned) this.fit(); });
         },
         px(v) { return (v * this.k).toFixed(2) + 'px'; },
-        layerColor(key) { const i = KEYS.indexOf(key); return i >= 0 ? COLORS[i] : '#94a3b8'; },
-        /* A node box is 150 map units wide (an outcome 250), centred on x,
-           with the tile at the top and the labels under it. */
+        glyph(name) { return GLYPHS[name] || GLYPHS.dot; },
+        kindLabel(n) { return n.kind === 'service' && n.need ? n.need : LABEL[n.kind] || ''; },
+        /* Everything the pinned or hovered node touches: the rest dims. */
+        get dim() { return !!(this.pinned || this.hover); },
+        get litKey() {
+            const c = this.pinned || this.hover;
+            if (!c) return null;
+            return c.kind === 'node' ? this.map.nodes[c.i].key : null;
+        },
+        near(ei) {
+            const c = this.pinned || this.hover;
+            if (!c) return true;
+            if (c.kind === 'edge') return c.i === ei;
+            const key = this.litKey, e = this.map.edges[ei];
+            return e.a === key || e.b === key;
+        },
+        nearNode(key) {
+            const c = this.pinned || this.hover;
+            if (!c) return true;
+            if (c.kind === 'edge') { const e = this.map.edges[c.i]; return e.a === key || e.b === key; }
+            if (key === this.litKey) return true;
+            return this.map.edges.some(e => (e.a === this.litKey && e.b === key) || (e.b === this.litKey && e.a === key));
+        },
+        connected(key) {
+            const names = new Map(this.map.nodes.map(n => [n.key, n.name]));
+            const out = [];
+            this.map.edges.forEach(e => { if (e.a === key) out.push(names.get(e.b)); else if (e.b === key) out.push(names.get(e.a)); });
+            return out.filter(Boolean);
+        },
         nodeStyle(n) {
-            const w = n.kind === 'outcome' ? 250 : 150;
-            const top = n.kind === 'outcome' ? 28 : 32;
+            const w = n.kind === 'outcome' ? 230 : (n.kind === 'center' ? 170 : 150);
+            const top = n.kind === 'outcome' ? 28 : (n.kind === 'center' ? 52 : (n.kind === 'surface' ? 36 : 32));
             return 'left:' + (this.tx + (n.x - w / 2) * this.k).toFixed(2) + 'px; top:' + (this.ty + (n.y - top) * this.k).toFixed(2) + 'px; width:' + (w * this.k).toFixed(2) + 'px';
         },
         fit() {
             const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
             if (!w || !h) return;
-            const k = Math.max(0.35, Math.min(1.4, Math.min((w - 40) / this.map.width, (h - 40) / this.map.height)));
+            const k = Math.max(0.28, Math.min(1.4, Math.min((w - 40) / this.map.width, (h - 40) / this.map.height)));
             this.k = k;
             this.tx = (w - this.map.width * k) / 2;
             this.ty = (h - this.map.height * k) / 2;
         },
         zoomAt(factor, cx, cy) {
-            const k2 = Math.max(0.25, Math.min(3, this.k * factor));
+            const k2 = Math.max(0.2, Math.min(3, this.k * factor));
             this.tx = cx - (cx - this.tx) * (k2 / this.k);
             this.ty = cy - (cy - this.ty) * (k2 / this.k);
             this.k = k2;
@@ -312,8 +343,7 @@ document.addEventListener('alpine:init', () => {
                 const [a, b] = [...this.pointers.values()];
                 const d = Math.hypot(a.x - b.x, a.y - b.y);
                 const r = this.canvas.getBoundingClientRect();
-                const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
-                this.zoomAt((this.pinchStart.k * (d / this.pinchStart.d)) / this.k, cx, cy);
+                this.zoomAt((this.pinchStart.k * (d / this.pinchStart.d)) / this.k, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
                 return;
             }
             this.tx += dx; this.ty += dy;
@@ -325,30 +355,20 @@ document.addEventListener('alpine:init', () => {
             if (this.pointers.size === 0) {
                 this.dragging = false;
                 if (!this.moved) {
-                    if (this.downPick) {
-                        const [kind, i] = this.downPick.split(':');
-                        this.pin(kind, +i, e);
-                    } else {
-                        this.pinned = null;
-                    }
+                    if (this.downPick) { const [kind, i] = this.downPick.split(':'); this.pin(kind, +i, e); }
+                    else { this.pinned = null; }
                 }
             }
             this.downPick = '';
         },
-        show(kind, i, e) {
-            if (this.pinned) return;
-            this.hover = { kind, i, x: e.clientX, y: e.clientY };
-        },
+        show(kind, i, e) { if (this.pinned) return; this.hover = { kind, i, x: e.clientX, y: e.clientY }; },
         hide() { if (!this.holdCard) this.hover = null; },
         pin(kind, i, e) {
             const same = this.pinned && this.pinned.kind === kind && this.pinned.i === i;
             this.pinned = same ? null : { kind, i, x: e.clientX, y: e.clientY };
             this.hover = null;
         },
-        isLit(kind, i) {
-            const c = this.pinned || this.hover;
-            return !!c && c.kind === kind && c.i === i;
-        },
+        isLit(kind, i) { const c = this.pinned || this.hover; return !!c && c.kind === kind && c.i === i; },
         get card() {
             const c = this.pinned || this.hover;
             if (!c) return null;
@@ -360,7 +380,7 @@ document.addEventListener('alpine:init', () => {
             const r = this.canvas.getBoundingClientRect();
             let x = c.x - r.left + 16, y = c.y - r.top + 16;
             if (x + 330 > r.width) x = Math.max(8, c.x - r.left - 330);
-            if (y + 280 > r.height) y = Math.max(8, r.height - 290);
+            if (y + 300 > r.height) y = Math.max(8, r.height - 310);
             return `left:${x}px; top:${y}px`;
         },
     }));
