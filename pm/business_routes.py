@@ -45,7 +45,7 @@ import app_icon_service
 from models import (db, AppLink, Business, BusinessLocation, Client, Invoice, Project,
                     SalesTaxFiling, SalesTaxFilingFile, SalesTaxSetting)
 from pm.users_routes import ceo_required
-from stripe_service import import_invoices_from_stripe
+from stripe_service import get_stripe_invoice_totals, import_invoices_from_stripe
 
 business_bp = Blueprint("businesses", __name__)
 
@@ -225,31 +225,20 @@ def periods_for(business, today, board=None):
 
 # ── The businesses, and each one ─────────────────────────────
 
-def _refresh_invoices():
-    """Stripe's invoices made rows first, cached five minutes; a failure leaves
-    the ledger as it was rather than the page broken."""
-    try:
-        import_invoices_from_stripe(ttl=300)
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Businesses: Stripe import failed: {e}")
-
-
 def lifetime_revenue(business, ask=False):
-    """Everything the business has sold and been paid for, before tax, or None.
+    """Everything the business has been paid, or None when nothing counts it.
 
-    "board" is this board's invoices: every paid one, less the tax on it, and
-    never a catch-up invoice, which bills back tax and is not a sale. Tax a
-    client paid is the state's money passing through, the same reading the
-    returns use, so this is lower than the dashboard's Total Revenue by the
-    tax collected. "hub" is what the business's own app last said, asked again
-    only when `ask` and the answer is older than REVENUE_FRESH_SECONDS.
-    "manual" has nothing to count.
+    "board" is the dashboard's Total Revenue, read from the same call: what
+    Stripe says was paid on every invoice, tax included. It shipped on
+    2026-11-01 as the board's own invoice rows less tax and back tax, and that
+    evening Michael found it did not match the dashboard. A business's takings
+    are one number, so the two pages read one function; if revenue is ever to
+    leave the tax out, it changes there, for both. "hub" is what the
+    business's own app last said, asked again only when `ask` and the answer
+    is older than REVENUE_FRESH_SECONDS. "manual" has nothing to count.
     """
     if business.sales_source == "board":
-        paid = Invoice.query.filter(Invoice.status == "paid",
-                                    Invoice.sales_tax_catchup.is_(False)).all()
-        return round(sum((inv.total or 0.0) - (inv.tax or 0.0) for inv in paid), 2)
+        return round(get_stripe_invoice_totals()["paid"], 2)
     if business.sales_source == "hub":
         if ask:
             age = None
@@ -276,8 +265,6 @@ def index():
     last said."""
     businesses = Business.query.order_by(Business.is_active.desc(), Business.name,
                                          Business.id).all()
-    if any(b.sales_source == "board" for b in businesses):
-        _refresh_invoices()
     tiles = [{"business": b, "revenue": lifetime_revenue(b)} for b in businesses]
     return render_template("pm/businesses/index.html", tiles=tiles)
 

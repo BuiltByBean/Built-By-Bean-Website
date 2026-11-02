@@ -8,8 +8,9 @@ and proves:
 
   1. The list shows each business's name, start date and lifetime revenue, and
      no WebFile or taxpayer number; each tile opens its business.
-  2. Lifetime revenue is every paid invoice less its tax, never a catch-up
-     invoice or an unpaid one. A business on its app shows what the app last
+  2. Lifetime revenue for the business the board bills from is the
+     dashboard's Total Revenue, the same figure on both pages (they disagreed
+     the evening this shipped). A business on its app shows what the app last
      said, the list never asks the app, and the business's page asks only when
      that answer is old. A business with nothing to count says so.
   3. The business's page carries its tax: the numbers, the next return, eSystems.
@@ -55,6 +56,27 @@ def fake_fetch(base_url, path, payload, *, secret, origin_slug, timeout=20):
 
 
 br.hub.fetch = fake_fetch
+
+# Stripe's invoices as the dashboard and the Businesses page both read them:
+# paid with and without tax, a paid back-tax invoice, an open one, a draft.
+import stripe_service  # noqa: E402
+def _stripe_row(n, status, total, tax, catchup=False):
+    """One invoice in the shape stripe_service.get_stripe_invoices returns."""
+    when = datetime(2026, 10, n, tzinfo=timezone.utc)
+    paid = status == "paid"
+    return {"id": f"in_{n}", "number": f"BBB-{n}", "status": status, "customer_id": "cus_1",
+            "customer_name": "J&D Entertainment", "total": total, "tax": tax,
+            "amount_due": 0.0 if paid else total, "amount_paid": total if paid else 0.0,
+            "created_at": when, "due_date": when + timedelta(days=30),
+            "paid_at": when if paid else None, "issued_at": when, "catchup": catchup,
+            "description": None, "lines": [], "hosted_url": None, "pdf_url": None,
+            "admin_url": f"https://dashboard.stripe.com/invoices/in_{n}"}
+
+
+stripe_service.get_stripe_invoices = lambda ttl=300: [
+    _stripe_row(1, "paid", 11350.0, 0.0), _stripe_row(2, "paid", 1066.0, 66.0),
+    _stripe_row(3, "paid", 749.10, 0.0, catchup=True), _stripe_row(4, "open", 5000.0, 0.0),
+    _stripe_row(5, "draft", 900.0, 0.0)]
 
 application = create_app()
 application.config["UPLOAD_FOLDER"] = TMP
@@ -128,7 +150,11 @@ html = c.get("/admin/businesses").get_data(as_text=True)
 check("shows each business by name", all(n in html for n in ("Built by Bean", "EntertainHQ", "Shelf Company LLC")))
 check("with its start date", "Jan 17, 2024" in html and "Oct 05, 2026" in html,
       re.findall(r"[A-Z][a-z]{2} \d{1,2}, 20\d\d", html))
-check("lifetime revenue is paid sales before tax, no back tax: $12,350.00", "$12,350.00" in html,
+dash = c.get("/admin/finances").get_data(as_text=True)
+m = re.search(r"Total Revenue.*?(\$[\d,]+\.\d\d)", dash, re.S)
+dash_total = m.group(1) if m else None
+check("the dashboard's Total Revenue is what Stripe says was paid", dash_total == "$13,165.10", dash_total)
+check("and the Businesses tile shows the same figure", dash_total and dash_total in html,
       re.findall(r"\$[\d,]+\.\d\d", html))
 check("a business on its app that has not reported says so", "App not reporting" in html)
 check("a business with nothing to count says so", "Not tracked" in html)
@@ -141,7 +167,7 @@ print("A business's page")
 page = c.get(f"/admin/businesses/{ids['bbb']}").get_data(as_text=True)
 check("carries the tax numbers", "32093304155" in page and "RT000000" in page)
 check("and eSystems", "eSystems" in page and "Every return" in page)
-check("and the same revenue as the list", "$12,350.00" in page)
+check("and the same revenue as the list and the dashboard", dash_total and dash_total in page)
 page = c.get(f"/admin/businesses/{ids['ehq']}").get_data(as_text=True)
 check("an app's business is asked for its lifetime sales, briefly",
       len(hub_calls) == 1 and hub_calls[0][0] == "/api/hub/tax/sales" and hub_calls[0][2] <= 6, hub_calls)
