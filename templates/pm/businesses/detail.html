@@ -3,6 +3,8 @@
 {% from "pm/components/copy_button.html" import copy_button %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/businesses/_logo.html" import business_logo %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/icon_button.html" import delete_icon %}
 
 {#
   One business: who it is first, then its tax. The numbers the state knows it
@@ -40,7 +42,7 @@
 
 {% block title %}{{ b.label }} - Built By Bean{% endblock %}
 {% block page_title %}{{ b.label }}{% endblock %}
-{% block page_subtitle %}{{ 'A division of ' ~ b.parent.label if b.parent else b.name }}{% endblock %}
+{% block page_subtitle %}{{ b.parent.name ~ ' d/b/a ' ~ b.label if b.parent else b.name }}{% endblock %}
 {% block back %}{{ back_link(url_for('businesses.index'), 'Businesses') }}{% endblock %}
 
 {% block header_actions %}
@@ -59,9 +61,18 @@
         <div class="flex items-center gap-5 min-w-0">
             {{ business_logo(b, box='w-20 h-20', pad='p-2.5', text='text-xl') }}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-w-0">
+                {# Age runs from the launch; before it, from the idea. #}
                 <div class="min-w-0">
-                    <p class="text-xs text-surface-400">Started</p>
-                    <p class="text-base font-semibold text-white">{{ b.formed_on | format_date if b.formed_on else 'Not on file' }}</p>
+                    {% if b.launched_on %}
+                    <p class="text-xs text-surface-400">Age</p>
+                    <p class="text-xl font-bold text-white break-words">{{ b.launched_on | age }}</p>
+                    {% elif b.conceived_on %}
+                    <p class="text-xs text-surface-400">In the works</p>
+                    <p class="text-xl font-bold text-white break-words">{{ b.conceived_on | age }}</p>
+                    {% else %}
+                    <p class="text-xs text-surface-400">Age</p>
+                    <p class="text-sm font-semibold text-surface-400">Not on file</p>
+                    {% endif %}
                 </div>
                 <div class="min-w-0">
                     <p class="text-xs text-surface-400">Lifetime revenue</p>
@@ -75,16 +86,82 @@
                 </div>
             </div>
         </div>
+        {% set dates = [('Conceived', b.conceived_on)] + ([] if b.parent else [('Formed', b.formed_on)]) + [('Launched', b.launched_on)] %}
+        <div class="grid grid-cols-1 {{ 'sm:grid-cols-2' if b.parent else 'sm:grid-cols-3' }} gap-2 mt-5">
+            {% for label, day in dates %}
+            <div class="min-w-0 p-3 rounded-xl bg-surface-800/40">
+                <p class="text-xs text-surface-400">{{ label }}</p>
+                {% if day %}
+                <p class="text-sm font-semibold text-white">{{ day | format_date }}</p>
+                <p class="text-xs text-surface-400">{{ day | age }}{{ ' ago' if (day | age) not in ('Today', 'Not yet') else '' }}</p>
+                {% else %}
+                <p class="text-sm font-medium text-surface-400">Not on file</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
         {% if not b.is_active %}
         <span class="inline-flex mt-3 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
         {% endif %}
+    </div>
+
+    {# Its paperwork: what LegalZoom filed and the IRS sent back. relative
+       z-30 (LM-1), because the kind picker opens over the cards below. #}
+    <div id="documents" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Documents</h3>
+        {% if documents %}
+        <div class="space-y-2">
+            {% for d in documents %}
+            <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-800/40 min-w-0">
+                <div class="min-w-0 flex-1">
+                    <span class="inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-500/15 text-brand-300">{{ d.kind_label }}</span>
+                    <p class="text-sm font-semibold text-white break-words mt-1">{{ d.label }}</p>
+                    <p class="text-xs text-surface-400">{{ d.uploaded_at | format_date }} &middot; {{ ((d.size or 0) / 1024) | round(0) | int | commas }} KB</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <a href="{{ url_for('businesses.document_open', doc_id=d.id) }}" target="_blank" rel="noopener"
+                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        Open</a>
+                    <form method="POST" action="{{ url_for('businesses.document_delete', doc_id=d.id) }}">
+                        {{ delete_icon(question='Remove it?', label='Remove ' ~ d.label) }}
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('businesses.document_add', id=b.id) }}" enctype="multipart/form-data"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="min-w-0">
+                    <p class="block text-sm font-medium text-surface-300 mb-1.5">What it is</p>
+                    {{ select_dropdown('kind', doc_kinds, 'formation', 'Certificate of Formation', full_width=true) }}
+                </div>
+                <div class="min-w-0">
+                    <label for="doc-title" class="block text-sm font-medium text-surface-300 mb-1.5">Name it</label>
+                    <input id="doc-title" name="title" maxlength="200" placeholder="Optional"
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500">
+                </div>
+            </div>
+            <input type="file" name="document" multiple aria-label="Document files"
+                   accept=".pdf,.png,.jpg,.jpeg,.webp,.docx"
+                   class="w-full min-w-0 text-sm text-surface-300 file:mr-3 file:py-2 file:px-4
+                          file:rounded-lg file:border-0 file:text-sm file:font-medium
+                          file:bg-brand-500/15 file:text-brand-300 hover:file:bg-brand-500/25
+                          file:cursor-pointer cursor-pointer">
+            <div class="flex justify-end">
+                <button type="submit"
+                        class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Keep it</button>
+            </div>
+        </form>
     </div>
 
     {% if b.parent %}
     {# A division: its tax numbers, permit and returns are its parent's, so the
        card that would hold them points there instead. #}
     <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Part of</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Operated by</h3>
         <a href="{{ url_for('businesses.detail', id=b.parent.id) }}"
            class="flex items-center gap-3 p-3 min-h-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 transition-colors min-w-0">
             {{ business_logo(b.parent, box='w-10 h-10', pad='p-1.5', text='text-sm') }}
@@ -97,7 +174,7 @@
     {% else %}
     {% if b.divisions %}
     <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Divisions</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Doing business as</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {% for d in b.divisions %}
             <a href="{{ url_for('businesses.detail', id=d.id) }}"

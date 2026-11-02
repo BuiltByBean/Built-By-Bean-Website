@@ -24,41 +24,76 @@
 {% endblock %}
 
 {% block content %}
-{% if tiles %}
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger-in">
-    {% for t in tiles %}
-    {% set b = t.business %}
-    <a href="{{ url_for('businesses.detail', id=b.id) }}"
-       class="glass-card p-5 min-w-0 flex flex-col gap-5 border border-white/10 hover:border-brand-500/40 transition-colors {{ '' if b.is_active else 'opacity-70' }}">
-        <div class="flex items-center gap-4 min-w-0">
-            {{ business_logo(b) }}
-            <div class="min-w-0">
-                <h3 class="text-lg font-bold text-white break-words">{{ b.label }}</h3>
-                {% if b.parent %}
-                <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-500/15 text-brand-300 break-words">Part of {{ b.parent.label }}</span>
-                {% endif %}
-                {% if not b.is_active %}
-                <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
-                {% endif %}
-            </div>
+{#
+  A family per company, and its DBAs hang under it on a connecting line. The
+  line leaves from under the parent's logo (p-5 plus half a w-14 logo is 48px)
+  and turns into each DBA tile with a rounded elbow; a DBA that is not the
+  last carries the line on past its elbow to the next one. Laid out as a
+  tree inside a single column on purpose, so the same drawing reads at 375px
+  and on a desktop, and a family takes one cell of the grid like anything else.
+#}
+{% macro tile(t) %}
+{% set b = t.business %}
+<a href="{{ url_for('businesses.detail', id=b.id) }}"
+   class="glass-card p-5 min-w-0 flex flex-col gap-5 border border-white/10 hover:border-brand-500/40 transition-colors {{ '' if b.is_active else 'opacity-70' }}">
+    <div class="flex items-center gap-4 min-w-0">
+        {{ business_logo(b) }}
+        <div class="min-w-0">
+            <h3 class="text-lg font-bold text-white break-words">{{ b.label }}</h3>
+            {% if b.parent %}
+            <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-500/15 text-brand-300">DBA</span>
+            {% endif %}
+            {% if not b.is_active %}
+            <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
+            {% endif %}
         </div>
-        <div class="grid grid-cols-2 gap-3">
-            <div class="min-w-0">
-                <p class="text-xs text-surface-400">Started</p>
-                <p class="text-sm font-semibold text-white">{{ b.formed_on | format_date if b.formed_on else 'Not on file' }}</p>
-            </div>
-            <div class="min-w-0 text-right">
-                <p class="text-xs text-surface-400">Lifetime revenue</p>
-                {% if t.revenue is not none %}
-                <p class="text-lg font-bold text-white tabular-nums">{{ t.revenue | format_currency }}</p>
-                {% elif b.sales_source == 'hub' %}
-                <p class="text-sm font-semibold text-surface-400">App not reporting</p>
-                {% else %}
-                <p class="text-sm font-semibold text-surface-400">Not tracked</p>
-                {% endif %}
-            </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+        {# The date it leads with names itself (Launched, Formed or
+           Conceived), and the age under it is counted from that date. #}
+        {% set m = b.milestone %}
+        <div class="min-w-0">
+            <p class="text-xs text-surface-400">{{ m[0] if m else 'Started' }}</p>
+            <p class="text-sm font-semibold text-white">{{ m[1] | format_date if m else 'Not on file' }}</p>
+            {% if m %}
+            <p class="text-xs text-surface-400 mt-0.5">{{ 'In the works ' if m[0] == 'Conceived' else '' }}{{ m[1] | age }}</p>
+            {% endif %}
         </div>
-    </a>
+        <div class="min-w-0 text-right">
+            <p class="text-xs text-surface-400">Lifetime revenue</p>
+            {% if t.revenue is not none %}
+            <p class="text-lg font-bold text-white tabular-nums break-words">{{ t.revenue | format_currency }}</p>
+            {% elif b.sales_source == 'hub' %}
+            <p class="text-sm font-semibold text-surface-400">App not reporting</p>
+            {% else %}
+            <p class="text-sm font-semibold text-surface-400">Not tracked</p>
+            {% endif %}
+        </div>
+    </div>
+</a>
+{% endmacro %}
+
+{% if families %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start stagger-in">
+    {% for f in families %}
+    <div class="min-w-0" data-family="{{ f.tile.business.slug }}">
+        {{ tile(f.tile) }}
+        {% if f.dbas %}
+        <div class="pt-3 space-y-3">
+            {% for d in f.dbas %}
+            <div class="relative pl-[72px] min-w-0" data-dba-of="{{ f.tile.business.slug }}">
+                <span aria-hidden="true" class="absolute border-l-2 border-b-2 border-brand-400/50 rounded-bl-xl"
+                      style="left:47px; top:-12px; width:25px; height:calc(50% + 12px);"></span>
+                {% if not loop.last %}
+                <span aria-hidden="true" class="absolute border-l-2 border-brand-400/50"
+                      style="left:47px; top:50%; bottom:0;"></span>
+                {% endif %}
+                {{ tile(d) }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
     {% endfor %}
 </div>
 {% else %}

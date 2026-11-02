@@ -367,18 +367,33 @@ those two, never `amount_paid` raw. A business on its own app shows what the app
 a six second wait when the answer is an hour old, and "App not reporting" is
 said rather than $0.00. `tools/test_business_pages.py`.
 
-**A division is a business with no tax of its own** (Michael, 2026-11-02, of
+**A DBA is a business with no tax of its own** (Michael, 2026-11-02, of
 Data Dungeon: "technically not its own business because it sits under my
 Built by Bean LLC, but it effectively is a business"). `Business.parent_id`
-names the company it trades under, one level deep. It is a tile on Businesses,
-straight after its parent, with its own logo, start date and revenue, and its
-page points at the parent instead of a tax card. It is never a row on the
+names the company it trades under, one level deep; the code says division,
+the screen says DBA, and its page header reads the legal way, "Built by Bean
+LLC d/b/a Data Dungeon". On Businesses each company is a family: its tile,
+with its DBAs hung under it on a connecting line drawn from under the
+parent's logo (`data-family`, `data-dba-of`), one column wide so the same
+tree reads at 375px. Its page points at the parent instead of a tax card. It is never a row on the
 returns pages or the guide: its taxable sales are the LLC's, filed on the
 parent's return, and a second set of returns would file them twice. Nor does
 it ever read "board" for revenue, which is the parent's takings. Making a
 business a division hides its tax fields on the form but keeps what was typed,
 so one wrong pick cannot wipe Built by Bean's taxpayer number. Migration
 `f3b9d27c4e18` put Data Dungeon on file. `tools/test_business_divisions.py`.
+
+**Three dates, an age, and the papers.** `conceived_on` (first an idea),
+`formed_on` (the LLC filed; a DBA has none) and `launched_on` (open for
+business). Age is worked out by the `age` filter in whole calendar months, so
+a business turns a month older on the day of the month it launched; it runs
+from the launch, and before one from the idea ("In the works"). The tile
+leads with `Business.milestone`, whose label always names the date shown, so a
+formation date never reads as a launch. `BusinessDocument` is the company's
+own paperwork, LegalZoom's filings first: a kind from `KINDS` (Texas calls the
+articles a Certificate of Formation; a DBA's lawful footing is an Assumed Name
+Certificate), stored on the volume under `business_documents/` exactly as a
+return's confirmation is. `tools/test_business_papers.py`.
 
 A return is worked out, typed into WebFile by hand, and recorded from the
 confirmation page. `sales_tax.build_return` splits a period's sales by the

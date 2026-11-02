@@ -42,8 +42,8 @@ from flask_login import current_user
 import hub
 import sales_tax
 import app_icon_service
-from models import (db, AppLink, Business, BusinessLocation, Client, Invoice, Project,
-                    SalesTaxFiling, SalesTaxFilingFile, SalesTaxSetting)
+from models import (db, AppLink, Business, BusinessDocument, BusinessLocation, Client, Invoice,
+                    Project, SalesTaxFiling, SalesTaxFilingFile, SalesTaxSetting)
 from pm.users_routes import ceo_required
 from stripe_service import get_stripe_invoice_totals, import_invoices_from_stripe
 
@@ -63,6 +63,46 @@ MAX_LOGO = 2 * 1024 * 1024
 # Michael opened must not hang on somebody else's server.
 REVENUE_FRESH_SECONDS = 3600
 REVENUE_TIMEOUT = 6
+# A company's own paperwork. LegalZoom hands it over as PDFs; a scan or a
+# photo of a letter from the IRS is an image; an operating agreement somebody
+# edited is sometimes Word.
+DOC_DIR = "business_documents"
+DOC_TYPES = dict(FILE_TYPES, docx="application/vnd.openxmlformats-officedocument."
+                 "wordprocessingml.document")
+MAX_DOC = 20 * 1024 * 1024
+
+
+@business_bp.app_template_filter("age")
+def age(day, today=None):
+    """How long since `day`, the way a person says it: "2 years, 9 months".
+
+    Whole calendar months, not days divided by thirty, so a business launched
+    on the 17th turns a month older on the 17th. Under a month it counts
+    weeks, then days. A day still to come reads as "Not yet".
+    """
+    if not day:
+        return ""
+    today = today or date.today()
+    if day > today:
+        return "Not yet"
+    months = (today.year - day.year) * 12 + (today.month - day.month)
+    if today.day < day.day:
+        months -= 1
+    years, months = divmod(months, 12)
+    if years or months:
+        parts = []
+        if years:
+            parts.append(f"{years} year{'' if years == 1 else 's'}")
+        if months:
+            parts.append(f"{months} month{'' if months == 1 else 's'}")
+        return ", ".join(parts)
+    days = (today - day).days
+    if days >= 7:
+        weeks = days // 7
+        return f"{weeks} week{'' if weeks == 1 else 's'}"
+    if days:
+        return f"{days} day{'' if days == 1 else 's'}"
+    return "Today"
 
 
 # ── Small readers ────────────────────────────────────────────
@@ -268,16 +308,19 @@ def index():
     last said."""
     businesses = Business.query.order_by(Business.is_active.desc(), Business.name,
                                          Business.id).all()
-    # Each company with its divisions straight after it, so Data Dungeon sits
-    # beside Built by Bean rather than wherever D falls in the alphabet.
-    ordered = []
-    for b in businesses:
-        if b.parent_id is None:
-            ordered.append(b)
-            ordered.extend(d for d in businesses if d.parent_id == b.id)
-    ordered.extend(b for b in businesses if b not in ordered)  # a parent gone missing
-    tiles = [{"business": b, "revenue": lifetime_revenue(b)} for b in ordered]
-    return render_template("pm/businesses/index.html", tiles=tiles)
+    # A family per company: its tile, and its DBAs hung under it on a
+    # connecting line (Michael, 2026-11-02), so Data Dungeon reads as Built by
+    # Bean's rather than as a company of its own that happens to sit nearby.
+    def tile(b):
+        return {"business": b, "revenue": lifetime_revenue(b)}
+
+    families = [{"tile": tile(b), "dbas": [tile(d) for d in businesses if d.parent_id == b.id]}
+                for b in businesses if b.parent_id is None]
+    placed = {f["tile"]["business"].id for f in families} | {
+        d["business"].id for f in families for d in f["dbas"]}
+    # A DBA whose parent is gone stands on its own rather than vanishing.
+    families += [{"tile": tile(b), "dbas": []} for b in businesses if b.id not in placed]
+    return render_template("pm/businesses/index.html", families=families)
 
 
 @business_bp.route("/admin/businesses/<int:id>")
@@ -289,7 +332,7 @@ def detail(id):
         return render_template(
             "pm/businesses/detail.html", business=business,
             revenue=lifetime_revenue(business, ask=True), next=None, late=0,
-            esystems_url=ESYSTEMS_URL)
+            esystems_url=ESYSTEMS_URL, **_papers(business))
     today = date.today()
     # _board_rows brings Stripe's invoices in first, which the revenue reads too.
     board = _board_rows() if business.sales_source == "board" else None
@@ -303,7 +346,84 @@ def detail(id):
         revenue=lifetime_revenue(business, ask=True),
         next=urgent or next((p for p in periods if p["status"] == "open"), None),
         late=sum(1 for p in periods if p["status"] == "late"),
-        esystems_url=ESYSTEMS_URL)
+        esystems_url=ESYSTEMS_URL, **_papers(business))
+
+
+# ── Its paperwork ────────────────────────────────────────────
+
+def _papers(business):
+    """The documents in the order KINDS lists them, and the kinds on offer."""
+    order = {k: i for i, (k, _label) in enumerate(BusinessDocument.KINDS)}
+    docs = sorted(business.documents, key=lambda d: (order.get(d.kind, len(order)), d.id))
+    return {"documents": docs, "doc_kinds": BusinessDocument.KINDS}
+
+
+def _doc_folder():
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], DOC_DIR)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+@business_bp.route("/admin/businesses/<int:id>/documents", methods=["POST"])
+@ceo_required
+def document_add(id):
+    """Keep one or more papers. Each gets the kind picked; the title is kept
+    only for a single file, because one title on five files says nothing."""
+    business = db.session.get(Business, id) or abort(404)
+    kind = _text("kind", 20)
+    kind = kind if kind in dict(BusinessDocument.KINDS) else "other"
+    uploads = [u for u in request.files.getlist("document") if u and u.filename]
+    title = _text("title", 200) if len(uploads) == 1 else ""
+    kept, refused = 0, []
+    for upload in uploads:
+        name = os.path.basename(upload.filename)
+        ext = (name.rsplit(".", 1)[-1] if "." in name else "").lower()
+        data = upload.read(MAX_DOC + 1)
+        if ext not in DOC_TYPES or not data or len(data) > MAX_DOC:
+            refused.append(name)
+            continue
+        stored = f"{uuid.uuid4().hex}.{ext}"
+        with open(os.path.join(_doc_folder(), stored), "wb") as fh:
+            fh.write(data)
+        db.session.add(BusinessDocument(
+            business_id=business.id, kind=kind, title=title, stored_name=stored,
+            original_name=name[:300] or stored, content_type=DOC_TYPES[ext], size=len(data)))
+        kept += 1
+    db.session.commit()
+    if kept:
+        flash(f"{kept} document{'' if kept == 1 else 's'} kept.", "success")
+    if refused:
+        flash("Not kept (PDF, image or Word, under 20 MB): " + ", ".join(refused), "error")
+    if not uploads:
+        flash("Pick a file first.", "info")
+    return redirect(url_for("businesses.detail", id=business.id) + "#documents")
+
+
+@business_bp.route("/admin/businesses/documents/<int:doc_id>")
+@ceo_required
+def document_open(doc_id):
+    doc = db.session.get(BusinessDocument, doc_id) or abort(404)
+    if not os.path.exists(os.path.join(_doc_folder(), doc.stored_name)):
+        flash(f"{doc.original_name} is not on the server any more.", "error")
+        return redirect(url_for("businesses.detail", id=doc.business_id) + "#documents")
+    resp = send_from_directory(_doc_folder(), doc.stored_name, as_attachment=False,
+                               download_name=doc.original_name, mimetype=doc.content_type)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@business_bp.route("/admin/businesses/documents/<int:doc_id>/delete", methods=["POST"])
+@ceo_required
+def document_delete(doc_id):
+    doc = db.session.get(BusinessDocument, doc_id) or abort(404)
+    business_id = doc.business_id
+    path = os.path.join(_doc_folder(), doc.stored_name)
+    if os.path.exists(path):
+        os.remove(path)
+    db.session.delete(doc)
+    db.session.commit()
+    flash("Document removed.", "success")
+    return redirect(url_for("businesses.detail", id=business_id) + "#documents")
 
 
 def _logo_folder():
@@ -433,7 +553,11 @@ def _fill(business):
                                  business.id)
     business.texas_taxpayer_number = _digits("texas_taxpayer_number", 11)
     business.sos_file_number = _digits("sos_file_number", 20)
+    business.conceived_on = _date("conceived_on")
     business.formed_on = _date("formed_on")
+    business.launched_on = _date("launched_on")
+    if business.conceived_on and business.launched_on and business.conceived_on > business.launched_on:
+        return "The idea has to come before the launch."
     business.franchise_tax_webfile = _webfile("franchise_tax_webfile")
     business.sales_tax_webfile = _webfile("sales_tax_webfile")
     business.sales_tax_registered_on = _date("sales_tax_registered_on")
@@ -576,7 +700,8 @@ def returns_index():
     board = None
     groups = []
     # Divisions are left out: their sales are their parent's, on its return.
-    for b in Business.query.filter_by(is_active=True, parent_id=None)             .order_by(Business.name, Business.id):
+    for b in Business.query.filter_by(is_active=True, parent_id=None).order_by(
+            Business.name, Business.id):
         if b.sales_source == "board" and board is None:
             board = _board_rows()
         periods, note = periods_for(b, today, board)
@@ -897,7 +1022,8 @@ def filing_record_pdf(filing):
 @business_bp.route("/admin/taxes/sales/guide")
 @ceo_required
 def guide():
-    businesses = Business.query.filter_by(is_active=True, parent_id=None)         .order_by(Business.name).all()
+    businesses = Business.query.filter_by(is_active=True, parent_id=None).order_by(
+        Business.name).all()
     return render_template("pm/taxes/guide.html", businesses=businesses,
                            esystems_url=ESYSTEMS_URL)
 

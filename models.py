@@ -1333,7 +1333,12 @@ class Business(db.Model):
     slug = db.Column(db.String(40), nullable=False, unique=True)
     texas_taxpayer_number = db.Column(db.String(11), default="")
     sos_file_number = db.Column(db.String(20), default="")
+    # Three dates, three different facts (Michael, 2026-11-02): when it was
+    # first an idea, when the LLC was filed with the state, and when it opened
+    # for business. A division has no filing of its own, so no formed_on.
+    conceived_on = db.Column(db.Date, nullable=True)
     formed_on = db.Column(db.Date, nullable=True)
+    launched_on = db.Column(db.Date, nullable=True)
     franchise_tax_webfile = db.Column(db.String(20), default="")
 
     sales_tax_webfile = db.Column(db.String(20), default="")
@@ -1407,6 +1412,9 @@ class Business(db.Model):
                                 order_by="BusinessLocation.opened_on")
     filings = db.relationship("SalesTaxFiling", back_populates="business",
                               cascade="all, delete-orphan")
+    documents = db.relationship("BusinessDocument", back_populates="business",
+                                cascade="all, delete-orphan",
+                                order_by="BusinessDocument.kind, BusinessDocument.id")
 
     @property
     def label(self):
@@ -1415,6 +1423,23 @@ class Business(db.Model):
     @property
     def is_division(self):
         return self.parent_id is not None
+
+    @property
+    def milestone(self):
+        """(label, day) for the date the tile leads with, or None.
+
+        Launched is the business's age; before launch it is in the works,
+        counted from the idea; formed is the fallback for a company whose
+        launch nobody has typed yet. The label always names the date shown,
+        so a formation date never reads as a launch.
+        """
+        if self.launched_on:
+            return ("Launched", self.launched_on)
+        if self.formed_on and not self.is_division:
+            return ("Formed", self.formed_on)
+        if self.conceived_on:
+            return ("Conceived", self.conceived_on)
+        return None
 
     @property
     def initials(self):
@@ -1574,6 +1599,60 @@ class SalesTaxFiling(db.Model):
 
     def __repr__(self):
         return f"<SalesTaxFiling {self.business_id} {self.period_code}>"
+
+
+class BusinessDocument(db.Model):
+    """A company's own paperwork: what LegalZoom filed and the IRS sent back.
+
+    Michael, 2026-11-02: the LLC documents for each business he actually has
+    an LLC for, kept on the board rather than in a LegalZoom login. Stored on
+    the volume under UPLOAD_FOLDER/business_documents by a random name and
+    served under the name it was uploaded with, the same way a return's
+    confirmation is.
+
+    `kind` is what the document IS, from KINDS, so the business page can say
+    which papers are on file. Texas calls the articles a Certificate of
+    Formation (Form 205), which is the name LegalZoom files them under.
+    """
+
+    __tablename__ = "business_documents"
+
+    KINDS = (
+        ("formation", "Certificate of Formation"),
+        ("operating", "Operating Agreement"),
+        ("ein", "EIN letter"),
+        ("organizer", "Organizer statement"),
+        ("resolutions", "Resolutions"),
+        ("agent", "Registered agent"),
+        # What makes a DBA lawful in Texas: the certificate the LLC files to
+        # trade under another name, Data Dungeon's being Built by Bean's.
+        ("assumed_name", "Assumed Name Certificate"),
+        ("franchise", "Franchise tax report"),
+        ("other", "Other"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(
+        db.Integer,
+        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_documents_business_id"),
+        nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False, default="other", server_default="other")
+    title = db.Column(db.String(200), default="")
+    stored_name = db.Column(db.String(100), nullable=False)
+    original_name = db.Column(db.String(300), nullable=False)
+    content_type = db.Column(db.String(100), default="application/pdf")
+    size = db.Column(db.Integer, default=0)
+    uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", back_populates="documents")
+
+    @property
+    def kind_label(self):
+        return dict(self.KINDS).get(self.kind, "Other")
+
+    @property
+    def label(self):
+        return self.title or self.original_name
 
 
 class SalesTaxFilingFile(db.Model):

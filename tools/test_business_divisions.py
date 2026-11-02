@@ -109,7 +109,10 @@ page = c.get("/admin/businesses").get_data(as_text=True)
 check("the page draws", "Data Dungeon" in page)
 order = [page.find(n) for n in ("Built by Bean", "Data Dungeon", "EntertainHQ")]
 check("it sits straight after Built by Bean", order[0] < order[1] < order[2], order)
-check("and says whose it is", "Part of Built by Bean" in page)
+check("it hangs off Built by Bean on the connecting line", 'data-dba-of="built-by-bean"' in page
+      and page.find('data-family="built-by-bean"') < page.find("Data Dungeon"))
+check("and is marked a DBA", ">DBA<" in page)
+check("EntertainHQ has no line", 'data-dba-of="entertainhq"' not in page)
 check("Built by Bean still shows the board's revenue", "$12,345.00" in page)
 check("Data Dungeon does not show it a second time", page.count("$12,345.00") == 1, page.count("$12,345.00"))
 
@@ -117,10 +120,11 @@ print("\nITS PAGE, AND ITS PARENT'S:")
 r = c.get(f"/admin/businesses/{ids['dd']}")
 page = r.get_data(as_text=True)
 check("its page draws", r.status_code == 200, r.status_code)
-check("it points at Built by Bean", f"/admin/businesses/{ids['bbb']}" in page and "Part of" in page)
+check("it points at Built by Bean", f"/admin/businesses/{ids['bbb']}" in page and "Operated by" in page)
+check("its header reads the legal way", "Built by Bean LLC d/b/a Data Dungeon" in page)
 check("with no tax card of its own", "Texas taxpayer number" not in page and "eSystems" not in page)
 page = c.get(f"/admin/businesses/{ids['bbb']}").get_data(as_text=True)
-check("Built by Bean's page lists it", "Divisions" in page and f"/admin/businesses/{ids['dd']}" in page)
+check("Built by Bean's page lists it", "Doing business as" in page and f"/admin/businesses/{ids['dd']}" in page)
 check("and keeps its own tax card", "Texas taxpayer number" in page)
 
 print("\nTHE RETURNS:")
@@ -132,8 +136,8 @@ check("nor in the guide", "Data Dungeon" not in page)
 
 print("\nTHE FORM:")
 page = c.get(f"/admin/businesses/{ids['dd']}/edit").get_data(as_text=True)
-check("the form offers Part of", "A division of Built by Bean" in page)
-check("and never offers a division as a parent", "A division of Data Dungeon" not in page)
+check("the form offers it as a DBA", "A DBA of Built by Bean" in page)
+check("and never offers a DBA as a parent", "A DBA of Data Dungeon" not in page)
 check("its x-data sits in single quotes", "x-data='{ parent: \"" in page)
 
 
