@@ -312,6 +312,20 @@ interchangeable (sales tax is RT and six digits, franchise tax XT; eSystems
 permit lists, with WebFile's own five digit location number, which is the
 Comptroller's and not in opening order: Paris is 00001, Fort Worth 00002.
 
+The front door shows the business, not its tax (Michael, 2026-11-01: "as my
+business grows I want these done differently. Where I can see the
+business"): a tile per business with its logo, name, start date
+(`formed_on`) and lifetime revenue, opening `/admin/businesses/<id>`, where
+the tax numbers, the next return and the locations live. The logo is an
+uploaded image or a My Apps tile's icon (`logo_file`, `logo_app_id`), one or
+the other. Lifetime revenue (`business_routes.lifetime_revenue`) is paid
+invoices less their tax and never a catch-up invoice, so it reads lower than
+the dashboard's Total Revenue by the tax collected, on purpose: tax is the
+state's money. A business on its own app shows what the app last reported
+(`revenue_total`); the list never asks the app, the business's page asks with
+a six second wait when the answer is an hour old, and "App not reporting" is
+said rather than $0.00. `tools/test_business_pages.py`.
+
 A return is worked out, typed into WebFile by hand, and recorded from the
 confirmation page. `sales_tax.build_return` splits a period's sales by the
 location trading THAT DAY (`Business.location_on`) and rounds each line to

@@ -5,6 +5,7 @@
 {% from "pm/components/icon_button.html" import delete_icon %}
 {% from "pm/components/copy_button.html" import copy_button %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/businesses/_logo.html" import business_logo %}
 
 {#
   One business: what the state knows it by, how its sales tax is filed, the
@@ -13,6 +14,11 @@
   The dropdown card carries relative z-30 (LM-1): its panels open over the
   cards below. Locations are their own forms, one per row, outside the main
   form, because forms do not nest.
+
+  The logo is picked by looking at it: every My Apps icon as a choice, the
+  image already uploaded, or none, with an upload beside them. Radios rather
+  than a dropdown, because a logo is chosen by sight and a grid opens no
+  panel to paint over anything.
 #}
 
 {% set field = 'w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
@@ -21,12 +27,13 @@
 {% block title %}{{ business.label if editing else 'New business' }} - Built By Bean{% endblock %}
 {% block page_title %}{{ business.label if editing else 'New business' }}{% endblock %}
 {% block page_subtitle %}{{ business.name if editing else 'Add a business you own' }}{% endblock %}
-{% block back %}{{ back_link(url_for('businesses.index'), 'Businesses') }}{% endblock %}
+{% block back %}{{ back_link(url_for('businesses.detail', id=business.id) if editing else url_for('businesses.index'),
+                             business.label if editing else 'Businesses') }}{% endblock %}
 
 {% block content %}
 <div class="space-y-4 max-w-4xl">
     <form method="POST" action="{{ url_for('businesses.edit', id=business.id) if editing else url_for('businesses.new') }}"
-          class="space-y-4">
+          enctype="multipart/form-data" class="space-y-4">
 
         <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
             <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">The business</h3>
@@ -73,6 +80,45 @@
                 </div>
             </div>
             {{ checkbox('is_active', checked=business.is_active, label='Active') }}
+        </div>
+
+        {% set logo_now = 'upload' if business.logo_file else (business.logo_app_id | string if business.logo_app_id else 'none') %}
+        {% set pick = 'w-14 h-14 rounded-2xl flex items-center justify-center bg-white/5 ring-1 ring-white/10 peer-checked:ring-2 peer-checked:ring-brand-400 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300 transition' %}
+        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+            <div class="flex items-center gap-3 min-w-0">
+                {{ business_logo(business) }}
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Logo</h3>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <label class="flex flex-col items-center gap-1.5 w-20 cursor-pointer">
+                    <input type="radio" name="logo_choice" value="none" class="sr-only peer" {{ 'checked' if logo_now == 'none' }}>
+                    <span class="{{ pick }}"><span class="text-sm font-bold text-brand-300">{{ business.initials if business.name else '?' }}</span></span>
+                    <span class="text-[11px] text-surface-300 text-center break-words w-full">None</span>
+                </label>
+                {% if business.logo_file %}
+                <label class="flex flex-col items-center gap-1.5 w-20 cursor-pointer">
+                    <input type="radio" name="logo_choice" value="upload" class="sr-only peer" {{ 'checked' if logo_now == 'upload' }}>
+                    <span class="{{ pick }}"><img src="{{ url_for('businesses.logo', id=business.id) }}" alt="" class="w-11 h-11 object-contain"></span>
+                    <span class="text-[11px] text-surface-300 text-center break-words w-full">Uploaded</span>
+                </label>
+                {% endif %}
+                {% for app in logo_apps %}
+                <label class="flex flex-col items-center gap-1.5 w-20 cursor-pointer">
+                    <input type="radio" name="logo_choice" value="{{ app.id }}" class="sr-only peer" {{ 'checked' if logo_now == app.id | string }}>
+                    <span class="{{ pick }}"><img src="{{ url_for('apps.icon', id=app.id) }}" alt="" class="w-11 h-11 object-contain"></span>
+                    <span class="text-[11px] text-surface-300 text-center break-words w-full">{{ app.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div>
+                <label for="b-logo" class="{{ lbl }}">Or upload an image</label>
+                <input id="b-logo" type="file" name="logo_upload"
+                       accept=".png,.jpg,.jpeg,.webp,.svg,.gif"
+                       class="w-full min-w-0 text-sm text-surface-300 file:mr-3 file:py-2 file:px-4
+                              file:rounded-lg file:border-0 file:text-sm file:font-medium
+                              file:bg-brand-500/15 file:text-brand-300 hover:file:bg-brand-500/25
+                              file:cursor-pointer cursor-pointer">
+            </div>
         </div>
 
         <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">

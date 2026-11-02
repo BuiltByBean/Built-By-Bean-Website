@@ -9,8 +9,10 @@ confirmation page with the confirmation itself kept beside it.
 The pages (CEO only, because a WebFile number links a tax account to
 whoever's eSystems login types it):
 
-  /admin/businesses                          the command center
-  /admin/businesses/new, /<id>/edit          a business, its locations, its hub
+  /admin/businesses                          every business: logo, name, start
+                                             date, lifetime revenue
+  /admin/businesses/<id>                     one business, its tax inside it
+  /admin/businesses/new, /<id>/edit          a business, its logo, locations, hub
   /admin/taxes/sales/returns                 every period owed, every business
   /admin/taxes/sales/returns/<slug>/<y>/q<n> one return: what to type, then
                                              what was paid, and its files
@@ -39,8 +41,9 @@ from flask_login import current_user
 
 import hub
 import sales_tax
-from models import (db, Business, BusinessLocation, Client, Invoice, Project, SalesTaxFiling,
-                    SalesTaxFilingFile, SalesTaxSetting)
+import app_icon_service
+from models import (db, AppLink, Business, BusinessLocation, Client, Invoice, Project,
+                    SalesTaxFiling, SalesTaxFilingFile, SalesTaxSetting)
 from pm.users_routes import ceo_required
 from stripe_service import import_invoices_from_stripe
 
@@ -52,6 +55,14 @@ FILE_TYPES = {"pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg",
               "jpeg": "image/jpeg", "webp": "image/webp"}
 MAX_FILE = 10 * 1024 * 1024
 HUB_SALES_PATH = "/api/hub/tax/sales"
+LOGO_DIR = "business_logos"
+LOGO_TYPES = {"png": "png", "jpg": "jpg", "jpeg": "jpg", "webp": "webp", "svg": "svg", "gif": "gif"}
+MAX_LOGO = 2 * 1024 * 1024
+# How long an app's word on its lifetime sales is trusted before the
+# business's page asks again, and how long it waits for the answer: a page
+# Michael opened must not hang on somebody else's server.
+REVENUE_FRESH_SECONDS = 3600
+REVENUE_TIMEOUT = 6
 
 
 # ── Small readers ────────────────────────────────────────────
@@ -131,14 +142,15 @@ def _board_rows():
     return rows, settings.taxable_share
 
 
-def _hub_sales(business, start, end):
+def _hub_sales(business, start, end, timeout=20):
     """Ask the business's own app for its sales. (sales, None) or (None, why)."""
     if not (business.hub_base_url and business.hub_secret and business.hub_slug):
         return None, "Its app is not connected yet."
     try:
         payload = hub.fetch(business.hub_base_url, HUB_SALES_PATH,
                             {"from": start.isoformat(), "to": end.isoformat()},
-                            secret=business.hub_secret, origin_slug=business.hub_slug)
+                            secret=business.hub_secret, origin_slug=business.hub_slug,
+                            timeout=timeout)
     except hub.DeliveryError as exc:
         note = f"{business.label} did not answer: {exc}"[:300]
         business.hub_pull_note = note
@@ -211,29 +223,152 @@ def periods_for(business, today, board=None):
     return out, note
 
 
-# ── The command center ───────────────────────────────────────
+# ── The businesses, and each one ─────────────────────────────
+
+def _refresh_invoices():
+    """Stripe's invoices made rows first, cached five minutes; a failure leaves
+    the ledger as it was rather than the page broken."""
+    try:
+        import_invoices_from_stripe(ttl=300)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Businesses: Stripe import failed: {e}")
+
+
+def lifetime_revenue(business, ask=False):
+    """Everything the business has sold and been paid for, before tax, or None.
+
+    "board" is this board's invoices: every paid one, less the tax on it, and
+    never a catch-up invoice, which bills back tax and is not a sale. Tax a
+    client paid is the state's money passing through, the same reading the
+    returns use, so this is lower than the dashboard's Total Revenue by the
+    tax collected. "hub" is what the business's own app last said, asked again
+    only when `ask` and the answer is older than REVENUE_FRESH_SECONDS.
+    "manual" has nothing to count.
+    """
+    if business.sales_source == "board":
+        paid = Invoice.query.filter(Invoice.status == "paid",
+                                    Invoice.sales_tax_catchup.is_(False)).all()
+        return round(sum((inv.total or 0.0) - (inv.tax or 0.0) for inv in paid), 2)
+    if business.sales_source == "hub":
+        if ask:
+            age = None
+            if business.revenue_as_of:
+                age = (datetime.now(timezone.utc).replace(tzinfo=None)
+                       - business.revenue_as_of.replace(tzinfo=None)).total_seconds()
+            if age is None or age > REVENUE_FRESH_SECONDS:
+                start = business.formed_on or date(2000, 1, 1)
+                sales, _note = _hub_sales(business, start, date.today(), timeout=REVENUE_TIMEOUT)
+                if sales is not None:
+                    business.revenue_total = round(sum(s["total"] for s in sales), 2)
+                    business.revenue_as_of = datetime.now(timezone.utc)
+                    db.session.commit()
+        return business.revenue_total
+    return None
+
 
 @business_bp.route("/admin/businesses")
 @ceo_required
 def index():
-    today = date.today()
+    """Every business as a business: its logo, its name, when it started and
+    what it has made. The tax is inside each one. Nothing here asks another
+    server: a business whose sales come from its own app shows what that app
+    last said."""
     businesses = Business.query.order_by(Business.is_active.desc(), Business.name,
                                          Business.id).all()
-    board = None
-    cards = []
-    for b in businesses:
-        if b.sales_source == "board" and board is None:
-            board = _board_rows()
-        # The page lists, it does not ask: an app's sales are fetched on the
-        # return pages, so one slow app never holds up the command center.
-        periods, _note = (periods_for(b, today, board) if b.sales_source != "hub"
-                          else _periods_without_figures(b, today))
-        urgent = next((p for p in periods if p["status"] in ("late", "due")), None)
-        cards.append({"business": b, "periods": periods, "next": urgent or
-                      next((p for p in periods if p["status"] == "open"), None),
-                      "late": sum(1 for p in periods if p["status"] == "late")})
-    return render_template("pm/businesses/index.html", cards=cards, today=today,
-                           esystems_url=ESYSTEMS_URL)
+    if any(b.sales_source == "board" for b in businesses):
+        _refresh_invoices()
+    tiles = [{"business": b, "revenue": lifetime_revenue(b)} for b in businesses]
+    return render_template("pm/businesses/index.html", tiles=tiles)
+
+
+@business_bp.route("/admin/businesses/<int:id>")
+@ceo_required
+def detail(id):
+    business = db.session.get(Business, id) or abort(404)
+    today = date.today()
+    # _board_rows brings Stripe's invoices in first, which the revenue reads too.
+    board = _board_rows() if business.sales_source == "board" else None
+    # The returns list does not ask the app for figures: one return page at a
+    # time does that. The revenue may ask, briefly, when its answer is old.
+    periods, _note = (periods_for(business, today, board) if business.sales_source != "hub"
+                      else _periods_without_figures(business, today))
+    urgent = next((p for p in periods if p["status"] in ("late", "due")), None)
+    return render_template(
+        "pm/businesses/detail.html", business=business,
+        revenue=lifetime_revenue(business, ask=True),
+        next=urgent or next((p for p in periods if p["status"] == "open"), None),
+        late=sum(1 for p in periods if p["status"] == "late"),
+        esystems_url=ESYSTEMS_URL)
+
+
+def _logo_folder():
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], LOGO_DIR)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+@business_bp.route("/admin/businesses/<int:id>/logo")
+@ceo_required
+def logo(id):
+    business = db.session.get(Business, id) or abort(404)
+    if not business.logo_file:
+        abort(404)
+    resp = send_from_directory(_logo_folder(), business.logo_file, max_age=86400)
+    # An uploaded SVG is a document that can carry script, as on My Apps.
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+def _drop_logo_file(business):
+    if business.logo_file:
+        try:
+            os.remove(os.path.join(_logo_folder(), business.logo_file))
+        except OSError:
+            pass  # a missing file is already the state we wanted
+    business.logo_file = None
+
+
+def _take_logo(business):
+    """The logo choice from the form. Returns an error string or None.
+
+    An uploaded image wins and clears an app's icon; choosing an app's icon
+    removes an uploaded image; "none" clears both. Absent from the form means
+    the form had no logo section, so nothing changes.
+    """
+    upload = request.files.get("logo_upload")
+    if upload and upload.filename:
+        ext = LOGO_TYPES.get(os.path.splitext(upload.filename)[1].lstrip(".").lower())
+        if not ext:
+            return "That file type cannot be used as a logo."
+        data = upload.read(MAX_LOGO + 1)
+        if len(data) > MAX_LOGO:
+            return "That image is larger than 2MB."
+        if len(data) < 64:
+            return "That file is empty."
+        _drop_logo_file(business)
+        business.logo_file = app_icon_service.store(data, ext, _logo_folder())
+        business.logo_app_id = None
+        return None
+    choice = request.form.get("logo_choice")
+    if choice is None or choice == "upload":
+        return None
+    if choice == "none":
+        _drop_logo_file(business)
+        business.logo_app_id = None
+        return None
+    app = db.session.get(AppLink, int(choice)) if choice.isdigit() else None
+    if app is None or not app.icon_file:
+        return "That app has no icon to use."
+    _drop_logo_file(business)
+    business.logo_app_id = app.id
+    return None
+
+
+def _logo_apps():
+    return AppLink.query.filter(AppLink.icon_file.isnot(None), AppLink.icon_file != "") \
+        .order_by(AppLink.name, AppLink.id).all()
 
 
 def _periods_without_figures(business, today):
@@ -290,15 +425,17 @@ def new():
     business = Business(sales_tax_frequency="quarterly", taxable_share=80.0,
                         sales_source="manual", is_active=True)
     if request.method == "POST":
-        error = _fill(business)
+        error = _fill(business) or _take_logo(business)
         if error:
+            db.session.rollback()
             flash(error, "error")
         else:
             db.session.add(business)
             db.session.commit()
             flash(f"{business.label} is on the board. Add where it sells from next.", "success")
             return redirect(url_for("businesses.edit", id=business.id))
-    return render_template("pm/businesses/form.html", business=business, editing=False)
+    return render_template("pm/businesses/form.html", business=business, editing=False,
+                           logo_apps=_logo_apps())
 
 
 @business_bp.route("/admin/businesses/<int:id>/edit", methods=["GET", "POST"])
@@ -306,15 +443,16 @@ def new():
 def edit(id):
     business = db.session.get(Business, id) or abort(404)
     if request.method == "POST":
-        error = _fill(business)
+        error = _fill(business) or _take_logo(business)
         if error:
             db.session.rollback()
             flash(error, "error")
         else:
             db.session.commit()
             flash("Saved.", "success")
-            return redirect(url_for("businesses.edit", id=business.id))
-    return render_template("pm/businesses/form.html", business=business, editing=True)
+            return redirect(url_for("businesses.detail", id=business.id))
+    return render_template("pm/businesses/form.html", business=business, editing=True,
+                           logo_apps=_logo_apps())
 
 
 @business_bp.route("/admin/businesses/<int:id>/secret", methods=["POST"])

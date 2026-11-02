@@ -1,0 +1,145 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/icon_button.html" import icon_button %}
+{% from "pm/components/copy_button.html" import copy_button %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/businesses/_logo.html" import business_logo %}
+
+{#
+  One business: who it is first, then its tax. The numbers the state knows it
+  by, the return it owes next and the places its permit lists used to be the
+  whole Businesses page; they live here now, inside the business they belong
+  to. CEO only (business_routes).
+
+  The next return's figure is not worked out here for a business whose sales
+  come from its own app: that is a network call per period, and the return
+  page asks for its own. The lifetime revenue may ask, briefly, when the app's
+  last answer is an hour old.
+#}
+
+{% macro copy_value(label, value) -%}
+<div class="min-w-0 p-3 rounded-xl bg-surface-800/40 flex items-center justify-between gap-2">
+    <div class="min-w-0">
+        <p class="text-xs text-surface-400">{{ label }}</p>
+        {% if value %}
+        <p class="text-sm font-semibold text-white font-mono break-all">{{ value }}</p>
+        {% else %}
+        <p class="text-sm font-medium text-amber-300">Not on file</p>
+        {% endif %}
+    </div>
+    {% if value %}{{ copy_button(label, value) }}{% endif %}
+</div>
+{%- endmacro %}
+
+{% set PILL = {
+    'late': ('Late', 'bg-red-900/30 text-red-300'),
+    'due': ('Due', 'bg-amber-500/15 text-amber-300'),
+    'open': ('Building up', 'bg-surface-800 text-surface-300'),
+    'filed': ('Filed', 'bg-emerald-900/30 text-emerald-400'),
+} %}
+{% set b = business %}
+
+{% block title %}{{ b.label }} - Built By Bean{% endblock %}
+{% block page_title %}{{ b.label }}{% endblock %}
+{% block page_subtitle %}{{ b.name }}{% endblock %}
+{% block back %}{{ back_link(url_for('businesses.index'), 'Businesses') }}{% endblock %}
+
+{% block header_actions %}
+{% if b.admin_url %}
+{{ icon_button('external', 'Open ' ~ b.label ~ ' admin', href=b.admin_url, target='_blank') }}
+{% endif %}
+{{ icon_button('edit', 'Edit ' ~ b.label, href=url_for('businesses.edit', id=b.id)) }}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl stagger-in">
+
+    {# The banner already names it (title and legal name), so the card is the
+       logo beside the two figures rather than the name a second time. #}
+    <div class="glass-card p-5 sm:p-6 min-w-0 {{ '' if b.is_active else 'opacity-70' }}">
+        <div class="flex items-center gap-5 min-w-0">
+            {{ business_logo(b, box='w-20 h-20', pad='p-2.5', text='text-xl') }}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 min-w-0">
+                <div class="min-w-0">
+                    <p class="text-xs text-surface-400">Started</p>
+                    <p class="text-base font-semibold text-white">{{ b.formed_on | format_date if b.formed_on else 'Not on file' }}</p>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-xs text-surface-400">Lifetime revenue</p>
+                    {% if revenue is not none %}
+                    <p class="text-xl font-bold text-white tabular-nums break-words">{{ revenue | format_currency }}</p>
+                    {% elif b.sales_source == 'hub' %}
+                    <p class="text-sm font-semibold text-surface-400">App not reporting</p>
+                    {% else %}
+                    <p class="text-sm font-semibold text-surface-400">Not tracked</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% if not b.is_active %}
+        <span class="inline-flex mt-3 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
+        {% endif %}
+    </div>
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Sales tax</h3>
+                {% if b.sales_tax_first_sale %}
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-sky-900/30 text-sky-300">{{ b.sales_tax_frequency | capitalize }}</span>
+                {% else %}
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-300">No taxable sales yet</span>
+                {% endif %}
+                {% if late %}
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">{{ late }} late</span>
+                {% endif %}
+            </div>
+            <a href="{{ esystems_url }}" target="_blank" rel="noopener"
+               class="ml-auto inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">
+                eSystems</a>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {{ copy_value('Texas taxpayer number', b.texas_taxpayer_number) }}
+            {{ copy_value('Sales tax WebFile', b.sales_tax_webfile) }}
+            {{ copy_value('Franchise tax WebFile', b.franchise_tax_webfile) }}
+            {{ copy_value('SOS file number', b.sos_file_number) }}
+        </div>
+
+        {% if next %}
+        {% set p = next %}
+        {% set pill = PILL[p.status] %}
+        <a href="{{ url_for('businesses.return_page', slug=b.slug, year=p.year, quarter=p.quarter) }}"
+           class="flex flex-wrap items-center justify-between gap-3 p-3 min-h-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 transition-colors">
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ pill[1] }}">{{ pill[0] }}</span>
+                <span class="text-sm font-semibold text-white">{{ p.label }}</span>
+                <span class="text-xs text-surface-400 whitespace-nowrap">due {{ p.due | format_date }}</span>
+            </div>
+            <span class="text-sm font-semibold text-white whitespace-nowrap">
+                {% if p.figures %}{{ p.figures.tax | format_currency }}{% else %}Open return{% endif %}</span>
+        </a>
+        {% endif %}
+
+        {% if b.locations %}
+        <div class="space-y-1.5">
+            {% for loc in b.locations %}
+            <div class="flex flex-wrap items-center justify-between gap-2 text-sm min-w-0">
+                <span class="min-w-0 break-words text-surface-200">
+                    {% if loc.webfile_number %}<span class="font-mono text-surface-400">{{ loc.webfile_number }}</span> {% endif %}{{ loc.label }}
+                    <span class="text-surface-500">{{ loc.address }}</span></span>
+                <span class="text-xs whitespace-nowrap {{ 'text-surface-500' if loc.closed_on else 'text-emerald-400' }}">
+                    {% if loc.closed_on %}Closed {{ loc.closed_on | format_date }}{% if not loc.closure_filed %}, not told the state{% endif %}
+                    {% else %}Since {{ loc.opened_on | format_date }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="flex justify-end">
+            <a href="{{ url_for('businesses.returns_index') }}"
+               class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">
+                Every return</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

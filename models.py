@@ -1350,6 +1350,23 @@ class Business(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
+    # Its logo: an image uploaded for it, or the icon of one of its apps on My
+    # Apps, which is already fetched and kept (a business is often an app).
+    # One or the other: choosing an app's icon removes an uploaded image.
+    logo_file = db.Column(db.String(120), nullable=True)
+    logo_app_id = db.Column(
+        db.Integer,
+        db.ForeignKey("app_links.id", ondelete="SET NULL", name="fk_businesses_logo_app_id"),
+        nullable=True,
+    )
+    logo_app = db.relationship("AppLink")
+    # For a business whose sales come over the hub: what its app last said
+    # it has sold, all time, before tax. The list of businesses shows this
+    # rather than wait on somebody else's server; the business's own page
+    # asks again when it is old.
+    revenue_total = db.Column(db.Float, nullable=True)
+    revenue_as_of = db.Column(db.DateTime, nullable=True)
+
     locations = db.relationship("BusinessLocation", back_populates="business",
                                 cascade="all, delete-orphan",
                                 order_by="BusinessLocation.opened_on")
@@ -1359,6 +1376,14 @@ class Business(db.Model):
     @property
     def label(self):
         return self.short_name or self.name
+
+    @property
+    def initials(self):
+        """Two letters for a business with no logo yet."""
+        parts = [p for p in (self.label or "?").split() if p]
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return (parts[0][:2] if parts else "?").upper()
 
     def location_on(self, day):
         """The place a sale on `day` was made from, or None.

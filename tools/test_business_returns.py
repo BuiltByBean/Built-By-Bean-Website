@@ -208,9 +208,12 @@ br.hub.fetch = fake_fetch
 resp = c.get("/admin/businesses")
 body = resp.get_data(as_text=True)
 check("Businesses draws", resp.status_code == 200, resp.status_code)
-check("with both taxpayer numbers", "32093304155" in body and "32108463343" in body)
-check("and says what is not on file", "Not on file" in body)
 check("the list does not call out to an app", not hub_calls, hub_calls)
+# The tax lives inside each business since 2026-11-01, not on the list.
+pages = {bid: c.get(f"/admin/businesses/{bid}").get_data(as_text=True) for bid in (bbb_id, ehq_id)}
+check("each business's page has its taxpayer number",
+      "32093304155" in pages[bbb_id] and "32108463343" in pages[ehq_id])
+check("and says what is not on file", "Not on file" in pages[ehq_id])
 
 resp = c.get("/admin/taxes/sales/returns")
 body = resp.get_data(as_text=True)
