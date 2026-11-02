@@ -108,7 +108,9 @@
         </div>
 
         {% set logo_now = 'upload' if business.logo_file else (business.logo_app_id | string if business.logo_app_id else 'none') %}
-        {% set pick = 'w-14 h-14 rounded-2xl flex items-center justify-center bg-white/5 ring-1 ring-white/10 peer-checked:ring-2 peer-checked:ring-brand-400 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300 transition' %}
+        {# No tile behind the icons (rule "An app icon is never put in a box"): a ring
+   shows only on the one picked, offset so it never touches the art. #}
+{% set pick = 'w-14 h-14 rounded-2xl flex items-center justify-center ring-offset-2 ring-offset-surface-900 peer-checked:ring-2 peer-checked:ring-brand-400 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300 transition' %}
         <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
             <div class="flex items-center gap-3 min-w-0">
                 {{ business_logo(business) }}
@@ -117,20 +119,20 @@
             <div class="flex flex-wrap gap-3">
                 <label class="flex flex-col items-center gap-1.5 w-20 cursor-pointer">
                     <input type="radio" name="logo_choice" value="none" class="sr-only peer" {{ 'checked' if logo_now == 'none' }}>
-                    <span class="{{ pick }}"><span class="text-sm font-bold text-brand-300">{{ business.initials if business.name else '?' }}</span></span>
+                    <span class="{{ pick }} bg-brand-500/15"><span class="text-sm font-bold text-brand-300">{{ business.initials if business.name else '?' }}</span></span>
                     <span class="text-[11px] text-surface-300 text-center break-words w-full">None</span>
                 </label>
                 {% if business.logo_file %}
                 <label class="flex flex-col items-center gap-1.5 w-20 cursor-pointer">
                     <input type="radio" name="logo_choice" value="upload" class="sr-only peer" {{ 'checked' if logo_now == 'upload' }}>
-                    <span class="{{ pick }}"><img src="{{ url_for('businesses.logo', id=business.id) }}" alt="" class="w-11 h-11 object-contain"></span>
+                    <span class="{{ pick }}"><img src="{{ url_for('businesses.logo', id=business.id) }}" alt="" class="w-14 h-14 rounded-2xl object-contain"></span>
                     <span class="text-[11px] text-surface-300 text-center break-words w-full">Uploaded</span>
                 </label>
                 {% endif %}
                 {% for app in logo_apps %}
                 <label class="flex flex-col items-center gap-1.5 w-20 cursor-pointer">
                     <input type="radio" name="logo_choice" value="{{ app.id }}" class="sr-only peer" {{ 'checked' if logo_now == app.id | string }}>
-                    <span class="{{ pick }}"><img src="{{ url_for('apps.icon', id=app.id) }}" alt="" class="w-11 h-11 object-contain"></span>
+                    <span class="{{ pick }}"><img src="{{ url_for('apps.icon', id=app.id) }}" alt="" class="w-14 h-14 rounded-2xl object-contain"></span>
                     <span class="text-[11px] text-surface-300 text-center break-words w-full">{{ app.name }}</span>
                 </label>
                 {% endfor %}

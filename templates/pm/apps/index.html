@@ -38,7 +38,7 @@
         {# object-contain, not cover: these are logos, and cropping a
            logo to fill a square cuts somebody's name off. #}
         <img src="{{ url_for('apps.icon', id=app.id) }}" alt=""
-             class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-1.5 object-contain">
+             class="w-12 h-12 flex-shrink-0 rounded-xl object-contain">
         {% else %}
         <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
             <span class="text-sm font-bold text-brand-300">{{ app.initials }}</span>

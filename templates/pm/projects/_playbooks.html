@@ -185,7 +185,7 @@ function playbookPanel(ids, preferred) {
                 <div class="flex items-center gap-2.5">
                     {% if pb.logo_path %}
                     <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
-                         class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                         class="w-7 h-7 flex-shrink-0 rounded-lg object-contain">
                     {% else %}
                     <div class="w-7 h-7 flex-shrink-0 rounded-lg bg-brand-500/15 flex items-center justify-center">
                         <span class="text-[10px] font-bold text-brand-300">{{ pb.initials }}</span>
@@ -233,7 +233,7 @@ function playbookPanel(ids, preferred) {
             <div class="flex items-start gap-4 pb-4 border-b border-white/10">
                 {% if pb.logo_path %}
                 <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
-                     class="w-10 h-10 flex-shrink-0 rounded-xl bg-white/5 p-1 object-contain">
+                     class="w-10 h-10 flex-shrink-0 rounded-xl object-contain">
                 {% else %}
                 <div class="w-10 h-10 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
                     <span class="text-xs font-bold text-brand-300">{{ pb.initials }}</span>
@@ -440,7 +440,7 @@ function playbookPanel(ids, preferred) {
                                     class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
                                 {% if pb.logo_path %}
                                 <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
-                                     class="w-7 h-7 flex-shrink-0 rounded-lg bg-white/5 p-0.5 object-contain">
+                                     class="w-7 h-7 flex-shrink-0 rounded-lg object-contain">
                                 {% else %}
                                 <div class="w-7 h-7 flex-shrink-0 rounded-lg bg-brand-500/15 flex items-center justify-center">
                                     <span class="text-[10px] font-bold text-brand-300">{{ pb.initials }}</span>

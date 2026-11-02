@@ -152,7 +152,7 @@
         <div class="flex flex-wrap items-center gap-3 min-w-0">
             {% if app.icon_file %}
             <img src="{{ url_for('apps.icon', id=app.id) }}" alt=""
-                 class="w-10 h-10 flex-shrink-0 rounded-xl bg-white/5 p-1 object-contain">
+                 class="w-10 h-10 flex-shrink-0 rounded-xl object-contain">
             {% else %}
             <div class="w-10 h-10 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
                 <span class="text-xs font-bold text-brand-300">{{ app.initials }}</span>

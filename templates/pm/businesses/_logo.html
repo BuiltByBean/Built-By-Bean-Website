@@ -2,14 +2,20 @@
   A business's logo, at the size given: its uploaded image, else the icon of
   the My Apps tile it was given, else its initials. object-contain, as on My
   Apps: a logo cropped to fill a square cuts somebody's name off.
+
+  The image fills the whole box, with no tile behind it (Michael, 2026-11-02:
+  "I do not ever want the app icon to have the grey square around it, just
+  make the app icon bigger"; catalogue rule "An app icon is never put in a
+  box"). Only the initials, which have no image, sit on a filled shape.
+  `pad` is accepted and ignored, so callers written before need no change.
 #}
 {% macro business_logo(b, box='w-14 h-14', pad='p-2', text='text-base') -%}
 {% if b.logo_file %}
 <img src="{{ url_for('businesses.logo', id=b.id) }}" alt=""
-     class="{{ box }} flex-shrink-0 rounded-2xl bg-white/5 {{ pad }} object-contain">
+     class="{{ box }} flex-shrink-0 rounded-2xl object-contain">
 {% elif b.logo_app and b.logo_app.icon_file %}
 <img src="{{ url_for('apps.icon', id=b.logo_app_id) }}" alt=""
-     class="{{ box }} flex-shrink-0 rounded-2xl bg-white/5 {{ pad }} object-contain">
+     class="{{ box }} flex-shrink-0 rounded-2xl object-contain">
 {% else %}
 <div class="{{ box }} flex-shrink-0 rounded-2xl bg-brand-500/15 flex items-center justify-center">
     <span class="{{ text }} font-bold text-brand-300">{{ b.initials }}</span>

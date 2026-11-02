@@ -97,7 +97,7 @@
                     <div class="flex items-start gap-4">
                         {% if link and link.icon_file %}
                         <img src="{{ url_for('apps.icon', id=link.id) }}" alt=""
-                             class="w-12 h-12 flex-shrink-0 rounded-xl bg-white/5 p-1.5 object-contain">
+                             class="w-12 h-12 flex-shrink-0 rounded-xl object-contain">
                         {% else %}
                         <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
                             <span class="text-sm font-bold text-brand-300">{{ link.initials if link else '?' }}</span>
