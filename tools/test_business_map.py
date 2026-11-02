@@ -111,6 +111,38 @@ with application.test_request_context():
     o = db.session.get(Business, ids["other"])
     check("a business with a map already is left alone", len(o.services) == 1 and o.services[0].name == "Already here")
 
+    # The correction that followed: the media is a Railway bucket, not AWS.
+    db.session.add(Playbook(slug="aws", display_name="AWS", is_active=True))
+    db.session.commit()
+    spec2 = importlib.util.spec_from_file_location(
+        "mig2", ROOT / "migrations/versions/e5a3c7b19d42_media_is_on_railway_not_aws.py")
+    mig2 = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(mig2)
+    aws_id = Playbook.query.filter_by(slug="aws").one().id
+    storage = next(s for s in db.session.get(Business, ids["ehq"]).services if s.need and s.need.slug == "storage")
+    storage.playbook_id = aws_id
+    db.session.commit()
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    with db.engine.begin() as conn:
+        mig2.op = Operations(MigrationContext.configure(conn))
+        mig2.upgrade()
+    db.session.expire_all()
+    storage = db.session.get(BusinessService, storage.id)
+    check("EntertainHQ's file storage is the Railway bucket, not AWS",
+          storage.name == "Railway bucket" and storage.playbook.slug == "railway" and "not AWS" in storage.role)
+    storage.notes = "Michael checked this one."
+    storage.playbook_id = aws_id
+    db.session.commit()
+    with db.engine.begin() as conn:
+        mig2.op = Operations(MigrationContext.configure(conn))
+        mig2.upgrade()
+    db.session.expire_all()
+    check("a row somebody edited is left alone", db.session.get(BusinessService, storage.id).playbook.slug == "aws")
+    storage.playbook_id = Playbook.query.filter_by(slug="railway").one().id
+    storage.name = "Railway bucket"
+    db.session.commit()
+
     print("\nTHE LAYOUT:")
     m = br._map_for(e)
     cols = [c["key"] for c in m["columns"]]
