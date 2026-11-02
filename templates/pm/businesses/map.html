@@ -6,20 +6,24 @@
 {#
   Everything that makes this business run, as a map you can move around.
 
-  Columns are the layers a business is built in, left to right, so Stripe
-  sits in the same column on every business's map. Each vendor is its own
-  runbook's mark at the size the Businesses tile draws it, with no box behind
-  it (rule "An app icon is never put in a box"). A line between two says why
-  on hover; a dashed slot is an essential nobody has filled; a vendor with no
-  runbook says so, because that is the other kind of hole.
+  Columns are the layers a business is built in, left to right, and the
+  last column is what all of it delivers: the outcomes a partner asks about,
+  each wired to the services that deliver it. Lines are solid, coloured by
+  the column they leave, and say why on hover; a dashed slot is an essential
+  nobody has filled; a red mark is a vendor with no runbook.
 
-  Hover shows the card; a tap or click pins it, because hover does not exist
-  on a phone and a map that only works with a mouse is half a map. The page
-  fills the content area and the window never scrolls (contained-scroll):
-  the map is what scrolls, by dragging it. Escape goes back.
+  The nodes are HTML, not SVG, laid out from the same pan and zoom: each
+  tile is an <img> at its real pixel size, so a logo is rasterised at the
+  size it is shown and never blurs (an SVG <image> under a scale transform
+  is drawn once and stretched). The lines stay in SVG under them. A tile is
+  the shape of an app icon and the logo fills it edge to edge (rule "An app
+  icon is never put in a box").
 
-  The data rides in x-data through |tojson, in a SINGLE quoted attribute
-  (house rule: tojson leaves double quotes alone).
+  Hover shows the card; a tap or click pins it (read on pointerup without
+  movement, never click: the canvas captures the pointer). touch-action
+  none, or a finger's drag is the browser's scroll. The window never
+  scrolls (contained-scroll). Escape goes back. |tojson rides in a
+  single-quoted attribute.
 #}
 
 {% block title %}{{ business.label }} map - Built By Bean{% endblock %}
@@ -48,6 +52,10 @@
         <div class="ml-auto flex flex-wrap items-center gap-1.5">
             <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-surface-800/70 text-surface-200 whitespace-nowrap">
                 {{ map.counts.services }} running it</span>
+            {% if map.counts.outcomes %}
+            <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-emerald-900/30 text-emerald-300 whitespace-nowrap">
+                {{ map.counts.outcomes - map.counts.gaps }} of {{ map.counts.outcomes }} delivered</span>
+            {% endif %}
             {% if map.counts.holes %}
             <span class="px-2 py-1 text-[11px] font-semibold rounded-md bg-amber-500/15 text-amber-300 whitespace-nowrap">
                 {{ map.counts.holes }} hole{{ '' if map.counts.holes == 1 else 's' }}</span>
@@ -65,14 +73,14 @@
         </div>
     </div>
 
-    {# touch-action none, or a finger's drag is the browser's scroll and the
-       pointer is cancelled under us: no pan, no pinch, no tap to pin. #}
     <div x-ref="canvas" class="relative flex-1 min-h-0 rounded-2xl border border-white/10 bg-surface-900/60 overflow-hidden select-none touch-none"
          style="touch-action: none"
          :class="dragging ? 'cursor-grabbing' : 'cursor-grab'"
          @wheel.prevent="onWheel($event)"
          @pointerdown="onDown($event)" @pointermove="onMove($event)"
          @pointerup="onUp($event)" @pointercancel="onUp($event)" @pointerleave="onUp($event)">
+
+        {# The lines and the column bands, in SVG under the tiles. #}
         <svg class="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -81,105 +89,128 @@
             </defs>
             <rect width="100%" height="100%" fill="url(#dots)"/>
             <g :transform="'translate(' + tx + ' ' + ty + ') scale(' + k + ')'">
-                {# A band per column, so the layers read as layers. #}
                 {% for c in map.columns %}
-                <rect x="{{ c.x - 110 }}" y="20" width="220" height="{{ map.height - 30 }}" rx="18"
-                      fill="{{ c.color }}" fill-opacity="0.05" stroke="{{ c.color }}" stroke-opacity="0.18"/>
+                <rect x="{{ c.x - (140 if c.key == 'outcomes' else 110) }}" y="20" width="{{ 280 if c.key == 'outcomes' else 220 }}" height="{{ map.height - 30 }}" rx="18"
+                      fill="{{ c.color }}" fill-opacity="{{ 0.03 if c.key == 'outcomes' else 0.05 }}" stroke="{{ c.color }}" stroke-opacity="0.18"/>
                 <text x="{{ c.x }}" y="56" text-anchor="middle" font-size="13" font-weight="800" letter-spacing="0.14em"
                       fill="{{ c.color }}">{{ c.label | upper }}</text>
                 {% endfor %}
-
-                {# Lines first, under the nodes: solid, in the colour of the
-                   column they leave, and lit white on hover. Hand-written
-                   ones are brand purple and a touch heavier. #}
                 {% for e in map.edges %}
                 <g class="edge" data-pick="edge:{{ loop.index0 }}"
                    @pointerenter="show('edge', {{ loop.index0 }}, $event)" @pointerleave="hide()">
                     <path d="{{ e.path }}" fill="none" stroke="transparent" stroke-width="30"/>
                     <path d="{{ e.path }}" fill="none" stroke-linecap="round"
-                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ '#a78bfa' if not e.derived else e.color }}'"
+                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ '#a78bfa' if (not e.derived and not e.outcome) else e.color }}'"
                           :stroke-opacity="isLit('edge', {{ loop.index0 }}) ? 1 : {{ 0.95 if not e.derived else 0.75 }}"
                           :stroke-width="isLit('edge', {{ loop.index0 }}) ? 4.5 : {{ 3.2 if not e.derived else 2.4 }}"
+                          {% if e.outcome %}stroke-dasharray="7 5"{% endif %}
                           style="transition: stroke 120ms, stroke-width 120ms"/>
-                </g>
-                {% endfor %}
-
-                {% for n in map.nodes %}
-                <g class="node" data-pick="node:{{ loop.index0 }}" transform="translate({{ n.x }} {{ n.y }})" style="cursor: pointer"
-                   @pointerenter="show('node', {{ loop.index0 }}, $event)" @pointerleave="hide()">
-                    {# The mark sits on the page's own dark, so a line never
-                       runs through a logo. #}
-                    <circle r="40" fill="#0b0b14"/>
-                    {% if n.kind == 'hole' %}
-                    <circle r="31" fill="rgba(245,158,11,0.08)" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6 5"/>
-                    <path d="M-10 0h20M0-10v20" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
-                    {% else %}
-                    <circle r="37" fill="rgba(255,255,255,0.001)"/>
-                    {% if n.status != 'running' %}
-                    <circle r="35" fill="none" stroke="{{ '#f59e0b' if n.status == 'setting_up' else '#64748b' }}" stroke-width="2.5" stroke-dasharray="6 5"/>
-                    {% endif %}
-                    {% if n.mark %}
-                    <image href="{{ n.mark }}" x="-28" y="-28" width="56" height="56" preserveAspectRatio="xMidYMid meet"/>
-                    {% else %}
-                    <circle r="28" fill="rgba(139,92,246,0.22)"/>
-                    <text text-anchor="middle" dominant-baseline="central" font-size="18" font-weight="700" fill="#c4b5fd">{{ n.initials }}</text>
-                    {% endif %}
-                    {% if n.runbook_missing %}
-                    <circle cx="25" cy="-25" r="9" fill="#ef4444"/>
-                    <text x="25" y="-25" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="800" fill="#fff">!</text>
-                    {% endif %}
-                    {% endif %}
-                    {# What it is, then what it is FOR, in its column's colour. #}
-                    {% set words = n.name.split(' ') %}
-                    {% if n.name | length > 16 and words | length > 1 %}
-                    {% set half = (words | length / 2) | round(0, 'ceil') | int %}
-                    <text y="54" text-anchor="middle" font-size="13" font-weight="700" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f8fafc' }}">{{ words[:half] | join(' ') }}</text>
-                    <text y="70" text-anchor="middle" font-size="13" font-weight="700" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f8fafc' }}">{{ words[half:] | join(' ') }}</text>
-                    {% set cap_y = 86 %}
-                    {% else %}
-                    <text y="54" text-anchor="middle" font-size="13" font-weight="700" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f8fafc' }}">{{ n.name }}</text>
-                    {% set cap_y = 70 %}
-                    {% endif %}
-                    {% if n.kind == 'hole' %}
-                    <text y="{{ cap_y }}" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="0.08em" fill="#f59e0b">MISSING</text>
-                    {% elif n.need %}
-                    <text y="{{ cap_y }}" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="0.08em" fill="{{ map.columns | selectattr('key', 'equalto', n.layer) | map(attribute='color') | first }}">{{ n.need | upper }}</text>
-                    {% endif %}
                 </g>
                 {% endfor %}
             </g>
         </svg>
 
+        {# The tiles, in HTML at real pixel size. One element per node, placed
+           from the same tx, ty and k the lines use. #}
+        <div class="absolute inset-0 pointer-events-none">
+            <template x-for="(n, i) in map.nodes" :key="n.key">
+                <div class="absolute pointer-events-auto flex flex-col items-center text-center cursor-pointer"
+                     :style="nodeStyle(n)" :data-pick="'node:' + i"
+                     @pointerenter="show('node', i, $event)" @pointerleave="hide()">
+
+                    {# An outcome is a pill in its status colour. #}
+                    <template x-if="n.kind === 'outcome'">
+                        <div class="w-full rounded-2xl border-2 bg-[#0b0b14] flex items-center gap-2 text-left"
+                             :style="'padding:' + px(10) + ' ' + px(14) + '; border-color:' + n.color + '; box-shadow: 0 0 0 ' + px(4) + ' ' + n.color + '22'">
+                            <span class="rounded-full shrink-0" :style="'width:' + px(10) + '; height:' + px(10) + '; background:' + n.color"></span>
+                            <span class="font-bold text-white leading-tight" :style="'font-size:' + px(13)" x-text="n.name"></span>
+                        </div>
+                    </template>
+
+                    {# A hole is a dashed empty tile. #}
+                    <template x-if="n.kind === 'hole'">
+                        <div class="rounded-2xl border-2 border-dashed border-amber-400 bg-amber-400/10 flex items-center justify-center text-amber-300 font-bold"
+                             :style="'width:' + px(64) + '; height:' + px(64) + '; font-size:' + px(30)">+</div>
+                    </template>
+
+                    {# A service is its mark, filling an app-icon tile. #}
+                    <template x-if="n.kind === 'service'">
+                        <div class="relative" :style="'width:' + px(64) + '; height:' + px(64)">
+                            <template x-if="n.mark">
+                                <img :src="n.mark" alt="" draggable="false"
+                                     class="w-full h-full object-contain bg-[#0b0b14]"
+                                     :style="'border-radius:' + px(14)">
+                            </template>
+                            <template x-if="!n.mark">
+                                <div class="w-full h-full bg-brand-500/25 flex items-center justify-center font-bold text-brand-200"
+                                     :style="'border-radius:' + px(14) + '; font-size:' + px(20)" x-text="n.initials"></div>
+                            </template>
+                            <template x-if="n.status !== 'running'">
+                                <div class="absolute border-2 border-dashed pointer-events-none"
+                                     :class="n.status === 'setting_up' ? 'border-amber-400' : 'border-slate-400'"
+                                     :style="'inset:' + px(-5) + '; border-radius:' + px(18)"></div>
+                            </template>
+                            <template x-if="n.runbook_missing">
+                                <div class="absolute rounded-full bg-red-500 text-white font-extrabold flex items-center justify-center"
+                                     :style="'width:' + px(20) + '; height:' + px(20) + '; top:' + px(-7) + '; right:' + px(-7) + '; font-size:' + px(12)">!</div>
+                            </template>
+                        </div>
+                    </template>
+
+                    {# What it is, then what it is for. #}
+                    <template x-if="n.kind !== 'outcome'">
+                        <div class="w-full" :style="'margin-top:' + px(6)">
+                            <p class="font-bold leading-tight break-words" :class="n.kind === 'hole' ? 'text-amber-300' : 'text-white'"
+                               :style="'font-size:' + px(13)" x-text="n.name"></p>
+                            <p class="font-bold tracking-wider uppercase leading-tight break-words"
+                               :style="'font-size:' + px(10) + '; color:' + (n.kind === 'hole' ? '#f59e0b' : layerColor(n.layer))"
+                               x-text="n.kind === 'hole' ? 'Missing' : n.need"></p>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
         {# The card. One element, filled from whichever node or line is under
-           the pointer or was tapped, kept inside the canvas so it never
-           leaves the screen. #}
+           the pointer or was tapped, kept inside the canvas. #}
         <div x-show="card" x-cloak x-transition.opacity.duration.120ms
-             class="absolute z-10 w-72 max-w-[calc(100%-1.5rem)] p-4 rounded-2xl border border-white/10 bg-surface-900/95 shadow-2xl pointer-events-auto"
-             :style="cardStyle" @click.stop @pointerenter="holdCard = true" @pointerleave="holdCard = false; if (!pinned) hide()">
+             class="absolute z-10 w-80 max-w-[calc(100%-1.5rem)] p-4 rounded-2xl border border-white/10 bg-surface-900/95 shadow-2xl pointer-events-auto"
+             :style="cardStyle" @pointerenter="holdCard = true" @pointerleave="holdCard = false; if (!pinned) hide()">
             <template x-if="card && card.kind === 'node'">
                 <div class="space-y-2 min-w-0">
                     <div class="flex items-center gap-3 min-w-0">
                         <template x-if="card.item.kind === 'service' && card.item.mark">
-                            <img :src="card.item.mark" alt="" class="w-10 h-10 object-contain flex-shrink-0">
+                            <img :src="card.item.mark" alt="" class="w-10 h-10 object-contain rounded-xl flex-shrink-0">
                         </template>
                         <template x-if="card.item.kind === 'service' && !card.item.mark">
-                            <span class="w-10 h-10 rounded-xl bg-brand-500/15 text-brand-300 font-bold flex items-center justify-center flex-shrink-0" x-text="card.item.initials"></span>
+                            <span class="w-10 h-10 rounded-xl bg-brand-500/25 text-brand-200 font-bold flex items-center justify-center flex-shrink-0" x-text="card.item.initials"></span>
                         </template>
                         <template x-if="card.item.kind === 'hole'">
-                            <span class="w-10 h-10 rounded-full border-2 border-dashed border-amber-400 text-amber-300 font-bold flex items-center justify-center flex-shrink-0">+</span>
+                            <span class="w-10 h-10 rounded-xl border-2 border-dashed border-amber-400 text-amber-300 font-bold flex items-center justify-center flex-shrink-0">+</span>
+                        </template>
+                        <template x-if="card.item.kind === 'outcome'">
+                            <span class="w-4 h-4 rounded-full flex-shrink-0" :style="'background:' + card.item.color"></span>
                         </template>
                         <div class="min-w-0">
                             <p class="text-sm font-bold text-white break-words" x-text="card.item.kind === 'hole' ? 'Missing: ' + card.item.name : card.item.name"></p>
-                            <p class="text-xs text-surface-400 break-words" x-text="card.item.kind === 'hole' ? 'Every business needs one' : card.item.need"></p>
+                            <p class="text-xs text-surface-400 break-words"
+                               x-text="card.item.kind === 'hole' ? 'Every business needs one' : (card.item.kind === 'outcome' ? 'What it delivers' : card.item.need)"></p>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5">
                         <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md"
-                              :class="{'bg-emerald-900/30 text-emerald-400': card.item.status === 'running', 'bg-amber-500/15 text-amber-300': card.item.status === 'setting_up' || card.item.status === 'missing', 'bg-surface-800 text-surface-300': card.item.status === 'planned'}"
+                              :class="{'bg-emerald-900/30 text-emerald-400': card.item.status === 'running' || card.item.status === 'delivered',
+                                       'bg-amber-500/15 text-amber-300': card.item.status === 'setting_up' || card.item.status === 'in_progress',
+                                       'bg-red-900/30 text-red-300': card.item.status === 'missing' && card.item.kind === 'outcome',
+                                       'bg-amber-500/15 text-amber-200': card.item.status === 'missing' && card.item.kind === 'hole',
+                                       'bg-surface-800 text-surface-300': card.item.status === 'planned'}"
                               x-text="card.item.status_label"></span>
                         <span x-show="card.item.runbook_missing" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-red-900/30 text-red-300">No runbook yet</span>
                     </div>
                     <p class="text-sm text-surface-200 break-words" x-show="card.item.role" x-text="card.item.role"></p>
+                    <template x-if="card.item.kind === 'outcome' && card.item.delivered_by && card.item.delivered_by.length">
+                        <p class="text-xs text-surface-400 break-words">Delivered by <span class="text-surface-200" x-text="card.item.delivered_by.join(', ')"></span></p>
+                    </template>
                     <template x-if="card.item.kind === 'hole' && card.item.suggestions && card.item.suggestions.length">
                         <p class="text-xs text-surface-400 break-words">Fill it with
                             <template x-for="(s, i) in card.item.suggestions" :key="s.slug">
@@ -189,8 +220,11 @@
                     <div class="flex flex-wrap gap-2 pt-1" x-show="pinned">
                         <template x-if="card.item.kind === 'hole'">
                             <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "?need=" + card.item.need_slug + "#add"'
-
                                class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Fill it</a>
+                        </template>
+                        <template x-if="card.item.kind === 'outcome'">
+                            <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "#outcome-" + card.item.id'
+                               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">Edit</a>
                         </template>
                         <template x-if="card.item.runbook">
                             <a :href="card.item.runbook"
@@ -208,6 +242,7 @@
                     <p class="text-sm font-bold text-white break-words" x-text="card.item.label"></p>
                     <p class="text-sm text-surface-200 break-words" x-text="card.item.why || 'Connected.'"></p>
                     <p class="text-[11px] text-surface-500" x-show="card.item.derived">From the business playbook</p>
+                    <p class="text-[11px] text-surface-500" x-show="card.item.outcome">How the outcome is delivered</p>
                 </div>
             </template>
         </div>
@@ -216,6 +251,8 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
+    const COLORS = {{ map.columns | map(attribute='color') | list | tojson }};
+    const KEYS = {{ map.columns | map(attribute='key') | list | tojson }};
     Alpine.data('bizMap', (map) => ({
         map, tx: 0, ty: 0, k: 1, dragging: false, moved: false,
         pointers: new Map(), pinchStart: null, downPick: '',
@@ -225,8 +262,15 @@ document.addEventListener('alpine:init', () => {
             this.$nextTick(() => this.fit());
             window.addEventListener('resize', () => { if (!this.pinned) this.fit(); });
         },
-        /* The whole drawing inside the canvas, with a margin, never above 1.6x
-           or the marks go soft, never under 0.35x or the names go. */
+        px(v) { return (v * this.k).toFixed(2) + 'px'; },
+        layerColor(key) { const i = KEYS.indexOf(key); return i >= 0 ? COLORS[i] : '#94a3b8'; },
+        /* A node box is 150 map units wide (an outcome 250), centred on x,
+           with the tile at the top and the labels under it. */
+        nodeStyle(n) {
+            const w = n.kind === 'outcome' ? 250 : 150;
+            const top = n.kind === 'outcome' ? 28 : 32;
+            return 'left:' + (this.tx + (n.x - w / 2) * this.k).toFixed(2) + 'px; top:' + (this.ty + (n.y - top) * this.k).toFixed(2) + 'px; width:' + (w * this.k).toFixed(2) + 'px';
+        },
         fit() {
             const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
             if (!w || !h) return;
@@ -269,8 +313,7 @@ document.addEventListener('alpine:init', () => {
                 const d = Math.hypot(a.x - b.x, a.y - b.y);
                 const r = this.canvas.getBoundingClientRect();
                 const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
-                const target = this.pinchStart.k * (d / this.pinchStart.d);
-                this.zoomAt(target / this.k, cx, cy);
+                this.zoomAt((this.pinchStart.k * (d / this.pinchStart.d)) / this.k, cx, cy);
                 return;
             }
             this.tx += dx; this.ty += dy;
@@ -292,7 +335,6 @@ document.addEventListener('alpine:init', () => {
             }
             this.downPick = '';
         },
-        /* Hover follows the pointer; a pin stays where it was tapped. */
         show(kind, i, e) {
             if (this.pinned) return;
             this.hover = { kind, i, x: e.clientX, y: e.clientY };
@@ -317,8 +359,8 @@ document.addEventListener('alpine:init', () => {
             if (!c || !this.canvas) return '';
             const r = this.canvas.getBoundingClientRect();
             let x = c.x - r.left + 16, y = c.y - r.top + 16;
-            if (x + 300 > r.width) x = Math.max(8, c.x - r.left - 300);
-            if (y + 260 > r.height) y = Math.max(8, r.height - 270);
+            if (x + 330 > r.width) x = Math.max(8, c.x - r.left - 330);
+            if (y + 280 > r.height) y = Math.max(8, r.height - 290);
             return `left:${x}px; top:${y}px`;
         },
     }));

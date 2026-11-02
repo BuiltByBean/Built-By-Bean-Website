@@ -143,6 +143,40 @@ with application.test_request_context():
     storage.name = "Railway bucket"
     db.session.commit()
 
+    print("\nWHAT IT DELIVERS:")
+    spec3 = importlib.util.spec_from_file_location(
+        "mig3", ROOT / "migrations/versions/f1d6b8c3a924_what_the_map_delivers.py")
+    mig3 = importlib.util.module_from_spec(spec3)
+    spec3.loader.exec_module(mig3)
+    with db.engine.begin() as conn:
+        mig3.op = Operations(MigrationContext.configure(conn))
+        mig3.upgrade()
+    db.session.expire_all()
+    e = db.session.get(Business, ids["ehq"])
+    caps = {c.name: c for c in e.capabilities}
+    check("EntertainHQ's outcomes are on file", len(caps) == len(mig3.CAPABILITIES["entertainhq"]), len(caps))
+    check("the phone apps and push joined its map",
+          {s.need.slug for s in e.services if s.need} >= {"mobile-apps", "push"})
+    charge = caps["Customers charge their clients"]
+    check("'Customers charge their clients' is delivered by Stripe",
+          [l.service.display_name for l in charge.links] == ["Stripe"], [l.service.display_name for l in charge.links])
+    heard = caps["Talent hears about a booking"]
+    check("'Talent hears about a booking' is wired to texting, email and push",
+          len(heard.links) == 3, [l.service.display_name for l in heard.links])
+    with db.engine.begin() as conn:
+        mig3.op = Operations(MigrationContext.configure(conn))
+        mig3.upgrade()
+    db.session.expire_all()
+    check("running it again adds nothing", len(db.session.get(Business, ids["ehq"]).capabilities) == len(caps))
+    m = br._map_for(db.session.get(Business, ids["ehq"]))
+    outcomes = [n for n in m["nodes"] if n["kind"] == "outcome"]
+    check("outcomes are the last column", m["columns"][-1]["key"] == "outcomes" and all(n["layer"] == "outcomes" for n in outcomes))
+    o = next(n for n in outcomes if n["name"] == "Customers charge their clients")
+    check("an outcome says who delivers it", o["delivered_by"] == ["Stripe"], o["delivered_by"])
+    check("and is wired by a line from that service",
+          any(x["b"] == o["key"] and x.get("outcome") and "Stripe" in x["label"] for x in m["edges"]))
+    check("the counts say how many are delivered", m["counts"]["outcomes"] == len(caps) and m["counts"]["gaps"] == 2, m["counts"])
+
     print("\nTHE LAYOUT:")
     m = br._map_for(e)
     cols = [c["key"] for c in m["columns"]]
@@ -247,6 +281,47 @@ with application.test_request_context():
 r = c.post(f"/admin/businesses/{ids['ehq']}/map/links", data={"from_service_id": qb_id, "to_service_id": qb_id, "why": "x"},
            follow_redirects=True)
 check("a service cannot be connected to itself", b"two different services" in r.data)
+# Outcomes: add one wired to two services, save it, remove it.
+with application.test_request_context():
+    svc_ids = [s.id for s in db.session.get(Business, ids["ehq"]).services][:2]
+r = c.post(f"/admin/businesses/{ids['ehq']}/map/outcomes",
+           data={"name": "Partners see the books", "how": "A monthly statement.", "status": "missing",
+                 "service_ids": [str(svc_ids[0]), str(svc_ids[1])]}, follow_redirects=True)
+with application.test_request_context():
+    from models import BusinessCapability
+    cap = BusinessCapability.query.filter_by(business_id=ids["ehq"], name="Partners see the books").first()
+    check("an outcome can be added, wired to its services", cap is not None and cap.service_ids == set(svc_ids))
+    cap_id = cap.id
+    m = br._map_for(db.session.get(Business, ids["ehq"]))
+    check("a missing outcome is drawn red", next(n for n in m["nodes"] if n["key"] == f"c{cap_id}")["color"] == "#f87171")
+c.post(f"/admin/businesses/{ids['ehq']}/map/outcomes/{cap_id}", data={"name": "Partners see the books", "status": "delivered",
+                                                                     "service_ids": [str(svc_ids[0])]})
+with application.test_request_context():
+    cap = db.session.get(BusinessCapability, cap_id)
+    check("saving rewires it", cap.status == "delivered" and cap.service_ids == {svc_ids[0]})
+c.post(f"/admin/businesses/{ids['ehq']}/map/outcomes/{cap_id}/delete")
+with application.test_request_context():
+    check("removing it removes it", db.session.get(BusinessCapability, cap_id) is None)
+page = c.get(f"/admin/businesses/{ids['ehq']}/map").get_data(as_text=True)
+check("the map page carries the outcomes", "Customers charge their clients" in page)
+page = c.get(f"/admin/businesses/{ids['ehq']}/map/edit").get_data(as_text=True)
+check("the edit page lists them with their services ticked", "What it delivers" in page and 'name="service_ids"' in page)
+
+# Marks: a service with a URL and no runbook asks for its own, once.
+fetched = []
+br.app_icon_service.fetch = lambda url: (fetched.append(url) or (b"\x89PNG" + b"0" * 100, "png", url))
+r = c.post(f"/admin/businesses/{ids['ehq']}/map/marks", follow_redirects=True)
+with application.test_request_context():
+    merc = BusinessService.query.filter_by(business_id=ids["ehq"], name="Mercury").one()
+    check("the press fetches a mark for Mercury off its URL", merc.icon_file is not None and any("mercury.com" in u for u in fetched), fetched)
+    check("and the tile shows it", merc.mark_url.endswith(f"/map/services/{merc.id}/icon"))
+    mark_url = merc.mark_url
+r = c.get(mark_url)
+check("served with nosniff", r.status_code == 200 and r.headers.get("X-Content-Type-Options") == "nosniff")
+before = len(fetched)
+c.post(f"/admin/businesses/{ids['ehq']}/map/marks", follow_redirects=True)
+check("a service already asked is not asked again", all("mercury" not in u for u in fetched[before:]))
+
 c.post(f"/admin/businesses/{ids['ehq']}/map/services/{qb_id}/delete")
 with application.test_request_context():
     check("removing a service removes it", db.session.get(BusinessService, qb_id) is None)

@@ -1267,13 +1267,14 @@ def hub_get_file():
 # button and a place on the Businesses tile.
 
 import business_map  # noqa: E402
-from models import BusinessLink, BusinessNeed, BusinessNeedLink, BusinessService, Playbook  # noqa: E402
+from models import (BusinessCapability, BusinessCapabilityLink, BusinessLink, BusinessNeed,  # noqa: E402
+                    BusinessNeedLink, BusinessService, Playbook)
 
 
 def _map_for(business):
     needs = BusinessNeed.query.order_by(BusinessNeed.sort_order, BusinessNeed.id).all()
     return business_map.layout(business, needs, list(business.services), list(business.map_links),
-                               BusinessNeedLink.query.all())
+                               BusinessNeedLink.query.all(), list(business.capabilities))
 
 
 @business_bp.route("/admin/businesses/<int:id>/map")
@@ -1302,6 +1303,9 @@ def _map_edit_context(business):
         "layer_options": [(key, label) for key, label, _c in business_map.LAYERS],
         "preselect_need": request.args.get("need", ""),
         "preselect_id": next((str(n.id) for n in needs if n.slug == request.args.get("need", "")), ""),
+        "capabilities": list(business.capabilities),
+        "capability_statuses": BusinessCapability.STATUSES,
+        "marks_waiting": sum(1 for s in business.services if s.wants_mark),
     }
 
 
@@ -1341,6 +1345,9 @@ def service_add(id):
         flash(error, "error")
     else:
         db.session.add(service)
+        db.session.flush()
+        if service.wants_mark:
+            fetch_service_mark(service)
         db.session.commit()
         flash(f"{service.display_name} is on the map.", "success")
     return redirect(url_for("businesses.map_edit", id=business.id) + "#services")
@@ -1357,6 +1364,8 @@ def service_save(id, sid):
         db.session.rollback()
         flash(error, "error")
     else:
+        if service.wants_mark:
+            fetch_service_mark(service)
         db.session.commit()
         flash("Saved.", "success")
     return redirect(url_for("businesses.map_edit", id=id) + f"#service-{sid}")
@@ -1409,3 +1418,158 @@ def link_delete(id, lid):
     db.session.commit()
     flash("Connection removed.", "success")
     return redirect(url_for("businesses.map_edit", id=id) + "#links")
+
+
+# ── Outcomes, and a service's own mark ───────────────────────
+
+SERVICE_ICON_DIR = "service_icons"
+MARK_BATCH = 8
+
+
+def _service_icon_folder():
+    path = os.path.join(current_app.config["UPLOAD_FOLDER"], SERVICE_ICON_DIR)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def fetch_service_mark(service):
+    """Fetch and keep this service's mark off its URL. Returns whether one came.
+
+    Best effort, as the runbooks' and My Apps' fetches are: a site that is
+    down leaves the tile on its initials. Stamped either way, so a URL with
+    no icon is not asked again on every press.
+    """
+    url = (service.url or "").strip()
+    if not url:
+        return False
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    got = None
+    try:
+        got = app_icon_service.fetch(url)
+    except Exception:
+        got = None
+    if not got:
+        host = url.split("//", 1)[-1].split("/", 1)[0].split("@")[-1].split(":")[0]
+        try:
+            got = app_icon_service.fetch_by_domain(host) if "." in host else None
+        except Exception:
+            got = None
+    service.icon_fetched_at = datetime.now(timezone.utc)
+    if not got:
+        return False
+    data, ext, source = got
+    old = service.icon_file
+    service.icon_file = app_icon_service.store(data, ext, _service_icon_folder())
+    service.icon_source = source[:500] if source else None
+    if old and old != service.icon_file:
+        try:
+            os.remove(os.path.join(_service_icon_folder(), old))
+        except OSError:
+            pass
+    return True
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/services/<int:sid>/icon")
+@ceo_required
+def service_icon(id, sid):
+    service = db.session.get(BusinessService, sid) or abort(404)
+    if service.business_id != id or not service.icon_file:
+        abort(404)
+    resp = send_from_directory(_service_icon_folder(), service.icon_file, max_age=86400)
+    # Fetched from somebody else's server, and an SVG can carry script.
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/marks", methods=["POST"])
+@ceo_required
+def marks_fetch(id):
+    """Go and get the marks for the services still showing initials.
+
+    On a press, not on render: a network call to somebody else's server
+    must never be what a page waits on.
+    """
+    business = db.session.get(Business, id) or abort(404)
+    waiting = [s for s in business.services if s.wants_mark]
+    batch = waiting[:MARK_BATCH]
+    missed = [s.display_name for s in batch if not fetch_service_mark(s)]
+    db.session.commit()
+    found, asked = len(batch) - len(missed), len(batch)
+    if not asked:
+        flash("Every service with a URL already has its mark.", "info")
+    elif not missed:
+        flash(f"Got all {found}." + (f" {len(waiting) - asked} still to ask." if len(waiting) > asked else ""),
+              "success")
+    else:
+        flash(f"Got {found} of {asked}. Nothing found for " + ", ".join(missed[:5]) + ".",
+              "warning" if found else "error")
+    return redirect(url_for("businesses.map_edit", id=business.id) + "#services")
+
+
+def _fill_capability(cap, business):
+    """Copy the form onto an outcome. Returns an error string or None."""
+    cap.name = _text("name", 120)
+    if not cap.name:
+        return "An outcome needs a name: what the customer gets."
+    cap.how = _text("how", 400)
+    status = _text("status", 12)
+    cap.status = status if status in dict(BusinessCapability.STATUSES) else "delivered"
+    wanted = {int(v) for v in request.form.getlist("service_ids") if v.isdigit()}
+    mine = {s.id for s in business.services}
+    wanted &= mine
+    have = {l.service_id: l for l in cap.links}
+    for sid in list(have):
+        if sid not in wanted:
+            db.session.delete(have[sid])
+    for sid in wanted:
+        if sid not in have:
+            cap.links.append(BusinessCapabilityLink(service_id=sid))
+    return None
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/outcomes", methods=["POST"])
+@ceo_required
+def outcome_add(id):
+    business = db.session.get(Business, id) or abort(404)
+    last = max([c.sort_order for c in business.capabilities] or [0])
+    cap = BusinessCapability(business_id=business.id, sort_order=last + 10)
+    db.session.add(cap)
+    error = _fill_capability(cap, business)
+    if error:
+        db.session.rollback()
+        flash(error, "error")
+    else:
+        db.session.commit()
+        flash(f"{cap.name} is on the map.", "success")
+    return redirect(url_for("businesses.map_edit", id=business.id) + "#outcomes")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/outcomes/<int:cid>", methods=["POST"])
+@ceo_required
+def outcome_save(id, cid):
+    cap = db.session.get(BusinessCapability, cid) or abort(404)
+    if cap.business_id != id:
+        abort(404)
+    error = _fill_capability(cap, cap.business)
+    if error:
+        db.session.rollback()
+        flash(error, "error")
+    else:
+        db.session.commit()
+        flash("Saved.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + f"#outcome-{cid}")
+
+
+@business_bp.route("/admin/businesses/<int:id>/map/outcomes/<int:cid>/delete", methods=["POST"])
+@ceo_required
+def outcome_delete(id, cid):
+    cap = db.session.get(BusinessCapability, cid) or abort(404)
+    if cap.business_id != id:
+        abort(404)
+    name = cap.name
+    db.session.delete(cap)
+    db.session.commit()
+    flash(f"{name} is off the map.", "success")
+    return redirect(url_for("businesses.map_edit", id=id) + "#outcomes")

@@ -1619,6 +1619,12 @@ class BusinessService(db.Model):
     status = db.Column(db.String(12), nullable=False, default="running", server_default="running")
     url = db.Column(db.String(300), default="")
     notes = db.Column(db.Text, default="")
+    # Its own mark, fetched off `url` the way a My Apps tile gets its icon,
+    # for a service with no runbook to borrow one from (Mercury, Zapier, the
+    # app itself). Null until asked for; icon_fetched_at stops the asking.
+    icon_file = db.Column(db.String(120), nullable=True)
+    icon_source = db.Column(db.String(500), nullable=True)
+    icon_fetched_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     business = db.relationship("Business", backref=db.backref(
@@ -1643,16 +1649,23 @@ class BusinessService(db.Model):
 
     @property
     def mark_url(self):
-        """The vendor's own mark, from its runbook, or None for initials."""
+        """The vendor's mark: its runbook's, else one fetched for this row, else None."""
         from flask import url_for
         pb = self.playbook
-        if pb is None:
-            return None
-        if pb.logo_path:
-            return url_for("static", filename=pb.logo_path)
-        if pb.icon_file:
-            return url_for("playbooks.icon", slug=pb.slug)
+        if pb is not None:
+            if pb.logo_path:
+                return url_for("static", filename=pb.logo_path)
+            if pb.icon_file:
+                return url_for("playbooks.icon", slug=pb.slug)
+        if self.icon_file:
+            return url_for("businesses.service_icon", id=self.business_id, sid=self.id)
         return None
+
+    @property
+    def wants_mark(self):
+        """Worth a network call: no mark, a URL to ask, not asked already."""
+        return (self.mark_url is None and bool((self.url or "").strip())
+                and self.icon_fetched_at is None)
 
     @property
     def runbook_url(self):
@@ -1688,6 +1701,76 @@ class BusinessLink(db.Model):
         "map_links", cascade="all, delete-orphan", order_by="BusinessLink.id"))
     from_service = db.relationship("BusinessService", foreign_keys=[from_service_id])
     to_service = db.relationship("BusinessService", foreign_keys=[to_service_id])
+
+
+class BusinessCapability(db.Model):
+    """One thing the business can do for its customers, and whether it does.
+
+    Michael, 2026-11-02: "how do our customers charge their clients? That's
+    done through Stripe payments ... to truly be able to answer all questions
+    from any of the business partners, if they ask, do we have a process in
+    place for X?" A capability is the question's answer in plain words, with
+    the services that deliver it drawn as its lines. Its status is the
+    honest state: delivered, in progress, or missing, which is a question
+    with no process yet.
+    """
+
+    __tablename__ = "business_capabilities"
+
+    STATUSES = (
+        ("delivered", "Delivered"),
+        ("in_progress", "In progress"),
+        ("missing", "Missing"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(
+        db.Integer,
+        db.ForeignKey("businesses.id", ondelete="CASCADE", name="fk_business_capabilities_business_id"),
+        nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    how = db.Column(db.String(400), default="")
+    status = db.Column(db.String(12), nullable=False, default="delivered", server_default="delivered")
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "capabilities", cascade="all, delete-orphan",
+        order_by="BusinessCapability.sort_order, BusinessCapability.id"))
+    links = db.relationship("BusinessCapabilityLink", back_populates="capability",
+                            cascade="all, delete-orphan")
+
+    @property
+    def status_label(self):
+        return dict(self.STATUSES).get(self.status, "Delivered")
+
+    @property
+    def service_ids(self):
+        return {l.service_id for l in self.links}
+
+
+class BusinessCapabilityLink(db.Model):
+    """A service that delivers a capability."""
+
+    __tablename__ = "business_capability_links"
+    __table_args__ = (
+        db.UniqueConstraint("capability_id", "service_id", name="uq_business_capability_link"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    capability_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_capabilities.id", ondelete="CASCADE",
+                      name="fk_business_capability_links_capability_id"),
+        nullable=False, index=True)
+    service_id = db.Column(
+        db.Integer,
+        db.ForeignKey("business_services.id", ondelete="CASCADE",
+                      name="fk_business_capability_links_service_id"),
+        nullable=False, index=True)
+
+    capability = db.relationship("BusinessCapability", back_populates="links")
+    service = db.relationship("BusinessService")
 
 
 class SalesTaxFiling(db.Model):

@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/icon_button.html" import delete_icon %}
+{% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/back_link.html" import back_link %}
 
 {#
@@ -67,6 +68,11 @@
     </div>
 
     <div id="services" class="space-y-3">
+        {% if marks_waiting %}
+        <form method="POST" action="{{ url_for('businesses.marks_fetch', id=business.id) }}" class="flex justify-end">
+            <button type="submit" class="{{ btn }}">Fetch {{ marks_waiting }} missing mark{{ '' if marks_waiting == 1 else 's' }}</button>
+        </form>
+        {% endif %}
         {% set ns = namespace(layer=None) %}
         {% for s in services %}
         {% set layer = (s.need.layer if s.need else s.layer) or 'operations' %}
@@ -134,6 +140,61 @@
         {% else %}
         <div class="glass-card p-8 text-center"><p class="text-surface-300">Nothing on the map yet.</p></div>
         {% endfor %}
+    </div>
+
+    {# What it delivers: an outcome in plain words, its status, and the
+       services that deliver it, ticked. Each row is its own form. #}
+    <div id="outcomes" class="space-y-3">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400 pt-2">What it delivers</h3>
+        {% macro outcome_fields(cap) %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="min-w-0">
+                <label for="oc-name-{{ cap.id if cap else 'new' }}" class="{{ lbl }}">What the customer gets</label>
+                <input id="oc-name-{{ cap.id if cap else 'new' }}" name="name" maxlength="120" required
+                       value="{{ cap.name if cap else '' }}" placeholder="Customers charge their clients" class="{{ field }}">
+            </div>
+            <div class="min-w-0">
+                <p class="{{ lbl }}">Status</p>
+                {{ select_dropdown('status', capability_statuses, cap.status if cap else 'delivered', 'Delivered', full_width=true) }}
+            </div>
+            <div class="sm:col-span-2 min-w-0">
+                <label for="oc-how-{{ cap.id if cap else 'new' }}" class="{{ lbl }}">How</label>
+                <input id="oc-how-{{ cap.id if cap else 'new' }}" name="how" maxlength="400"
+                       value="{{ cap.how if cap else '' }}" placeholder="Invoices and card payments go through Stripe." class="{{ field }}">
+            </div>
+        </div>
+        <div>
+            <p class="{{ lbl }}">Delivered by</p>
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+                {% set picked = cap.service_ids if cap else [] %}
+                {% for s in services %}
+                {{ checkbox('service_ids', checked=(s.id in picked), value=s.id, label=s.display_name) }}
+                {% endfor %}
+            </div>
+        </div>
+        {% endmacro %}
+        {% for cap in capabilities %}
+        <div id="outcome-{{ cap.id }}" class="glass-card p-4 sm:p-5 min-w-0 relative focus-within:z-30">
+            <form method="POST" action="{{ url_for('businesses.outcome_save', id=business.id, cid=cap.id) }}" class="space-y-3">
+                {{ outcome_fields(cap) }}
+                <div class="flex justify-end">
+                    <button type="submit" class="{{ btn }}">Save</button>
+                </div>
+            </form>
+            <form method="POST" action="{{ url_for('businesses.outcome_delete', id=business.id, cid=cap.id) }}" class="flex justify-end -mt-11 mr-20">
+                {{ delete_icon(question='Take it off?', label='Remove ' ~ cap.name) }}
+            </form>
+        </div>
+        {% endfor %}
+        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Add an outcome</h3>
+            <form method="POST" action="{{ url_for('businesses.outcome_add', id=business.id) }}" class="space-y-3">
+                {{ outcome_fields(none) }}
+                <div class="flex justify-end">
+                    <button type="submit" class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">Put it on the map</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <div id="links" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">

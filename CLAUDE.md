@@ -412,6 +412,25 @@ need nobody filled, drawn as a dashed slot that opens the edit page with the
 need preselected; a vendor with no runbook wears a red mark, except on an
 `in_house` need (the app, this board), which has no vendor.
 
+**The right-hand column is what it delivers** (Michael, same day: "how do
+our customers charge their clients? Stripe payments ... do we have a process
+in place for X?"). `BusinessCapability` is an outcome in plain words with a
+status (delivered, in progress, missing) and `BusinessCapabilityLink` the
+services that deliver it, drawn as dashed lines into a pill; the card says
+"Delivered by". A missing outcome is a question with no process, which is
+the honest answer to "do we have one". Migration `f1d6b8c3a924` seeded a
+first set per business off its docs, plus EntertainHQ's phone apps and push.
+
+**The tiles are HTML, the lines are SVG.** The first cut drew logos as SVG
+`<image>` under the pan-and-zoom transform, and Chrome rasterises those once
+and stretches them, so every mark went blurry the moment the map zoomed;
+square logos also sat inside circles. Each node is now an `<img>` laid out
+at its real pixel size from the same `tx, ty, k` the lines use (`nodeStyle`,
+`px()`), so it is rasterised at the size it is shown, in an app-icon tile the
+logo fills edge to edge. A service with no runbook gets its own mark fetched
+off its URL (`fetch_service_mark`, served by `service_icon`, nosniff), on a
+press or on save, never on render.
+
 Columns, not a force layout: Stripe sits in the same column on every
 business's map, so maps can be compared. Hover shows the card and a tap or
 click PINS it, because hover does not exist on a phone. Two things the first

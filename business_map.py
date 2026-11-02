@@ -31,9 +31,13 @@ LAYERS = (
     ("growth", "Growth", "#a3e635"),
     ("intelligence", "Intelligence", "#e879f9"),
 )
-LAYER_INDEX = {key: i for i, (key, _label, _color) in enumerate(LAYERS)}
-LAYER_LABEL = {key: label for key, label, _color in LAYERS}
-LAYER_COLOR = {key: color for key, _label, color in LAYERS}
+# The column on the right: what all of it adds up to for a customer, in
+# plain words, so "do we have a process for X?" is read off the map.
+OUTCOMES = ("outcomes", "What it delivers", "#f8fafc")
+LAYER_INDEX = {key: i for i, (key, _label, _color) in enumerate(LAYERS + (OUTCOMES,))}
+LAYER_LABEL = {key: label for key, label, _color in LAYERS + (OUTCOMES,)}
+LAYER_COLOR = {key: color for key, _label, color in LAYERS + (OUTCOMES,)}
+CAPABILITY_COLOR = {"delivered": "#34d399", "in_progress": "#fbbf24", "missing": "#f87171"}
 
 STATUSES = (
     ("running", "Running"),
@@ -55,13 +59,15 @@ def _sort_key(need):
     return (need.sort_order if need is not None else 10_000, need.name if need is not None else "")
 
 
-def layout(business, needs, services, links, need_links):
+def layout(business, needs, services, links, need_links, capabilities=()):
     """The whole map for `business`.
 
-    needs        every BusinessNeed in the catalogue
-    services     this business's BusinessService rows
-    links        this business's BusinessLink rows (explicit, with a why)
-    need_links   every BusinessNeedLink (the template's connections)
+    needs         every BusinessNeed in the catalogue
+    services      this business's BusinessService rows
+    links         this business's BusinessLink rows (explicit, with a why)
+    need_links    every BusinessNeedLink (the template's connections)
+    capabilities  this business's BusinessCapability rows, each wired to the
+                  services that deliver it
     """
     need_by_id = {n.id: n for n in needs}
 
@@ -106,10 +112,26 @@ def layout(business, needs, services, links, need_links):
                 "status_label": "Missing",
                 "suggestions": n.suggestions,
             })
+    for i, c in enumerate(capabilities):
+        nodes.append({
+            "key": f"c{c.id}",
+            "kind": "outcome",
+            "id": c.id,
+            "layer": "outcomes",
+            "sort": (c.sort_order, i, c.name),
+            "name": c.name,
+            "need": "",
+            "need_slug": "",
+            "role": c.how or "",
+            "status": c.status,
+            "status_label": c.status_label,
+            "color": CAPABILITY_COLOR.get(c.status, CAPABILITY_COLOR["delivered"]),
+            "delivered_by": [],
+        })
 
     # Columns: only the layers something sits in, in build order.
     present = sorted({n["layer"] for n in nodes}, key=lambda k: LAYER_INDEX[k])
-    col_x = {key: LEFT + i * COL_W for i, key in enumerate(present)}
+    col_x = {key: LEFT + i * COL_W + (60 if key == "outcomes" else 0) for i, key in enumerate(present)}
     rows = {key: 0 for key in present}
     for node in sorted(nodes, key=lambda n: (LAYER_INDEX[n["layer"]], n["sort"])):
         node["x"] = col_x[node["layer"]]
@@ -138,6 +160,15 @@ def layout(business, needs, services, links, need_links):
             edges[pair] = {"a": f"s{l.from_service_id}", "b": f"s{l.to_service_id}",
                            "why": l.why or "", "derived": False, "id": l.id}
 
+    # An outcome's lines: from each service that delivers it.
+    for c in capabilities:
+        for l in c.links:
+            if l.service_id in service_nodes:
+                key = (f"s{l.service_id}", f"c{c.id}")
+                edges[key] = {"a": key[0], "b": key[1], "why": c.how or "", "derived": False,
+                              "outcome": True}
+                by_key[f"c{c.id}"]["delivered_by"].append(service_nodes[l.service_id]["name"])
+
     out_edges = []
     for pair, e in edges.items():
         a, b = by_key[e["a"]], by_key[e["b"]]
@@ -149,10 +180,11 @@ def layout(business, needs, services, links, need_links):
         e["color"] = LAYER_COLOR[left["layer"]]
         out_edges.append(e)
 
-    width = (LEFT + len(present) * COL_W) if present else LEFT + COL_W
+    width = (LEFT + len(present) * COL_W + (120 if "outcomes" in present else 0)) if present else LEFT + COL_W
     height = TOP + (max(rows.values()) if rows else 1) * ROW_H + 40
     holes = [n for n in nodes if n["kind"] == "hole"]
     no_runbook = [n for n in nodes if n["kind"] == "service" and n["runbook_missing"]]
+    gaps = [n for n in nodes if n["kind"] == "outcome" and n["status"] != "delivered"]
     return {
         "nodes": nodes,
         "edges": out_edges,
@@ -161,7 +193,8 @@ def layout(business, needs, services, links, need_links):
         "width": width,
         "height": height,
         "counts": {"services": len(services), "holes": len(holes),
-                   "no_runbook": len(no_runbook), "edges": len(out_edges)},
+                   "no_runbook": len(no_runbook), "edges": len(out_edges),
+                   "outcomes": len(capabilities), "gaps": len(gaps)},
     }
 
 
