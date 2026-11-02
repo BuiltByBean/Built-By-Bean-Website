@@ -442,6 +442,17 @@ finger's drag is the browser's scroll. `|tojson` rides in single-quoted
 attributes. `tools/test_business_map.py` runs the four migrations in the
 order production did.
 
+**Search and focus** (Michael, 2026-11-02: "if I'm in a meeting and someone
+says, head of our clients, what is running? I need to be able to filter that
+where everything else hides"). The box in the toolbar matches any word of a
+node's name, role, need or kind; picking one, or Only this on a pinned card,
+hides everything off its TRAIL and fits what is left: the thing, what it
+touches, and two steps out only toward answers (a surface's services and
+outcomes, an outcome's services), never through the centre and never into a
+second person or surface, or one person's trail would be the whole map. The
+whole `<g class="edge">` hides, not just the stroke: a hidden line's
+invisible 30px hit path kept catching hover and left a stale card up.
+
 A return is worked out, typed into WebFile by hand, and recorded from the
 confirmation page. `sales_tax.build_return` splits a period's sales by the
 location trading THAT DAY (`Business.location_on`) and rounds each line to

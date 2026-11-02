@@ -36,6 +36,30 @@
      @keydown.escape.window='window.location.href = {{ url_for('businesses.detail', id=business.id) | tojson }}'>
 
     <div class="shrink-0 flex flex-wrap items-center gap-2 min-w-0">
+        {# Type a person, a surface, a vendor or a question; pick one and
+           everything that is not on its trail hides. #}
+        <div class="relative min-w-0 w-full sm:w-72" @keydown.escape.stop="query = ''; showAll()">
+            <input type="search" x-model="query" @keydown.enter.prevent="pickFirst()" @focus="searching = true"
+                   @blur="setTimeout(() => searching = false, 150)"
+                   placeholder="Who, what, or which question" aria-label="Find something on the map"
+                   class="w-full min-w-0 input-ring px-4 py-2.5 min-h-[44px] text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500">
+            <div x-show="searching && query && matches.length" x-cloak
+                 class="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl border border-white/10 bg-surface-900/95 shadow-2xl overflow-hidden">
+                <template x-for="m in matches" :key="m.key">
+                    <button type="button" @mousedown.prevent="focus(m.key)"
+                            class="w-full text-left px-3 py-2.5 min-h-[44px] flex items-center gap-2 hover:bg-white/5">
+                        <span class="w-2 h-2 rounded-full shrink-0" :style="'background:' + m.color"></span>
+                        <span class="text-sm text-white truncate" x-text="m.name"></span>
+                        <span class="ml-auto text-[11px] text-surface-400 whitespace-nowrap" x-text="kindLabel(m)"></span>
+                    </button>
+                </template>
+            </div>
+        </div>
+        <button type="button" x-show="focused" x-cloak @click="showAll()"
+                class="min-h-[44px] px-3 inline-flex items-center gap-2 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-300 hover:bg-brand-500/10 transition-colors">
+            <span x-text="'Only ' + focusedName"></span>
+            <span aria-hidden="true">&times;</span>
+        </button>
         <div class="hidden sm:flex flex-wrap items-center gap-1.5 min-w-0">
             {% for l in map.legend %}
             <span class="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold rounded-md bg-surface-800/70 text-surface-200">
@@ -88,14 +112,15 @@
                 {% endfor %}
                 {% for e in map.edges %}
                 <g class="edge" data-pick="edge:{{ loop.index0 }}"
+                   :style="(focused && !inTrailEdge({{ loop.index0 }})) ? 'display:none' : ''"
                    @pointerenter="show('edge', {{ loop.index0 }}, $event)" @pointerleave="hide()">
                     <path d="{{ e.path }}" fill="none" stroke="transparent" stroke-width="30"/>
                     <path d="{{ e.path }}" fill="none" stroke-linecap="round"
                           :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ e.color }}'"
                           :stroke-opacity="isLit('edge', {{ loop.index0 }}) ? 1 : (dim && !near({{ loop.index0 }}) ? 0.08 : {{ 0.22 if e.derived else (0.9 if e.outcome else 0.6) }})"
+                          style="transition: stroke 120ms, stroke-width 120ms, stroke-opacity 120ms"
                           :stroke-width="isLit('edge', {{ loop.index0 }}) ? 4.5 : {{ 1.6 if e.derived else 2.4 }}"
-                          {% if e.outcome %}stroke-dasharray="7 5"{% endif %}
-                          style="transition: stroke 120ms, stroke-width 120ms, stroke-opacity 120ms"/>
+                          {% if e.outcome %}stroke-dasharray="7 5"{% endif %}/>
                 </g>
                 {% endfor %}
             </g>
@@ -104,8 +129,8 @@
         <div class="absolute inset-0 pointer-events-none">
             <template x-for="(n, i) in map.nodes" :key="n.key">
                 <div class="absolute pointer-events-auto flex flex-col items-center text-center cursor-pointer"
-                     :style="nodeStyle(n)" :data-pick="'node:' + i"
-                     :class="dim && !nearNode(n.key) ? 'opacity-30' : ''"
+                     :style="nodeStyle(n) + ((focused && !inTrail(n.key)) ? '; display:none' : '')" :data-pick="'node:' + i"
+                     :class="(dim && !nearNode(n.key)) || (query && !focused && !matchesQuery(n)) ? 'opacity-30' : ''"
                      @pointerenter="show('node', i, $event)" @pointerleave="hide()">
 
                     <template x-if="n.kind === 'center'">
@@ -142,13 +167,13 @@
                         <div class="relative" :style="'width:' + px(n.kind === 'surface' ? 72 : 64) + '; height:' + px(n.kind === 'surface' ? 72 : 64)">
                             <template x-if="n.mark">
                                 <img :src="n.mark" alt="" draggable="false" class="w-full h-full object-contain bg-[#0b0b14]"
-                                     :style="'border-radius:' + px(16) + (n.kind === 'surface' ? '; box-shadow: 0 0 0 ' + px(2) + ' #a78bfa' : '')">
+                                     :style="'border-radius:' + px(16) + (n.kind === 'surface' ? '; box-shadow: 0 0 0 ' + px(2) + ' #a78bfa, 0 ' + px(6) + ' ' + px(18) + ' rgba(139,92,246,0.35)' : '')">
                             </template>
                             <template x-if="!n.mark && n.kind === 'surface'">
-                                <div class="w-full h-full bg-[#0b0b14] flex items-center justify-center"
-                                     :style="'border-radius:' + px(16) + '; box-shadow: 0 0 0 ' + px(2) + ' #a78bfa'">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
-                                         :style="'width:' + px(36) + '; height:' + px(36)"><path :d="glyph(n.glyph)"/></svg>
+                                <div class="w-full h-full flex items-center justify-center"
+                                     :style="'border-radius:' + px(16) + '; background: linear-gradient(135deg, #8b5cf6, #c026d3); box-shadow: 0 ' + px(6) + ' ' + px(18) + ' rgba(139,92,246,0.35)'">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                                         :style="'width:' + px(38) + '; height:' + px(38)"><path :d="glyph(n.glyph)"/></svg>
                                 </div>
                             </template>
                             <template x-if="!n.mark && n.kind === 'service'">
@@ -217,6 +242,10 @@
                     <p class="text-xs text-surface-400 break-words" x-show="connected(card.item.key).length">Connected to
                         <span class="text-surface-200" x-text="connected(card.item.key).join(', ')"></span></p>
                     <div class="flex flex-wrap gap-2 pt-1" x-show="pinned">
+                        <template x-if="card.item.kind !== 'hole' && card.item.kind !== 'center'">
+                            <button type="button" @click="focus(card.item.key)"
+                                    class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Only this</button>
+                        </template>
                         <template x-if="card.item.kind === 'hole'">
                             <a :href='{{ url_for('businesses.map_edit', id=business.id) | tojson }} + "?need=" + card.item.need_slug + "#add"'
                                class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Fill it</a>
@@ -262,12 +291,72 @@ document.addEventListener('alpine:init', () => {
         map, tx: 0, ty: 0, k: 1, dragging: false, moved: false,
         pointers: new Map(), pinchStart: null, downPick: '',
         hover: null, pinned: null, holdCard: false, canvas: null,
+        query: '', searching: false, focused: null, trail: new Set(),
         init(canvas) {
             this.canvas = canvas;
             this.$nextTick(() => this.fit());
             window.addEventListener('resize', () => { if (!this.pinned) this.fit(); });
         },
         px(v) { return (v * this.k).toFixed(2) + 'px'; },
+        /* Search: name, role, need, status or kind, every word typed. */
+        matchesQuery(n) {
+            const q = this.query.trim().toLowerCase();
+            if (!q) return true;
+            const hay = [n.name, n.role, n.need, n.status_label, LABEL[n.kind]].join(' ').toLowerCase();
+            return q.split(/\s+/).every(w => hay.includes(w));
+        },
+        get matches() {
+            if (!this.query.trim()) return [];
+            return this.map.nodes.filter(n => n.kind !== 'center' && n.kind !== 'hole' && this.matchesQuery(n)).slice(0, 8);
+        },
+        pickFirst() { if (this.matches.length) this.focus(this.matches[0].key); },
+        get focusedName() { const n = this.map.nodes.find(n => n.key === this.focused); return n ? n.name : ''; },
+        /* The trail: the thing, everything it touches, and what those touch
+           in turn, but never through the business in the middle (everything
+           touches that), and two steps out only toward answers: a surface's
+           services and outcomes, an outcome's services. Not a second person,
+           not a second surface, or one person's trail would be the whole map. */
+        focus(key) {
+            const adj = new Map();
+            this.map.edges.forEach(e => {
+                if (!adj.has(e.a)) adj.set(e.a, []);
+                if (!adj.has(e.b)) adj.set(e.b, []);
+                adj.get(e.a).push(e.b); adj.get(e.b).push(e.a);
+            });
+            const kindOf = k => (this.map.nodes.find(n => n.key === k) || {}).kind;
+            const trail = new Set([key]);
+            (adj.get(key) || []).forEach(k1 => {
+                if (k1 === 'center') return;
+                trail.add(k1);
+                const k1kind = kindOf(k1);
+                (adj.get(k1) || []).forEach(k2 => {
+                    if (k2 === 'center') return;
+                    const k2kind = kindOf(k2);
+                    if (k1kind === 'surface' && (k2kind === 'service' || k2kind === 'outcome')) trail.add(k2);
+                    if (k1kind === 'outcome' && k2kind === 'service') trail.add(k2);
+                });
+            });
+            this.trail = trail;
+            this.focused = key;
+            this.pinned = null; this.hover = null;
+            this.query = ''; this.searching = false;
+            this.$nextTick(() => this.fitTrail());
+        },
+        showAll() { this.focused = null; this.trail = new Set(); this.$nextTick(() => this.fit()); },
+        inTrail(key) { return this.trail.has(key); },
+        inTrailEdge(ei) { const e = this.map.edges[ei]; return this.trail.has(e.a) && this.trail.has(e.b); },
+        /* Fit what is left, not the whole canvas. */
+        fitTrail() {
+            const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+            const pts = this.map.nodes.filter(n => this.trail.has(n.key));
+            if (!w || !h || !pts.length) return this.fit();
+            const xs = pts.map(n => n.x), ys = pts.map(n => n.y);
+            const x0 = Math.min(...xs) - 150, x1 = Math.max(...xs) + 150, y0 = Math.min(...ys) - 120, y1 = Math.max(...ys) + 120;
+            const k = Math.max(0.3, Math.min(1.4, Math.min((w - 40) / (x1 - x0), (h - 40) / (y1 - y0))));
+            this.k = k;
+            this.tx = (w - (x1 - x0) * k) / 2 - x0 * k;
+            this.ty = (h - (y1 - y0) * k) / 2 - y0 * k;
+        },
         glyph(name) { return GLYPHS[name] || GLYPHS.dot; },
         kindLabel(n) { return n.kind === 'service' && n.need ? n.need : LABEL[n.kind] || ''; },
         /* Everything the pinned or hovered node touches: the rest dims. */
