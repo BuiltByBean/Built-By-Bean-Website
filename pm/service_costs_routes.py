@@ -12,7 +12,7 @@ from flask_login import login_required
 from models import (db, Client, Project, ServiceProvider, ServiceMapping,
                     ServiceCostEntry, ProviderInvoice)
 from service_costs_service import (
-    sync_provider, list_provider_resources, get_cost_summary,
+    sync_provider, list_provider_resources, get_cost_summary, railway_token,
     _record_cost_entry, _month_bounds, _find_mapping,
 )
 
@@ -387,7 +387,7 @@ def provider_edit(id):
                 note = f" {moved} charge{'s' if moved != 1 else ''} booked back to you."
         # A Railway account that can read its own bills pulls them on the
         # press, so the months it fills are there before anybody looks again.
-        if provider.name == "railway" and creds.get("api_token") and creds.get("workspace_id"):
+        if provider.name == "railway" and creds.get("workspace_id") and railway_token(creds):
             count, error = sync_provider(provider.id)
             note += (f" Railway could not be read: {error}" if error
                      else f" Bills pulled from Railway, {count} project entr{'ies' if count != 1 else 'y'} written.")

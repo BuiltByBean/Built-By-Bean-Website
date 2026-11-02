@@ -1,4 +1,5 @@
 import json
+import os
 import requests
 import boto3
 from datetime import datetime, timezone, date, timedelta
@@ -509,6 +510,21 @@ query($w: String!, $s: DateTime!, $e: DateTime!) {
 }"""
 
 
+def railway_token(creds):
+    """The token a Railway provider reads with.
+
+    One that names its workspace reads billing, which takes an ACCOUNT token,
+    and that token lives in the service's variables (PM_RAILWAY_ACCOUNT_TOKEN)
+    rather than on a form or in the database: made 2026-11-01 through the
+    Railway API by the session that built this, one token for one login and
+    both of its workspaces. A token typed on the provider's form is the
+    fallback, and the only one a provider without a workspace uses.
+    """
+    if (creds.get("workspace_id") or "").strip():
+        return os.environ.get("PM_RAILWAY_ACCOUNT_TOKEN") or creds.get("api_token", "")
+    return creds.get("api_token", "")
+
+
 def _railway_gql(token, query, variables=None, timeout=30):
     resp = requests.post(RAILWAY_API, json={"query": query, "variables": variables or {}},
                          headers={"Authorization": f"Bearer {token}",
@@ -547,7 +563,7 @@ def _sync_railway(provider):
     Without one the sync only proves the token works, as before.
     """
     creds = _get_credentials(provider)
-    token = creds.get("api_token", "")
+    token = railway_token(creds)
     if not token:
         raise ValueError("Railway API token not configured")
     workspace_id = (creds.get("workspace_id") or "").strip()
@@ -913,7 +929,7 @@ def list_provider_resources(provider):
                 resources.append({"id": f"aws:{svc}", "label": svc})
 
         elif provider.name == "railway":
-            token = creds.get("api_token", "")
+            token = railway_token(creds)
             headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
             # This provider's own workspace when it names one, so two Railway
             # accounts never list each other's projects; the token-wide list

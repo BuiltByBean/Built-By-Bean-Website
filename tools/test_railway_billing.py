@@ -221,10 +221,13 @@ with application.app_context():
     after = (ServiceCostEntry.query.count(), Expense.query.count(), round(sum(e.amount for e in Expense.query.all()), 2))
     check("a second pull corrects rather than doubles", before == after, (before, after))
 
-    print("EntertainHQ's pull")
+    print("EntertainHQ's pull, on the account token in the service's variables")
     ehq = db.session.get(ServiceProvider, ids["ehq"])
-    ehq.credentials_json = json.dumps({"api_token": "account-token", "workspace_id": EHQ_WS})
-    db.session.commit()
+    check("no token anywhere is a plain error", scs.sync_provider(ids["ehq"])[1] == "Railway API token not configured")
+    os.environ["PM_RAILWAY_ACCOUNT_TOKEN"] = "account-token"
+    check("the variable is read for a provider that names a workspace",
+          scs.railway_token(json.loads(ehq.credentials_json)) == "account-token")
+    check("and not for one that does not", scs.railway_token({"api_token": "typed"}) == "typed")
     spent = round(sum(e.amount for e in Expense.query.all()), 2)
     count, error = scs.sync_provider(ids["ehq"])
     entries = ServiceCostEntry.query.filter_by(provider_id=ids["ehq"]).all()
@@ -284,6 +287,7 @@ with application.app_context():
           and p.account_business_id == ids["ehq_biz"])
 check("and pulls the bills on the press", any("workspace" in q for q in calls) and "Bills pulled from Railway" in r.get_data(as_text=True),
       calls)
+os.environ.pop("PM_RAILWAY_ACCOUNT_TOKEN", None)
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All passed.")
