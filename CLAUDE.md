@@ -261,7 +261,13 @@ Railway") and a month broken down by hand. Never written: a period still
 running. A project that moves workspace keeps its Railway id, so the other
 account's mapping is copied rather than guessed. EntertainHQ bills 16th to
 16th, which is why Needs attention gives a pulled account a month's grace.
-Saving a Railway provider with a token pulls at once. `tools/test_railway_billing.py`.
+Saving a Railway provider with a token pulls at once. The account token is
+`PM_RAILWAY_ACCOUNT_TOKEN` on the web service (cost-sync references it), made
+2026-11-02 on Railway's Tokens page with no workspace; the CLI's own login can
+read bills but Railway refuses it `apiTokenCreate`. A project mapped after a
+pull loses its no-mapping row on the next one (`prune_stale_allocations`,
+shared with the monthly page), or the month reads double: $54.30 against a
+$43.71 bill in the test. `tools/test_railway_billing.py`.
 
 Chasing that one found a second, unrelated fault on the same page. The ledger
 ordered by `Expense.date.desc()` and nothing else, and every vendor charge for

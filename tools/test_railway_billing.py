@@ -220,6 +220,23 @@ with application.app_context():
     scs.sync_provider(ids["rw"])
     after = (ServiceCostEntry.query.count(), Expense.query.count(), round(sum(e.amount for e in Expense.query.all()), 2))
     check("a second pull corrects rather than doubles", before == after, (before, after))
+    # Mapped after a pull: the no-mapping row from then must go, or it reads double.
+    site_project = Project(name="Built By Beans Website", client_id=ids["me"], status="active")
+    db.session.add(site_project)
+    db.session.flush()
+    db.session.add(ServiceMapping(provider_id=ids["rw"], resource_identifier=f"railway:{P_SITE}",
+                                  resource_label="Built By Beans Website", client_id=ids["me"],
+                                  project_id=site_project.id, split_percentage=100.0, is_active=True))
+    db.session.commit()
+    scs.sync_provider(ids["rw"])
+    site_rows = ServiceCostEntry.query.filter_by(provider_id=ids["rw"], resource_identifier=f"railway:{P_SITE}",
+                                                 period_start=sept[0]).all()
+    sept_rows = ServiceCostEntry.query.filter_by(provider_id=ids["rw"], period_start=sept[0]).all()
+    check("a project mapped after a pull is counted once, on its client",
+          len(site_rows) == 1 and site_rows[0].mapping_id is not None
+          and round(sum(e.raw_amount for e in sept_rows), 2) == 43.71
+          and round(sum(e.expense.amount for e in sept_rows if e.expense), 2) == 43.71,
+          (len(site_rows), round(sum(e.raw_amount for e in sept_rows), 2)))
 
     print("EntertainHQ's pull, on the account token in the service's variables")
     ehq = db.session.get(ServiceProvider, ids["ehq"])

@@ -63,6 +63,44 @@ def _drop_expense(cost_entry):
     db.session.flush()
 
 
+def discard_entry(entry):
+    """Remove a cost entry and the expense it created.
+
+    An expense that has been put on an invoice is left alone and merely
+    detached. Deleting it would silently change an invoice that has already
+    gone to a client, which is a worse outcome than an orphan row.
+    """
+    expense = entry.expense
+    if expense is not None and not expense.invoice_line_items:
+        db.session.delete(expense)
+    entry.expense_id = None
+    db.session.delete(entry)
+
+
+def prune_stale_allocations(provider, resource_id, p_start, p_end):
+    """Drop rows for an allocation that no longer exists.
+
+    mapping_id is part of the cost entry's unique key, so a resource that was
+    unallocated when it was first entered keeps that no-mapping row forever.
+    Map it to a client afterwards and the next save writes a second row
+    beside the first rather than replacing it, and the month reads double.
+    Same story when a mapping is deleted and its row is left behind.
+    """
+    valid = {m.id for m in _find_mapping(provider.id, resource_id)}
+    for e in ServiceCostEntry.query.filter_by(
+        provider_id=provider.id,
+        resource_identifier=resource_id,
+        period_start=p_start,
+        period_end=p_end,
+    ).all():
+        if e.mapping_id in valid:
+            continue
+        # Nothing to prune when the resource has no mappings at all: the
+        # no-mapping row is then the correct and only row.
+        if valid or e.mapping_id is not None:
+            discard_entry(e)
+
+
 def _sync_expense(cost_entry, mapping, default_client_id=None):
     """Keep an Expense in step with a cost entry, creating one if absent.
 
@@ -674,14 +712,26 @@ def _split_railway_month(provider, token, workspace_id, month, invs, amount, pro
     # largest share, where a cent is the smallest part of anything.
     largest = max(cents, key=lambda pid: weight[pid])
     cents[largest] += int(round(amount * 100)) - sum(cents.values())
+    written = set()
     for pid, c in cents.items():
         if c <= 0:
             continue
+        rid = f"railway:{pid}"
         label = projects.get(pid) or f"Deleted project {pid[:8]}"
-        _record_cost_entry(provider, f"railway:{pid}", m_start, m_end, c / 100.0,
+        _record_cost_entry(provider, rid, m_start, m_end, c / 100.0,
                            f"{provider.display_name} - {label}",
                            {"source": RAILWAY_SPLIT_SOURCE, "label": label, **span})
-    return len(cents)
+        # A project mapped since the last pull has a no-mapping row from then;
+        # left beside the new one it reads double (the page does the same).
+        prune_stale_allocations(provider, rid, m_start, m_end)
+        written.add(rid)
+    # And a row this sync wrote for a project that is no longer in the split.
+    for e in ServiceCostEntry.query.filter_by(provider_id=provider.id, period_start=m_start,
+                                              period_end=m_end).all():
+        if e.resource_identifier not in written:
+            discard_entry(e)
+    db.session.flush()
+    return len(written)
 
 
 # ── Twilio ──────────────────────────────────────────────────
