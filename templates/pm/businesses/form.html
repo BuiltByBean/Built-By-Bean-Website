@@ -33,13 +33,28 @@
 {% block content %}
 <div class="space-y-4 max-w-4xl">
     <form method="POST" action="{{ url_for('businesses.edit', id=business.id) if editing else url_for('businesses.new') }}"
-          enctype="multipart/form-data" class="space-y-4">
+          enctype="multipart/form-data" class="space-y-4"
+          x-data='{ parent: {{ (business.parent_id | string if business.parent_id else "") | tojson }} }'>
 
-        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        {# relative z-30 (LM-1): the Part of panel opens over the logo card.
+           A division trades under its parent's LLC, so the fields only a
+           company of its own has are hidden while one is picked; they are
+           kept, not cleared, if they were ever typed. #}
+        <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
             <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">The business</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {% if parents %}
+                {% set parent_options = [('', 'Its own company')] %}
+                {% for p in parents %}{% set _ = parent_options.append((p.id | string, 'A division of ' ~ p.label)) %}{% endfor %}
                 <div class="sm:col-span-2">
-                    <label for="b-name" class="{{ lbl }}">Legal name</label>
+                    <p class="{{ lbl }}">Part of</p>
+                    {{ select_dropdown('parent_id', parent_options,
+                                       business.parent_id | string if business.parent_id else '',
+                                       'Its own company', full_width=true, model='parent') }}
+                </div>
+                {% endif %}
+                <div class="sm:col-span-2">
+                    <label for="b-name" class="{{ lbl }}" x-text="parent ? 'Name' : 'Legal name'">Legal name</label>
                     <input id="b-name" name="name" required maxlength="200" value="{{ business.name or '' }}"
                            placeholder="Built by Bean LLC" class="{{ field }}">
                 </div>
@@ -53,22 +68,22 @@
                     <input id="b-slug" name="slug" maxlength="40" value="{{ business.slug or '' }}"
                            placeholder="built-by-bean" class="{{ field }}">
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-tpn" class="{{ lbl }}">Texas taxpayer number</label>
                     <input id="b-tpn" name="texas_taxpayer_number" inputmode="numeric" maxlength="14"
                            value="{{ business.texas_taxpayer_number or '' }}" placeholder="11 digits" class="{{ field }} font-mono">
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-sos" class="{{ lbl }}">SOS file number</label>
                     <input id="b-sos" name="sos_file_number" inputmode="numeric" maxlength="20"
                            value="{{ business.sos_file_number or '' }}" class="{{ field }} font-mono">
                 </div>
                 <div>
-                    <label for="b-formed" class="{{ lbl }}">Formed on</label>
+                    <label for="b-formed" class="{{ lbl }}" x-text="parent ? 'Started on' : 'Formed on'">Formed on</label>
                     <input id="b-formed" type="date" name="formed_on"
                            value="{{ business.formed_on.isoformat() if business.formed_on else '' }}" class="{{ field }}">
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-xt" class="{{ lbl }}">Franchise tax WebFile</label>
                     <input id="b-xt" name="franchise_tax_webfile" maxlength="20" autocomplete="off"
                            value="{{ business.franchise_tax_webfile or '' }}" placeholder="XT123456" class="{{ field }} font-mono">
@@ -122,28 +137,29 @@
         </div>
 
         <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
-            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Sales tax</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400"
+                x-text="parent ? 'Sales' : 'Sales tax'">Sales tax</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+                <div x-show="!parent">
                     <label for="b-rt" class="{{ lbl }}">Sales tax WebFile</label>
                     <input id="b-rt" name="sales_tax_webfile" maxlength="20" autocomplete="off"
                            value="{{ business.sales_tax_webfile or '' }}" placeholder="RT123456" class="{{ field }} font-mono">
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-reg" class="{{ lbl }}">Registered on</label>
                     <input id="b-reg" type="date" name="sales_tax_registered_on"
                            value="{{ business.sales_tax_registered_on.isoformat() if business.sales_tax_registered_on else '' }}" class="{{ field }}">
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-first" class="{{ lbl }}">First taxable sale</label>
                     <input id="b-first" type="date" name="sales_tax_first_sale"
                            value="{{ business.sales_tax_first_sale.isoformat() if business.sales_tax_first_sale else '' }}" class="{{ field }}">
                 </div>
-                <div>
+                <div x-show="!parent">
                     <p class="{{ lbl }}">Files</p>
                     {{ select_dropdown('sales_tax_frequency', business.FREQUENCIES, business.sales_tax_frequency or 'quarterly', 'Quarterly', full_width=true) }}
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-share" class="{{ lbl }}">Taxable share</label>
                     <div class="relative">
                         <input id="b-share" type="number" step="1" min="0" max="100" name="taxable_share" inputmode="decimal"
@@ -151,7 +167,7 @@
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-surface-500">%</span>
                     </div>
                 </div>
-                <div>
+                <div x-show="!parent">
                     <label for="b-naics" class="{{ lbl }}">NAICS code</label>
                     <input id="b-naics" name="naics_code" inputmode="numeric" maxlength="10"
                            value="{{ business.naics_code or '' }}" placeholder="541511" class="{{ field }} font-mono">
@@ -224,6 +240,7 @@
         </div>
     </div>
 
+    {% if not business.parent_id %}
     <div id="locations" class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
         <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Where it sells from</h3>
         {% for loc in business.locations %}
@@ -255,6 +272,7 @@
             </div>
         </form>
     </div>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

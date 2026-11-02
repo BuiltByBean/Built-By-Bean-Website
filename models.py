@@ -1367,6 +1367,24 @@ class Business(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
+    # The company this one is a division of, or null for a company of its
+    # own. Data Dungeon is the first (Michael, 2026-11-02): it trades under
+    # Built by Bean LLC, so it has no taxpayer number, permit or return of its
+    # own and its taxable sales go on Built by Bean's return, but it is run as
+    # a business and may be spun out one day. So it is a tile of its own on
+    # Businesses and is never a row on the returns pages, where a second set
+    # of returns for the same LLC would file the same sales twice. One level
+    # only: a division has no divisions. SET NULL, so removing the parent
+    # leaves the division standing as a company rather than deleting it.
+    parent_id = db.Column(
+        db.Integer,
+        db.ForeignKey("businesses.id", ondelete="SET NULL", name="fk_businesses_parent_id"),
+        nullable=True,
+        index=True,
+    )
+    parent = db.relationship("Business", remote_side=[id], backref=db.backref(
+        "divisions", order_by="Business.name"))
+
     # Its logo: an image uploaded for it, or the icon of one of its apps on My
     # Apps, which is already fetched and kept (a business is often an app).
     # One or the other: choosing an app's icon removes an uploaded image.
@@ -1393,6 +1411,10 @@ class Business(db.Model):
     @property
     def label(self):
         return self.short_name or self.name
+
+    @property
+    def is_division(self):
+        return self.parent_id is not None
 
     @property
     def initials(self):

@@ -40,7 +40,7 @@
 
 {% block title %}{{ b.label }} - Built By Bean{% endblock %}
 {% block page_title %}{{ b.label }}{% endblock %}
-{% block page_subtitle %}{{ b.name }}{% endblock %}
+{% block page_subtitle %}{{ 'A division of ' ~ b.parent.label if b.parent else b.name }}{% endblock %}
 {% block back %}{{ back_link(url_for('businesses.index'), 'Businesses') }}{% endblock %}
 
 {% block header_actions %}
@@ -79,6 +79,36 @@
         <span class="inline-flex mt-3 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
         {% endif %}
     </div>
+
+    {% if b.parent %}
+    {# A division: its tax numbers, permit and returns are its parent's, so the
+       card that would hold them points there instead. #}
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Part of</h3>
+        <a href="{{ url_for('businesses.detail', id=b.parent.id) }}"
+           class="flex items-center gap-3 p-3 min-h-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 transition-colors min-w-0">
+            {{ business_logo(b.parent, box='w-10 h-10', pad='p-1.5', text='text-sm') }}
+            <span class="min-w-0">
+                <span class="block text-sm font-semibold text-white break-words">{{ b.parent.label }}</span>
+                <span class="block text-xs text-surface-400 break-words">Sales tax filed on its return</span>
+            </span>
+        </a>
+    </div>
+    {% else %}
+    {% if b.divisions %}
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Divisions</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {% for d in b.divisions %}
+            <a href="{{ url_for('businesses.detail', id=d.id) }}"
+               class="flex items-center gap-3 p-3 min-h-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 transition-colors min-w-0 {{ '' if d.is_active else 'opacity-70' }}">
+                {{ business_logo(d, box='w-10 h-10', pad='p-1.5', text='text-sm') }}
+                <span class="text-sm font-semibold text-white break-words min-w-0">{{ d.label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -141,5 +171,6 @@
                 Every return</a>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

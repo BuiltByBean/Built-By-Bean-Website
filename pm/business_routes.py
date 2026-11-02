@@ -237,7 +237,10 @@ def lifetime_revenue(business, ask=False):
     business's own app last said, asked again only when `ask` and the answer
     is older than REVENUE_FRESH_SECONDS. "manual" has nothing to count.
     """
-    if business.sales_source == "board":
+    # A division is never "board": the board's invoices are its parent's
+    # takings, and counting them again here would show one business's money
+    # on two tiles. _fill refuses it; this holds for a row written elsewhere.
+    if business.sales_source == "board" and not business.is_division:
         return round(get_stripe_invoice_totals()["revenue"], 2)
     if business.sales_source == "hub":
         if ask:
@@ -265,7 +268,15 @@ def index():
     last said."""
     businesses = Business.query.order_by(Business.is_active.desc(), Business.name,
                                          Business.id).all()
-    tiles = [{"business": b, "revenue": lifetime_revenue(b)} for b in businesses]
+    # Each company with its divisions straight after it, so Data Dungeon sits
+    # beside Built by Bean rather than wherever D falls in the alphabet.
+    ordered = []
+    for b in businesses:
+        if b.parent_id is None:
+            ordered.append(b)
+            ordered.extend(d for d in businesses if d.parent_id == b.id)
+    ordered.extend(b for b in businesses if b not in ordered)  # a parent gone missing
+    tiles = [{"business": b, "revenue": lifetime_revenue(b)} for b in ordered]
     return render_template("pm/businesses/index.html", tiles=tiles)
 
 
@@ -273,6 +284,12 @@ def index():
 @ceo_required
 def detail(id):
     business = db.session.get(Business, id) or abort(404)
+    if business.is_division:
+        # Its tax is its parent's: no numbers, no permit, no returns here.
+        return render_template(
+            "pm/businesses/detail.html", business=business,
+            revenue=lifetime_revenue(business, ask=True), next=None, late=0,
+            esystems_url=ESYSTEMS_URL)
     today = date.today()
     # _board_rows brings Stripe's invoices in first, which the revenue reads too.
     board = _board_rows() if business.sales_source == "board" else None
@@ -371,11 +388,45 @@ def _periods_without_figures(business, today):
     return out, None
 
 
+def _parent_choices(business):
+    """The companies this one could be a division of: any company of its own
+    other than itself. One level only, so a division is never offered."""
+    q = Business.query.filter(Business.parent_id.is_(None))
+    if business.id:
+        q = q.filter(Business.id != business.id)
+    return q.order_by(Business.name, Business.id).all()
+
+
+def _take_parent(business):
+    """The "Part of" choice. Returns an error string or None.
+
+    The tax numbers of a business made a division are left exactly as they
+    were rather than cleared: picking the wrong company in this one control
+    must not cost Built by Bean its taxpayer number. A division is simply
+    never asked for them, and the returns pages leave it out.
+    """
+    raw = request.form.get("parent_id")
+    if raw is None:
+        return None  # a form without the control changes nothing
+    if not raw:
+        business.parent_id = None
+        return None
+    parent = db.session.get(Business, int(raw)) if raw.isdigit() else None
+    if parent is None or parent.id == business.id or parent.parent_id is not None:
+        return "That cannot be the company it is part of."
+    if business.id and Business.query.filter_by(parent_id=business.id).first():
+        return f"{business.label} has divisions of its own, so it cannot be one."
+    business.parent_id = parent.id
+    if business.sales_source == "board":
+        business.sales_source = "manual"
+    return None
+
+
 def _fill(business):
     """Copy the form onto a business. Returns an error string or None."""
     name = _text("name", 200)
     if not name:
-        return "A business needs its legal name."
+        return "A business needs its name."
     business.name = name
     business.short_name = _text("short_name", 80)
     business.slug = _unique_slug(_slugify(_text("slug", 40) or business.short_name or name),
@@ -403,7 +454,7 @@ def _fill(business):
     business.hub_base_url = _text("hub_base_url", 300).rstrip("/")
     business.notes = (request.form.get("notes") or "").strip()
     business.is_active = request.form.get("is_active") == "1"
-    return None
+    return _take_parent(business)
 
 
 @business_bp.route("/admin/businesses/new", methods=["GET", "POST"])
@@ -422,7 +473,7 @@ def new():
             flash(f"{business.label} is on the board. Add where it sells from next.", "success")
             return redirect(url_for("businesses.edit", id=business.id))
     return render_template("pm/businesses/form.html", business=business, editing=False,
-                           logo_apps=_logo_apps())
+                           logo_apps=_logo_apps(), parents=_parent_choices(business))
 
 
 @business_bp.route("/admin/businesses/<int:id>/edit", methods=["GET", "POST"])
@@ -439,7 +490,7 @@ def edit(id):
             flash("Saved.", "success")
             return redirect(url_for("businesses.detail", id=business.id))
     return render_template("pm/businesses/form.html", business=business, editing=True,
-                           logo_apps=_logo_apps())
+                           logo_apps=_logo_apps(), parents=_parent_choices(business))
 
 
 @business_bp.route("/admin/businesses/<int:id>/secret", methods=["POST"])
@@ -524,7 +575,8 @@ def returns_index():
     today = date.today()
     board = None
     groups = []
-    for b in Business.query.filter_by(is_active=True).order_by(Business.name, Business.id):
+    # Divisions are left out: their sales are their parent's, on its return.
+    for b in Business.query.filter_by(is_active=True, parent_id=None)             .order_by(Business.name, Business.id):
         if b.sales_source == "board" and board is None:
             board = _board_rows()
         periods, note = periods_for(b, today, board)
@@ -845,7 +897,7 @@ def filing_record_pdf(filing):
 @business_bp.route("/admin/taxes/sales/guide")
 @ceo_required
 def guide():
-    businesses = Business.query.filter_by(is_active=True).order_by(Business.name).all()
+    businesses = Business.query.filter_by(is_active=True, parent_id=None)         .order_by(Business.name).all()
     return render_template("pm/taxes/guide.html", businesses=businesses,
                            esystems_url=ESYSTEMS_URL)
 

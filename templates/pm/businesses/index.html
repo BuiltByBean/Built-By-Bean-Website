@@ -34,6 +34,9 @@
             {{ business_logo(b) }}
             <div class="min-w-0">
                 <h3 class="text-lg font-bold text-white break-words">{{ b.label }}</h3>
+                {% if b.parent %}
+                <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-500/15 text-brand-300 break-words">Part of {{ b.parent.label }}</span>
+                {% endif %}
                 {% if not b.is_active %}
                 <span class="inline-flex mt-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-400">Inactive</span>
                 {% endif %}
