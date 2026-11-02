@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/practices/_tabs.html" import practices_tabs %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/clear_filters.html" import clear_filters %}
 
@@ -10,8 +11,8 @@
   category and a number - which is what a phone call needs.
 #}
 
-{% block title %}{{ 'Rules' if page_kind == 'rule' else 'Features' }} - Built By Bean{% endblock %}
-{% block page_title %}{{ 'Rules' if page_kind == 'rule' else 'Features' }}{% endblock %}
+{% block title %}{{ 'Rules' if page_kind == 'rule' else 'How to build' }} - Best Practices{% endblock %}
+{% block page_title %}Best Practices{% endblock %}
 {% block page_subtitle %}{{ 'What never gets broken' if page_kind == 'rule' else 'What I have built before' }}{% endblock %}
 
 {# The window never scrolls here: the list is the page, so the list is
@@ -54,6 +55,8 @@
        }
      }'
      x-effect="filter()">
+
+    {{ practices_tabs('rule' if page_kind == 'rule' else 'howto') }}
 
     {# Standing still because the page stands still; relative z-30 per LM-1
        so its panels paint over the list card. Enter is swallowed: the state

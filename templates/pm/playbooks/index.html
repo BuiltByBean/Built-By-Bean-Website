@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/practices/_tabs.html" import practices_tabs %}
 
 {#
   The tile grid. One column on a phone, growing from there.
@@ -10,8 +11,8 @@
   every browser. Editing and deleting live on the runbook itself.
 #}
 
-{% block title %}Playbooks - Built By Bean{% endblock %}
-{% block page_title %}Playbooks{% endblock %}
+{% block title %}Playbooks - Best Practices{% endblock %}
+{% block page_title %}Best Practices{% endblock %}
 {# Short on purpose. The header lays the subtitle beside the actions with no
    wrap guard, so a long one takes five lines at 375 and squeezes the buttons. #}
 {% block page_subtitle %}Nothing researched twice{% endblock %}
@@ -39,6 +40,8 @@
 
 {% block content %}
 <div class="space-y-6 stagger-in">
+    {{ practices_tabs('playbook') }}
+
     {# The grid is the region a fetch swaps, so the marks arrive without the
        page reloading and without the grid jumping back to the top. #}
     <div data-live="runbooks" class="space-y-6">

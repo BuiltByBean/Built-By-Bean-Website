@@ -1,0 +1,34 @@
+{#
+  The one strip every Best Practices page wears: Everything, Rules, How to
+  build, Playbooks, Products, Waiting. The pages behind it kept their own
+  URLs because the MVP Builder, project pages, the tax guide and the
+  guidance API link into them; this strip is what makes them one place.
+
+  Waiting is the catalogue inbox, which had no link anywhere before it was
+  here; it lights amber while anything waits on a yes. The strip wraps
+  rather than scrolling sideways, so it never widens the page at 375px.
+#}
+{% macro practices_tabs(active) %}
+{% set c = practices_counts() %}
+{% set tabs = [
+    ('all', 'Everything', url_for('practices.index'), none),
+    ('rule', 'Rules', url_for('features.rules_index'), c.rule),
+    ('howto', 'How to build', url_for('features.features_index'), c.howto),
+    ('playbook', 'Playbooks', url_for('playbooks.playbooks_index'), c.playbook),
+    ('product', 'Products', url_for('products.products_index'), c.product),
+    ('waiting', 'Waiting', url_for('inbox.inbox_index'), c.waiting),
+] %}
+<nav aria-label="Best Practices" class="shrink-0 flex flex-wrap gap-2">
+    {% for key, label, href, n in tabs %}
+    <a href="{{ href }}" {% if key == active %}aria-current="page"{% endif %}
+       class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
+              {{ 'btn-brand text-white' if key == active else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
+        {{ label }}
+        {% if n is not none %}
+        <span class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums
+                     {{ 'bg-amber-500/20 text-amber-300' if key == 'waiting' and n else ('bg-white/15 text-white' if key == active else 'bg-surface-700 text-surface-300') }}">{{ n | commas }}</span>
+        {% endif %}
+    </a>
+    {% endfor %}
+</nav>
+{% endmacro %}

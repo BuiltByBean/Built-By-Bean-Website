@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/practices/_tabs.html" import practices_tabs %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
@@ -11,8 +12,8 @@
   one form so those cannot come apart.
 #}
 
-{% block title %}Products - Built By Bean{% endblock %}
-{% block page_title %}Products{% endblock %}
+{% block title %}Products - Best Practices{% endblock %}
+{% block page_title %}Best Practices{% endblock %}
 {% block page_subtitle %}What I sell, and who has it{% endblock %}
 
 {#
@@ -73,11 +74,25 @@
             paying to be hosted must not start paying twice. */
          this.hostIt = this.hosted[id] !== false;
        },
+       /* "Sell it" on the Everything tab lands here as ?sell=<id> and opens
+          the dialog for that product, by pressing its own Sell button so the price
+          and monthly come from the row exactly as a press would read them. */
+       init() {
+         const want = {{ request.args.get("sell", "") | tojson }};
+         if (!want) return;
+         setTimeout(() => {
+           const press = [...this.$el.querySelectorAll("[data-sell]")].find(b => b.dataset.sell === want);
+           if (press) { press.scrollIntoView({ block: "center" }); press.click(); }
+           history.replaceState(null, "", location.pathname);
+         }, 0);
+       },
        async copy(text) {
          try { await navigator.clipboard.writeText(text); this.copied = true;
                setTimeout(() => this.copied = false, 1800); } catch (e) {}
        }
      }'>
+
+    {{ practices_tabs('product') }}
 
     {# One card per category, in the order a sale is discussed, each with
        its count. A category with nothing to sell in it does not appear. #}
@@ -163,7 +178,7 @@
                         </svg>
                     </button>
                     {# Sells what the fields say right now, saved or not. #}
-                    <button type="button"
+                    <button type="button" data-sell="{{ p.id }}"
                             @click='open({{ p.id }}, {{ p.name|tojson }}, price, m ? {{ fee|tojson }} : "")'
                             aria-label="Sell {{ p.name }}" title="Sell"
                             class="inline-flex items-center justify-center w-11 h-11 rounded-xl btn-brand transition-all">
@@ -313,7 +328,7 @@
 
             <div class="flex flex-wrap items-center gap-2.5">
                 {% call checkbox(name='hosted', model='hostIt') %}
-                    <span class="text-sm text-surface-300">I host this &mdash; monthly hosting and storage</span>
+                    <span class="text-sm text-surface-300">I host this: monthly hosting and storage</span>
                 {% endcall %}
                 <input type="text" name="hosting_fee" inputmode="decimal" value="{{ default_hosting_fee|commas }}"
                        @blur="$el.value = fmt($el.value)"

@@ -13,8 +13,8 @@ headed sections; any heading the board has not seen for that repo before,
 with enough body to be a lesson, is filed through the same door a session
 uses - as a rule create, attributed to the repo, HELD as pending, because
 repo prose was written for that repo and a create would otherwise ride
-into every build prompt verbatim. One press on Needs attention accepts
-it. The first run of a repo only records what is there, so nothing already
+into every build prompt verbatim. One press on the Waiting tab of Best
+Practices accepts it. The first run of a repo only records what is there, so nothing already
 mined by hand comes back as a duplicate.
 
 Runs after the cost sync in the same nightly service. GITHUB_TOKEN on that

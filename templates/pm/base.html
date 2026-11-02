@@ -1166,11 +1166,10 @@
             </a>
             <div class="my-2 border-t border-white/10"></div>
 
-            {# What the work is made of: the apps that exist, what is sold,
-               what has been built before, the ways of building that hold
-               whatever was bought, and how the vendors get set up. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Catalogue</p>
+            {# My Apps is what has been built and where it lives. Best
+               Practices is how to build: rules, how-tos, playbooks, products
+               and what Claude filed waiting on a yes, one tab strip across
+               five pages (pm/practices_routes.py says why). #}
             <a href="{{ url_for('apps.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1178,50 +1177,13 @@
                 </svg>
                 My Apps
             </a>
-            <a href="{{ url_for('products.products_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('products.') %}active{% endif %}">
+            <a href="{{ url_for('practices.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.split('.')[0] in ('practices', 'features', 'playbooks', 'products', 'inbox') %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"/>
                 </svg>
-                Products
+                Best Practices
             </a>
-            <a href="{{ url_for('features.features_index') }}"
-               class="sidebar-link {% if request.endpoint == 'features.features_index' %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                </svg>
-                Features
-            </a>
-            {# The layer under the features: ways of building that hold no
-               matter what was bought. Every one rides into every build
-               prompt. #}
-            <a href="{{ url_for('features.rules_index') }}"
-               class="sidebar-link {% if request.endpoint == 'features.rules_index' %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
-                </svg>
-                Rules
-            </a>
-            <a href="{{ url_for('playbooks.playbooks_index') }}"
-               class="sidebar-link {% if request.endpoint and 'playbook' in request.endpoint %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                </svg>
-                Playbooks
-            </a>
-            {# Every client held against the catalogue: who has what, and
-               who is breaking which rule. #}
-            <a href="{{ url_for('cerebro.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('cerebro.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                Cerebro
-            </a>
-            {# The catalogue's inbox has no entry of its own: what waits
-               there is on the attention page, and its history is a link
-               from that page. #}
 
             {# Who may open this board. CEO only: a member has no business
                in the list of people, so the section is not drawn for them

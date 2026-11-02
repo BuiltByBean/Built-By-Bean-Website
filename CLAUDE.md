@@ -4,13 +4,25 @@ This repo serves builtbybeans.com and the live PM at `/admin`. Flask +
 SQLAlchemy + Alembic, Jinja + Tailwind + Alpine, Postgres on Railway in
 production, SQLite locally. Pushing to `main` deploys.
 
-The feature catalogue at `/admin/features` is the CROSS-REPO lesson store:
+**Best Practices** (`/admin/practices`) is the CROSS-REPO lesson store:
 when any project teaches a lesson, it goes there (pitfalls_md) as well as
-here. Its second half is `/admin/features/rules` - the layer under the
-features, `kind='rule'` on the same table: ways of building that hold no
-matter what was bought. Every rule rides into every MVP build prompt as a
-house rule, so writing a lesson there is how every future project gets
-it. This file is for lessons about THIS repo's own code.
+here. It is one sidebar link over six tabs (`pm/practices/_tabs.html`):
+Everything (one search across all of it, `pm/practices_routes.py`), Rules
+(`/admin/features/rules`, `kind='rule'`: ways of building that hold no
+matter what was bought), How to build (`/admin/features`, what has been
+built before and its price), Playbooks, Products, and Waiting (the
+proposal inbox). Every rule rides into every MVP build prompt as a house
+rule, so writing a lesson there is how every future project gets it. This
+file is for lessons about THIS repo's own code.
+
+On 2026-11-02 the owner called the old Catalogue, five sidebar links and
+Cerebro, "a good idea on paper, but it's not functional", and asked for one
+place for everything he works on. The pages kept their URLs and endpoints
+because the MVP Builder, project pages and the guidance API link into
+them; what changed is that they read as one thing. The inbox had no link
+anywhere before the Waiting tab, so every replace a session filed and every
+lesson the sweeper mined sat unread. My Apps stays its own link: it is what
+was built, not how to build.
 
 ## The god door
 
@@ -557,11 +569,16 @@ service. It reads every repo on the GitHub account (GITHUB_TOKEN on that
 service for private ones; public without), splits each CLAUDE.md into
 headed sections, and proposes any heading the board has not seen for
 that repo - through `_propose(..., hold=True)`, so it lands PENDING on
-Needs attention rather than riding into every build prompt as repo
-prose. `RepoWatch` holds the blob sha and the headings seen; the first
+the Waiting tab of Best Practices rather than riding into every build
+prompt as repo prose. `RepoWatch` holds the blob sha and the headings seen; the first
 read of a repo only records, so nothing mined by hand comes back.
 
-## Cerebro
+## Cerebro (page retired)
+
+Retired into Best Practices on 2026-11-02: `cerebro.index` redirects there
+and the sidebar link is gone. The nightly audit still runs and still fills
+`RuleAudit` and `ProductAudit`; nothing draws them until a page earns its
+place. What follows is what the page was, and what the scanners still are.
 
 `pm/cerebro_routes.py` is every client held against the catalogue: chips
 picked from products, features, playbooks and rules become columns, the

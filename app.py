@@ -338,6 +338,9 @@ def create_app():
     from pm.cerebro_routes import cerebro_bp
     app.register_blueprint(cerebro_bp)
 
+    from pm.practices_routes import practices_bp
+    app.register_blueprint(practices_bp)
+
     # ── The people who may open this board ─────────────────
     from pm.users_routes import users_bp
     app.register_blueprint(users_bp)

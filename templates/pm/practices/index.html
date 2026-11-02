@@ -1,0 +1,180 @@
+{% extends "pm/base.html" %}
+{% from "pm/practices/_tabs.html" import practices_tabs %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+
+{#
+  Everything: one search across every rule, how-to, playbook and product.
+
+  Every entry is on the page and the bar filters them in place, as the
+  features page always did: the keystroke is the apply, and the URL keeps
+  step. No type chips: the tab strip above already names the types, and two
+  rows saying the same thing cost a third of a phone screen. ?type= still
+  narrows, so a link to "playbooks about texting" can say so.
+  A row opens to what a session would be told: the guidance, the traps, the
+  file worth copying, a playbook's sections, a product's price. Changing one
+  happens on its own tab, one press away, because each kind has its own
+  editor and its own rules about what may change from the page.
+
+  contained-scroll (LM-4): the bar stands still and the list scrolls.
+#}
+
+{% block title %}Best Practices - Built By Bean{% endblock %}
+{% block page_title %}Best Practices{% endblock %}
+{% block page_subtitle %}Everything Claude reads before it builds{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0 gap-4 stagger-in"
+     x-data='{
+       q: {{ request.args.get("q", "") | tojson }},
+       type: {{ (request.args.get("type") or "all") | tojson }},
+       shown: {{ entries | length }},
+       get active() { return this.q.trim() !== "" || this.type !== "all"; },
+       clear() { this.q = ""; this.type = "all"; },
+       filter() {
+         const words = this.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+         let n = 0;
+         for (const row of this.$el.querySelectorAll("[data-row]")) {
+           const hit = (this.type === "all" || row.dataset.type === this.type)
+                    && words.every(w => row.dataset.search.includes(w));
+           row.hidden = !hit;
+           if (hit) n += 1;
+         }
+         this.shown = n;
+         const p = new URLSearchParams();
+         if (this.q.trim()) p.set("q", this.q.trim());
+         if (this.type !== "all") p.set("type", this.type);
+         history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p.toString() : ""));
+       }
+     }'
+     x-effect="filter()">
+
+    {{ practices_tabs('all') }}
+
+    {% if pending %}
+    <a href="{{ url_for('inbox.inbox_index') }}"
+       class="shrink-0 glass-card p-4 flex flex-wrap items-center justify-between gap-3 border border-amber-500/30 hover:border-amber-400/60 transition-colors">
+        <span class="text-sm text-white">
+            <span class="font-semibold text-amber-300">{{ pending | commas }}</span>
+            lesson{{ '' if pending == 1 else 's' }} Claude filed, waiting on your yes</span>
+        <span class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Review</span>
+    </a>
+    {% endif %}
+
+    <form role="search" @submit.prevent class="shrink-0 relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
+        <input type="search" x-model="q" placeholder="Search names, guidance, traps"
+               aria-label="Search Best Practices"
+               class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        {{ clear_filters(click="clear()", show="active") }}
+    </form>
+
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="shrink-0 px-4 sm:px-5 py-3 border-b border-white/5">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
+                <span x-text="shown">{{ entries | length }}</span> shown</span>
+        </div>
+        <div class="divide-y divide-white/5 min-h-0 overflow-y-auto">
+        {% for e in entries %}
+        <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }"
+             data-row data-type="{{ e.type }}" data-search="{{ e.search }}">
+            <button type="button" @click="open = !open" :aria-expanded="open"
+                    class="group flex w-full items-start gap-3 text-left min-h-[44px]">
+                {% if e.type == 'playbook' %}
+                    {% if e.mark %}
+                    <img src="{{ e.mark }}" alt="" class="w-9 h-9 shrink-0 rounded-lg object-contain">
+                    {% else %}
+                    <span class="w-9 h-9 shrink-0 rounded-lg bg-emerald-500/15 text-emerald-300 text-xs font-bold flex items-center justify-center">{{ e.initials }}</span>
+                    {% endif %}
+                {% endif %}
+                <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors break-words">{{ e.name }}</span>
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-semibold {{ type_tone[e.type] }}">{{ type_label[e.type] }}</span>
+                        {% if e.category %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ e.category }}</span>
+                        {% endif %}
+                        {% if e.idea %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-300">not built yet</span>
+                        {% endif %}
+                        {% if e.traps %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-red-500/10 text-red-300">traps</span>
+                        {% endif %}
+                        {% if e.type == 'playbook' and e.steps %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ e.steps }} steps</span>
+                        {% endif %}
+                    </span>
+                    {% if e.line %}
+                    <span class="block mt-1 text-xs text-surface-400 max-w-3xl break-words">{{ e.line }}</span>
+                    {% endif %}
+                </span>
+                {% if e.type in ('howto', 'product') %}
+                <span class="shrink-0 text-sm tabular-nums {{ 'text-surface-200' if e.price else 'text-surface-600' }}">
+                    {{ e.price | format_currency if e.price else '-' }}</span>
+                {% endif %}
+                <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
+                     :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div x-show="open" x-cloak class="mt-4 pt-4 border-t border-surface-700 space-y-4 min-w-0">
+                {% if e.type in ('rule', 'howto') %}
+                    {% if e.gold %}
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">How it should be built</p>
+                        <div class="prose-pm text-sm text-surface-200 break-words">{{ e.gold | markdown }}</div>
+                    </div>
+                    {% endif %}
+                    {% if e.traps %}
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">What went wrong last time</p>
+                        <div class="prose-pm text-sm text-surface-200 break-words">{{ e.traps | markdown }}</div>
+                    </div>
+                    {% endif %}
+                    {% if e.reference %}
+                    <p class="text-xs text-surface-400 break-words">
+                        <span class="text-surface-500">The one worth copying:</span>
+                        <span class="text-surface-200">{{ e.reference }}</span>
+                        {%- if e.path %} <code class="text-brand-300 break-all">{{ e.path }}</code>{% endif %}</p>
+                    {% endif %}
+                    <div class="flex justify-end">
+                        <a href="{{ e.edit }}"
+                           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Edit</a>
+                    </div>
+                {% elif e.type == 'playbook' %}
+                    {% for s in e.sections %}
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">{{ s.heading }}</p>
+                        <div class="prose-pm text-sm text-surface-200 break-words">{{ s.body | markdown }}</div>
+                    </div>
+                    {% endfor %}
+                    <div class="flex flex-wrap justify-end gap-2">
+                        <a href="{{ e.edit }}"
+                           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Edit</a>
+                        <a href="{{ e.open }}"
+                           class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Open the playbook</a>
+                    </div>
+                {% elif e.type == 'product' %}
+                    <dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        <div><dt class="text-xs text-surface-400">Price</dt><dd class="text-white">{{ e.price | format_currency if e.price else 'Not set' }}</dd></div>
+                        <div><dt class="text-xs text-surface-400">Monthly</dt><dd class="text-white">{{ e.monthly | format_currency if e.monthly else 'None' }}</dd></div>
+                        <div><dt class="text-xs text-surface-400">Playbook</dt><dd class="text-white break-words">{{ e.playbook or 'None' }}</dd></div>
+                    </dl>
+                    <div class="flex justify-end">
+                        <a href="{{ e.sell }}"
+                           class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Sell it</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        <div x-show="shown === 0" x-cloak class="p-8 sm:p-12 text-center">
+            <p class="text-surface-400 mb-3">Nothing matches that.</p>
+            <button type="button" @click="clear()"
+                    class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                Show everything</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

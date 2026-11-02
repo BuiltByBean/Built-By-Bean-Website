@@ -219,6 +219,13 @@ def _health_counts():
 @cerebro_bp.route("/")
 @login_required
 def index():
+    # Retired 2026-11-02 into Best Practices: "a good idea on paper, but it's
+    # not functional". The nightly audit still fills RuleAudit and
+    # ProductAudit; nothing draws them until a page earns its place.
+    return redirect(url_for("practices.index"))
+
+
+def _retired_index():
     chips = _chips()
     view = request.args.get("view") or "all"
     if view not in dict(VIEWS):

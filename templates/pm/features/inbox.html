@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/practices/_tabs.html" import practices_tabs %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
@@ -15,9 +16,9 @@
   that will be in the prompt.
 #}
 
-{% block title %}Inbox - Built By Bean{% endblock %}
-{% block page_title %}Inbox{% endblock %}
-{% block page_subtitle %}What other sessions have learned, waiting on a yes{% endblock %}
+{% block title %}Waiting - Best Practices{% endblock %}
+{% block page_title %}Best Practices{% endblock %}
+{% block page_subtitle %}What Claude learned, waiting on a yes{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
 
 {% macro text_block(label, text, tone='') %}
@@ -100,6 +101,9 @@
 
 {% block content %}
 <div data-live="results" class="flex flex-col flex-1 min-h-0 gap-5 stagger-in">
+
+    {# Inside the live region so the Waiting count moves with an accept. #}
+    {{ practices_tabs('waiting') }}
 
     <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
         <div class="glass-card p-4">
