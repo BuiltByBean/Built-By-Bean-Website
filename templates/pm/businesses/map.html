@@ -108,14 +108,14 @@
                 {# The rings, faint, so the eye reads the layers. #}
                 {% for key, r in map.rings.items() %}
                 <circle cx="{{ map.center.x }}" cy="{{ map.center.y }}" r="{{ r }}" fill="none"
-                        stroke="rgba(255,255,255,0.07)" stroke-dasharray="3 9"/>
+                        stroke="rgba(255,255,255,0.07)" stroke-dasharray="3 9" x-show="!focused"/>
                 {% endfor %}
                 {% for e in map.edges %}
                 <g class="edge" data-pick="edge:{{ loop.index0 }}"
                    :style="(focused && !inTrailEdge({{ loop.index0 }})) ? 'display:none' : ''"
                    @pointerenter="show('edge', {{ loop.index0 }}, $event)" @pointerleave="hide()">
-                    <path d="{{ e.path }}" fill="none" stroke="transparent" stroke-width="30"/>
-                    <path d="{{ e.path }}" fill="none" stroke-linecap="round"
+                    <path :d="pathFor({{ loop.index0 }})" fill="none" stroke="transparent" stroke-width="30"/>
+                    <path :d="pathFor({{ loop.index0 }})" fill="none" stroke-linecap="round"
                           :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ e.color }}'"
                           :stroke-opacity="isLit('edge', {{ loop.index0 }}) ? 1 : (dim && !near({{ loop.index0 }}) ? 0.08 : {{ 0.22 if e.derived else (0.9 if e.outcome else 0.6) }})"
                           style="transition: stroke 120ms, stroke-width 120ms, stroke-opacity 120ms"
@@ -292,6 +292,11 @@ document.addEventListener('alpine:init', () => {
         pointers: new Map(), pinchStart: null, downPick: '',
         hover: null, pinned: null, holdCard: false, canvas: null,
         query: '', searching: false, focused: null, trail: new Set(),
+        /* Where every tile is right now. The server's positions are the
+           whole map; a focus re-lays its trail round the picked thing and
+           the tiles glide there, lines following. */
+        pos: Object.fromEntries(map.nodes.map(n => [n.key, { x: n.x, y: n.y }])),
+        bow: { x: map.center.x, y: map.center.y }, anim: null,
         init(canvas) {
             this.canvas = canvas;
             this.$nextTick(() => this.fit());
@@ -340,17 +345,25 @@ document.addEventListener('alpine:init', () => {
             this.focused = key;
             this.pinned = null; this.hover = null;
             this.query = ''; this.searching = false;
-            this.$nextTick(() => this.fitTrail());
+            const targets = this.localLayout(key);
+            this.animateTo(targets, { x: this.map.center.x, y: this.map.center.y });
+            this.$nextTick(() => this.fitTrail(targets));
         },
-        showAll() { this.focused = null; this.trail = new Set(); this.$nextTick(() => this.fit()); },
+        showAll() {
+            this.focused = null; this.trail = new Set();
+            const home = Object.fromEntries(this.map.nodes.map(n => [n.key, { x: n.x, y: n.y }]));
+            this.animateTo(home, { x: this.map.center.x, y: this.map.center.y });
+            this.$nextTick(() => this.fit());
+        },
         inTrail(key) { return this.trail.has(key); },
         inTrailEdge(ei) { const e = this.map.edges[ei]; return this.trail.has(e.a) && this.trail.has(e.b); },
         /* Fit what is left, not the whole canvas. */
-        fitTrail() {
+        fitTrail(targets) {
             const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
-            const pts = this.map.nodes.filter(n => this.trail.has(n.key));
+            const at = targets || this.pos;
+            const pts = [...this.trail].map(k => at[k]).filter(Boolean);
             if (!w || !h || !pts.length) return this.fit();
-            const xs = pts.map(n => n.x), ys = pts.map(n => n.y);
+            const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
             const x0 = Math.min(...xs) - 150, x1 = Math.max(...xs) + 150, y0 = Math.min(...ys) - 120, y1 = Math.max(...ys) + 120;
             const k = Math.max(0.3, Math.min(1.4, Math.min((w - 40) / (x1 - x0), (h - 40) / (y1 - y0))));
             this.k = k;
@@ -389,7 +402,86 @@ document.addEventListener('alpine:init', () => {
         nodeStyle(n) {
             const w = n.kind === 'outcome' ? 230 : (n.kind === 'center' ? 170 : 150);
             const top = n.kind === 'outcome' ? 28 : (n.kind === 'center' ? 52 : (n.kind === 'surface' ? 36 : 32));
-            return 'left:' + (this.tx + (n.x - w / 2) * this.k).toFixed(2) + 'px; top:' + (this.ty + (n.y - top) * this.k).toFixed(2) + 'px; width:' + (w * this.k).toFixed(2) + 'px';
+            const p = this.pos[n.key] || n;
+            return 'left:' + (this.tx + (p.x - w / 2) * this.k).toFixed(2) + 'px; top:' + (this.ty + (p.y - top) * this.k).toFixed(2) + 'px; width:' + (w * this.k).toFixed(2) + 'px';
+        },
+        pathFor(ei) {
+            const e = this.map.edges[ei];
+            const a = this.pos[e.a], b = this.pos[e.b];
+            if (!a || !b) return '';
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+            const qx = mx + (this.bow.x - mx) * 0.18, qy = my + (this.bow.y - my) * 0.18;
+            return 'M ' + a.x.toFixed(1) + ' ' + a.y.toFixed(1) + ' Q ' + qx.toFixed(1) + ' ' + qy.toFixed(1) + ' ' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
+        },
+        /* Glide every tile from where it is to where it should be. */
+        animateTo(targets, bow, then) {
+            if (this.anim) cancelAnimationFrame(this.anim);
+            const from = Object.fromEntries(Object.entries(this.pos).map(([k, p]) => [k, { x: p.x, y: p.y }]));
+            const fromBow = { x: this.bow.x, y: this.bow.y };
+            const t0 = performance.now(), ms = 420;
+            const step = (now) => {
+                const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3);
+                const next = {};
+                for (const k in targets) {
+                    const f = from[k] || targets[k];
+                    next[k] = { x: f.x + (targets[k].x - f.x) * e, y: f.y + (targets[k].y - f.y) * e };
+                }
+                this.pos = next;
+                this.bow = { x: fromBow.x + (bow.x - fromBow.x) * e, y: fromBow.y + (bow.y - fromBow.y) * e };
+                if (u < 1) this.anim = requestAnimationFrame(step);
+                else { this.anim = null; if (then) then(); }
+            };
+            this.anim = requestAnimationFrame(step);
+        },
+        /* The trail's own layout: the picked thing in the middle, what it
+           touches in a ring round it, the second step in a ring beyond, each
+           ring spread so nothing overlaps; everything else keeps its place
+           off screen. */
+        localLayout(key) {
+            const nodes = Object.fromEntries(this.map.nodes.map(n => [n.key, n]));
+            const adj = new Map();
+            this.map.edges.forEach(e => {
+                if (!this.trail.has(e.a) || !this.trail.has(e.b)) return;
+                if (!adj.has(e.a)) adj.set(e.a, []);
+                if (!adj.has(e.b)) adj.set(e.b, []);
+                adj.get(e.a).push(e.b); adj.get(e.b).push(e.a);
+            });
+            const cx = this.map.center.x, cy = this.map.center.y;
+            const width = k => (nodes[k].kind === 'outcome' ? 250 : 170);
+            const order = { audience: 0, surface: 1, service: 2, outcome: 3 };
+            const ring1 = (adj.get(key) || []).slice().sort((a, b) => (order[nodes[a].kind] - order[nodes[b].kind]) || nodes[a].name.localeCompare(nodes[b].name));
+            const ring2 = [...this.trail].filter(k => k !== key && !ring1.includes(k));
+            const r1 = Math.max(260, ring1.reduce((s, k) => s + width(k), 0) / (2 * Math.PI) + 40);
+            const r2 = r1 + 240;
+            const angle = {};
+            ring1.forEach((k, i) => { angle[k] = -Math.PI / 2 + i * 2 * Math.PI / Math.max(1, ring1.length); });
+            const mean = (ks) => {
+                const xs = ks.map(k => Math.cos(angle[k])), ys = ks.map(k => Math.sin(angle[k]));
+                const x = xs.reduce((a, b) => a + b, 0), y = ys.reduce((a, b) => a + b, 0);
+                return (Math.abs(x) < 1e-9 && Math.abs(y) < 1e-9) ? (ks.length ? angle[ks[0]] : 0) : Math.atan2(y, x);
+            };
+            ring2.forEach(k => { angle[k] = mean((adj.get(k) || []).filter(n => angle[n] !== undefined)); });
+            const spread = (ks, r) => {
+                if (ks.length < 2) return;
+                const gap = Math.min(Math.max(...ks.map(width)) / r, 2 * Math.PI / ks.length);
+                for (let it = 0; it < 300; it++) {
+                    ks.sort((a, b) => angle[a] - angle[b]);
+                    let moved = false;
+                    for (let i = 0; i < ks.length; i++) {
+                        const a = ks[i], b = ks[(i + 1) % ks.length];
+                        const d = i < ks.length - 1 ? angle[b] - angle[a] : angle[b] + 2 * Math.PI - angle[a];
+                        if (d < gap - 1e-6) { const push = (gap - d) / 2; angle[a] -= push; angle[b] += push; moved = true; }
+                    }
+                    if (!moved) break;
+                }
+            };
+            spread(ring1, r1); spread(ring2, r2);
+            const targets = {};
+            for (const k in this.pos) targets[k] = { x: this.pos[k].x, y: this.pos[k].y };
+            targets[key] = { x: cx, y: cy };
+            ring1.forEach(k => { targets[k] = { x: cx + r1 * Math.cos(angle[k]), y: cy + r1 * Math.sin(angle[k]) }; });
+            ring2.forEach(k => { targets[k] = { x: cx + r2 * Math.cos(angle[k]), y: cy + r2 * Math.sin(angle[k]) }; });
+            return targets;
         },
         fit() {
             const w = this.canvas.clientWidth, h = this.canvas.clientHeight;

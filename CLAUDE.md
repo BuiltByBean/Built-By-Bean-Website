@@ -452,6 +452,12 @@ outcomes, an outcome's services), never through the centre and never into a
 second person or surface, or one person's trail would be the whole map. The
 whole `<g class="edge">` hides, not just the stroke: a hidden line's
 invisible 30px hit path kept catching hover and left a stale card up.
+A focus RE-LAYS its trail (Michael: "make that where it kind of goes to a
+friendly layout"): the picked thing in the middle, what it touches in a ring
+round it, the second step in a ring beyond (`localLayout`), tiles gliding
+there over 420ms (`animateTo`) with the lines drawn from the live positions
+(`pathFor`, `pos`), because five things left where the whole map put them
+are five things scattered across a canvas. Show all glides them home.
 
 A return is worked out, typed into WebFile by hand, and recorded from the
 confirmation page. `sales_tax.build_return` splits a period's sales by the
