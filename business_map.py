@@ -45,10 +45,10 @@ STATUS_LABEL = dict(STATUSES)
 # Geometry, in SVG units. A node is a 56px mark (the icon at the size the
 # Businesses tile draws it, with no box behind it) and its name underneath.
 NODE_R = 32
-COL_W = 240
-ROW_H = 130
-LEFT = 140
-TOP = 120
+COL_W = 250
+ROW_H = 150
+LEFT = 150
+TOP = 130
 
 
 def _sort_key(need):
@@ -143,6 +143,10 @@ def layout(business, needs, services, links, need_links):
         a, b = by_key[e["a"]], by_key[e["b"]]
         e["path"] = _path(a, b)
         e["label"] = f"{a['name']} to {b['name']}"
+        # A line wears the colour of the column it leaves, so the eye can
+        # follow money lines from money and comms lines from comms.
+        left = a if a["x"] <= b["x"] else b
+        e["color"] = LAYER_COLOR[left["layer"]]
         out_edges.append(e)
 
     width = (LEFT + len(present) * COL_W) if present else LEFT + COL_W

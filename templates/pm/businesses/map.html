@@ -81,52 +81,69 @@
             </defs>
             <rect width="100%" height="100%" fill="url(#dots)"/>
             <g :transform="'translate(' + tx + ' ' + ty + ') scale(' + k + ')'">
+                {# A band per column, so the layers read as layers. #}
                 {% for c in map.columns %}
-                <text x="{{ c.x }}" y="48" text-anchor="middle" font-size="13" font-weight="700" letter-spacing="0.12em"
-                      fill="{{ c.color }}" style="text-transform: uppercase">{{ c.label | upper }}</text>
-                <line x1="{{ c.x }}" y1="62" x2="{{ c.x }}" y2="{{ map.height - 20 }}" stroke="{{ c.color }}" stroke-opacity="0.12" stroke-dasharray="2 6"/>
+                <rect x="{{ c.x - 110 }}" y="20" width="220" height="{{ map.height - 30 }}" rx="18"
+                      fill="{{ c.color }}" fill-opacity="0.05" stroke="{{ c.color }}" stroke-opacity="0.18"/>
+                <text x="{{ c.x }}" y="56" text-anchor="middle" font-size="13" font-weight="800" letter-spacing="0.14em"
+                      fill="{{ c.color }}">{{ c.label | upper }}</text>
                 {% endfor %}
 
+                {# Lines first, under the nodes: solid, in the colour of the
+                   column they leave, and lit white on hover. Hand-written
+                   ones are brand purple and a touch heavier. #}
                 {% for e in map.edges %}
                 <g class="edge" data-pick="edge:{{ loop.index0 }}"
                    @pointerenter="show('edge', {{ loop.index0 }}, $event)" @pointerleave="hide()">
                     <path d="{{ e.path }}" fill="none" stroke="transparent" stroke-width="30"/>
-                    <path d="{{ e.path }}" fill="none"
-                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#c084fc' : '{{ '#8b5cf6' if not e.derived else 'rgba(255,255,255,0.28)' }}'"
-                          :stroke-width="isLit('edge', {{ loop.index0 }}) ? 3.5 : 2"
-                          stroke-linecap="round" style="transition: stroke 120ms, stroke-width 120ms"/>
+                    <path d="{{ e.path }}" fill="none" stroke-linecap="round"
+                          :stroke="isLit('edge', {{ loop.index0 }}) ? '#ffffff' : '{{ '#a78bfa' if not e.derived else e.color }}'"
+                          :stroke-opacity="isLit('edge', {{ loop.index0 }}) ? 1 : {{ 0.95 if not e.derived else 0.75 }}"
+                          :stroke-width="isLit('edge', {{ loop.index0 }}) ? 4.5 : {{ 3.2 if not e.derived else 2.4 }}"
+                          style="transition: stroke 120ms, stroke-width 120ms"/>
                 </g>
                 {% endfor %}
 
                 {% for n in map.nodes %}
                 <g class="node" data-pick="node:{{ loop.index0 }}" transform="translate({{ n.x }} {{ n.y }})" style="cursor: pointer"
                    @pointerenter="show('node', {{ loop.index0 }}, $event)" @pointerleave="hide()">
+                    {# The mark sits on the page's own dark, so a line never
+                       runs through a logo. #}
+                    <circle r="40" fill="#0b0b14"/>
                     {% if n.kind == 'hole' %}
-                    <circle r="30" fill="rgba(245,158,11,0.06)" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 5"/>
-                    <path d="M-9 0h18M0-9v18" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+                    <circle r="31" fill="rgba(245,158,11,0.08)" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="6 5"/>
+                    <path d="M-10 0h20M0-10v20" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
                     {% else %}
-                    <circle r="36" fill="rgba(255,255,255,0.001)"/>
+                    <circle r="37" fill="rgba(255,255,255,0.001)"/>
                     {% if n.status != 'running' %}
-                    <circle r="34" fill="none" stroke="{{ '#f59e0b' if n.status == 'setting_up' else '#64748b' }}" stroke-width="2" stroke-dasharray="6 5"/>
+                    <circle r="35" fill="none" stroke="{{ '#f59e0b' if n.status == 'setting_up' else '#64748b' }}" stroke-width="2.5" stroke-dasharray="6 5"/>
                     {% endif %}
                     {% if n.mark %}
                     <image href="{{ n.mark }}" x="-28" y="-28" width="56" height="56" preserveAspectRatio="xMidYMid meet"/>
                     {% else %}
-                    <circle r="28" fill="rgba(139,92,246,0.18)"/>
+                    <circle r="28" fill="rgba(139,92,246,0.22)"/>
                     <text text-anchor="middle" dominant-baseline="central" font-size="18" font-weight="700" fill="#c4b5fd">{{ n.initials }}</text>
                     {% endif %}
                     {% if n.runbook_missing %}
-                    <circle cx="24" cy="-24" r="8" fill="#ef4444"/>
-                    <text x="24" y="-24" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="800" fill="#fff">!</text>
+                    <circle cx="25" cy="-25" r="9" fill="#ef4444"/>
+                    <text x="25" y="-25" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="800" fill="#fff">!</text>
                     {% endif %}
                     {% endif %}
+                    {# What it is, then what it is FOR, in its column's colour. #}
                     {% set words = n.name.split(' ') %}
                     {% if n.name | length > 16 and words | length > 1 %}
                     {% set half = (words | length / 2) | round(0, 'ceil') | int %}
-                    <text y="52" text-anchor="middle" font-size="13" font-weight="600" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f1f5f9' }}">{{ words[:half] | join(' ') }}</text>
-                    <text y="68" text-anchor="middle" font-size="13" font-weight="600" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f1f5f9' }}">{{ words[half:] | join(' ') }}</text>
+                    <text y="54" text-anchor="middle" font-size="13" font-weight="700" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f8fafc' }}">{{ words[:half] | join(' ') }}</text>
+                    <text y="70" text-anchor="middle" font-size="13" font-weight="700" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f8fafc' }}">{{ words[half:] | join(' ') }}</text>
+                    {% set cap_y = 86 %}
                     {% else %}
-                    <text y="52" text-anchor="middle" font-size="13" font-weight="600" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f1f5f9' }}">{{ n.name }}</text>
+                    <text y="54" text-anchor="middle" font-size="13" font-weight="700" fill="{{ '#fcd34d' if n.kind == 'hole' else '#f8fafc' }}">{{ n.name }}</text>
+                    {% set cap_y = 70 %}
+                    {% endif %}
+                    {% if n.kind == 'hole' %}
+                    <text y="{{ cap_y }}" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="0.08em" fill="#f59e0b">MISSING</text>
+                    {% elif n.need %}
+                    <text y="{{ cap_y }}" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing="0.08em" fill="{{ map.columns | selectattr('key', 'equalto', n.layer) | map(attribute='color') | first }}">{{ n.need | upper }}</text>
                     {% endif %}
                 </g>
                 {% endfor %}
@@ -213,7 +230,7 @@ document.addEventListener('alpine:init', () => {
         fit() {
             const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
             if (!w || !h) return;
-            const k = Math.max(0.35, Math.min(1.6, Math.min((w - 40) / this.map.width, (h - 40) / this.map.height)));
+            const k = Math.max(0.35, Math.min(1.4, Math.min((w - 40) / this.map.width, (h - 40) / this.map.height)));
             this.k = k;
             this.tx = (w - this.map.width * k) / 2;
             this.ty = (h - this.map.height * k) / 2;
