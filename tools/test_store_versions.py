@@ -129,8 +129,9 @@ with application.app_context():
     whole = "y" * 14100
     r = propose(field="traps_md", mode="replace", text=whole)
     row = CatalogueProposal.query.order_by(CatalogueProposal.id.desc()).first()
-    check("a replace past 6000 waits in the inbox whole",
-          r.status_code == 200 and row is not None and row.proposed == whole,
+    check("a replace past 6000 applies whole",
+          r.status_code == 200 and row is not None and row.proposed == whole
+          and Playbook.query.filter_by(slug="vendor").first().traps_md == whole,
           (r.status_code, len(row.proposed) if row else None))
 
     before = CatalogueProposal.query.count()

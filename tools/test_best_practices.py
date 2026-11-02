@@ -12,7 +12,7 @@ the parts that would quietly come apart:
      found by its symptom.
   3. Every Best Practices page draws the tab strip with its own tab lit,
      under one title, and the sidebar has one link for all of them.
-  4. Waiting counts the pending proposals, the inbox nothing linked to.
+  4. History is a tab with no count and no banner: nothing waits on a yes.
   5. Cerebro's page redirects here, and its link is gone.
   6. "Sell it" hands the product's id to the products page, which carries
      the Sell button that the id presses.
@@ -69,7 +69,7 @@ with application.app_context():
                  traps_md="Brand record cannot be edited after approval."),
         Product(slug="custom", name="Custom software build", price=5000),
         CatalogueProposal(kind="rule", target_slug="no-em-dash", field="pitfalls_md",
-                          mode="replace", proposed="x", status="pending"),
+                          mode="replace", proposed="x", status="candidate"),
         CatalogueProposal(kind="rule", target_slug="no-em-dash", field="pitfalls_md",
                           mode="append", proposed="y", status="applied"),
     ])
@@ -99,7 +99,7 @@ check("a playbook is found by its traps section", "brand record" in pb["search"]
 print("3. One title, one strip, one sidebar link")
 PAGES = {"/admin/practices/": "Everything", "/admin/features/rules": "Rules",
          "/admin/features/": "How to build", "/admin/playbooks/": "Playbooks",
-         "/admin/products/": "Products", "/admin/features/inbox/": "Waiting"}
+         "/admin/products/": "Products", "/admin/features/inbox/": "History"}
 for url, tab in PAGES.items():
     r = c.get(url)
     body = r.get_data(as_text=True)
@@ -113,11 +113,11 @@ for url, tab in PAGES.items():
     check(f"{url} has no Rules, Features, Playbooks or Cerebro sidebar link",
           not re.search(r'</svg>\s*(Rules|Features|Playbooks|Cerebro|Products)\s*</a>', body))
 
-print("4. Waiting counts what waits")
+print("4. Nothing waits on a yes")
 body = c.get("/admin/practices/").get_data(as_text=True)
-waiting = re.search(r'Waiting\s*<span[^>]*>(\d+)</span>', body)
-check("the Waiting tab says 1", waiting and waiting.group(1) == "1", waiting and waiting.group(0))
-check("the strip above the list says one lesson waits", "1</span>\n            lesson Claude filed" in body)
+check("the History tab carries no count", re.search(r'History\s*<span', body) is None)
+check("there is no Waiting tab", re.search(r'>\s*Waiting\s*<', body) is None)
+check("and no banner over the list", "waiting on your yes" not in body)
 
 print("5. Cerebro is gone")
 r = c.get("/admin/cerebro/")

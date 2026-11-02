@@ -10,8 +10,8 @@ here. It is one sidebar link over six tabs (`pm/practices/_tabs.html`):
 Everything (one search across all of it, `pm/practices_routes.py`), Rules
 (`/admin/features/rules`, `kind='rule'`: ways of building that hold no
 matter what was bought), How to build (`/admin/features`, what has been
-built before and its price), Playbooks, Products, and Waiting (the
-proposal inbox). Every rule rides into every MVP build prompt as a house
+built before and its price), Playbooks, Products, and History (every
+change and the curator's nights, each with Revert). Every rule rides into every MVP build prompt as a house
 rule, so writing a lesson there is how every future project gets it. This
 file is for lessons about THIS repo's own code.
 
@@ -19,10 +19,32 @@ On 2026-11-02 the owner called the old Catalogue, five sidebar links and
 Cerebro, "a good idea on paper, but it's not functional", and asked for one
 place for everything he works on. The pages kept their URLs and endpoints
 because the MVP Builder, project pages and the guidance API link into
-them; what changed is that they read as one thing. The inbox had no link
-anywhere before the Waiting tab, so every replace a session filed and every
-lesson the sweeper mined sat unread. My Apps stays its own link: it is what
-was built, not how to build.
+them; what changed is that they read as one thing. My Apps stays its own
+link: it is what was built, not how to build.
+
+**Nothing waits on a yes** (Michael, the same day, looking at a Waiting tab
+reading 188: "stop this waiting on a yes thing. Just have it adjust properly
+over time ... add new, delete or prune ... based on my core projects'
+repos"). Every change a session sends applies on arrival, rewrites and
+retires included, and `curate_practices.py` runs last in the nightly
+cost-sync job: Claude (Opus, `ANTHROPIC_API_KEY` on cost-sync, recorded as
+a skipped night without it) turns the sweeper's notes into rules for any
+project, folds them into the rule they belong to, or sets them aside; then
+reads the whole rule list for merges, rules to tighten and rules to retire,
+capped per night so it converges over days rather than rewriting everything
+at once. Every change it makes goes through the door as project "curator",
+so History shows it with a Revert, and a retire switches a rule off rather
+than deleting it. `CuratorRun` is the night; `tools/test_curator.py` runs
+one against a scripted model.
+
+The catalogue had only ever grown: 485 rules, and the session-start brief
+was 986KB. Claude Code keeps about ten thousand characters of a hook's
+output and replaces the rest with a 2KB preview, so every session on the
+machine had been starting with the first few rules while the hook said it
+had briefed them. `/api/guidance/brief` is now the one-line index
+(`rules_index`, held under `INDEX_BUDGET`), `?full=1` is every rule in full,
+and the curator's target of about 120 rules is the size at which the index
+carries every summary.
 
 ## The god door
 
@@ -46,16 +68,16 @@ tools are missing, and to file what it learns as it goes. The write path appends
 because reporting sessions retry like any other API client. A proposal's
 text is kept whole up to `TEXT_MAX` (60,000) and refused past it, never cut:
 appends grow a field without limit, and the old 6000 bound truncated a
-replace in silence, so accepting a rewrite of a grown field would have
-deleted its tail while the inbox said it was in.
+replace in silence, so a rewrite of a grown field would have deleted its
+tail while the record said it was in.
 
-The catalogue grows itself through the same door, with the policy set by
-the SHAPE of a change, not by trust in the sender. Everything a session
+The catalogue grows itself through the same door. Everything a session
 sends becomes a `CatalogueProposal` (`pm/guidance_routes.py`, the
-`suggest_update` tool): an append or a create applies on arrival and can
-be reverted from `/admin/features/inbox` in one press; a replace of
-existing words waits there as pending and touches no build prompt until
-accepted. `previous` is snapshotted at apply time so revert is exact.
+`suggest_update` tool) and applies on arrival: append, create, replace
+and retire. History (`/admin/features/inbox`) lists each with a Revert.
+`previous` is snapshotted at apply time so revert is exact. A held change
+(`hold=True`, the sweeper's) is a `candidate`: a note for the curator,
+never in a build prompt as it stands.
 The Rules and Playbooks pages carry no add button on purpose: sessions
 write those through the door, and a hand-typed one is never written
 properly. Features keep their quick-add, because a client names one on
@@ -66,9 +88,8 @@ contact a client, resolve a ticket or send a contract: those are
 Michael's, and the API has no route for them on purpose. A playbook's
 checklist goes through the same door: `steps` is a structured field on
 kind playbook, a list in the payload rather than text. Append adds to
-the end on arrival, replace rewrites the list and waits in the inbox, a
-create may carry steps, and revert puts back the exact list that was
-there.
+the end and replace rewrites the list, both on arrival, a create may
+carry steps, and revert puts back the exact list that was there.
 
 `register_app` keeps ONE card per app on My Apps: the same host edits the same
 card, and so does the same project, whatever the address is this week. On
@@ -565,13 +586,15 @@ the injection after its header.
 ## The sweeper
 
 `sweep_repos.py` runs after `sync_costs.py` in the same nightly cost-sync
-service. It reads every repo on the GitHub account (GITHUB_TOKEN on that
-service for private ones; public without), splits each CLAUDE.md into
-headed sections, and proposes any heading the board has not seen for
-that repo - through `_propose(..., hold=True)`, so it lands PENDING on
-the Waiting tab of Best Practices rather than riding into every build
-prompt as repo prose. `RepoWatch` holds the blob sha and the headings seen; the first
-read of a repo only records, so nothing mined by hand comes back.
+service. It reads the CORE repos, those pushed to in the last `CORE_DAYS`
+(120; GITHUB_TOKEN on that service for private ones), splits each
+CLAUDE.md into headed sections, and files any section that is new or
+whose body changed as a curator candidate (`_propose(..., hold=True)`).
+`RepoWatch.seen_json` maps each heading to a fingerprint of its body; a
+row from before fingerprints holds a bare list, which is fingerprinted
+silently on the next read rather than refiling every section. The first
+read of a repo only records, so nothing mined by hand comes back. The
+nightly audit reads the same core list.
 
 ## Cerebro (page retired)
 

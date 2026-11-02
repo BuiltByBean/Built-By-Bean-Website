@@ -1,34 +1,37 @@
-"""The catalogue's inbox: what the field has proposed, and the one screen
-where Michael agrees or does not.
+"""Best Practices' History tab: what changed, who changed it, and the way back.
 
-Every change a session sends through the guidance API lands here as a
-CatalogueProposal. The additive ones arrived already applied and sit in
-the "live" list with a Revert; the rewrites wait at the top with the words
-they would replace beside the words they would put there, and Accept or
-Reject is one press. This is where "Claude's best practices that I agree
-with" gets its "that I agree with".
+Nothing here waits on anybody. Until 2026-11-02 this was an inbox where a
+rewrite sat until Michael pressed Accept; 188 piled up, and he asked for it
+to "just adjust properly over time". So every change a session sends now
+applies on arrival, the nightly curator (curate_practices.py) merges,
+tightens and retires, and this page is the record: the curator's nights at
+the top, then every change newest first, each with Revert. The URL stayed
+put because sessions and older notes link to it.
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, render_template, redirect, url_for, flash, abort, request
 from flask_login import login_required
 
-from models import db, CatalogueProposal
-from pm.guidance_routes import (apply_proposal, revert_proposal, target_label,
-                                steps_text)
+from models import db, CatalogueProposal, CuratorRun
+from pm.guidance_routes import revert_proposal, target_label, steps_text
 
 inbox_bp = Blueprint("inbox", __name__, url_prefix="/admin/features/inbox")
 
+# What the record shows. Candidates are notes for the curator, not changes,
+# and a discarded one changed nothing.
+SHOWN = ("applied", "accepted", "reverted", "rejected")
+PAGE = 80
+
 
 def _back():
-    """Where a decision returns to. The attention hub posts here too and
-    wants its own page back; anything that is not a same-site path is
-    ignored rather than followed."""
+    """Where a press returns to; anything not a same-site path is ignored."""
     nxt = request.form.get("next") or ""
     if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
         return nxt
     return url_for("inbox.inbox_index")
+
 
 FIELD_LABELS = {
     "name": "name", "display_name": "name", "summary": "summary",
@@ -38,12 +41,15 @@ FIELD_LABELS = {
     "vendor_url": "vendor URL", "client_only_md": "what only the client can do",
     "access_grant_md": "the access to ask for", "your_steps_md": "the steps",
     "traps_md": "the traps", "verify_md": "how to verify",
-    "prompt_intro": "prompt intro", "playbook_slug": "runbook",
+    "prompt_intro": "prompt intro", "playbook_slug": "playbook",
     "price": "price", "monthly_price": "monthly price", "*": "",
-    "steps": "the checklist",
+    "steps": "the checklist", "check_pattern": "scanner",
+    "check_globs": "scanner files", "check_exclude": "scanner exclusions",
+    "check_unless": "scanner exceptions", "check_fixture": "scanner fixture",
 }
 
-MODE_VERBS = {"append": "Added to", "replace": "Rewrites", "create": "Created"}
+MODE_VERBS = {"append": "Added to", "replace": "Rewrote", "create": "Created",
+              "retire": "Retired"}
 
 
 def _decorate(rows):
@@ -52,6 +58,7 @@ def _decorate(rows):
         p.kind_label = CatalogueProposal.KIND_LABELS.get(p.kind, p.kind)
         p.field_label = FIELD_LABELS.get(p.field, p.field)
         p.verb = MODE_VERBS.get(p.mode, p.mode)
+        p.by_curator = (p.project or "").startswith("curator")
         p.payload = {}
         if p.payload_json:
             try:
@@ -59,70 +66,30 @@ def _decorate(rows):
                              if v not in (None, "", [])}
             except ValueError:
                 p.payload = {}
-        # The checklist reads as numbered lines here, and the snapshot kept
-        # for revert is not for display.
         p.payload.pop("previous_steps", None)
         if isinstance(p.payload.get("steps"), list):
             p.payload["steps"] = steps_text(p.payload["steps"])
-        # What a create would put in the catalogue, as one readable text
-        # for the attention page: the name, the summary, the lesson.
-        parts = []
-        if p.mode == "create":
-            name = p.payload.get("name") or p.payload.get("display_name") or ""
-            wrong = str(p.payload.get("what_went_wrong") or p.payload.get("pitfalls_md") or "")
-            parts = [str(name), str(p.payload.get("summary") or ""),
-                     wrong[:600] + ("..." if len(wrong) > 600 else "")]
-        p.create_text = (chr(10) * 2).join(x for x in parts if x)
     return rows
 
 
 @inbox_bp.route("/")
 @login_required
 def inbox_index():
-    base = CatalogueProposal.query.order_by(CatalogueProposal.created_at.desc())
-    pending = _decorate(base.filter_by(status="pending").all())
-    live = _decorate(base.filter(CatalogueProposal.status.in_(("applied", "accepted")))
-                     .limit(40).all())
-    closed = _decorate(base.filter(CatalogueProposal.status.in_(("rejected", "reverted")))
-                       .limit(20).all())
-    return render_template("pm/features/inbox.html",
-                           pending=pending, live=live, closed=closed)
-
-
-def _decide(proposal, status):
-    proposal.status = status
-    proposal.decided_at = datetime.now(timezone.utc)
-
-
-@inbox_bp.route("/<int:id>/accept", methods=["POST"])
-@login_required
-def accept(id):
-    proposal = db.session.get(CatalogueProposal, id) or abort(404)
-    if proposal.status != "pending":
-        flash("That one has already been decided.", "warning")
-        return redirect(_back())
-    ok, message = apply_proposal(proposal)
-    if not ok:
-        db.session.rollback()
-        flash(f"Could not apply it: {message}.", "warning")
-        return redirect(_back())
-    _decide(proposal, "accepted")
-    db.session.commit()
-    flash("Accepted. It is in the catalogue now.", "success")
-    return redirect(_back())
-
-
-@inbox_bp.route("/<int:id>/reject", methods=["POST"])
-@login_required
-def reject(id):
-    proposal = db.session.get(CatalogueProposal, id) or abort(404)
-    if proposal.status != "pending":
-        flash("That one has already been decided.", "warning")
-        return redirect(_back())
-    _decide(proposal, "rejected")
-    db.session.commit()
-    flash("Rejected. Nothing changed.", "success")
-    return redirect(_back())
+    changes = _decorate(
+        CatalogueProposal.query.filter(CatalogueProposal.status.in_(SHOWN))
+        .order_by(CatalogueProposal.created_at.desc(), CatalogueProposal.id.desc())
+        .limit(PAGE).all())
+    runs = (CuratorRun.query.order_by(CuratorRun.started_at.desc(), CuratorRun.id.desc())
+            .limit(7).all())
+    week = datetime.now(timezone.utc) - timedelta(days=7)
+    this_week = (CatalogueProposal.query
+                 .filter(CatalogueProposal.status.in_(("applied", "accepted")))
+                 .filter(CatalogueProposal.created_at >= week.replace(tzinfo=None))
+                 .count())
+    queued = CatalogueProposal.query.filter_by(status="candidate").count()
+    return render_template("pm/features/inbox.html", changes=changes, runs=runs,
+                           last_run=runs[0] if runs else None,
+                           this_week=this_week, queued=queued)
 
 
 @inbox_bp.route("/<int:id>/revert", methods=["POST"])
@@ -137,7 +104,8 @@ def revert(id):
         db.session.rollback()
         flash(f"Could not revert it: {message}.", "warning")
         return redirect(_back())
-    _decide(proposal, "reverted")
+    proposal.status = "reverted"
+    proposal.decided_at = datetime.now(timezone.utc)
     db.session.commit()
-    flash("Reverted. The catalogue reads as it did before.", "success")
+    flash("Reverted. Best Practices reads as it did before.", "success")
     return redirect(_back())

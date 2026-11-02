@@ -16,9 +16,12 @@ be its own entry sits behind one tab strip (`pm/practices/_tabs.html`):
                  its price for the MVP Builder and the on-a-call quick-add.
   Playbooks      playbooks.playbooks_index: how each vendor gets set up.
   Products       products.products_index: what is sold, and the sell flow.
-  Waiting        inbox.inbox_index: what sessions filed that waits on a yes.
-                 It had no link anywhere before this, so every rewrite and
-                 every lesson the nightly sweeper mined sat unread.
+  History        inbox.inbox_index: what changed, and who changed it. A
+                 session's change applies on arrival and the nightly curator
+                 (curate_practices.py) merges, tightens and retires, so
+                 nothing waits on a yes; this is where any of it goes back
+                 in one press. It was a "Waiting" tab for a day, until
+                 Michael said to stop the waiting altogether.
 
 The pages keep their own URLs and endpoints, because the MVP Builder, the
 tax guide, project pages and the guidance API all link into them. Cerebro's
@@ -30,7 +33,7 @@ and get_playbook answer from the same rows through /api/guidance.
 from flask import Blueprint, render_template, url_for
 from flask_login import login_required
 
-from models import CatalogueProposal, Feature, Playbook, Product
+from models import Feature, Playbook, Product
 
 practices_bp = Blueprint("practices", __name__, url_prefix="/admin/practices")
 
@@ -52,7 +55,6 @@ def practices_counts():
         "howto": Feature.query.filter_by(is_active=True, kind="feature").count(),
         "playbook": Playbook.query.filter_by(is_active=True).count(),
         "product": Product.query.filter_by(is_active=True).count(),
-        "waiting": CatalogueProposal.query.filter_by(status="pending").count(),
     }
 
 
@@ -114,6 +116,5 @@ def entries():
 @practices_bp.route("/")
 @login_required
 def index():
-    pending = CatalogueProposal.query.filter_by(status="pending").count()
     return render_template("pm/practices/index.html", entries=entries(),
-                           type_label=TYPE_LABEL, type_tone=TYPE_TONE, pending=pending)
+                           type_label=TYPE_LABEL, type_tone=TYPE_TONE)

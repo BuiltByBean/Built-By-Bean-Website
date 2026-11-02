@@ -96,6 +96,13 @@ def _sweep():
         audit_repos.main()
     except Exception as err:  # noqa: BLE001
         print(f"repo sweep failed: {str(err)[:200]}", flush=True)
+    # Last, because it reads what the sweep filed and what the audit found.
+    try:
+        import curate_practices
+        print("curating Best Practices", flush=True)
+        curate_practices.main()
+    except Exception as err:  # noqa: BLE001
+        print(f"curator failed: {str(err)[:200]}", flush=True)
 
 
 if __name__ == "__main__":

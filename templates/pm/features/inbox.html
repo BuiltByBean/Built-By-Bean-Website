@@ -3,58 +3,56 @@
 {% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
-  What the field has proposed to the catalogue, and the decision.
+  History: what changed in Best Practices, and the way back.
 
-  Three lists in one scroller, worst-first in the sense that matters here:
-  the rewrites waiting on a person come first, because nothing in them is
-  live yet and every day they wait is a day the rule reads the old way.
-  Below them, what applied on arrival with a way to put it back, and then
-  what was declined - kept, because "we tried that" is worth remembering.
-
-  A rewrite shows both texts, not a diff: a runbook step read whole is
-  easier to judge than a line of pluses and minuses, and it is the whole
-  that will be in the prompt.
+  Nothing on this page waits on anybody (pm/inbox_routes.py says why). The
+  tiles say when the curator last ran and what it did; the list is every
+  change newest first. A rewritten field shows the old text beside the new
+  one, both capped and scrolling inside themselves, because a merged rule
+  can run to pages and one of them must not push every other row away.
 #}
 
-{% block title %}Waiting - Best Practices{% endblock %}
+{% block title %}History - Best Practices{% endblock %}
 {% block page_title %}Best Practices{% endblock %}
-{% block page_subtitle %}What Claude learned, waiting on a yes{% endblock %}
+{% block page_subtitle %}What changed, and who changed it{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
 
 {% macro text_block(label, text, tone='') %}
 <div class="min-w-0">
     <p class="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">{{ label }}</p>
-    <div class="rounded-xl border p-3 text-sm whitespace-pre-wrap break-words leading-relaxed
+    <div class="max-h-48 overflow-y-auto rounded-xl border p-3 text-sm whitespace-pre-wrap break-words leading-relaxed
                 {% if tone == 'new' %}border-brand-500/30 bg-brand-500/5 text-surface-100
                 {% elif tone == 'old' %}border-white/10 bg-surface-900/60 text-surface-400
                 {% else %}border-white/10 bg-surface-900/40 text-surface-200{% endif %}">{{ text or '(empty)' }}</div>
 </div>
 {% endmacro %}
 
+{% macro when(dt) %}{% if dt %}{{ dt.strftime('%b') }} {{ dt.day }}{% endif %}{% endmacro %}
+
 {% macro card(p) %}
-{% set pill = {'pending': 'bg-amber-500/10 text-amber-300',
-               'applied': 'bg-emerald-500/10 text-emerald-300',
-               'accepted': 'bg-emerald-500/10 text-emerald-300',
-               'rejected': 'bg-surface-800 text-surface-400',
-               'reverted': 'bg-surface-800 text-surface-400'}[p.status] %}
-<div class="p-4 sm:p-5 space-y-3">
+<div class="p-4 sm:p-5 space-y-3 {{ 'opacity-60' if not p.is_live }}">
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2 min-w-0">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-white/5 text-surface-300 shrink-0">{{ p.kind_label }}</span>
-                <span class="font-medium text-white truncate max-w-full">{{ p.label }}</span>
+                <span class="font-medium text-white break-words min-w-0">{{ p.label }}</span>
             </div>
-            <p class="text-xs text-surface-400 mt-1">
+            <p class="text-xs text-surface-400 mt-1 break-words">
                 {{ p.verb }}{% if p.field_label %} {{ p.field_label }}{% endif %}
-                &middot; from {{ p.project or 'a session' }}
+                &middot; {{ 'Curator' if p.by_curator else 'a session' }}{% if p.project and p.project != 'curator' %}, {{ p.project|replace('curator, ', '') }}{% endif %}
                 {# .day rather than %-d: that flag is glibc-only and Windows
-                   Python raises on it, which is how the preview found out. #}
-                &middot; {% if p.created_at %}{{ p.created_at.strftime('%b') }} {{ p.created_at.day }}{% endif %}
+                   Python raises on it. #}
+                &middot; {{ when(p.created_at) }}
             </p>
         </div>
-        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0 {{ pill }}">
-            {{ p.status|capitalize }}
-        </span>
+        {% if p.is_live %}
+        <form method="POST" data-live-action action="{{ url_for('inbox.revert', id=p.id) }}" class="shrink-0">
+            {{ confirm_button('Revert', 'Put it back the way it was?') }}
+        </form>
+        {% else %}
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0 bg-surface-800 text-surface-400">
+            {{ 'Reverted' if p.status == 'reverted' else 'Declined' }}</span>
+        {% endif %}
     </div>
 
     {% if p.reason %}
@@ -63,37 +61,16 @@
 
     {% if p.mode == 'replace' %}
     <div class="grid gap-3 lg:grid-cols-2">
-        {{ text_block('Now', p.previous, 'old') }}
-        {{ text_block('Proposed', p.proposed, 'new') }}
+        {{ text_block('Before', p.previous, 'old') }}
+        {{ text_block('After', p.proposed, 'new') }}
     </div>
     {% elif p.mode == 'append' %}
     {{ text_block('Added', p.proposed, 'new') }}
-    {% else %}
+    {% elif p.mode == 'create' %}
     <div class="grid gap-3 sm:grid-cols-2">
         {% for key, value in p.payload.items() %}
         {{ text_block(key|replace('_', ' '), value) }}
         {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if p.status == 'pending' %}
-    <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
-        <form method="POST" data-live-action action="{{ url_for('inbox.reject', id=p.id) }}">
-            <button type="submit"
-                    class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300 transition-colors">
-                Reject</button>
-        </form>
-        <form method="POST" data-live-action action="{{ url_for('inbox.accept', id=p.id) }}">
-            <button type="submit"
-                    class="min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
-                Accept</button>
-        </form>
-    </div>
-    {% elif p.is_live %}
-    <div class="flex justify-end pt-1">
-        <form method="POST" data-live-action action="{{ url_for('inbox.revert', id=p.id) }}">
-            {{ confirm_button('Revert', 'Put it back the way it was?') }}
-        </form>
     </div>
     {% endif %}
 </div>
@@ -102,60 +79,72 @@
 {% block content %}
 <div data-live="results" class="flex flex-col flex-1 min-h-0 gap-5 stagger-in">
 
-    {# Inside the live region so the Waiting count moves with an accept. #}
-    {{ practices_tabs('waiting') }}
+    {{ practices_tabs('history') }}
 
     <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
-        <div class="glass-card p-4">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Waiting</p>
-            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-amber-400' if pending else 'text-white' }}">{{ pending|length | commas }}</p>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Curated</p>
+            {% if not last_run %}
+            <p class="text-xl sm:text-2xl font-bold text-surface-300 mt-1">Not yet</p>
+            {% elif last_run.status == 'skipped' %}
+            <p class="text-xl sm:text-2xl font-bold text-amber-400 mt-1">No key</p>
+            <p class="hidden sm:block text-xs text-surface-400 mt-1 break-words">ANTHROPIC_API_KEY on cost-sync</p>
+            {% else %}
+            <p class="text-xl sm:text-2xl font-bold mt-1 {{ 'text-red-400' if last_run.status == 'failed' else 'text-white' }}">{{ when(last_run.started_at) }}</p>
+            <p class="text-xs text-surface-400 mt-1 break-words">{{ last_run.rules_before | commas }} to {{ last_run.rules_after | commas }} rules</p>
+            {% endif %}
         </div>
         <div class="glass-card p-4">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Live</p>
-            <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-1">{{ live|length | commas }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">This week</p>
+            <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-1">{{ this_week | commas }}</p>
         </div>
         <div class="glass-card p-4">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Declined</p>
-            <p class="text-xl sm:text-2xl font-bold text-surface-300 mt-1">{{ closed|length | commas }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Tonight</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ queued | commas }}</p>
         </div>
     </div>
 
     <div class="glass-card overflow-hidden flex flex-col min-h-0">
         <div class="min-h-0 overflow-y-auto">
 
-            {% if not pending and not live and not closed %}
+            {% if runs %}
+            <div class="px-4 sm:px-5 py-3 border-b border-white/5">
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">The curator's nights</span>
+            </div>
+            <div class="divide-y divide-white/5 border-b border-white/5">
+                {% for r in runs %}
+                <div class="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    <span class="text-sm text-white">{{ when(r.started_at) }}</span>
+                    <span class="text-sm text-surface-300 min-w-0 break-words">
+                        {% if r.status == 'skipped' %}Skipped, no API key
+                        {% elif r.status == 'failed' %}Failed
+                        {% elif r.status == 'running' %}Running
+                        {% else %}
+                        {% set bits = [] %}
+                        {% if r.added %}{% set _ = bits.append(r.added ~ ' added') %}{% endif %}
+                        {% if r.folded %}{% set _ = bits.append(r.folded ~ ' folded in') %}{% endif %}
+                        {% if r.merged %}{% set _ = bits.append(r.merged ~ ' merged') %}{% endif %}
+                        {% if r.tightened %}{% set _ = bits.append(r.tightened ~ ' tightened') %}{% endif %}
+                        {% if r.retired %}{% set _ = bits.append(r.retired ~ ' retired') %}{% endif %}
+                        {% if r.discarded %}{% set _ = bits.append(r.discarded ~ ' notes set aside') %}{% endif %}
+                        {{ bits | join(', ') if bits else 'Nothing needed changing' }}{% if r.status == 'partial' %}, part failed{% endif %}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if changes %}
+            <div class="px-4 sm:px-5 py-3 border-b border-white/5">
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Every change, newest first</span>
+            </div>
+            <div class="divide-y divide-white/5">
+                {% for p in changes %}{{ card(p) }}{% endfor %}
+            </div>
+            {% else %}
             <div class="p-8 sm:p-12 text-center">
-                <p class="text-surface-400 mb-1">Nothing has been proposed yet</p>
-                <p class="text-sm text-surface-500 max-w-md mx-auto">
-                    What other sessions learn arrives here.
-                </p>
-            </div>
-            {% endif %}
-
-            {% if pending %}
-            <div class="px-4 sm:px-5 py-3 border-b border-white/5 bg-amber-500/5">
-                <span class="text-xs font-semibold uppercase tracking-wider text-amber-300">Waiting on you</span>
-            </div>
-            <div class="divide-y divide-white/5">
-                {% for p in pending %}{{ card(p) }}{% endfor %}
-            </div>
-            {% endif %}
-
-            {% if live %}
-            <div class="px-4 sm:px-5 py-3 border-y border-white/5">
-                <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Applied on arrival</span>
-            </div>
-            <div class="divide-y divide-white/5">
-                {% for p in live %}{{ card(p) }}{% endfor %}
-            </div>
-            {% endif %}
-
-            {% if closed %}
-            <div class="px-4 sm:px-5 py-3 border-y border-white/5">
-                <span class="text-xs font-semibold uppercase tracking-wider text-surface-500">Declined or put back</span>
-            </div>
-            <div class="divide-y divide-white/5 opacity-70">
-                {% for p in closed %}{{ card(p) }}{% endfor %}
+                <p class="text-surface-400">Nothing has changed yet</p>
             </div>
             {% endif %}
 

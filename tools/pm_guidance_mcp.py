@@ -129,10 +129,11 @@ TOOLS = [
             "Propose a change to the catalogue itself - a playbook step that "
             "has moved, a feature's gold standard or file worth copying, a "
             "rule whose wording needs work, a product that now exists. "
-            "Policy by shape: an APPEND or a CREATE applies on arrival and "
-            "can be reverted from the inbox; a REPLACE waits in the inbox "
-            "until Michael accepts it and touches no build prompt before "
-            "then. Fields by kind - feature/rule: name, summary, "
+            "Every mode applies on arrival: APPEND, CREATE, REPLACE, and "
+            "RETIRE (switches an entry off; give slug and reason). A nightly "
+            "curator merges, tightens and prunes, and any change can be "
+            "reverted from the History tab of Best Practices, so write for "
+            "any project, not the one you are in. Fields by kind - feature/rule: name, summary, "
             "gold_standard_md, pitfalls_md, reference_project, "
             "reference_path, typical_value (feature only), and for a rule the "
             "scanner that catches it mechanically: check_pattern (a regex one "
@@ -161,7 +162,7 @@ TOOLS = [
                 "field": {"type": "string",
                           "description": "The field to change (not for create)"},
                 "mode": {"type": "string",
-                         "enum": ["append", "replace", "create"]},
+                         "enum": ["append", "replace", "create", "retire"]},
                 "text": {"type": "string",
                          "description": "The text to append, or the full "
                                         "replacement"},
@@ -444,8 +445,8 @@ def tool_suggest_update(args):
     action = data.get("action")
     if action == "applied":
         return (f"Applied to '{data.get('slug')}'. {data.get('note', '')}")
-    if action == "pending":
-        return (f"Filed for '{data.get('slug')}' as proposal "
+    if action in ("pending", "candidate"):
+        return (f"Filed for '{data.get('slug')}' as note "
                 f"#{data.get('id')}. {data.get('note', '')}")
     if action == "unchanged":
         return f"Nothing to do: {data.get('reason', 'already in the catalogue')}."

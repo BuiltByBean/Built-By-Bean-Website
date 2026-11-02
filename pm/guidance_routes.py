@@ -6,14 +6,13 @@ them used to relearn this board's lessons the hard way. These endpoints
 hand the catalogue out live - the rules that hold on every build, the
 guidance behind any feature, the vendor runbooks - and take knowledge BACK.
 
-The write side is the half that keeps the thing alive, and it is shaped by
-what a wrong write could do. A rule rides into every future build prompt,
-so the door does not let a session rewrite one on its own authority.
-Everything a session sends becomes a CatalogueProposal: ADDITIVE changes
-(a lesson appended, a new entry created) apply on arrival, because they
-cannot damage what was already there and can be reverted from the inbox
-in one press; anything that REPLACES existing words waits there as
-pending until Michael accepts it. That policy is by shape, not by trust.
+The write side is the half that keeps the thing alive. Everything a
+session sends becomes a CatalogueProposal and applies on arrival, rewrites
+included: until 2026-11-02 a rewrite waited for Michael's yes, 188 of them
+piled up unread, and he asked for it to "just adjust properly over time".
+What keeps it honest now is the nightly curator (curate_practices.py),
+which merges, tightens and retires, and the History tab, where any change
+goes back in one press.
 
 Below the catalogue sit the operational writes a session is allowed:
 logging an expense or time against a project, filing a project, and
@@ -118,16 +117,65 @@ def rules():
     return jsonify({"rules": [_entry(r) for r in rows]})
 
 
+# What a session can actually be handed at start. Claude Code keeps a hook's
+# output in context only up to about ten thousand characters and swaps
+# anything longer for a 2KB preview and a file path. On 2026-11-02 the full
+# brief was 485 rules and 986KB, so every session on the machine had been
+# starting with the first few rules and nothing else, while the hook
+# reported success.
+INDEX_BUDGET = 9000
+
+
+def rules_index(budget=INDEX_BUDGET):
+    """Every rule as one line, name, slug and summary, inside `budget`.
+
+    The whole rule is one get_feature_guidance away. When the index does not
+    fit, the summaries go before any rule does, and only past that are rules
+    left off, with a count saying how many.
+    """
+    rows = (Feature.query.filter_by(is_active=True, kind="rule")
+            .order_by(Feature.sort_order, Feature.name).all())
+    head = ["THE HOUSE RULES, one line each. Before you build anything a rule "
+            "touches, get_feature_guidance with its slug for the whole rule: "
+            "how to build it and what went wrong last time.", ""]
+    if not rows:
+        return "\n".join(head + ["No rules recorded yet."])
+
+    def line(r, with_summary=True):
+        summary = " ".join((r.summary or "").split())
+        if with_summary and summary:
+            return f"- {r.name} [{r.slug}]: {summary[:140]}"
+        return f"- {r.name} [{r.slug}]"
+
+    for with_summary in (True, False):
+        lines = [line(r, with_summary) for r in rows]
+        text = "\n".join(head + lines)
+        if len(text) <= budget:
+            return text
+    kept, size = [], len("\n".join(head))
+    for entry in lines:
+        if size + len(entry) + 120 > budget:
+            break
+        kept.append(entry)
+        size += len(entry) + 1
+    left = len(rows) - len(kept)
+    return "\n".join(head + kept + [
+        f"... and {left} more. get_feature_guidance with a topic finds them."])
+
+
 @guidance_bp.route("/brief")
 def brief():
-    """Every rule as one piece of text, for a session that wants the whole
-    briefing in one call. Assembled by the same code that writes the MVP
-    build prompts, so the two can never say different things."""
-    from pm.mvp_routes import _house_rules
-    lines = _house_rules()
-    if not lines:
-        lines = ["No rules recorded yet."]
-    return Response("\n".join(lines), mimetype="text/plain")
+    """The rules for a session that is starting. `?full=1` is every rule in
+    full, assembled by the same code that writes the MVP build prompts, so
+    the two can never say different things; without it, the index that fits
+    in the context a session start actually keeps."""
+    if request.args.get("full"):
+        from pm.mvp_routes import _house_rules
+        lines = _house_rules()
+        if not lines:
+            lines = ["No rules recorded yet."]
+        return Response("\n".join(lines), mimetype="text/plain")
+    return Response(rules_index(), mimetype="text/plain")
 
 
 @guidance_bp.route("/search")
@@ -329,7 +377,7 @@ def costs():
     return jsonify({"providers": out, "clients": clients})
 
 
-# ── The inbox: how the catalogue changes ─────────────────
+# ── How the catalogue changes ───────────────────────
 
 # What a session may touch, per kind. Anything else is refused by name,
 # because a whitelist that grows by accident is not a whitelist. `steps` on
@@ -399,18 +447,18 @@ def _stamp(project, text):
 
 
 def _auto_applies(mode):
-    """The policy. Additive on arrival; a rewrite waits for a person."""
-    return mode in ("append", "create")
+    """Everything a session sends applies on arrival."""
+    return mode in ("append", "create", "replace", "retire")
 
 
 # ── The checklist ────────────────────────────────────────
 # A playbook's steps are rows, not prose, so they travel as a list in
 # payload["steps"]: {title, detail_md, client_channel (email or text),
 # client_message_subject, client_message_md}. A step with a client message
-# waits on the client. Append adds to the end and applies on arrival;
-# replace rewrites the list and waits in the inbox; a create may carry
-# them. The inbox reads the checklist as numbered lines, and revert puts
-# back the exact list that was there.
+# waits on the client. Append adds to the end and replace rewrites the
+# list, both on arrival; a create may carry them. History reads the
+# checklist as numbered lines, and revert puts back the exact list that
+# was there.
 STEP_FIELD = "steps"
 MAX_STEPS = 40
 
@@ -455,7 +503,7 @@ def steps_snapshot(playbook):
 
 
 def steps_text(steps):
-    """The checklist as the inbox reads it: one numbered line per step."""
+    """The checklist as History reads it: one numbered line per step."""
     lines = []
     for i, s in enumerate(steps or [], 1):
         flag = "  [waits on the client]" if s.get("client_message_md") else ""
@@ -613,6 +661,12 @@ def apply_proposal(proposal):
     row = _target(proposal.kind, proposal.target_slug)
     if row is None:
         return False, "no such entry"
+    if proposal.mode == "retire":
+        if not row.is_active:
+            return False, "already there"
+        proposal.previous = "active"
+        row.is_active = False
+        return True, ""
     field = proposal.field
     if field not in _fields_for(proposal.kind):
         return False, f"{field} is not a field a session may change"
@@ -652,6 +706,9 @@ def revert_proposal(proposal):
     row = _target(proposal.kind, proposal.target_slug)
     if row is None:
         return False, "no such entry"
+    if proposal.mode == "retire":
+        row.is_active = True
+        return True, ""
     field = proposal.field
     if field == STEP_FIELD:
         return _revert_steps(proposal, row)
@@ -664,17 +721,18 @@ def revert_proposal(proposal):
 
 def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
              hold=False):
-    """Validate, record, and either apply or park. Returns (dict, status).
+    """Validate, record, and apply. Returns (dict, status).
 
-    `hold` parks a change that would otherwise apply on arrival. The repo
-    sweeper uses it: text mined from a CLAUDE.md was written for that
-    repo, and a create would otherwise ride into every build prompt
-    verbatim. Accepting it is one press on the attention page.
+    `hold` files the change as a curator CANDIDATE instead of applying it.
+    The repo sweeper uses it: a section of a repo's CLAUDE.md was written
+    for that repo, and as it stands it would ride into every build prompt.
+    The curator reads it that night and writes a rule for any project from
+    it, folds it into one, or discards it. Nobody has to press anything.
     """
     if kind not in CatalogueProposal.KIND_LABELS:
         return {"error": "kind must be feature, rule, playbook or product"}, 400
-    if mode not in ("append", "replace", "create"):
-        return {"error": "mode must be append, replace or create"}, 400
+    if mode not in ("append", "replace", "create", "retire"):
+        return {"error": "mode must be append, replace, create or retire"}, 400
     if not project:
         return {"error": "project is required - a change with no provenance "
                          "is a change nobody can weigh"}, 400
@@ -688,13 +746,16 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
             return {"error": "slug is required unless creating"}, 400
         if _target(kind, slug) is None:
             return {"error": f"no {kind} with slug {slug!r}"}, 404
-        if field not in _fields_for(kind):
+        if mode == "retire":
+            field = "*"
+            text = text or reason or "retired"
+        elif field not in _fields_for(kind):
             return {"error": f"{field!r} is not a field a session may change "
                              f"on a {kind}; choose from "
                              + ", ".join(_fields_for(kind))}, 400
         if mode == "append" and field not in APPENDABLE:
             return {"error": f"{field} is replaced whole, not appended to"}, 400
-        if field == STEP_FIELD:
+        if mode != "retire" and field == STEP_FIELD:
             steps, err = normalise_steps((payload or {}).get("steps"))
             if err:
                 return {"error": err}, 400
@@ -724,26 +785,18 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
         db.session.commit()
         return {"action": "applied", "id": proposal.id,
                 "slug": proposal.target_slug,
-                "note": "Applied on arrival. It can be reverted from the "
-                        "catalogue inbox."}, 200
+                "note": "Applied on arrival. The nightly curator may merge or "
+                        "tighten it, and it can be reverted from the History "
+                        "tab of Best Practices."}, 200
 
-    # A rewrite. Snapshot what it would replace so the inbox can show the
-    # diff, and wait.
-    if mode == "create":
-        proposal.previous = None  # nothing to put back; a create is retired instead
-    else:
-        row = _target(kind, slug)
-        if field == STEP_FIELD:
-            proposal.previous = steps_text(steps_snapshot(row))
-        else:
-            current = getattr(row, field)
-            proposal.previous = "" if current is None else str(current)
-    proposal.status = "pending"
+    # Held for the curator: raw material, not yet a change.
+    proposal.previous = None
+    proposal.status = "candidate"
     db.session.add(proposal)
     db.session.commit()
-    return {"action": "pending", "id": proposal.id, "slug": slug,
-            "note": "Waiting for Michael in the catalogue inbox. It will "
-                    "not affect any build prompt until accepted."}, 200
+    return {"action": "candidate", "id": proposal.id, "slug": slug,
+            "note": "Filed for tonight's curator, which turns it into a rule "
+                    "for any project, folds it into one, or discards it."}, 200
 
 
 @guidance_bp.route("/proposals", methods=["POST"])
@@ -782,7 +835,7 @@ def report_lesson():
 
     The original door, kept for the sessions that use it: append when the
     entry exists, create a rule when it does not. Both now travel as
-    proposals, so the inbox holds the whole history of what the field has
+    proposals, so History holds the whole record of what the field has
     taught this board and any of it can be put back.
     """
     body = request.get_json(silent=True) or {}

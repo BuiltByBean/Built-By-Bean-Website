@@ -255,8 +255,8 @@ def build_package_prompt(package):
                "not at the end: report_lesson for a bug that cost time, "
                "suggest_update for a runbook step that moved, a better file "
                "to copy, a rule that reads badly, or a product that now "
-               "exists. Appends and creates apply at once; a rewrite waits "
-               "for Michael in the inbox.")
+               "exists. Every change applies at once, and a nightly curator "
+               "merges and prunes, so write for any project, not this one.")
     out.append("  File the work as it happens: upsert_project once, log_time "
                "and log_expense as they occur, register_hosting_resource "
                "for anything stood up.")

@@ -2995,13 +2995,20 @@ class CatalogueProposal(db.Model):
     difference between a catalogue that learns and one that can be vandalised
     by a single confused session.
 
-    The policy is by shape, not by trust. Anything ADDITIVE - a lesson
-    appended, a new rule or feature created - applies on arrival, because it
-    cannot damage what was already there and can be reverted from the inbox
-    in one press. Anything that REPLACES existing words waits as `pending`
-    until Michael accepts it. `previous` is the snapshot that makes revert
-    possible; `payload_json` carries a create, whose fields do not fit one
-    column.
+    Everything applies on arrival, rewrites included (Michael, 2026-11-02:
+    "stop this waiting on a yes thing, just have it adjust properly over
+    time"). The inbox held 188 rewrites and swept notes nobody was ever going
+    to read one at a time, so the safety it promised was never delivered.
+    What keeps the catalogue honest now is the nightly curator
+    (`curate_practices.py`), which merges, tightens and retires, and the
+    History tab, where any change still goes back in one press. `previous`
+    is the snapshot that makes revert possible; `payload_json` carries a
+    create, whose fields do not fit one column.
+
+    `candidate` is raw material rather than a change: a section the sweeper
+    read in a repo's CLAUDE.md. Repo prose is written for that repo, so it
+    never rides into a build prompt as it stands; the curator reads it and
+    either writes a rule for any project, folds it into one, or discards it.
     """
 
     __tablename__ = "catalogue_proposals"
@@ -3012,7 +3019,7 @@ class CatalogueProposal(db.Model):
     target_slug = db.Column(db.String(80), nullable=True, index=True)
     # The column being changed, or "*" for a create.
     field = db.Column(db.String(40), nullable=False)
-    # append | replace | create
+    # append | replace | create | retire
     mode = db.Column(db.String(10), nullable=False)
     proposed = db.Column(db.Text, default="")
     previous = db.Column(db.Text, nullable=True)
@@ -3020,8 +3027,9 @@ class CatalogueProposal(db.Model):
     # Which project's session learned it. A change with no provenance is a
     # change nobody can weigh.
     project = db.Column(db.String(120), default="")
-    # applied (auto) | pending | accepted | rejected | reverted
-    status = db.Column(db.String(10), nullable=False, default="pending", index=True)
+    # applied | reverted | candidate | curated | discarded. Older rows also
+    # carry accepted and rejected from when rewrites waited on a person.
+    status = db.Column(db.String(10), nullable=False, default="applied", index=True)
     payload_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     decided_at = db.Column(db.DateTime, nullable=True)
@@ -3036,6 +3044,43 @@ class CatalogueProposal(db.Model):
 
     def __repr__(self):
         return f"<CatalogueProposal {self.kind}:{self.target_slug} {self.mode} {self.status}>"
+
+
+class CuratorRun(db.Model):
+    """One night of the curator, and what it did to Best Practices.
+
+    The changes themselves are CatalogueProposal rows with project
+    "curator", so each one reverts on its own; this is the night as a whole,
+    which is what the History tab leads with. `status` is ok, partial (it
+    ran and something failed), skipped (no ANTHROPIC_API_KEY) or failed.
+    """
+
+    __tablename__ = "curator_runs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    finished_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(10), nullable=False, default="running")
+    model = db.Column(db.String(60), default="")
+    added = db.Column(db.Integer, nullable=False, default=0)
+    folded = db.Column(db.Integer, nullable=False, default=0)
+    merged = db.Column(db.Integer, nullable=False, default=0)
+    tightened = db.Column(db.Integer, nullable=False, default=0)
+    retired = db.Column(db.Integer, nullable=False, default=0)
+    discarded = db.Column(db.Integer, nullable=False, default=0)
+    rules_before = db.Column(db.Integer, nullable=True)
+    rules_after = db.Column(db.Integer, nullable=True)
+    input_tokens = db.Column(db.Integer, nullable=False, default=0)
+    output_tokens = db.Column(db.Integer, nullable=False, default=0)
+    note = db.Column(db.Text, default="")
+
+    @property
+    def changed(self):
+        return (self.added + self.folded + self.merged + self.tightened
+                + self.retired)
+
+    def __repr__(self):
+        return f"<CuratorRun {self.started_at} {self.status}>"
 
 
 class MvpPackage(db.Model):
