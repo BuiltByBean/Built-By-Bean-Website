@@ -10,7 +10,7 @@
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
-    <div class="glass-card p-6">
+    <div class="glass-card p-6 relative z-30">
         <form method="POST" enctype="multipart/form-data">
             <div class="space-y-5">
                 <div>
@@ -84,6 +84,13 @@
                     {{ select_dropdown("project_id", project_options,
                                        link.project_id if link else '',
                                        "Not a client project", full_width=true) }}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Shows under</label>
+                    {{ select_dropdown("board_group", group_options,
+                                       link.board_group or '' if link else '',
+                                       "Follows the project", full_width=true) }}
                 </div>
 
                 <div class="rounded-xl border border-white/10 bg-surface-800/40 p-4">

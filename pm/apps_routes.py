@@ -77,10 +77,12 @@ def _refresh_icon(link):
 def index():
     """The board, split by whose work it is.
 
-    An app belongs to a client engagement or it does not, and that is already
-    what project_id says - client work first, because that is the half with
-    somebody waiting on it. Ordering inside each group stays by id, so a tile
-    does not move under the cursor when a project is attached or detached.
+    Client work first, because that is the half with somebody waiting on it.
+    Which half a tile is in is the project it carries unless the tile says
+    otherwise (AppLink.board_group): a project is a record of who paid for a
+    build, not a promise that it is current work. Ordering inside each group
+    stays by id, so a tile does not move under the cursor when it changes
+    halves.
     """
     apps = AppLink.query.order_by(AppLink.id).all()
     # A phone app's store versions are asked for on the way in when the last
@@ -95,8 +97,8 @@ def index():
     return render_template(
         "pm/apps/index.html",
         groups=[
-            {"label": "Client work", "apps": [a for a in apps if a.project_id]},
-            {"label": "Mine", "apps": [a for a in apps if not a.project_id]},
+            {"label": "Client work", "apps": [a for a in apps if a.is_client_work]},
+            {"label": "Mine", "apps": [a for a in apps if not a.is_client_work]},
         ],
         total=len(apps))
 
@@ -175,6 +177,8 @@ def edit(id=None):
         # the board that is mine rather than a client's.
         chosen = request.form.get("project_id", type=int)
         link.project_id = chosen if chosen and db.session.get(Project, chosen) else None
+        group = request.form.get("board_group") or ""
+        link.board_group = group if group in AppLink.BOARD_GROUPS else None
         db.session.flush()
 
         upload = request.files.get("icon_upload")
@@ -209,8 +213,10 @@ def edit(id=None):
         (p.id, f"{p.name} - {p.client.name}")
         for p in Project.query.order_by(Project.name).all()
     ]
+    group_options = [("", "Follows the project"), ("client", "Client work"), ("mine", "Mine")]
     return render_template("pm/apps/form.html", link=link,
-                           project_options=project_options)
+                           project_options=project_options,
+                           group_options=group_options)
 
 
 @apps_bp.route("/<int:id>/refresh-icon", methods=["POST"])

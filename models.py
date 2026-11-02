@@ -1745,7 +1745,25 @@ class AppLink(db.Model):
     project = db.relationship("Project", backref=db.backref(
         "apps", lazy="select", order_by="AppLink.name"))
 
+    # Which half of My Apps the tile sits in, when that is not what the
+    # project says: "client" or "mine", NULL to follow the project (attached
+    # means client work), which is every tile made before 2026-11-01. The two
+    # questions came apart that day: Robinson & Co., Christ Community Church,
+    # Lets Cook and Piped have projects and are not current client work, and
+    # Data Dungeon has none and is (Michael). A column of its own rather than
+    # detaching the project, because the project page still lists its app and
+    # register_app re-attaches the project on its next call.
+    board_group = db.Column(db.String(10), nullable=True)
+    BOARD_GROUPS = ("client", "mine")
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_client_work(self):
+        """Which half of My Apps: the choice made on the tile, else the project."""
+        if self.board_group in self.BOARD_GROUPS:
+            return self.board_group == "client"
+        return self.project_id is not None
 
     @property
     def is_external(self):

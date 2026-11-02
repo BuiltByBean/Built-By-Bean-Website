@@ -72,6 +72,14 @@ because one arrived as "Robinson &amp; Co." and was shown that way. The
 migration that folded the pairs together keeps the oldest name, the real
 domain, and every link and icon the others carried.
 
+My Apps splits into Client work and Mine by the project a tile carries,
+unless the tile says otherwise (`AppLink.board_group`, "Shows under" on the
+edit form). The two came apart on 2026-11-01: Robinson & Co., Christ
+Community Church, Lets Cook and Piped have projects and are not current
+client work, and Data Dungeon has no client and is. Never move a tile by
+detaching its project: the project page lists its app, and `register_app`
+re-attaches the project on the next call. `tools/test_app_groups.py`.
+
 A phone app's tile also carries its two store ids (`app_store_bundle_id`,
 `play_package`; `register_app` takes them as `app_store_bundle_id` /
 `play_package`, or `bundle_id` / `package`) and the last answer each PUBLIC
