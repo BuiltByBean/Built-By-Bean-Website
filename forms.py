@@ -87,13 +87,25 @@ HOSTING_CYCLE_CHOICES = [
     ("annually", "Annually"),
 ]
 
+# The bank feed (bank_feed.py) and Claude's suggestions file into these too,
+# and the tax reports group them, so a new one needs a home there as well.
 EXPENSE_CATEGORY_CHOICES = [
     ("software", "Software"),
     ("hosting", "Hosting"),
+    ("ai_services", "AI services"),
+    ("domain", "Domains"),
     ("design", "Design"),
     ("hardware", "Hardware"),
     ("travel", "Travel"),
+    ("meals", "Meals"),
     ("subcontractor", "Subcontractor"),
+    ("legal_professional", "Legal and professional"),
+    ("advertising", "Advertising"),
+    ("taxes_licenses", "Taxes and licenses"),
+    ("bank_fees", "Bank and card fees"),
+    ("phone_internet", "Phone and internet"),
+    ("office", "Office and supplies"),
+    ("education", "Education"),
     ("billable_time", "Billable Time"),
     ("service_cost", "Service Cost"),
     ("misc", "Miscellaneous"),

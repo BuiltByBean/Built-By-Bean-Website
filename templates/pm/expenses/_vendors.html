@@ -27,6 +27,20 @@
 </div>
 {% endfor %}
 
+{# Bank lines nobody has a rule for yet. Until they are settled the books are
+   missing that money, so this sits with the other things that make the
+   totals wrong (bank_feed.py). #}
+{% set to_sort = bank_review_count() %}
+{% if to_sort %}
+<div class="glass-card p-4 flex flex-wrap items-center gap-3 border-amber-500/40">
+    <p class="w-full sm:flex-1 sm:min-w-0 text-sm font-semibold text-white">
+        {{ to_sort | commas }} bank line{{ '' if to_sort == 1 else 's' }} to sort</p>
+    <a href="{{ url_for('bank.review') }}"
+       class="w-full sm:w-auto justify-center px-4 min-h-[44px] inline-flex items-center text-sm font-semibold rounded-xl btn-brand transition-all shrink-0">
+        Sort them</a>
+</div>
+{% endif %}
+
 <div class="glass-card px-4 sm:px-5 py-3">
     <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
 

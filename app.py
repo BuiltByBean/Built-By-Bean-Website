@@ -23,7 +23,7 @@ import time
 from tax_engine import compute as tax_compute
 from models import (
     db, Client, ClientContact, Project, Ticket, TicketNote, Expense, TimeEntry,
-    Document, User,
+    Document, User, Business,
     Invoice, InvoiceLineItem, TimerSession, TaxSetting,
     ServiceProvider, ServiceCostEntry, ServiceMapping,
     Playbook, PlaybookStep, ProjectPlaybook, ProjectPlaybookStep,
@@ -340,6 +340,8 @@ def create_app():
 
     from pm.practices_routes import practices_bp
     app.register_blueprint(practices_bp)
+    from pm.bank_routes import bank_bp
+    app.register_blueprint(bank_bp)
 
     # ── The people who may open this board ─────────────────
     from pm.users_routes import users_bp
@@ -3696,6 +3698,7 @@ def create_app():
         category = request.args.get("category", "")
         project_id = request.args.get("project_id", "", type=str)
         client_id = request.args.get("client_id", "", type=str)
+        business_id = request.args.get("business_id", "", type=str)
 
         # Only real (material) expenses - time-entry-linked "billable time" rows are
         # pipeline revenue, not expenses, and are shown on the Time Tracking side.
@@ -3706,6 +3709,12 @@ def create_app():
                 q = q.filter(Expense.project_id == int(project_id))
             if client_id:
                 q = q.filter(Expense.client_id == int(client_id))
+            if business_id:
+                # A company's books include its DBAs' (Data Dungeon trades
+                # under Built by Bean LLC, so its costs are the LLC's too).
+                family = [int(business_id)] + [b.id for b in Business.query.filter_by(
+                    parent_id=int(business_id)).all()]
+                q = q.filter(Expense.business_id.in_(family))
             return q
 
         query = _filtered(Expense.query.filter(Expense.time_entry_id.is_(None))
@@ -3803,6 +3812,8 @@ def create_app():
             expenses=pagination.items, pagination=pagination, projects=projects,
             clients=clients, category=category, project_id=project_id,
             client_id=client_id, total_expenses=total_expenses, summary=summary,
+            business_id=business_id,
+            businesses=Business.query.order_by(Business.parent_id.isnot(None), Business.name).all(),
             providers=providers, vendors=vendor_health(providers),
             vendor_by_expense=vendor_by_expense,
             manual_monthly=MANUAL_MONTHLY_PROVIDERS, pending_manual=pending_manual)

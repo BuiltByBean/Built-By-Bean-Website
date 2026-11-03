@@ -194,6 +194,48 @@ five minutes as a NEW row with a new id and a new status, and archiving it
 did nothing anybody could see. Mail without that header now gets a
 fingerprint of its sender, date and subject.
 
+## The books stand on the bank
+
+Michael, 2026-11-03: "I use an unbelievable amount of services ... I need my
+expense tracking automated to like the highest degree ... broken out
+specifically by business as well, so that way I'm not accidentally double
+counting." Of the 35 playbooks, only Railway, AWS and Google Cloud report
+money through an API; Sentry, Resend, Postmark, Claude's own subscription,
+Apple's $99, LegalZoom and Cloudflare's renewals report nothing, and the
+prepaid ones (Twilio, the Anthropic and OpenAI APIs) report usage while the
+money left on a top-up. Every dollar leaves a bank, so the bank is the
+record: `bank_feed.py`, one `BankTransaction` per money movement, and that
+line is the ONLY thing allowed to make an expense. A vendor's own report is
+evidence and a way to split money across projects, never a second expense.
+
+`Expense.business_id` is whose books, filled in for every path by a
+`before_insert` listener (the business the board bills from, or a recurring
+child's parent's), and a company's books include its DBAs'. A
+`BankConnection` is one business's Mercury token, read only, typed on that
+business's page by its owner and never shown again; Mercury tokens open one
+organisation, so the connection's business is the attribution. Nightly, after
+the vendor syncs (`sync_costs._sweep`), every line since `synced_from` (April
+2026) is upserted on Mercury's id and the last ten days are read again,
+because a pending charge changes amount when it settles.
+
+What a line is (`classify`): void (cancelled, its expense removed), transfer
+(Mercury's internal kinds, or a rule), expense (booked only once SETTLED,
+Mercury's own fees without a rule, a vendor refund as a negative expense),
+covered (a vendor sync already books it: Railway, Cloudflare, Claude, but
+only in Built by Bean's books, because those syncs write only Built by
+Bean's expenses), income, personal, or review. `VendorRule` is what a
+counterparty is, longest pattern wins, written when a line is settled with
+"remember" on, and settling one settles every waiting line like it.
+`/admin/bank/` is the review list with Claude's suggestion filled in
+(`suggest`, needs `ANTHROPIC_API_KEY`) and one press to accept them all.
+
+`adopt` is the guard against the commonest double count: an expense somebody
+already booked for the same charge (the expense form, or a session's
+`log_expense`, which now takes `business`) is ADOPTED by the bank line, not
+written twice: same company, same amount to the cent, dated up to seven days
+before the bank's date or three after, not standing for another line and not
+written by a vendor sync. `tools/test_bank_feed.py`.
+
 ## What a month of usage cost
 
 `service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows

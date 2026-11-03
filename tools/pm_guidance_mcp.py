@@ -237,6 +237,10 @@ TOOLS = [
                            "description": "Client name or id, if any"},
                 "project": {"type": "string",
                             "description": "Project name or id, if any"},
+                "business": {"type": "string",
+                             "description": "Whose books: business name or id. "
+                                            "Default Built by Bean; EntertainHQ "
+                                            "LLC keeps its own"},
                 "date": {"type": "string", "description": "YYYY-MM-DD, "
                                                           "default today"},
                 "source": SOURCE,

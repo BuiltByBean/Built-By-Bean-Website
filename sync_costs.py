@@ -96,6 +96,14 @@ def _sweep():
         audit_repos.main()
     except Exception as err:  # noqa: BLE001
         print(f"repo sweep failed: {str(err)[:200]}", flush=True)
+    # Each business's bank, after the vendor syncs so a line a vendor's sync
+    # covers finds that vendor's expense already written.
+    try:
+        import bank_feed
+        print("reading each business's bank", flush=True)
+        bank_feed.main()
+    except Exception as err:  # noqa: BLE001
+        print(f"bank feed failed: {str(err)[:200]}", flush=True)
     # Last, because it reads what the sweep filed and what the audit found.
     try:
         import curate_practices

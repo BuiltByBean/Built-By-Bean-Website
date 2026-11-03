@@ -121,6 +121,68 @@
             {{ icon_glyph('map', 'w-4 h-4') }} Open the map</span>
     </a>
 
+    {# Its bank, read nightly into its own books (bank_feed.py). The token is
+       typed here by the owner, checked against Mercury before it is kept, and
+       never shown again. #}
+    {% set banks = bank_connections_for(b) %}
+    <div id="bank" class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Bank</h3>
+        {% for c in banks %}
+        {% set accts = c.accounts %}
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-surface-800/40 min-w-0">
+            {# Its own line on a phone: three buttons beside it left the name
+               one letter wide. #}
+            <div class="w-full sm:w-auto sm:flex-1 min-w-0">
+                <p class="text-sm font-semibold text-white break-words">{{ c.label or 'Mercury' }}{% if accts %} &middot; {{ accts.values() | join(', ') }}{% endif %}</p>
+                <p class="text-xs mt-0.5 break-words {{ 'text-red-300' if c.last_ok == false else 'text-surface-400' }}">
+                    {% if c.last_synced_at %}{{ c.last_synced_at.strftime('%b') }} {{ c.last_synced_at.day }}: {% endif %}{{ c.last_note or 'Not read yet' }}</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 ml-auto">
+                <form method="POST" action="{{ url_for('bank.sync', id=c.id) }}">
+                    <input type="hidden" name="next" value="{{ url_for('businesses.detail', id=b.id) }}#bank">
+                    <button type="submit"
+                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        Read now</button>
+                </form>
+                <a href="{{ url_for('bank.review') }}"
+                   class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                    Lines</a>
+                <form method="POST" action="{{ url_for('bank.disconnect', id=c.id) }}">
+                    {{ delete_icon(question='Disconnect it?', label='Disconnect ' ~ (c.label or 'Mercury')) }}
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% if not banks %}
+        <form method="POST" action="{{ url_for('bank.connect') }}" autocomplete="off"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3">
+            <input type="hidden" name="business_id" value="{{ b.id }}">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="min-w-0">
+                    <label for="bank-label" class="block text-sm font-medium text-surface-300 mb-1.5">Bank</label>
+                    <input id="bank-label" name="label" value="Mercury" maxlength="120"
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl">
+                </div>
+                <div class="min-w-0">
+                    <label for="bank-token" class="block text-sm font-medium text-surface-300 mb-1.5">Read only API token</label>
+                    <input id="bank-token" name="token" type="password" autocomplete="new-password" required
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl">
+                </div>
+                <div class="min-w-0">
+                    <label for="bank-from" class="block text-sm font-medium text-surface-300 mb-1.5">Books start</label>
+                    <input id="bank-from" name="synced_from" type="date" value="2026-04-01"
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl">
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit"
+                        class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Connect</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+
     {# Its paperwork: what LegalZoom filed and the IRS sent back. relative
        z-30 (LM-1), because the kind picker opens over the cards below. #}
     <div id="documents" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">

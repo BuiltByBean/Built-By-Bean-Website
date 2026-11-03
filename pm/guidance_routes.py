@@ -1014,6 +1014,19 @@ def log_expense():
             if err:
                 return jsonify({"error": err}), 400
 
+    # Whose books. Omitted is the business the board bills from; a name or
+    # id names another (EntertainHQ LLC keeps its own).
+    business_id = None
+    ref = _cap(body.get("business"), 200)
+    if ref:
+        from models import Business
+        biz = (db.session.get(Business, int(ref)) if ref.isdigit() else
+               Business.query.filter(db.or_(Business.name.ilike(f"%{ref}%"),
+                                            Business.short_name.ilike(f"%{ref}%"))).first())
+        if biz is None:
+            return jsonify({"error": f"no business matches {ref!r}"}), 400
+        business_id = biz.id
+
     source = _cap(body.get("source"), 120)
     if source:
         description = f"{description} (logged from {source})"
@@ -1022,6 +1035,7 @@ def log_expense():
         category=_cap(body.get("category"), 50) or "misc", date=when,
         client_id=client.id if client else None,
         project_id=project.id if project else None,
+        business_id=business_id,
     )
     db.session.add(expense)
     db.session.commit()

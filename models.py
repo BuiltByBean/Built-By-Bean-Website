@@ -660,7 +660,17 @@ class Expense(db.Model):
     recurring_end_date = db.Column(db.Date, nullable=True)
     next_due_date = db.Column(db.Date, nullable=True)
     parent_expense_id = db.Column(db.Integer, db.ForeignKey("expenses.id", ondelete="SET NULL"), nullable=True)
+    # Whose books it is in. Michael, 2026-11-03: two companies' expenses on
+    # one board, "so that way I'm not accidentally double counting". Null is
+    # never written: the before_insert listener below fills in the business
+    # the board bills from, so every path that makes an expense (a form, a
+    # sync, the guidance door, a recurring child) lands in somebody's books.
+    # A division (a DBA) may be named here; its tax is its parent's.
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="SET NULL", name="fk_expenses_business_id"),
+        nullable=True, index=True)
 
+    business = db.relationship("Business", foreign_keys=[business_id])
     client = db.relationship("Client", backref="expenses")
     project = db.relationship("Project", backref="expenses")
     ticket = db.relationship("Ticket", back_populates="expenses")
@@ -683,6 +693,200 @@ class Expense(db.Model):
 
     def __repr__(self):
         return f"<Expense ${self.amount} - {self.description}>"
+
+
+def home_business_id():
+    """The business this board bills from: Built by Bean. None before one is
+    on file, which only a fresh test database ever is."""
+    row = (Business.query.filter_by(sales_source="board", parent_id=None)
+           .order_by(Business.id).first())
+    if row is None:
+        row = Business.query.filter_by(parent_id=None).order_by(Business.id).first()
+    return row.id if row else None
+
+
+@db.event.listens_for(Expense, "before_insert")
+def _expense_has_a_business(mapper, connection, target):
+    if target.business_id is None and target.parent_expense_id is not None:
+        parent = connection.execute(
+            db.text("SELECT business_id FROM expenses WHERE id = :i"),
+            {"i": target.parent_expense_id}).scalar()
+        target.business_id = parent
+    if target.business_id is None:
+        row = connection.execute(db.text(
+            "SELECT id FROM businesses WHERE sales_source = 'board' AND parent_id IS NULL "
+            "ORDER BY id LIMIT 1")).scalar()
+        if row is None:
+            row = connection.execute(db.text(
+                "SELECT id FROM businesses WHERE parent_id IS NULL ORDER BY id LIMIT 1")).scalar()
+        target.business_id = row
+
+
+class BankConnection(db.Model):
+    """One business's bank, read nightly. Mercury first.
+
+    Michael, 2026-11-03: "I need my expense tracking automated to like the
+    highest degree ... broken out specifically by business ... so that way
+    I'm not accidentally double counting." Most vendors have no billing API,
+    but every dollar a business spends leaves its bank, so the bank is what
+    the books are built on: one row per money movement, and nothing else
+    may book that money a second time.
+
+    A Mercury token opens one organisation, which is one company, so the
+    connection's business IS the attribution for everything it reads. The
+    token is read only; it is typed into the business's page by its owner
+    and never by anybody on his behalf. `synced_from` is where history
+    starts (the books begin in April 2026).
+    """
+
+    __tablename__ = "bank_connections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_bank_connections_business_id"),
+        nullable=False, index=True)
+    provider = db.Column(db.String(20), nullable=False, default="mercury")
+    label = db.Column(db.String(120), default="")
+    token = db.Column(db.Text, default="")
+    synced_from = db.Column(db.Date, nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    last_ok = db.Column(db.Boolean, nullable=True)
+    last_note = db.Column(db.String(300), default="")
+    accounts_json = db.Column(db.Text, default="{}")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "bank_connections", cascade="all, delete-orphan"))
+
+    @property
+    def accounts(self):
+        """{Mercury account id: its name}, as last read."""
+        import json
+        try:
+            return json.loads(self.accounts_json or "{}") or {}
+        except ValueError:
+            return {}
+
+    def __repr__(self):
+        return f"<BankConnection {self.provider} for business {self.business_id}>"
+
+
+class VendorRule(db.Model):
+    """What a counterparty on a bank line is, learned once and applied for good.
+
+    Written when Michael (or the curator of the review list) settles a line
+    and keeps "remember" on. `pattern` is matched against the normalised
+    counterparty and bank description; the longest matching pattern wins, so
+    "GOOGLE WORKSPACE" beats "GOOGLE". `business_id` is whose expense it is,
+    which can differ from whose card paid it: that difference is money one
+    company lent the other, and the reports say so. `disposition`:
+      expense   an expense in its business's books
+      covered   a vendor sync already books this money (Railway, Cloudflare,
+                Claude); the bank line is evidence, not a second expense
+      transfer  money moving between the owner's own accounts
+      income    money in
+      personal  not a business cost at all
+    """
+
+    __tablename__ = "vendor_rules"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pattern = db.Column(db.String(120), nullable=False, unique=True)
+    vendor = db.Column(db.String(120), default="")
+    disposition = db.Column(db.String(12), nullable=False, default="expense")
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="SET NULL", name="fk_vendor_rules_business_id"), nullable=True)
+    category = db.Column(db.String(50), default="misc")
+    client_id = db.Column(db.Integer, db.ForeignKey(
+        "clients.id", ondelete="SET NULL", name="fk_vendor_rules_client_id"), nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey(
+        "projects.id", ondelete="SET NULL", name="fk_vendor_rules_project_id"), nullable=True)
+    provider_id = db.Column(db.Integer, db.ForeignKey(
+        "service_providers.id", ondelete="SET NULL", name="fk_vendor_rules_provider_id"), nullable=True)
+    note = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business")
+    client = db.relationship("Client")
+    project = db.relationship("Project")
+    provider = db.relationship("ServiceProvider")
+
+    DISPOSITIONS = (("expense", "Business expense"), ("covered", "Booked by its vendor sync"),
+                    ("transfer", "Transfer between my accounts"), ("income", "Money in"),
+                    ("personal", "Personal, not the business"))
+    DISPOSITION_LABELS = dict(DISPOSITIONS)
+
+    def __repr__(self):
+        return f"<VendorRule {self.pattern} -> {self.disposition}>"
+
+
+class BankTransaction(db.Model):
+    """One line off a business's bank, exactly as the bank reported it.
+
+    Upserted on (connection, external id), because a card charge starts
+    pending, changes amount when it settles, and can be cancelled. The
+    expense it makes (`expense_id`) is written only once the line has
+    settled, rewritten if the bank changes it, and removed if the bank
+    voids it. `amount` keeps the bank's sign: negative is money out.
+    `disposition` is what it turned out to be (VendorRule's words, plus
+    `review` while nobody knows and `void` when the bank cancelled it).
+    """
+
+    __tablename__ = "bank_transactions"
+    __table_args__ = (
+        db.UniqueConstraint("connection_id", "external_id", name="uq_bank_transactions_connection_external"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey(
+        "bank_connections.id", ondelete="CASCADE", name="fk_bank_transactions_connection_id"),
+        nullable=False, index=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_bank_transactions_business_id"),
+        nullable=False, index=True)
+    external_id = db.Column(db.String(80), nullable=False)
+    account_id = db.Column(db.String(80), default="")
+    account_name = db.Column(db.String(120), default="")
+    status = db.Column(db.String(12), default="")
+    kind = db.Column(db.String(40), default="")
+    amount = db.Column(db.Float, nullable=False)
+    occurred_on = db.Column(db.Date, nullable=False, index=True)
+    posted_at = db.Column(db.DateTime, nullable=True)
+    counterparty = db.Column(db.String(200), default="")
+    description = db.Column(db.String(300), default="")
+    note = db.Column(db.Text, default="")
+    merchant_category = db.Column(db.String(80), default="")
+    bank_category = db.Column(db.String(60), default="")
+    card_id = db.Column(db.String(60), default="")
+    link = db.Column(db.String(300), default="")
+    disposition = db.Column(db.String(12), nullable=False, default="review", index=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey(
+        "vendor_rules.id", ondelete="SET NULL", name="fk_bank_transactions_rule_id"), nullable=True)
+    expense_id = db.Column(db.Integer, db.ForeignKey(
+        "expenses.id", ondelete="SET NULL", name="fk_bank_transactions_expense_id"), nullable=True)
+    suggestion_json = db.Column(db.Text, nullable=True)
+    raw_json = db.Column(db.Text, default="{}")
+    decided_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    connection = db.relationship("BankConnection", backref=db.backref(
+        "transactions", lazy="dynamic", cascade="all, delete-orphan"))
+    business = db.relationship("Business")
+    rule = db.relationship("VendorRule")
+    expense = db.relationship("Expense", backref=db.backref("bank_lines", lazy="dynamic"))
+
+    @property
+    def suggestion(self):
+        import json
+        try:
+            return json.loads(self.suggestion_json) if self.suggestion_json else None
+        except ValueError:
+            return None
+
+    def __repr__(self):
+        return f"<BankTransaction {self.occurred_on} {self.amount} {self.counterparty}>"
 
 
 class TimeEntry(db.Model):
