@@ -151,11 +151,24 @@ with application.app_context():
           lines[("TARGET 00012345", 10.0)].disposition == "review")
     check("the Railway charge is covered by its sync",
           lines[("RAILWAY", -20.0)].disposition == "covered" and lines[("RAILWAY", -20.0)].expense_id is None)
+    moved = statements.import_rows(personal, [
+        {"date": date(2026, 10, 20), "description": "CHASE ONLINE TRANSFER FROM BUSINESS", "amount": 300.0,
+         "kind": "ACCT_XFER", "ref": "st:moved-in"},
+        {"date": date(2026, 10, 21), "description": "ONLINE TRANSFER TO MERCURY", "amount": -200.0,
+         "kind": "ACCT_XFER", "ref": "st:moved-out"}])
+    inn = BankTransaction.query.filter_by(connection_id=personal.id, external_id="st:moved-in").one()
+    out = BankTransaction.query.filter_by(connection_id=personal.id, external_id="st:moved-out").one()
+    check("a contribution rule on a personal account settles as a transfer",
+          inn.disposition == "transfer" and not inn.owner_name, inn.disposition)
+    bank_feed.decide(out, "contribution", pattern="ONLINE TRANSFER TO MERCURY", owner_name="Michael Bean")
+    out = db.session.get(BankTransaction, out.id)
+    check("money moved from a personal account to a company is a transfer there, not counted twice",
+          out.disposition == "transfer" and out.expense_id is None, out.disposition)
     check("Claude is told the line is on a personal card",
           "PERSONAL CARD of Michael Bean" in bank_feed._account_words(gh))
     again = statements.import_rows(personal, statements.parse(CHASE_CREDIT))
     check("the same statement twice stores nothing twice",
-          again["new"] == 0 and BankTransaction.query.filter_by(connection_id=personal.id).count() == 7)
+          again["new"] == 0 and BankTransaction.query.filter_by(connection_id=personal.id).count() == 9)
     money = books_service.owner_money_between(bbb, date(2026, 1, 1), date(2027, 1, 1))
     check("the owner put in the GitHub and the Railway he paid personally",
           money.get("Michael Bean", {}).get("in") == 24.0, money)

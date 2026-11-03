@@ -248,6 +248,9 @@ def classify(line, rules=None):
             line.disposition = rule.disposition
             if rule.disposition in ("contribution", "draw"):
                 line.owner_name = rule.owner_name or ""
+                if is_personal(line):
+                    line.disposition = "transfer"
+                    line.owner_name = ""
             if rule.disposition == "covered":
                 owner = rule.business_id or line.business_id
                 if not provider_books(rule.provider, owner):
@@ -475,11 +478,17 @@ def decide(line, disposition, *, business_id=None, category="misc", client_id=No
     from models import db, VendorRule
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     line.decided_at = now
+    # Money between an owner's own account and a company's is recorded once,
+    # on the company's side (Mercury's deposit from Chase is the contribution,
+    # the business checking's transfer out is the draw). Its other half, on
+    # the owner's personal account, is a transfer, or it would count twice.
+    if is_personal(line) and disposition in ("contribution", "draw"):
+        disposition, owner_name = "transfer", ""
     if keep and pattern:
         rule = remember(pattern, disposition, vendor=vendor, business_id=business_id,
                         category=category, client_id=client_id, project_id=project_id,
                         owner_name=owner_name,
-                        applies_to="personal" if disposition == "personal" and is_personal(line)
+                        applies_to="personal" if disposition in ("personal", "transfer") and is_personal(line)
                         else "all")
         classify(line, VendorRule.query.all())
         line.decided_at = now
@@ -524,7 +533,10 @@ or a booking platform buys (software, hosting, domains, developer tools, \
 business subscriptions, a vendor already known below). Restaurants, fuel, \
 groceries, shops, travel and entertainment on a personal card are personal \
 unless the known vendors say otherwise, and money in on a personal card is \
-a refund or a card payment, never income. Name the \
+a refund or a card payment, never income. On a personal account, money \
+moving to or from his own other accounts or the companies' accounts \
+(online transfers, Zelle to himself, paying his own card) is a transfer: \
+the company's side records it as a contribution or a draw. Name the \
 vendor in plain words, and give the PATTERN: the shortest stable piece of \
 the counterparty or bank text that will appear on every future charge from \
 this vendor and on no other (e.g. "GITHUB", "GOOGLE WORKSPACE", not a \
