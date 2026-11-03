@@ -226,7 +226,7 @@ for url in ("/admin/books/", f"/admin/books/{ids['bbb']}/year/2026", f"/admin/bo
     r = c.get(url)
     body = r.get_data(as_text=True)
     check(f"{url} renders", r.status_code == 200, r.status_code)
-    check(f"{url} has no em dash", "—" not in body)
+    check(f"{url} has no em dash", "\u2014" not in body)
 yr = c.get(f"/admin/books/{ids['bbb']}/year/2026").get_data(as_text=True)
 check("the single-owner report shows Schedule C line numbers", "(line 17)" in yr)
 ehq_yr = c.get(f"/admin/books/{ids['ehq']}/year/2026").get_data(as_text=True)
