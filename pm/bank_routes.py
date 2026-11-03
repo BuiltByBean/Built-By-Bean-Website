@@ -82,7 +82,7 @@ def review():
                    .order_by(BankConnection.id).all())
     return render_template(
         "pm/bank/review.html", lines=lines, view=view, waiting=waiting, suggested=suggested,
-        connections=connections,
+        connections=connections, suggesting=bank_feed.suggesting(),
         business_options=[(b.id, b.name) for b in businesses],
         project_options=[(0, "No project")] + [(p.id, p.name) for p in projects],
         disposition_options=DISPOSITIONS, category_options=CATEGORIES, norm=bank_feed.norm,
@@ -143,13 +143,14 @@ def accept_suggested():
 @bank_bp.route("/suggest", methods=["POST"])
 @ceo_required
 def suggest_now():
-    try:
-        n = bank_feed.suggest()
-    except Exception as err:  # noqa: BLE001
-        flash(f"Claude could not be asked: {str(err)[:160]}", "warning")
+    import os
+    from flask import current_app
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        flash("No ANTHROPIC_API_KEY on the board.", "warning")
         return redirect(url_for("bank.review"))
-    flash(f"{n:,} line{'' if n == 1 else 's'} given a suggestion." if n
-          else "Nothing to ask, or no ANTHROPIC_API_KEY on the board.", "success" if n else "warning")
+    started = bank_feed.suggest_in_background(current_app._get_current_object())
+    flash("Claude is reading the lines. Reload in a few minutes." if started
+          else "Claude is already reading them.", "success")
     return redirect(url_for("bank.review"))
 
 

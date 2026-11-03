@@ -151,6 +151,8 @@ with application.app_context():
           lines[("TARGET 00012345", 10.0)].disposition == "review")
     check("the Railway charge is covered by its sync",
           lines[("RAILWAY", -20.0)].disposition == "covered" and lines[("RAILWAY", -20.0)].expense_id is None)
+    check("Claude is told the line is on a personal card",
+          "PERSONAL CARD of Michael Bean" in bank_feed._account_words(gh))
     again = statements.import_rows(personal, statements.parse(CHASE_CREDIT))
     check("the same statement twice stores nothing twice",
           again["new"] == 0 and BankTransaction.query.filter_by(connection_id=personal.id).count() == 7)

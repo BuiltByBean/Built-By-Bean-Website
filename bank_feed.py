@@ -517,7 +517,14 @@ bank paid it, but a charge for EntertainHQ's own services paid by Built by \
 Bean is EntertainHQ's), a transfer between the company's own accounts, \
 money an owner put in (contribution) or took out (draw), money in from \
 customers, or a personal purchase that does not belong in either company's \
-books. Michael's personal accounts are at Chase. Name the \
+books. Michael's personal accounts are at Chase. A line whose account \
+says PERSONAL CARD was paid on an owner's own card, which carries his whole \
+life: there it is personal unless it is plainly something a software studio \
+or a booking platform buys (software, hosting, domains, developer tools, \
+business subscriptions, a vendor already known below). Restaurants, fuel, \
+groceries, shops, travel and entertainment on a personal card are personal \
+unless the known vendors say otherwise, and money in on a personal card is \
+a refund or a card payment, never income. Name the \
 vendor in plain words, and give the PATTERN: the shortest stable piece of \
 the counterparty or bank text that will appear on every future charge from \
 this vendor and on no other (e.g. "GITHUB", "GOOGLE WORKSPACE", not a \
@@ -542,6 +549,57 @@ def _suggest_schema(categories):
                 "why": s}}
     return {"type": "object", "additionalProperties": False, "required": ["lines"],
             "properties": {"lines": {"type": "array", "items": item}}}
+
+
+def _account_words(line):
+    conn = _connection(line)
+    company = line.business.name if line.business else ""
+    if conn is not None and conn.kind == "personal":
+        return f"PERSONAL CARD of {conn.owner_name or 'an owner'} ({conn.label}), usually for {company}"
+    return f"{company} account" + (f" ({conn.label})" if conn is not None and conn.label else "")
+
+
+def suggest_all(client=None, batch=60, rounds=20):
+    """Every waiting line, a batch at a time, until a batch answers none."""
+    total = 0
+    for _ in range(rounds):
+        n = suggest(client=client, limit=batch)
+        total += n
+        if not n:
+            break
+    return total
+
+
+_suggesting = set()
+_suggest_lock = __import__("threading").Lock()
+
+
+def suggesting():
+    return bool(_suggesting)
+
+
+def suggest_in_background(app):
+    """Ask on a thread of its own: 500 lines from a first statement is many
+    minutes of Claude, far past gunicorn's sixty seconds. A second press
+    while it runs starts nothing."""
+    import threading
+    with _suggest_lock:
+        if _suggesting:
+            return False
+        _suggesting.add(1)
+
+    def run():
+        try:
+            with app.app_context():
+                suggest_all()
+        except Exception as err:  # noqa: BLE001 - a suggestion is a nicety
+            app.logger.warning("bank: background suggestions failed: %s", err)
+        finally:
+            with _suggest_lock:
+                _suggesting.clear()
+
+    threading.Thread(target=run, name="bank-suggest", daemon=True).start()
+    return True
 
 
 def suggest(client=None, limit=60):
@@ -572,9 +630,9 @@ def suggest(client=None, limit=60):
         + "\n".join(f"{p.id} | {p.name} | {p.client.name if p.client else ''}" for p in projects)
         + "\n\nWHAT IS ALREADY KNOWN (pattern -> vendor, what it is):\n"
         + "\n".join(f"{r.pattern} -> {r.vendor}, {r.disposition}" for r in VendorRule.query.all())
-        + "\n\nTHE LINES (id | date | amount | paid by | counterparty | bank text | merchant type):\n"
-        + "\n".join(f"{l.id} | {l.occurred_on} | {l.amount:.2f} | "
-                    f"{l.business.name if l.business else ''} | {l.counterparty} | "
+        + "\n\nTHE LINES (id | date | amount | account | counterparty | bank text | merchant type):\n"
+        + "\n".join(f"{l.id} | {l.occurred_on} | {l.amount:.2f} | {_account_words(l)} | "
+                    f"{l.counterparty} | "
                     f"{l.description} | {l.merchant_category or l.bank_category}" for l in lines))
     with client.beta.messages.stream(
         model=SUGGEST_MODEL, max_tokens=32000,
