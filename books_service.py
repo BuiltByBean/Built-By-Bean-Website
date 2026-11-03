@@ -115,6 +115,16 @@ def owner_money_between(business, start, end):
                                    Expense.paid_by.isnot(None), Expense.paid_by != "",
                                    Expense.date >= start, Expense.date < end).all()):
         out.setdefault(e.paid_by, {"in": 0.0, "out": 0.0})["in"] += e.amount
+    # A vendor sync books some charges itself (Railway, Cloudflare, Claude);
+    # when one of those was paid on an owner's own card, the owner still put
+    # that money in.
+    from models import BankConnection
+    for line in (BankTransaction.query.join(BankConnection, BankTransaction.connection_id == BankConnection.id)
+                 .filter(BankTransaction.business_id.in_(family_ids(business)),
+                         BankTransaction.disposition == "covered", BankConnection.kind == "personal",
+                         BankTransaction.occurred_on >= start, BankTransaction.occurred_on < end).all()):
+        who = line.connection.owner_name or "Owner not named"
+        out.setdefault(who, {"in": 0.0, "out": 0.0})["in"] += abs(line.amount)
     for line in (BankTransaction.query.filter(BankTransaction.business_id.in_(family_ids(business)),
                                               BankTransaction.disposition.in_(("contribution", "draw")),
                                               BankTransaction.status == "sent",

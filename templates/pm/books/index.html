@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/icon_button.html" import delete_icon %}
+{% from "pm/components/checkbox.html" import checkbox %}
 
 {#
   Every company's books on one page (pm/books_routes.py says what each part
@@ -110,7 +111,66 @@
     </section>
     {% endfor %}
 
-    <section id="mailboxes" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+    {# Cards and accounts with no feed (statements.py): Chase debit, personal
+       cards. Each upload is read like a night of Mercury. relative z-30
+       (LM-1): its pickers open over the mailboxes card below. #}
+    <section id="statements" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+        <h2 class="text-lg font-semibold text-white">Card statements</h2>
+        {% for src in sources %}
+        <div class="p-3 rounded-xl bg-surface-800/40 min-w-0 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="w-full sm:w-auto sm:flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-white break-words">{{ src.label }}
+                        <span class="text-surface-400 font-normal">&middot; {{ src.business.short_name or src.business.name }}{% if src.kind == 'personal' %} &middot; personal{% if src.owner_name %}, {{ src.owner_name }}{% endif %}{% endif %}</span></p>
+                    <p class="text-xs text-surface-400 mt-0.5 break-words">
+                        {{ src.line_count | commas }} line{{ '' if src.line_count == 1 else 's' }}{% if src.through %}, through {{ src.through.strftime('%b') }} {{ src.through.day }}, {{ src.through.year }}{% endif %}</p>
+                </div>
+                <form method="POST" action="{{ url_for('books.statement_source_delete', cid=src.id) }}" class="ml-auto">
+                    {{ delete_icon(question='Remove it?', label='Remove ' ~ src.label) }}
+                </form>
+            </div>
+            <form method="POST" action="{{ url_for('books.statement_upload', cid=src.id) }}" enctype="multipart/form-data"
+                  class="flex flex-wrap items-center gap-3">
+                <input type="file" name="statement" accept=".csv,text/csv" multiple aria-label="Statement file for {{ src.label }}"
+                       class="flex-1 min-w-0 min-h-[44px] text-sm text-surface-300 file:mr-3 file:min-h-[44px] file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-500/15 file:text-brand-300 hover:file:bg-brand-500/25 file:cursor-pointer cursor-pointer">
+                <button type="submit"
+                        class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Upload</button>
+            </form>
+        </div>
+        {% endfor %}
+        <form method="POST" action="{{ url_for('books.statement_source_add') }}"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3" x-data="{ kind: 'business' }">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="min-w-0">
+                    <label for="src-label" class="block text-sm font-medium text-surface-300 mb-1.5">Card or account</label>
+                    <input id="src-label" name="label" maxlength="120" required placeholder="Chase Sapphire"
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500">
+                </div>
+                <div class="min-w-0">
+                    <p class="block text-sm font-medium text-surface-300 mb-1.5">Usually pays for</p>
+                    {{ select_dropdown('business_id', business_options, business_options[0][0] if business_options else '', full_width=true) }}
+                </div>
+                <div class="min-w-0">
+                    <p class="block text-sm font-medium text-surface-300 mb-1.5">Whose card</p>
+                    {{ select_dropdown('kind', [('business', "The company's own"), ('personal', "Personal, an owner's")], 'business', full_width=true, model='kind') }}
+                </div>
+                <div class="min-w-0" x-show="kind === 'personal'">
+                    <label for="src-owner" class="block text-sm font-medium text-surface-300 mb-1.5">Owner</label>
+                    <input id="src-owner" name="owner_name" maxlength="120" value="Michael Bean"
+                           class="w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl">
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                {{ checkbox('charges_positive', label='Its statements show purchases as positive numbers') }}
+                <button type="submit"
+                        class="ml-auto inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Add</button>
+            </div>
+        </form>
+    </section>
+
+    <section id="mailboxes" class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
         <h2 class="text-lg font-semibold text-white">Receipt mailboxes</h2>
         {% for m in mailboxes %}
         <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-surface-800/40 min-w-0">

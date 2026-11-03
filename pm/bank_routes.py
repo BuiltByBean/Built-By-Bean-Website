@@ -39,7 +39,8 @@ def bank_review_count():
 
 @bank_bp.app_template_global("bank_connections_for")
 def bank_connections_for(business):
-    return BankConnection.query.filter_by(business_id=business.id).order_by(BankConnection.id).all()
+    return (BankConnection.query.filter_by(business_id=business.id, provider="mercury")
+            .order_by(BankConnection.id).all())
 
 
 def _first_owner(business_id):
@@ -77,7 +78,8 @@ def review():
     waiting = BankTransaction.query.filter_by(disposition="review").count()
     suggested = (BankTransaction.query.filter_by(disposition="review")
                  .filter(BankTransaction.suggestion_json.isnot(None)).count())
-    connections = BankConnection.query.order_by(BankConnection.id).all()
+    connections = (BankConnection.query.filter_by(provider="mercury")
+                   .order_by(BankConnection.id).all())
     return render_template(
         "pm/bank/review.html", lines=lines, view=view, waiting=waiting, suggested=suggested,
         connections=connections,
@@ -187,6 +189,8 @@ def connect():
 @ceo_required
 def sync(id):
     conn = db.session.get(BankConnection, id) or abort(404)
+    if conn.provider != "mercury":
+        abort(404)
     result = bank_feed.sync_connection(conn)
     flash(result.get("error") or f"{conn.last_note}.", "warning" if result.get("error") else "success")
     return redirect(_back())

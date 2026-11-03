@@ -84,10 +84,18 @@ def index():
         companies.append({"business": b, "year": books_service.summarize(b, ystart, yend),
                           "months": list(reversed(months))})
     mailboxes = ReceiptMailbox.query.order_by(ReceiptMailbox.id).all()
+    from models import BankConnection, BankTransaction
+    sources = (BankConnection.query.filter_by(provider="statement")
+               .order_by(BankConnection.id).all())
+    for src in sources:
+        src.line_count = BankTransaction.query.filter_by(connection_id=src.id).count()
+        last = (db.session.query(db.func.max(BankTransaction.occurred_on))
+                .filter(BankTransaction.connection_id == src.id).scalar())
+        src.through = last
     waiting = Receipt.query.filter_by(status="unmatched").count()
     return render_template("pm/books/index.html", companies=companies, year=year,
                            mailboxes=mailboxes, waiting=waiting, today=today,
-                           reading=receipts_service.reading,
+                           reading=receipts_service.reading, sources=sources,
                            business_options=[(b.id, b.name) for b in _companies()])
 
 
@@ -384,3 +392,67 @@ def stripe_disconnect(id):
     db.session.commit()
     flash("Disconnected. What it read stays in the books.", "success")
     return redirect(url_for("businesses.detail", id=id) + "#stripe")
+
+
+# ── Cards and accounts with no feed: their statements ─────
+
+
+@books_bp.route("/admin/books/statements", methods=["POST"])
+@ceo_required
+def statement_source_add():
+    from models import BankConnection
+    business = db.session.get(Business, request.form.get("business_id", type=int) or 0) or abort(404)
+    label = (request.form.get("label") or "").strip()[:120]
+    if not label:
+        flash("Name the card or account.", "warning")
+        return redirect(url_for("books.index") + "#statements")
+    kind = "personal" if request.form.get("kind") == "personal" else "business"
+    conn = BankConnection(business_id=business.id, provider="statement", label=label, token="",
+                          kind=kind, owner_name=(request.form.get("owner_name") or "").strip()[:120],
+                          charges_positive=request.form.get("charges_positive") == "1")
+    db.session.add(conn)
+    db.session.commit()
+    flash(f"{label} added. Upload its statements below.", "success")
+    return redirect(url_for("books.index") + "#statements")
+
+
+@books_bp.route("/admin/books/statements/<int:cid>/upload", methods=["POST"])
+@ceo_required
+def statement_upload(cid):
+    import statements
+    from models import BankConnection
+    conn = db.session.get(BankConnection, cid) or abort(404)
+    if conn.provider != "statement":
+        abort(404)
+    files = [f for f in request.files.getlist("statement") if f and f.filename]
+    if not files:
+        flash("Choose the statement file you downloaded.", "warning")
+        return redirect(url_for("books.index") + "#statements")
+    total = {"read": 0, "new": 0}
+    for f in files:
+        raw = f.read(5 * 1024 * 1024)
+        try:
+            rows = statements.parse(raw.decode("utf-8-sig", "replace"), conn.charges_positive)
+        except statements.StatementError as err:
+            flash(f"{f.filename}: {err}", "warning")
+            return redirect(url_for("books.index") + "#statements")
+        got = statements.import_rows(conn, rows)
+        total["read"] += got["read"]
+        total["new"] += got["new"]
+    waiting = got.get("review", 0)
+    flash(f"{conn.label}: {total['new']:,} new line{'' if total['new'] == 1 else 's'} of "
+          f"{total['read']:,} read, {waiting:,} to sort.", "success")
+    return redirect(url_for("bank.review") if waiting else url_for("books.index") + "#statements")
+
+
+@books_bp.route("/admin/books/statements/<int:cid>/delete", methods=["POST"])
+@ceo_required
+def statement_source_delete(cid):
+    from models import BankConnection
+    conn = db.session.get(BankConnection, cid) or abort(404)
+    if conn.provider != "statement":
+        abort(404)
+    db.session.delete(conn)
+    db.session.commit()
+    flash("Removed. The expenses it booked are still in the books.", "success")
+    return redirect(url_for("books.index") + "#statements")

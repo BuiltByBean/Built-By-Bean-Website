@@ -151,19 +151,44 @@ def _when(value):
         return None
 
 
+def _card_payment(line):
+    import statements
+    return statements.is_card_payment(line.counterparty)
+
+
 def is_stripe_payout(line):
     hay = f"{norm(line.counterparty)} {norm(line.description)}"
     return " STRIPE" in f" {hay}"
 
 
+def _connection(line):
+    """The line's card or account, also for a line not yet flushed, whose
+    relationship is still empty though its connection_id is set."""
+    if line.connection is not None:
+        return line.connection
+    if line.connection_id:
+        from models import db, BankConnection
+        return db.session.get(BankConnection, line.connection_id)
+    return None
+
+
+def is_personal(line):
+    conn = _connection(line)
+    return bool(conn is not None and conn.kind == "personal")
+
+
 def rule_for(line, rules=None):
     """The longest rule whose pattern appears in the line's counterparty or
-    bank description, so GOOGLE WORKSPACE beats GOOGLE."""
+    bank description, so GOOGLE WORKSPACE beats GOOGLE. A rule learned as
+    personal on an owner's own card applies only to owners' own cards."""
     from models import VendorRule
     rules = rules if rules is not None else VendorRule.query.all()
     hay = f" {norm(line.counterparty)} | {norm(line.description)} "
+    personal = is_personal(line)
     best = None
     for r in rules:
+        if (r.applies_to or "all") == "personal" and not personal:
+            continue
         pat = norm(r.pattern)
         if not pat:
             continue
@@ -201,6 +226,8 @@ def classify(line, rules=None):
         pass  # settled by hand for this line alone; only the amount follows the bank
     elif line.kind in TRANSFER_KINDS:
         line.disposition = "transfer"
+    elif line.kind == "statement" and _card_payment(line):
+        line.disposition = "transfer"  # paying a card off is money moving, not spending
     elif line.amount > 0 and is_stripe_payout(line):
         # A payout is the company's own money leaving its Stripe balance for
         # its bank. The sale it came from was income on the day the customer
@@ -211,6 +238,12 @@ def classify(line, rules=None):
         line.disposition = "expense"
     else:
         rule = rule_for(line, rules)
+        # An owner's money only goes in as money in, and out as money out: a
+        # Chase fee on a statement must not read as Michael putting in a
+        # negative amount because the CHASE rule matched it.
+        if rule is not None and ((rule.disposition == "contribution" and line.amount < 0)
+                                 or (rule.disposition == "draw" and line.amount > 0)):
+            rule = None
         if rule is not None:
             line.disposition = rule.disposition
             if rule.disposition in ("contribution", "draw"):
@@ -219,7 +252,7 @@ def classify(line, rules=None):
                 owner = rule.business_id or line.business_id
                 if not provider_books(rule.provider, owner):
                     line.disposition = "expense"
-        elif line.amount > 0 and line.kind not in REFUND_KINDS:
+        elif line.amount > 0 and line.kind not in REFUND_KINDS and not is_personal(line):
             line.disposition = "income"
         else:
             line.disposition = "review"
@@ -253,10 +286,13 @@ def book(line, rule=None, manual=None):
     else:
         spec = None  # settled by hand earlier: keep what was settled, follow the amount
     expense = db.session.get(Expense, line.expense_id) if line.expense_id else None
+    paid_by = (_connection(line).owner_name or None) if is_personal(line) else None
     if expense is None:
         expense = adopt(line, (spec or {}).get("business_id") or line.business_id)
         if expense is not None:
             line.expense_id = expense.id
+            if paid_by and not expense.paid_by:
+                expense.paid_by = paid_by
             return expense
     fresh = expense is None
     if fresh:
@@ -272,6 +308,8 @@ def book(line, rule=None, manual=None):
         expense.project_id = spec.get("project_id") or None
         vendor = spec.get("vendor") or line.counterparty or "Bank charge"
         expense.description = vendor + (f" - {line.note}" if line.note else "")
+    if paid_by:
+        expense.paid_by = paid_by
     db.session.flush()
     line.expense_id = expense.id
     return expense
@@ -405,7 +443,8 @@ def reclassify_review(rules=None):
 
 
 def remember(pattern, disposition, vendor="", business_id=None, category="misc",
-             client_id=None, project_id=None, provider_id=None, note="", owner_name=""):
+             client_id=None, project_id=None, provider_id=None, note="", owner_name="",
+             applies_to="all"):
     """Write (or rewrite) the rule for a pattern. Returns the rule."""
     from models import db, VendorRule
     pattern = norm(pattern)[:120]
@@ -424,6 +463,7 @@ def remember(pattern, disposition, vendor="", business_id=None, category="misc",
     rule.provider_id = provider_id or None
     rule.note = (note or "")[:300]
     rule.owner_name = (owner_name or "")[:120]
+    rule.applies_to = applies_to if applies_to in ("all", "personal") else "all"
     db.session.flush()
     return rule
 
@@ -438,7 +478,9 @@ def decide(line, disposition, *, business_id=None, category="misc", client_id=No
     if keep and pattern:
         rule = remember(pattern, disposition, vendor=vendor, business_id=business_id,
                         category=category, client_id=client_id, project_id=project_id,
-                        owner_name=owner_name)
+                        owner_name=owner_name,
+                        applies_to="personal" if disposition == "personal" and is_personal(line)
+                        else "all")
         classify(line, VendorRule.query.all())
         line.decided_at = now
         db.session.commit()
@@ -456,7 +498,8 @@ def decide(line, disposition, *, business_id=None, category="misc", client_id=No
 def sync_all(app):
     from models import BankConnection
     with app.app_context():
-        for conn in BankConnection.query.order_by(BankConnection.id).all():
+        for conn in (BankConnection.query.filter_by(provider="mercury")
+                     .order_by(BankConnection.id).all()):
             result = sync_connection(conn)
             name = conn.business.name if conn.business else conn.business_id
             print(f"  bank {name:30} {result.get('error') or conn.last_note}", flush=True)

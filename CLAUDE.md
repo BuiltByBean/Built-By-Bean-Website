@@ -291,6 +291,24 @@ the same hour: "what if there's a bunch of money sitting in Stripe that we
 haven't transferred over to our Mercury account?" A connected Stripe also
 outranks any sales list an app sends. `tools/test_stripe_books.py`.
 
+**Cards with no feed come in as statements** (`statements.py`, Books page,
+Card statements). Michael's history since April is on Built by Bean's Chase
+debit, his personal debit and his personal credit card. A `BankConnection`
+with provider `statement` has no token; its downloaded CSVs (Chase credit,
+Chase checking, any Debit/Credit export, `charges_positive` for cards that
+export purchases as positive) become `BankTransaction`s and go through the
+same `classify`, so rules sort them, `adopt` claims the expenses already
+typed (this is how the 108 earlier expenses get checked), and waiting
+receipts attach. A row's id is a fingerprint plus its occurrence in the file,
+so re-uploads store nothing twice while two identical same-day charges stay
+two. On a `kind="personal"` card a business charge is an expense with
+`paid_by` its owner, and a covered vendor charge still counts as that owner's
+money in; card payments are transfers; money in is never income; and a
+"personal" rule learned there (`VendorRule.applies_to`) never touches a
+company card. A contribution rule only matches money in, a draw only money
+out. The nightly Mercury read skips statement accounts.
+`tools/test_statements.py`.
+
 ## What a month of usage cost
 
 `service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows

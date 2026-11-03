@@ -750,8 +750,18 @@ class BankConnection(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey(
         "businesses.id", ondelete="CASCADE", name="fk_bank_connections_business_id"),
         nullable=False, index=True)
+    # mercury: read nightly with a token. statement: a card or account with
+    # no feed, whose downloaded CSV statements are uploaded (statements.py).
     provider = db.Column(db.String(20), nullable=False, default="mercury")
     label = db.Column(db.String(120), default="")
+    # business: the company's own account. personal: an owner's own card,
+    # on which only business charges count, each one that owner's money put
+    # in; personal purchases are set aside and never reach the books.
+    kind = db.Column(db.String(12), nullable=False, default="business", server_default="business")
+    owner_name = db.Column(db.String(120), default="")
+    # Some card exports show a purchase as a positive number; flipped on
+    # import so money out is negative everywhere.
+    charges_positive = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     token = db.Column(db.Text, default="")
     synced_from = db.Column(db.Date, nullable=True)
     last_synced_at = db.Column(db.DateTime, nullable=True)
@@ -822,6 +832,10 @@ class VendorRule(db.Model):
     # For contribution and draw: which owner's money it was, by name, so one
     # rule ("CHASE" is Michael's own account) serves every company he owns.
     owner_name = db.Column(db.String(120), default="")
+    # "personal" for a rule learned on an owner's personal card that a
+    # purchase is personal: it must never mark the same shop personal on a
+    # company card, where the same counterparty can be a business cost.
+    applies_to = db.Column(db.String(12), nullable=False, default="all", server_default="all")
     note = db.Column(db.String(300), default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
