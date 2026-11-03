@@ -256,7 +256,7 @@ page = c.get("/admin/bank/")
 body = page.get_data(as_text=True)
 check("the review list renders", page.status_code == 200, page.status_code)
 check("it shows the suggestion and the accept press", "Error monitoring" in body and "Accept" in body)
-check("no em dashes", "—" not in body)
+check("no em dashes", "\u2014" not in body)
 r = c.post("/admin/bank/accept-suggested", follow_redirects=False)
 with application.app_context():
     t12 = BankTransaction.query.filter_by(external_id="t12").one()
