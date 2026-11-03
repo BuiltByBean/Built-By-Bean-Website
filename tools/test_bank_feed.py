@@ -145,8 +145,8 @@ with application.app_context():
           lines["t4"].disposition == "review" and lines["t8"].disposition == "review")
     check("the typed GitHub charge is adopted, not doubled",
           lines["t3"].disposition == "review" or lines["t3"].expense_id in (None, typed_id))
-    check("a payout in is income, never an expense",
-          lines["t5"].disposition == "income" and lines["t5"].expense_id is None)
+    check("a Stripe payout in is the company's own money moving, never income or an expense",
+          lines["t5"].disposition == "transfer" and lines["t5"].expense_id is None)
     check("a card payoff with a rule is a transfer", lines["t6"].disposition == "transfer")
     check("Mercury's own fee is a bank-fee expense",
           lines["t7"].disposition == "expense" and lines["t7"].expense.category == "bank_fees"

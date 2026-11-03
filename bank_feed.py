@@ -151,6 +151,11 @@ def _when(value):
         return None
 
 
+def is_stripe_payout(line):
+    hay = f"{norm(line.counterparty)} {norm(line.description)}"
+    return " STRIPE" in f" {hay}"
+
+
 def rule_for(line, rules=None):
     """The longest rule whose pattern appears in the line's counterparty or
     bank description, so GOOGLE WORKSPACE beats GOOGLE."""
@@ -195,6 +200,12 @@ def classify(line, rules=None):
     elif line.decided_at and line.rule_id is None and line.disposition != "review":
         pass  # settled by hand for this line alone; only the amount follows the bank
     elif line.kind in TRANSFER_KINDS:
+        line.disposition = "transfer"
+    elif line.amount > 0 and is_stripe_payout(line):
+        # A payout is the company's own money leaving its Stripe balance for
+        # its bank. The sale it came from was income on the day the customer
+        # paid (stripe_books.py, or the board's invoices); counting the
+        # deposit too would book the same money twice.
         line.disposition = "transfer"
     elif line.kind in BANK_FEE_KINDS:
         line.disposition = "expense"

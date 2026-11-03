@@ -96,6 +96,13 @@ def _sweep():
         audit_repos.main()
     except Exception as err:  # noqa: BLE001
         print(f"repo sweep failed: {str(err)[:200]}", flush=True)
+    # Each company's own Stripe: its sales and its fees.
+    try:
+        import stripe_books
+        print("reading each company's Stripe", flush=True)
+        stripe_books.main()
+    except Exception as err:  # noqa: BLE001
+        print(f"stripe books failed: {str(err)[:200]}", flush=True)
     # Each business's bank, after the vendor syncs so a line a vendor's sync
     # covers finds that vendor's expense already written.
     try:

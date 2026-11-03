@@ -7,9 +7,13 @@ report, the monthly close and EntertainHQ's read-only view in its own admin
   income        cash basis. For the business this board bills from it is
                 the board's paid invoices less their sales tax (the same
                 reading as the dashboard's Total Revenue, and sales tax is a
-                debt to Texas, never income). For a business on its own app
-                it is the sales that app reports, when it reports them, and
-                otherwise the money its bank received from customers.
+                debt to Texas, never income). For a company with its own
+                Stripe connected it is what customers paid there, gross, on
+                the day they paid, less refunds, whether or not Stripe has
+                paid it out yet (Michael, 2026-11-03: "what if there's a
+                bunch of money sitting in Stripe that we haven't transferred
+                over"). Otherwise the sales its app reports, and failing that
+                what its bank received.
   expenses      every Expense in the company's books (its DBAs' included),
                 billable-time rows excluded because they are revenue in the
                 pipeline, not money spent. Grouped into the lines a tax
@@ -88,6 +92,9 @@ def income_between(business, start, end, sales=None):
                 label += f", {inv.client.name}"
             out.append((when, amount, label))
         return sorted(out)
+    if root.stripe_key:
+        import stripe_books
+        return stripe_books.income_between(root, start, end)
     if sales is not None:
         return sorted((s["date"], round(s["total"], 2), s.get("ref") or "Sale")
                       for s in sales if start <= s["date"] < end)

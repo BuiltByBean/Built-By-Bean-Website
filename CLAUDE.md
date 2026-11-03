@@ -278,6 +278,19 @@ hub cannot disagree.
 
 `tools/test_books.py`.
 
+**Income lives where the sale happens.** For a company with its own Stripe
+(EntertainHQ), `stripe_books.py` reads every line of its Stripe balance
+through a restricted key typed on the company's page (`Business.stripe_key`)
+into `StripeActivity`. Income is sales gross on the day the customer paid,
+less refunds, whether or not Stripe has paid them out yet; Stripe's fees are
+one `bank_fees` Expense per month, corrected in place; and a Stripe payout
+landing in any company's Mercury is a transfer (`bank_feed.is_stripe_payout`),
+because the sale was already income on the day it was paid. It shipped first
+counting EntertainHQ's Mercury deposits as its income, and Michael caught it
+the same hour: "what if there's a bunch of money sitting in Stripe that we
+haven't transferred over to our Mercury account?" A connected Stripe also
+outranks any sales list an app sends. `tools/test_stripe_books.py`.
+
 ## What a month of usage cost
 
 `service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows

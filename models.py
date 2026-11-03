@@ -933,6 +933,35 @@ class BusinessOwner(db.Model):
         return f"<BusinessOwner {self.name} {self.share_percent}%>"
 
 
+class StripeActivity(db.Model):
+    """One line of a company's Stripe balance, exactly as Stripe reported it.
+
+    A charge is a sale on the day the customer paid, gross; a refund takes
+    one back; `fee` is what Stripe kept; a payout is the company's own money
+    leaving Stripe for its bank. Upserted on Stripe's id so a read can be
+    repeated (stripe_books.py).
+    """
+
+    __tablename__ = "stripe_activity"
+    __table_args__ = (
+        db.UniqueConstraint("business_id", "external_id", name="uq_stripe_activity_business_external"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_stripe_activity_business_id"),
+        nullable=False, index=True)
+    external_id = db.Column(db.String(80), nullable=False)
+    created_on = db.Column(db.Date, nullable=False, index=True)
+    category = db.Column(db.String(40), default="")
+    kind = db.Column(db.String(40), default="")
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    fee = db.Column(db.Float, nullable=False, default=0.0)
+    net = db.Column(db.Float, nullable=False, default=0.0)
+    currency = db.Column(db.String(8), default="usd")
+    description = db.Column(db.String(300), default="")
+
+
 class MonthClose(db.Model):
     """A month of one company's books, declared finished.
 
@@ -1708,6 +1737,14 @@ class Business(db.Model):
     hub_pull_note = db.Column(db.String(300), default="")
 
     notes = db.Column(db.Text, default="")
+    # Its own Stripe account, read into its books (stripe_books.py): a
+    # restricted key with read access to the balance, typed by its owner on
+    # this business's page and never shown again. Built by Bean's Stripe is
+    # read through the app's own key and needs nothing here.
+    stripe_key = db.Column(db.Text, nullable=True)
+    stripe_synced_at = db.Column(db.DateTime, nullable=True)
+    stripe_ok = db.Column(db.Boolean, nullable=True)
+    stripe_note = db.Column(db.String(300), default="")
     is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),

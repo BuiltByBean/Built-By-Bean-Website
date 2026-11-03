@@ -329,3 +329,56 @@ def hub_books():
                    for o in business.owners],
         "unsorted_bank_lines": s["unsorted"],
     })
+
+
+# ── A company's own Stripe ────────────────────────────────
+
+
+@books_bp.route("/admin/books/<int:id>/stripe", methods=["POST"])
+@ceo_required
+def stripe_connect(id):
+    import stripe_books
+    business = db.session.get(Business, id) or abort(404)
+    back = url_for("businesses.detail", id=id) + "#stripe"
+    key = (request.form.get("key") or "").strip()
+    if not key:
+        flash("Paste the restricted key from Stripe.", "warning")
+        return redirect(back)
+    try:
+        stripe_books.check_key(key)
+    except stripe_books.StripeKeyError as err:
+        flash(str(err), "warning")
+        return redirect(back)
+    business.stripe_key = key
+    business.stripe_ok = None
+    business.stripe_synced_at = None
+    db.session.commit()
+    result = stripe_books.sync(business)
+    flash(result.get("error") or f"Connected. {business.stripe_note}.",
+          "warning" if result.get("error") else "success")
+    return redirect(back)
+
+
+@books_bp.route("/admin/books/<int:id>/stripe/sync", methods=["POST"])
+@ceo_required
+def stripe_sync(id):
+    import stripe_books
+    business = db.session.get(Business, id) or abort(404)
+    if not business.stripe_key:
+        abort(404)
+    result = stripe_books.sync(business)
+    flash(result.get("error") or f"{business.stripe_note}.",
+          "warning" if result.get("error") else "success")
+    return redirect(url_for("businesses.detail", id=id) + "#stripe")
+
+
+@books_bp.route("/admin/books/<int:id>/stripe/disconnect", methods=["POST"])
+@ceo_required
+def stripe_disconnect(id):
+    business = db.session.get(Business, id) or abort(404)
+    business.stripe_key = None
+    business.stripe_ok = None
+    business.stripe_note = ""
+    db.session.commit()
+    flash("Disconnected. What it read stays in the books.", "success")
+    return redirect(url_for("businesses.detail", id=id) + "#stripe")
