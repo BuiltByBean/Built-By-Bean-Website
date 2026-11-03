@@ -1,40 +1,76 @@
 {% extends "pm/base.html" %}
 
 {#
-  Receipts that matched no charge (receipts_service.py). Each one is a
-  charge on a card whose history is not in yet, or a personal purchase:
-  Open shows the receipt, Set aside takes it off this list for good.
+  Receipts (receipts_service.py). Missing is every expense in the books
+  since April with no receipt yet; Add receipt opens the expense, whose form
+  takes the file. Unmatched is the mail receipts that matched no charge:
+  each is a charge on a card whose history is not in, or a personal
+  purchase. Open shows it, Set aside takes it off the list for good.
+  Matching, the split-month receipts, Stripe's fee statements and the sales
+  tax confirmations all attach themselves nightly.
 #}
 
 {% block title %}Receipts - Books{% endblock %}
 {% block page_title %}Receipts{% endblock %}
-{% block page_subtitle %}{{ rows | length | commas }} with no charge yet{% endblock %}
+{% block page_subtitle %}{{ missing | length | commas }} expense{{ '' if missing|length == 1 else 's' }} without one{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
-<div class="glass-card flex flex-col min-h-0 flex-1">
-    <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
-        {% for r in rows %}
-        <div class="p-4 flex flex-wrap items-center justify-between gap-3">
-            <div class="w-full sm:w-auto sm:flex-1 min-w-0">
-                <p class="text-sm font-medium text-white break-words">{{ r.vendor }} &middot; {{ r.subject }}</p>
-                <p class="text-xs text-surface-400 break-words">
-                    {% if r.received_on %}{{ r.received_on.strftime('%b') }} {{ r.received_on.day }}, {{ r.received_on.year }}{% endif %}
-                    &middot; {{ r.mailbox.address }}
-                    {% if r.amount %}&middot; ${{ '{:,.2f}'.format(r.amount) }}{% else %}&middot; no amount found{% endif %}</p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0 ml-auto">
-                <a href="{{ url_for('books.receipt_file', rid=r.id) }}" target="_blank" rel="noopener"
-                   class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40">Open</a>
-                <form method="POST" action="{{ url_for('books.receipt_ignore', rid=r.id) }}">
-                    <button type="submit"
-                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300">Set aside</button>
-                </form>
-            </div>
-        </div>
-        {% else %}
-        <div class="p-8 text-center text-surface-400">Every receipt is attached</div>
+<div class="flex flex-col flex-1 min-h-0 gap-5">
+    <nav aria-label="Receipts" class="shrink-0 flex flex-wrap gap-2">
+        {% for key, label, n in [('missing', 'Missing', missing|length), ('unmatched', 'Unmatched', rows|length)] %}
+        <a href="{{ url_for('books.receipts', view=key) }}" {% if view == key %}aria-current="page"{% endif %}
+           class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
+                  {{ 'btn-brand text-white' if view == key else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
+            {{ label }} <span class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums bg-white/15">{{ n | commas }}</span></a>
         {% endfor %}
+    </nav>
+
+    <div class="glass-card flex flex-col min-h-0 flex-1">
+        <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
+            {% if view == 'unmatched' %}
+            {% for r in rows %}
+            <div class="p-4 flex flex-wrap items-center justify-between gap-3">
+                <div class="w-full sm:w-auto sm:flex-1 min-w-0">
+                    <p class="text-sm font-medium text-white break-words">{{ r.vendor }} &middot; {{ r.subject }}</p>
+                    <p class="text-xs text-surface-400 break-words">
+                        {% if r.received_on %}{{ r.received_on.strftime('%b') }} {{ r.received_on.day }}, {{ r.received_on.year }}{% endif %}
+                        &middot; {{ r.mailbox.address }}
+                        {% if r.amount %}&middot; ${{ '{:,.2f}'.format(r.amount) }}{% else %}&middot; no amount found{% endif %}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 ml-auto">
+                    <a href="{{ url_for('books.receipt_file', rid=r.id) }}" target="_blank" rel="noopener"
+                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40">Open</a>
+                    <form method="POST" action="{{ url_for('books.receipt_ignore', rid=r.id) }}">
+                        <button type="submit"
+                                class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300">Set aside</button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-surface-400">Every receipt is attached</div>
+            {% endfor %}
+            {% else %}
+            {% for e in missing %}
+            <div class="p-4 flex flex-wrap items-center justify-between gap-3">
+                <div class="w-full sm:w-auto sm:flex-1 min-w-0">
+                    <p class="text-sm font-medium text-white break-words">{{ e.description }}</p>
+                    <p class="text-xs text-surface-400 break-words">
+                        {{ e.date.strftime('%b') }} {{ e.date.day }}, {{ e.date.year }}
+                        &middot; {{ business_names.get(e.business_id, '') }}
+                        {% if e.paid_by %}&middot; paid by {{ e.paid_by }}{% endif %}</p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0 ml-auto">
+                    <span class="text-sm font-semibold text-white tabular-nums">${{ '{:,.2f}'.format(e.amount) }}</span>
+                    <a href="{{ url_for('pm.expense_edit', id=e.id) }}"
+                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:border-brand-500/40 hover:text-brand-300">Add receipt</a>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-surface-400">Every expense has its receipt</div>
+            {% endfor %}
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}

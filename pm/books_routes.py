@@ -275,9 +275,19 @@ def mailbox_delete(mid):
 @books_bp.route("/admin/books/receipts")
 @ceo_required
 def receipts():
+    """Two lists: the expenses still without a receipt (Missing, first,
+    because that is the job), and the mail receipts that matched no charge."""
+    from models import Expense
+    import receipts_service
+    view = request.args.get("view", "missing")
     rows = (Receipt.query.filter_by(status="unmatched")
             .order_by(Receipt.received_on.desc(), Receipt.id.desc()).limit(300).all())
-    return render_template("pm/books/receipts.html", rows=rows)
+    missing = (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
+                                    Expense.amount > 0, Expense.date >= receipts_service.BOOKS_START)
+               .order_by(Expense.date.desc(), Expense.id.desc()).all())
+    names = {b.id: (b.short_name or b.name) for b in Business.query.all()}
+    return render_template("pm/books/receipts.html", rows=rows, missing=missing, view=view,
+                           business_names=names)
 
 
 @books_bp.route("/admin/books/receipts/<int:rid>/file")

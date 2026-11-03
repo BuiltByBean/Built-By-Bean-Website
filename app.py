@@ -3917,7 +3917,9 @@ def create_app():
             if form.receipt.data:
                 stored_name, original_name, size = save_upload(form.receipt.data, "receipts")
                 if stored_name:
-                    if expense.receipt_filename:
+                    import receipts_service
+                    if expense.receipt_filename and not receipts_service.in_use(
+                            expense.receipt_filename, expense.id):
                         delete_upload(expense.receipt_filename, "receipts")
                     expense.receipt_filename = stored_name
                     expense.receipt_original_name = original_name
@@ -3933,7 +3935,10 @@ def create_app():
         if expense.is_auto_generated:
             flash("Auto-generated expenses are deleted when their time entry is deleted.", "warning")
             return redirect(url_for("pm.expenses_list"))
-        if expense.receipt_filename:
+        # One receipt can prove a whole split month (receipts_service.in_use),
+        # so the file goes only when nothing else still points at it.
+        import receipts_service
+        if expense.receipt_filename and not receipts_service.in_use(expense.receipt_filename, expense.id):
             delete_upload(expense.receipt_filename, "receipts")
         db.session.delete(expense)
         db.session.commit()

@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import requests
 import boto3
@@ -230,8 +231,8 @@ def _sync_stripe(provider):
         for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
     }
 
-    # (customer_id or None, period) -> fee dollars
-    buckets = {}
+    # (customer_id or None, period) -> fee dollars, and the lines behind it
+    buckets, lines = {}, {}
     for txn in stripe_sdk.BalanceTransaction.list(limit=100, expand=["data.source"]).auto_paging_iter():
         fee = (getattr(txn, "fee", 0) or 0) / 100.0
         if fee <= 0:
@@ -250,6 +251,11 @@ def _sync_stripe(provider):
 
         key = (customer, _month_bounds(when))
         buckets[key] = buckets.get(key, 0.0) + fee
+        lines.setdefault(key, []).append({
+            "date": when, "id": getattr(txn, "id", "") or "",
+            "type": getattr(txn, "type", "") or "",
+            "description": getattr(txn, "description", "") or "",
+            "amount": (getattr(txn, "amount", 0) or 0) / 100.0, "fee": fee})
 
     count = 0
     for (customer, (p_start, p_end)), amount in buckets.items():
@@ -267,9 +273,52 @@ def _sync_stripe(provider):
             provider, resource_id, p_start, p_end, round(amount, 2), label,
             {"customer": customer}, default_client_id=client_by_customer.get(customer),
         )
+        _stripe_fee_statement(provider, resource_id, p_start, label,
+                              lines.get((customer, (p_start, p_end)), []))
 
     db.session.commit()
     return count
+
+
+def _stripe_fee_statement(provider, resource_id, p_start, label, rows):
+    """The receipt for a month of Stripe's fees, written from Stripe's own
+    balance transactions: Stripe emails no receipt for what it keeps, so this
+    page is the record, one line per transaction with its id to look up in
+    Stripe. Rewritten each night while the month is open, under the same
+    name, and attached to every expense the month's fees became."""
+    import html
+    from flask import current_app
+    from models import Expense
+    expenses = [e for e in (Expense.query.join(ServiceCostEntry, ServiceCostEntry.expense_id == Expense.id)
+                            .filter(ServiceCostEntry.provider_id == provider.id,
+                                    ServiceCostEntry.resource_identifier == resource_id,
+                                    ServiceCostEntry.period_start == p_start).all())
+                if not e.receipt_filename or e.receipt_filename.startswith("stripe-fees-")]
+    if not expenses or not rows:
+        return
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "-", resource_id.split(":", 1)[-1])[:60]
+    name = f"stripe-fees-{safe}-{p_start:%Y-%m}.html"
+    body = "".join(
+        f"<tr><td>{r['date']:%b %d, %Y}</td><td>{html.escape(r['type'])}</td>"
+        f"<td>{html.escape(r['description'])}</td><td>{html.escape(r['id'])}</td>"
+        f"<td style='text-align:right'>${r['amount']:,.2f}</td>"
+        f"<td style='text-align:right'>${r['fee']:,.2f}</td></tr>"
+        for r in sorted(rows, key=lambda r: (r["date"], r["id"])))
+    total = round(sum(r["fee"] for r in rows), 2)
+    page = (f"<!doctype html><meta charset='utf-8'><title>{html.escape(label)} {p_start:%B %Y}</title>"
+            f"<body style='font-family:sans-serif'><h1>{html.escape(label)}, {p_start:%B %Y}</h1>"
+            f"<p>Stripe's processing fees, read from Stripe's balance transactions.</p>"
+            f"<table cellpadding='6' border='1' style='border-collapse:collapse'>"
+            f"<tr><th>Date</th><th>Type</th><th>Description</th><th>Stripe id</th><th>Amount</th><th>Fee</th></tr>"
+            f"{body}<tr><td colspan='5'><b>Total fees</b></td>"
+            f"<td style='text-align:right'><b>${total:,.2f}</b></td></tr></table></body>")
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "receipts")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, name), "w", encoding="utf-8") as fh:
+        fh.write(page)
+    for e in expenses:
+        e.receipt_filename = name
+        e.receipt_original_name = f"Stripe fees {p_start:%B %Y}.html"
 
 
 # ── Flat monthly, for a vendor with no billing API ──────────

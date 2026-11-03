@@ -23,7 +23,7 @@
     {{ bank_review_count() | commas }} bank line{{ '' if bank_review_count() == 1 else 's' }} to sort</a>
 {% endif %}
 {% if waiting %}
-<a href="{{ url_for('books.receipts') }}"
+<a href="{{ url_for('books.receipts', view='unmatched') }}"
    class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:border-brand-500/40">
     {{ waiting | commas }} receipt{{ '' if waiting == 1 else 's' }} with no charge</a>
 {% endif %}

@@ -213,39 +213,178 @@ def _store(data, ext):
     return name
 
 
+_TOTAL_WORD = re.compile(r"\b(total|amount paid|amount charged|charged|paid|amount due|grand total)\b",
+                         re.I)
+_CANDIDATES = {}
+
+
+def _receipts_dir():
+    from flask import current_app
+    return os.path.join(current_app.config["UPLOAD_FOLDER"], "receipts")
+
+
+def candidate_amounts(receipt):
+    """The amount read when the receipt arrived, and every other amount on a
+    line that says total or paid. A receipt reads $200.00 on its subtotal
+    line and $213.20 once tax is on (Anthropic's, 2026-10-20), and only one
+    of them is the charge. Read back off the stored document, so receipts
+    that arrived before this existed are tried too."""
+    out = {round(receipt.amount, 2)} if receipt.amount else set()
+    name = receipt.filename or ""
+    if not name:
+        return out
+    if name not in _CANDIDATES:
+        found = set()
+        try:
+            with open(os.path.join(_receipts_dir(), name), "rb") as fh:
+                data = fh.read()
+            text = pdf_text(data) if name.endswith(".pdf") else _strip(data.decode("utf-8", "replace"))
+            for line in text.splitlines():
+                if _TOTAL_WORD.search(line):
+                    found.update(round(float(a.replace(",", "")), 2) for a in _AMOUNT.findall(line))
+        except Exception:  # noqa: BLE001 - a document that will not read keeps its first amount
+            pass
+        _CANDIDATES[name] = {a for a in found if a > 0}
+    return out | _CANDIDATES[name]
+
+
+def _attach(expense, filename, original_name):
+    expense.receipt_filename = filename
+    expense.receipt_original_name = original_name
+
+
+def _words(text):
+    return {w for w in re.findall(r"[a-z]{4,}", (text or "").lower())
+            if w not in ("your", "receipt", "from", "invoice", "payment", "corporation", "inc", "llc")}
+
+
+def _match_month_of_a_vendor(receipt, amounts):
+    """A vendor whose month the board splits across projects (Railway's
+    bill, as many rows as there are projects) sends one receipt for the
+    whole bill. When a vendor named on the receipt has a month whose rows add
+    up to one of its totals, that receipt proves every row of it."""
+    from models import db, Expense, ServiceCostEntry, ServiceProvider
+    lo = receipt.received_on - timedelta(days=MATCH_AFTER)
+    hi = receipt.received_on + timedelta(days=MATCH_AFTER)
+    said = _words(f"{receipt.vendor} {receipt.sender} {receipt.subject}")
+    groups = {}
+    for entry, expense, provider in (db.session.query(ServiceCostEntry, Expense, ServiceProvider)
+                                     .join(Expense, ServiceCostEntry.expense_id == Expense.id)
+                                     .join(ServiceProvider, ServiceCostEntry.provider_id == ServiceProvider.id)
+                                     .filter(Expense.date >= lo, Expense.date <= hi,
+                                             Expense.time_entry_id.is_(None)).all()):
+        if not (said & _words(f"{provider.name} {provider.display_name}")):
+            continue
+        key = (provider.id, expense.business_id, expense.date.year, expense.date.month)
+        groups.setdefault(key, {})[expense.id] = expense
+    for rows in groups.values():
+        total = round(sum(e.amount for e in rows.values()), 2)
+        waiting = [e for e in rows.values() if not e.receipt_filename]
+        if waiting and any(abs(total - a) < 0.005 for a in amounts):
+            for e in waiting:
+                _attach(e, receipt.filename, receipt.original_name)
+            receipt.expense_id = waiting[0].id
+            receipt.status = "matched"
+            db.session.flush()
+            return waiting[0]
+    return None
+
+
 def match(receipt):
-    """Attach a receipt to the expense it proves, if exactly one is likely.
-    Returns the expense or None."""
+    """Attach a receipt to the expense it proves, if exactly one is likely,
+    or to a vendor's whole split month. Returns an expense or None."""
     from models import db, Expense
-    if receipt.amount is None or receipt.received_on is None or receipt.amount <= 0:
+    if receipt.received_on is None:
+        return None
+    amounts = candidate_amounts(receipt)
+    if not amounts:
         return None
     lo = receipt.received_on - timedelta(days=MATCH_BEFORE)
     hi = receipt.received_on + timedelta(days=MATCH_AFTER)
     rows = (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
                                  Expense.date >= lo, Expense.date <= hi).all())
-    rows = [e for e in rows if abs(round(e.amount, 2) - receipt.amount) < 0.005]
-    if not rows:
-        return None
+    first = round(receipt.amount, 2) if receipt.amount else None
+    exact = [e for e in rows if first is not None and abs(round(e.amount, 2) - first) < 0.005]
+    if not exact:
+        # Another total on the same receipt: only when it picks out one
+        # charge, because a second figure is a weaker reading than the first.
+        others = [e for e in rows if any(abs(round(e.amount, 2) - a) < 0.005 for a in amounts - {first})]
+        exact = others if len(others) == 1 else []
     word = (receipt.vendor or "").lower()
+    said = _words(f"{receipt.vendor} {receipt.subject}")
+
+    def named(e):
+        return (bool(word) and word in (e.description or "").lower()) or bool(said & _words(e.description))
+
+    # A single charge that names the vendor wins; a vendor's own split month
+    # beats a stranger's charge that merely costs the same.
+    if not any(named(e) for e in exact):
+        whole = _match_month_of_a_vendor(receipt, amounts)
+        if whole is not None or not exact:
+            return whole
 
     def score(e):
-        named = bool(word) and word in (e.description or "").lower()
-        return (not named, abs((e.date - receipt.received_on).days), e.id)
+        return (not named(e), abs((e.date - receipt.received_on).days), e.id)
 
-    best = min(rows, key=score)
-    best.receipt_filename = receipt.filename
-    best.receipt_original_name = receipt.original_name
+    best = min(exact, key=score)
+    _attach(best, receipt.filename, receipt.original_name)
     receipt.expense_id = best.id
     receipt.status = "matched"
     db.session.flush()
     return best
 
 
+def attach_filings():
+    """A sales tax payment's receipt is the confirmation WebFile gave, which
+    the board already keeps with the return (SalesTaxFiling). Copied into
+    the receipts folder, so removing one never removes the other."""
+    import shutil
+    from flask import current_app
+    from models import db, Expense, SalesTaxFiling
+    done = 0
+    for filing in SalesTaxFiling.query.filter(SalesTaxFiling.filed_at.isnot(None)).all():
+        files = list(filing.files)
+        if not files:
+            continue
+        paid = round(filing.amount_paid or 0.0, 2)
+        amounts = {paid, round(paid + (filing.processing_fee or 0.0), 2)} - {0.0}
+        day = filing.filed_at.date()
+        for e in (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
+                                       Expense.date >= day - timedelta(days=MATCH_BEFORE),
+                                       Expense.date <= day + timedelta(days=MATCH_AFTER)).all()):
+            if not any(abs(round(e.amount, 2) - a) < 0.005 for a in amounts):
+                continue
+            src = os.path.join(current_app.config["UPLOAD_FOLDER"], "tax_filings", files[0].stored_name)
+            if not os.path.exists(src):
+                break
+            ext = os.path.splitext(files[0].stored_name)[1] or ".pdf"
+            name = f"{uuid.uuid4().hex}{ext}"
+            os.makedirs(_receipts_dir(), exist_ok=True)
+            shutil.copyfile(src, os.path.join(_receipts_dir(), name))
+            _attach(e, name, files[0].original_name)
+            done += 1
+            break
+    db.session.flush()
+    return done
+
+
+def in_use(filename, but_not_expense_id=None):
+    """Whether a receipt file still proves something: one document can stand
+    for a whole split month, so deleting one expense must not delete it."""
+    from models import Expense, Receipt
+    if not filename:
+        return False
+    q = Expense.query.filter(Expense.receipt_filename == filename)
+    if but_not_expense_id is not None:
+        q = q.filter(Expense.id != but_not_expense_id)
+    return q.first() is not None or Receipt.query.filter_by(filename=filename).first() is not None
+
+
 def rematch():
     """Try every waiting receipt again: an expense may have arrived since
     (a bank line settles, a statement is imported)."""
     from models import db, Receipt
-    done = 0
+    done = attach_filings()
     for r in Receipt.query.filter_by(status="unmatched").all():
         if match(r) is not None:
             done += 1
@@ -342,9 +481,12 @@ def reading(mailbox_id):
 def sync_all(app):
     from models import ReceiptMailbox
     with app.app_context():
-        for box in ReceiptMailbox.query.order_by(ReceiptMailbox.id).all():
+        boxes = ReceiptMailbox.query.order_by(ReceiptMailbox.id).all()
+        for box in boxes:
             result = sync_mailbox(box)
             print(f"  receipts {box.address:34} {result.get('error') or box.last_note}", flush=True)
+        if not boxes:
+            print(f"  receipts: {rematch():,} attached from what the board already keeps", flush=True)
 
 
 def main():
