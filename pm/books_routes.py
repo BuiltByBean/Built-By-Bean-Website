@@ -87,6 +87,7 @@ def index():
     waiting = Receipt.query.filter_by(status="unmatched").count()
     return render_template("pm/books/index.html", companies=companies, year=year,
                            mailboxes=mailboxes, waiting=waiting, today=today,
+                           reading=receipts_service.reading,
                            business_options=[(b.id, b.name) for b in _companies()])
 
 
@@ -219,19 +220,23 @@ def mailbox_add():
     box.last_ok = None
     db.session.add(box)
     db.session.commit()
-    result = receipts_service.sync_mailbox(box)
-    flash(result.get("error") or f"{address}: {box.last_note}.",
-          "warning" if result.get("error") else "success")
+    _read(box)
     return redirect(url_for("books.index") + "#mailboxes")
+
+
+def _read(box):
+    """Start reading a mailbox in the background and say so."""
+    if receipts_service.sync_in_background(current_app._get_current_object(), box.id):
+        flash(f"Reading {box.address}. Receipts appear here as it goes.", "success")
+    else:
+        flash(f"Already reading {box.address}.", "success")
 
 
 @books_bp.route("/admin/books/mailboxes/<int:mid>/sync", methods=["POST"])
 @ceo_required
 def mailbox_sync(mid):
     box = db.session.get(ReceiptMailbox, mid) or abort(404)
-    result = receipts_service.sync_mailbox(box)
-    flash(result.get("error") or f"{box.address}: {box.last_note}.",
-          "warning" if result.get("error") else "success")
+    _read(box)
     return redirect(url_for("books.index") + "#mailboxes")
 
 

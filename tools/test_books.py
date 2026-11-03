@@ -216,6 +216,30 @@ with application.app_context():
     stored = os.path.join(TMP, "receipts", railway.receipt_filename)
     check("the file is on the volume", os.path.exists(stored))
 
+    # A second read running at the same moment saves the same message first:
+    # the existence check passes, the insert collides. It shipped as a 500
+    # that threw away the whole read (2026-11-03). Simulated by blinding the
+    # check, so the insert itself meets the duplicate.
+    seen_query = Receipt.query
+
+    class Blind:
+        def filter_by(self, **kw):
+            return self if "message_key" in kw else seen_query.filter_by(**kw)
+
+        def first(self):
+            return None
+
+        def count(self):
+            return seen_query.count()
+
+    Receipt.query = Blind()
+    try:
+        again = receipts_service.sync_mailbox(box, fetcher=lambda b, since: iter(msgs))
+    finally:
+        Receipt.query = seen_query
+    check("a duplicate saved by another read is skipped, not a failure",
+          "error" not in again and again.get("new") == 0 and Receipt.query.count() == 3, again)
+
 print("5. The pages and the close")
 c = application.test_client()
 with c.session_transaction() as sess:
@@ -249,6 +273,45 @@ page = c.get(f"/admin/books/{ids['bbb']}/month/2026-10").get_data(as_text=True)
 check("a change after closing shows as a difference", "Changed since it closed" in page)
 r = c.post("/admin/books/mailboxes", data={"address": "", "password": ""}, follow_redirects=True)
 check("a mailbox needs its address and password", "Give the address" in r.get_data(as_text=True))
+
+# Connect reads in the background: the page answers at once, and a second
+# press while the read runs starts nothing.
+import threading  # noqa: E402
+import time  # noqa: E402
+gate = threading.Event()
+real_fetch = receipts_service.fetch
+
+
+def slow_fetch(mailbox, since):
+    gate.wait(5)
+    return iter([mail("Your receipt from Hetzner", "Total $7.00", sender="Hetzner <billing@hetzner.com>",
+                      mid="<hetzner-1@test>")])
+
+
+receipts_service.fetch = slow_fetch
+started = time.time()
+r = c.post("/admin/books/mailboxes", data={"address": "mbean@entertainhq.com", "password": "abcd efgh",
+                                           "business_id": ids["ehq"]}, follow_redirects=True)
+quick = time.time() - started
+body = r.get_data(as_text=True)
+check("Connect answers before the read finishes", quick < 2 and "Reading mbean@entertainhq.com" in body, quick)
+check("the page says it is reading", "Reading now" in body)
+with application.app_context():
+    second = ReceiptMailbox.query.filter_by(address="mbean@entertainhq.com").one()
+    check("the app password is kept without its spaces", second.password == "abcdefgh")
+    second_id = second.id
+r = c.post(f"/admin/books/mailboxes/{second_id}/sync", follow_redirects=True)
+check("a second press while it reads starts nothing", "Already reading" in r.get_data(as_text=True))
+gate.set()
+for _ in range(50):
+    if not receipts_service.reading(second_id):
+        break
+    time.sleep(0.1)
+receipts_service.fetch = real_fetch
+with application.app_context():
+    got = db.session.get(ReceiptMailbox, second_id)
+    check("and the read finishes on its own", got.last_ok and "1 new receipt" in (got.last_note or ""),
+          got.last_note)
 
 print("6. EntertainHQ reads its own books")
 anon = application.test_client()

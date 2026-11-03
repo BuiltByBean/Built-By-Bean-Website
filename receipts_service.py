@@ -30,6 +30,8 @@ from datetime import date, datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
 
+from sqlalchemy.exc import IntegrityError
+
 BOOKS_START = date(2026, 4, 1)
 OVERLAP_DAYS = 3
 MATCH_BEFORE, MATCH_AFTER = 3, 10
@@ -272,8 +274,16 @@ def sync_mailbox(mailbox, fetcher=None):
                           received_on=got["received_on"], amount=got["amount"],
                           filename=_store(got["file"], got["file_ext"]),
                           original_name=got["file_name"][:300], status="unmatched")
-            db.session.add(row)
-            db.session.flush()
+            # In a savepoint: a second read of the same mailbox running at
+            # the same moment (2026-11-03, Connect pressed while the first
+            # read was still going) saves the same message first, and one
+            # duplicate must not throw away every receipt read before it.
+            try:
+                with db.session.begin_nested():
+                    db.session.add(row)
+                    db.session.flush()
+            except IntegrityError:
+                continue
             counts["new"] += 1
             if match(row) is not None:
                 counts["matched"] += 1
@@ -291,6 +301,42 @@ def sync_mailbox(mailbox, fetcher=None):
                          f"{counts['matched']:,} attached")
     db.session.commit()
     return counts
+
+
+_running = set()
+_lock = __import__("threading").Lock()
+
+
+def sync_in_background(app, mailbox_id):
+    """Read one mailbox on a thread of its own, so the page that asked
+    answers at once (a first read back to April runs past gunicorn's sixty
+    seconds) and a second press while it runs starts nothing. Returns False
+    when a read of that mailbox is already going."""
+    import threading
+    with _lock:
+        if mailbox_id in _running:
+            return False
+        _running.add(mailbox_id)
+
+    def run():
+        try:
+            with app.app_context():
+                from models import db, ReceiptMailbox
+                box = db.session.get(ReceiptMailbox, mailbox_id)
+                if box is not None:
+                    sync_mailbox(box)
+        except Exception as err:  # noqa: BLE001 - a background read never takes the site down
+            app.logger.warning("receipts: background read of %s failed: %s", mailbox_id, err)
+        finally:
+            with _lock:
+                _running.discard(mailbox_id)
+
+    threading.Thread(target=run, name=f"receipts-{mailbox_id}", daemon=True).start()
+    return True
+
+
+def reading(mailbox_id):
+    return mailbox_id in _running
 
 
 def sync_all(app):

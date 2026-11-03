@@ -117,7 +117,7 @@
             <div class="w-full sm:w-auto sm:flex-1 min-w-0">
                 <p class="text-sm font-semibold text-white break-words">{{ m.address }}{% if m.business %} &middot; {{ m.business.short_name or m.business.name }}{% endif %}</p>
                 <p class="text-xs mt-0.5 break-words {{ 'text-red-300' if m.last_ok == false else 'text-surface-400' }}">
-                    {% if m.last_synced_at %}{{ m.last_synced_at.strftime('%b') }} {{ m.last_synced_at.day }}: {% endif %}{{ m.last_note or 'Not read yet' }}</p>
+                    {% if reading(m.id) %}Reading now{% else %}{% if m.last_synced_at %}{{ m.last_synced_at.strftime('%b') }} {{ m.last_synced_at.day }}: {% endif %}{{ m.last_note or 'Not read yet' }}{% endif %}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-auto">
                 <form method="POST" action="{{ url_for('books.mailbox_sync', mid=m.id) }}">
