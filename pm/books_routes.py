@@ -96,7 +96,9 @@ def index():
 def year_report(id, year):
     business = db.session.get(Business, id) or abort(404)
     s = books_service.summarize(business, date(year, 1, 1), date(year + 1, 1, 1))
-    single = len(business.owners) <= 1
+    # Schedule C numbers only for a company known to have exactly one owner;
+    # with none on file it may be a partnership, as EntertainHQ is.
+    single = len(business.owners) == 1
     return render_template("pm/books/year.html", business=business, year=year, s=s,
                            single=single, category_labels=dict(EXPENSE_CATEGORY_CHOICES))
 
