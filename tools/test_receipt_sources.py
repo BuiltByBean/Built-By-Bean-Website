@@ -153,7 +153,7 @@ with application.app_context():
 
     print("4. Sales tax")
     filing = SalesTaxFiling(business_id=bbb.id, year=2026, quarter=3, filed_at=datetime(2026, 10, 30, 15),
-                            amount_paid=740.00, processing_fee=16.43)
+                            amount_paid=739.54)  # the card fee was never typed in
     db.session.add(filing)
     db.session.flush()
     (pathlib.Path(TMP) / "tax_filings").mkdir(exist_ok=True)
@@ -162,6 +162,18 @@ with application.app_context():
                                       original_name="WebFile confirmation.pdf"))
     db.session.commit()
     receipts_service.rematch()
+    # A second return with no confirmation uploaded: the board's own record.
+    bare = SalesTaxFiling(business_id=bbb.id, year=2026, quarter=2, filed_at=datetime(2026, 10, 30, 15),
+                          amount_paid=426.93, reference_number="R-1")
+    tax2 = Expense(amount=436.79, description="Texas Comptroller (state tax)", category="taxes_licenses",
+                   date=date(2026, 11, 2), business_id=bbb.id)
+    db.session.add_all([bare, tax2])
+    db.session.commit()
+    receipts_service.rematch()
+    tax2 = db.session.get(Expense, tax2.id)
+    check("a return with no confirmation gives the board's own record",
+          (tax2.receipt_original_name or "").endswith("(board record).pdf")
+          and (RECEIPTS / tax2.receipt_filename).read_bytes().startswith(b"%PDF"), tax2.receipt_original_name)
     tax = db.session.get(Expense, tax.id)
     check("the payment carries the return's confirmation",
           tax.receipt_original_name == "WebFile confirmation.pdf" and tax.receipt_filename != "conf.pdf"

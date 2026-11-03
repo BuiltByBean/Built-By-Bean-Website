@@ -344,24 +344,40 @@ def attach_filings():
     done = 0
     for filing in SalesTaxFiling.query.filter(SalesTaxFiling.filed_at.isnot(None)).all():
         files = list(filing.files)
-        if not files:
-            continue
         paid = round(filing.amount_paid or 0.0, 2)
-        amounts = {paid, round(paid + (filing.processing_fee or 0.0), 2)} - {0.0}
+        if paid <= 0:
+            continue
+        amounts = {paid, round(paid + (filing.processing_fee or 0.0), 2)}
         day = filing.filed_at.date()
-        for e in (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
-                                       Expense.date >= day - timedelta(days=MATCH_BEFORE),
-                                       Expense.date <= day + timedelta(days=MATCH_AFTER)).all()):
-            if not any(abs(round(e.amount, 2) - a) < 0.005 for a in amounts):
-                continue
-            src = os.path.join(current_app.config["UPLOAD_FOLDER"], "tax_filings", files[0].stored_name)
-            if not os.path.exists(src):
-                break
-            ext = os.path.splitext(files[0].stored_name)[1] or ".pdf"
-            name = f"{uuid.uuid4().hex}{ext}"
+        near = (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
+                                     Expense.date >= day - timedelta(days=MATCH_BEFORE),
+                                     Expense.date <= day + timedelta(days=MATCH_AFTER)).all())
+        exact = [e for e in near if any(abs(round(e.amount, 2) - a) < 0.005 for a in amounts)]
+        # WebFile adds a card fee the return does not show, and it is not
+        # always typed in: $739.54 of tax was a $756.43 card charge on
+        # 2026-10-30. A charge to the Comptroller up to 3% over the tax is
+        # the payment, the nearest one first.
+        fee_on = [e for e in near
+                  if re.search(r"comptroller|texas tax|state tax", (e.description or "").lower())
+                  and paid <= e.amount <= paid * 1.03 + 0.01]
+        for e in (exact or sorted(fee_on, key=lambda x: x.amount - paid)[:1]):
             os.makedirs(_receipts_dir(), exist_ok=True)
-            shutil.copyfile(src, os.path.join(_receipts_dir(), name))
-            _attach(e, name, files[0].original_name)
+            src = (os.path.join(current_app.config["UPLOAD_FOLDER"], "tax_filings", files[0].stored_name)
+                   if files else None)
+            if src and os.path.exists(src):
+                ext = os.path.splitext(files[0].stored_name)[1] or ".pdf"
+                name = f"{uuid.uuid4().hex}{ext}"
+                shutil.copyfile(src, os.path.join(_receipts_dir(), name))
+                original = files[0].original_name
+            else:
+                # No confirmation uploaded: the board's own record of the
+                # return, with WebFile's reference numbers, until one is.
+                from pm.business_routes import filing_record_pdf
+                name = f"{uuid.uuid4().hex}.pdf"
+                with open(os.path.join(_receipts_dir(), name), "wb") as fh:
+                    fh.write(bytes(filing_record_pdf(filing)))
+                original = f"Sales tax return {filing.year} Q{filing.quarter} (board record).pdf"
+            _attach(e, name, original)
             done += 1
             break
     db.session.flush()
