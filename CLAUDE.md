@@ -278,6 +278,19 @@ hub cannot disagree.
 
 `tools/test_books.py`.
 
+**One company, one set of figures** (Michael, 2026-11-03: "does my finances
+every page settle with each from a numbers standpoint?"). They did not: the
+finance dashboard summed every company's expenses, the Taxes page took
+profit from Stripe's payouts (sales tax in, Stripe's fee already off and then
+taken off again as the expense the Stripe sync books) less every company's
+expenses, and the Books read the local invoice rows while the dashboard read
+Stripe live, $5.97 apart. Three profits for one company. Now the dashboard
+and Taxes read `books_service.board_business()` and `board_expense_total`,
+the Books' board income reads Stripe live (local rows only when Stripe is not
+configured), and the Expenses page's "everything" total is the companies'
+books added together. `tools/test_one_set_of_figures.py` holds the pages to
+the Books page's net, to the cent.
+
 **Income lives where the sale happens.** For a company with its own Stripe
 (EntertainHQ), `stripe_books.py` reads every line of its Stripe balance
 through a restricted key typed on the company's page (`Business.stripe_key`)
