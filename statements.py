@@ -160,6 +160,7 @@ def import_rows(conn, rows):
         bank_feed.classify(line, rules)
     db.session.flush()
     counts["review"] = BankTransaction.query.filter_by(connection_id=conn.id, disposition="review").count()
+    counts["folded"] = bank_feed.fold_duplicates()
     counts["attached"] = receipts_service.rematch()
     conn.last_ok = True
     conn.last_synced_at = datetime.utcnow()

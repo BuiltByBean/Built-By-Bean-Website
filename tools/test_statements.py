@@ -164,11 +164,38 @@ with application.app_context():
     out = db.session.get(BankTransaction, out.id)
     check("money moved from a personal account to a company is a transfer there, not counted twice",
           out.disposition == "transfer" and out.expense_id is None, out.disposition)
+    # Google Play, $25, already in EntertainHQ's books from its old list; the
+    # same charge on the personal card must not be booked to Built by Bean too.
+    ehq = Business(name="EntertainHQ LLC", short_name="EntertainHQ", slug="ehq", sales_source="hub")
+    db.session.add(ehq)
+    db.session.flush()
+    play = Expense(amount=25.0, description="Google Play developer account", category="software",
+                   date=date(2026, 10, 30), business_id=ehq.id)
+    db.session.add(play)
+    db.session.commit()
+    bank_feed.remember("GOOGLE *PLAY", "expense", vendor="Google Play", category="software")
+    statements.import_rows(personal, [{"date": date(2026, 10, 31), "description": "GOOGLE *Play",
+                                       "amount": -25.0, "kind": "Sale", "ref": "st:play"}])
+    gp = BankTransaction.query.filter_by(connection_id=personal.id, external_id="st:play").one()
+    check("a personal card's charge adopts the expense another company already has",
+          gp.expense_id == play.id and Expense.query.filter(Expense.amount == 25.0).count() == 1
+          and db.session.get(Expense, play.id).paid_by == "Michael Bean")
+    # And one that was booked twice before this existed is folded into one.
+    dup = Expense(amount=25.0, description="Google Play", category="software", date=date(2026, 10, 31),
+                  business_id=bbb.id, paid_by="Michael Bean")
+    db.session.add(dup)
+    db.session.flush()
+    gp.expense_id = dup.id
+    db.session.commit()
+    folded = bank_feed.fold_duplicates()
+    gp = db.session.get(BankTransaction, gp.id)
+    check("a charge already booked twice folds into the one that was there first",
+          folded == 1 and gp.expense_id == play.id and db.session.get(Expense, dup.id) is None, folded)
     check("Claude is told the line is on a personal card",
           "PERSONAL CARD of Michael Bean" in bank_feed._account_words(gh))
     again = statements.import_rows(personal, statements.parse(CHASE_CREDIT))
     check("the same statement twice stores nothing twice",
-          again["new"] == 0 and BankTransaction.query.filter_by(connection_id=personal.id).count() == 9)
+          again["new"] == 0 and BankTransaction.query.filter_by(connection_id=personal.id).count() == 10)
     money = books_service.owner_money_between(bbb, date(2026, 1, 1), date(2027, 1, 1))
     check("the owner put in the GitHub and the Railway he paid personally",
           money.get("Michael Bean", {}).get("in") == 24.0, money)

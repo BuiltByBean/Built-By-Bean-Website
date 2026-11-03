@@ -110,6 +110,7 @@ def decide(id):
         pattern=(request.form.get("pattern") or "").strip(),
         keep=request.form.get("keep") == "1",
         owner_name=(request.form.get("owner_name") or "").strip()[:120])
+    bank_feed.fold_duplicates()
     flash(f"Settled, and {settled:,} more like it." if settled else "Settled.", "success")
     return redirect(_back())
 
@@ -136,6 +137,7 @@ def accept_suggested():
                          owner_name=_first_owner(line.business_id)
                          if s.get("disposition") in ("contribution", "draw") else "")
         done += 1
+    bank_feed.fold_duplicates()
     flash(f"Accepted {done:,} suggestion{'' if done == 1 else 's'}.", "success")
     return redirect(url_for("bank.review"))
 
@@ -193,7 +195,9 @@ def sync(id):
     if conn.provider != "mercury":
         abort(404)
     result = bank_feed.sync_connection(conn)
-    flash(result.get("error") or f"{conn.last_note}.", "warning" if result.get("error") else "success")
+    folded = bank_feed.fold_duplicates()
+    note = result.get("error") or f"{conn.last_note}." + (f" {folded:,} charges booked twice folded into one." if folded else "")
+    flash(note, "warning" if result.get("error") else "success")
     return redirect(_back())
 
 

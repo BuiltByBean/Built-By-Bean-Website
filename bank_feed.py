@@ -321,7 +321,7 @@ def book(line, rule=None, manual=None):
 ADOPT_BEFORE, ADOPT_AFTER = 3, 7
 
 
-def adopt(line, business_id):
+def adopt(line, business_id, exclude_id=None):
     """An expense somebody already booked for this very charge, if there is
     one: typed on the expense form, or logged by a session through the
     guidance door (a domain bought from the Piped repo was, on 2026-11-02).
@@ -346,14 +346,57 @@ def adopt(line, business_id):
         BankTransaction.expense_id.isnot(None), BankTransaction.id != line.id)
     synced = db.session.query(ServiceCostEntry.expense_id).filter(
         ServiceCostEntry.expense_id.isnot(None))
-    rows = (Expense.query.filter(Expense.business_id.in_(family), Expense.date >= lo,
-                                 Expense.date <= hi, Expense.time_entry_id.is_(None),
-                                 ~Expense.id.in_(taken), ~Expense.id.in_(synced))
-            .all())
+    q = Expense.query.filter(Expense.date >= lo, Expense.date <= hi, Expense.time_entry_id.is_(None),
+                             ~Expense.id.in_(taken), ~Expense.id.in_(synced))
+    # An owner's own card pays for any of his companies, so the charge may
+    # already be in ANY company's books: on 2026-11-03 Sapphire's Google Play
+    # and Twilio charges were booked to Built by Bean while EntertainHQ's old
+    # list already had them. A company's own account pays only its own.
+    if not is_personal(line):
+        q = q.filter(Expense.business_id.in_(family))
+    if exclude_id is not None:
+        q = q.filter(Expense.id != exclude_id)
+    rows = q.all()
     rows = [e for e in rows if abs(round(e.amount, 2) - target) < 0.005]
     if not rows:
         return None
     return min(rows, key=lambda e: (abs((e.date - line.occurred_on).days), e.id))
+
+
+def fold_duplicates():
+    """Undo the double count adopt() used to miss: an expense a personal-card
+    line booked, standing beside an expense for the same charge in another
+    company's books that no bank line stands for. The one that was there
+    first is kept (somebody chose its company), the line points at it, it is
+    marked as paid by the card's owner, and any receipt moves across.
+    Returns how many were folded."""
+    from models import db, BankConnection, BankTransaction, Expense
+    done = 0
+    lines = (BankTransaction.query.join(BankConnection, BankTransaction.connection_id == BankConnection.id)
+             .filter(BankConnection.kind == "personal", BankTransaction.disposition == "expense",
+                     BankTransaction.expense_id.isnot(None)).all())
+    for line in lines:
+        mine = db.session.get(Expense, line.expense_id)
+        if mine is None:
+            continue
+        line.expense_id = None
+        db.session.flush()
+        other = adopt(line, mine.business_id, exclude_id=mine.id)
+        if other is None or (other.created_at and mine.created_at and other.created_at > mine.created_at):
+            line.expense_id = mine.id
+            continue
+        if not other.receipt_filename and mine.receipt_filename:
+            other.receipt_filename, other.receipt_original_name = mine.receipt_filename, mine.receipt_original_name
+        if not other.paid_by:
+            other.paid_by = line.connection.owner_name or None
+        from models import Receipt
+        Receipt.query.filter_by(expense_id=mine.id).update({"expense_id": other.id})
+        line.expense_id = other.id
+        db.session.delete(mine)
+        db.session.flush()
+        done += 1
+    db.session.commit()
+    return done
 
 
 def upsert(conn, row, accounts):
@@ -512,6 +555,7 @@ def sync_all(app):
             result = sync_connection(conn)
             name = conn.business.name if conn.business else conn.business_id
             print(f"  bank {name:30} {result.get('error') or conn.last_note}", flush=True)
+        print(f"  bank: {fold_duplicates():,} charges booked twice folded into one", flush=True)
 
 
 # ── Claude's suggestion for the lines nobody knows ───────
