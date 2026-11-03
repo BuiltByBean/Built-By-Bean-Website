@@ -236,6 +236,48 @@ written twice: same company, same amount to the cent, dated up to seven days
 before the bank's date or three after, not standing for another line and not
 written by a vendor sync. `tools/test_bank_feed.py`.
 
+## The books
+
+`/admin/books/` (`pm/books_routes.py`, figures from `books_service.py`) is
+each company's books, the board being the books (Michael has no bookkeeping
+software and no plans for any). Every reading is one function,
+`books_service.summarize`, so the year-end report, the monthly close and the
+hub cannot disagree.
+
+- **Income** is cash basis: for the company the board bills from, paid
+  invoices less their sales tax and nothing from a catch-up invoice (the
+  dashboard's reading); for a company on its own app, the sales the app sends;
+  otherwise its bank's money in.
+- **Expenses** are the company's and its DBAs' Expense rows, grouped by
+  `TAX_LINES` into the lines a return asks for. Schedule C line numbers are
+  shown only for a single-owner company.
+- **Owner money** is bank lines settled as `contribution` / `draw`, per
+  owner. `BusinessOwner` holds the shares, typed from the company's paperwork:
+  Built by Bean is Michael's alone, EntertainHQ has three members and files a
+  partnership return, so its accountant needs each member's figures. Money in
+  from Chase is Michael putting his own money in (the CHASE rule), never
+  income.
+- **The monthly close** (`MonthClose`) closes only a finished month and keeps
+  the totals it closed on, so a later change shows as a difference. Its checks
+  are bank lines unsorted, expenses without a receipt, and each Mercury
+  account's balance against the sum of every settled line read for it
+  (`balances_json`, read with the accounts).
+- **Receipts** (`receipts_service.py`, nightly after the bank feed) are read
+  from every `ReceiptMailbox` over IMAP, read only, with an app password typed
+  on the Books page. Only subjects that read as a receipt, never a renewal
+  notice. The amount is the last line that says total or paid, as a whole word
+  (Subtotal is not Total), from the PDF and from both the plain and HTML
+  parts, because a plain part is often a one-line fallback. A receipt attaches
+  to an expense without one for the same amount to the cent, dated three days
+  before to ten after. One that matches nothing waits, and `rematch` retries it
+  every night.
+- **`/api/hub/books`** is the same figures for a company's own app, signed
+  with its hub secret. EntertainHQ's admin shows its partners these numbers
+  read only, so there is one set of books and never two. The app may send its
+  own sales as the income.
+
+`tools/test_books.py`.
+
 ## What a month of usage cost
 
 `service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows

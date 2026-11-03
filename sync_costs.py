@@ -104,6 +104,13 @@ def _sweep():
         bank_feed.main()
     except Exception as err:  # noqa: BLE001
         print(f"bank feed failed: {str(err)[:200]}", flush=True)
+    # Receipts after the bank, so tonight's settled charges can take theirs.
+    try:
+        import receipts_service
+        print("reading receipts from every mailbox", flush=True)
+        receipts_service.main()
+    except Exception as err:  # noqa: BLE001
+        print(f"receipts failed: {str(err)[:200]}", flush=True)
     # Last, because it reads what the sweep filed and what the audit found.
     try:
         import curate_practices

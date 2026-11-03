@@ -24,7 +24,8 @@ from pm.users_routes import ceo_required
 bank_bp = Blueprint("bank", __name__, url_prefix="/admin/bank")
 
 DISPOSITIONS = [("expense", "Business expense"), ("personal", "Personal"),
-                ("transfer", "Transfer between my accounts"), ("income", "Money in")]
+                ("contribution", "Money an owner put in"), ("draw", "Money an owner took out"),
+                ("transfer", "Transfer between the company's accounts"), ("income", "Money in")]
 CATEGORIES = [(k, v) for k, v in EXPENSE_CATEGORY_CHOICES if k != "billable_time"]
 
 
@@ -39,6 +40,13 @@ def bank_review_count():
 @bank_bp.app_template_global("bank_connections_for")
 def bank_connections_for(business):
     return BankConnection.query.filter_by(business_id=business.id).order_by(BankConnection.id).all()
+
+
+def _first_owner(business_id):
+    from models import BusinessOwner
+    row = (BusinessOwner.query.filter_by(business_id=business_id)
+           .order_by(BusinessOwner.share_percent.desc().nullslast(), BusinessOwner.id).first())
+    return row.name if row else ""
 
 
 def _back():
@@ -78,6 +86,7 @@ def review():
         disposition_options=DISPOSITIONS, category_options=CATEGORIES, norm=bank_feed.norm,
         category_labels=dict(EXPENSE_CATEGORY_CHOICES),
         business_names={b.id: (b.short_name or b.name) for b in businesses},
+        owners_by_business={b.id: _first_owner(b.id) for b in businesses},
         disposition_labels=dict(VendorRule.DISPOSITIONS, review="To review", void="Cancelled"))
 
 
@@ -97,7 +106,8 @@ def decide(id):
         project_id=project_id, client_id=project.client_id if project else None,
         vendor=(request.form.get("vendor") or "").strip()[:120],
         pattern=(request.form.get("pattern") or "").strip(),
-        keep=request.form.get("keep") == "1")
+        keep=request.form.get("keep") == "1",
+        owner_name=(request.form.get("owner_name") or "").strip()[:120])
     flash(f"Settled, and {settled:,} more like it." if settled else "Settled.", "success")
     return redirect(_back())
 
@@ -120,7 +130,9 @@ def accept_suggested():
                          project_id=project.id if project else None,
                          client_id=project.client_id if project else None,
                          vendor=s.get("vendor") or "", pattern=s.get("pattern") or "",
-                         keep=bool(s.get("pattern")))
+                         keep=bool(s.get("pattern")),
+                         owner_name=_first_owner(line.business_id)
+                         if s.get("disposition") in ("contribution", "draw") else "")
         done += 1
     flash(f"Accepted {done:,} suggestion{'' if done == 1 else 's'}.", "success")
     return redirect(url_for("bank.review"))

@@ -753,10 +753,21 @@ class BankConnection(db.Model):
     last_ok = db.Column(db.Boolean, nullable=True)
     last_note = db.Column(db.String(300), default="")
     accounts_json = db.Column(db.Text, default="{}")
+    # {account id: current balance} as Mercury last reported it, for the
+    # monthly close to hold the books against.
+    balances_json = db.Column(db.Text, default="{}")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     business = db.relationship("Business", backref=db.backref(
         "bank_connections", cascade="all, delete-orphan"))
+
+    @property
+    def balances(self):
+        import json
+        try:
+            return json.loads(self.balances_json or "{}") or {}
+        except ValueError:
+            return {}
 
     @property
     def accounts(self):
@@ -803,6 +814,9 @@ class VendorRule(db.Model):
         "projects.id", ondelete="SET NULL", name="fk_vendor_rules_project_id"), nullable=True)
     provider_id = db.Column(db.Integer, db.ForeignKey(
         "service_providers.id", ondelete="SET NULL", name="fk_vendor_rules_provider_id"), nullable=True)
+    # For contribution and draw: which owner's money it was, by name, so one
+    # rule ("CHASE" is Michael's own account) serves every company he owns.
+    owner_name = db.Column(db.String(120), default="")
     note = db.Column(db.String(300), default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -812,7 +826,8 @@ class VendorRule(db.Model):
     provider = db.relationship("ServiceProvider")
 
     DISPOSITIONS = (("expense", "Business expense"), ("covered", "Booked by its vendor sync"),
-                    ("transfer", "Transfer between my accounts"), ("income", "Money in"),
+                    ("contribution", "Money an owner put in"), ("draw", "Money an owner took out"),
+                    ("transfer", "Transfer between the company's accounts"), ("income", "Money in"),
                     ("personal", "Personal, not the business"))
     DISPOSITION_LABELS = dict(DISPOSITIONS)
 
@@ -862,6 +877,7 @@ class BankTransaction(db.Model):
     disposition = db.Column(db.String(12), nullable=False, default="review", index=True)
     rule_id = db.Column(db.Integer, db.ForeignKey(
         "vendor_rules.id", ondelete="SET NULL", name="fk_bank_transactions_rule_id"), nullable=True)
+    owner_name = db.Column(db.String(120), default="")
     expense_id = db.Column(db.Integer, db.ForeignKey(
         "expenses.id", ondelete="SET NULL", name="fk_bank_transactions_expense_id"), nullable=True)
     suggestion_json = db.Column(db.Text, nullable=True)
@@ -887,6 +903,127 @@ class BankTransaction(db.Model):
 
     def __repr__(self):
         return f"<BankTransaction {self.occurred_on} {self.amount} {self.counterparty}>"
+
+
+class BusinessOwner(db.Model):
+    """Who owns a company, and how much of it.
+
+    A single-member LLC (Built by Bean) is reported on its owner's own
+    return; a multi-member one (EntertainHQ, three members) files a
+    partnership return and gives each member a K-1, so the books have to say
+    what each member put in and took out. The shares are typed on the
+    business's page from the company's own paperwork, never guessed.
+    """
+
+    __tablename__ = "business_owners"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_business_owners_business_id"),
+        nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    share_percent = db.Column(db.Float, nullable=True)
+    note = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "owners", cascade="all, delete-orphan", order_by="BusinessOwner.id"))
+
+    def __repr__(self):
+        return f"<BusinessOwner {self.name} {self.share_percent}%>"
+
+
+class MonthClose(db.Model):
+    """A month of one company's books, declared finished.
+
+    Pressed on the monthly close page once every bank line is sorted, every
+    expense has its receipt and the bank's balance agrees; the figures it
+    was closed on are kept, so a change to a closed month afterwards shows
+    as a difference rather than silently moving a number the accountant
+    already has.
+    """
+
+    __tablename__ = "month_closes"
+    __table_args__ = (
+        db.UniqueConstraint("business_id", "month", name="uq_month_closes_business_month"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_month_closes_business_id"),
+        nullable=False, index=True)
+    month = db.Column(db.Date, nullable=False)  # the first of the month
+    expenses_total = db.Column(db.Float, nullable=False, default=0.0)
+    income_total = db.Column(db.Float, nullable=False, default=0.0)
+    closed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    note = db.Column(db.String(300), default="")
+
+    business = db.relationship("Business")
+
+
+class ReceiptMailbox(db.Model):
+    """A mailbox the board reads for receipts.
+
+    Michael's receipts land in three inboxes (his own Gmail, EntertainHQ's
+    and Built by Bean's), and none of them is tidy. Each is opened read only
+    over IMAP with an app password its owner made and typed on the Books
+    page, and only mail that looks like a receipt or invoice is read.
+    `business_id` is the company whose receipts usually arrive there; a
+    receipt still attaches to whichever company's expense it matches.
+    """
+
+    __tablename__ = "receipt_mailboxes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="SET NULL", name="fk_receipt_mailboxes_business_id"), nullable=True)
+    address = db.Column(db.String(200), nullable=False, unique=True)
+    imap_host = db.Column(db.String(120), nullable=False, default="imap.gmail.com")
+    password = db.Column(db.Text, default="")
+    read_from = db.Column(db.Date, nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    last_ok = db.Column(db.Boolean, nullable=True)
+    last_note = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business")
+
+
+class Receipt(db.Model):
+    """One receipt or invoice email, and the expense it is proof of.
+
+    Matched on the amount to the cent within a few days of the charge; the
+    file (the PDF it carried, or the message itself as HTML) is copied onto
+    the expense as its receipt. A receipt that matches nothing waits, because
+    it may be a charge on a card whose history is not in yet, or a personal
+    purchase that never belonged in the books.
+    """
+
+    __tablename__ = "receipts"
+    __table_args__ = (
+        db.UniqueConstraint("mailbox_id", "message_key", name="uq_receipts_mailbox_message"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    mailbox_id = db.Column(db.Integer, db.ForeignKey(
+        "receipt_mailboxes.id", ondelete="CASCADE", name="fk_receipts_mailbox_id"),
+        nullable=False, index=True)
+    message_key = db.Column(db.String(200), nullable=False)
+    sender = db.Column(db.String(200), default="")
+    vendor = db.Column(db.String(120), default="")
+    subject = db.Column(db.String(300), default="")
+    received_on = db.Column(db.Date, nullable=True, index=True)
+    amount = db.Column(db.Float, nullable=True)
+    filename = db.Column(db.String(300), nullable=True)
+    original_name = db.Column(db.String(300), nullable=True)
+    status = db.Column(db.String(12), nullable=False, default="unmatched", index=True)
+    expense_id = db.Column(db.Integer, db.ForeignKey(
+        "expenses.id", ondelete="SET NULL", name="fk_receipts_expense_id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    mailbox = db.relationship("ReceiptMailbox", backref=db.backref(
+        "receipts", lazy="dynamic", cascade="all, delete-orphan"))
+    expense = db.relationship("Expense")
 
 
 class TimeEntry(db.Model):

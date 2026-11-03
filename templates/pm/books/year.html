@@ -1,0 +1,116 @@
+{% extends "pm/base.html" %}
+
+{#
+  The year-end report the accountant works from (books_service.summarize).
+  Expenses are grouped into the lines a return asks for; the Schedule C
+  line number shows only for a single-owner company, which files one. The
+  owner money table is what a partnership's K-1s need. The CSV is every
+  line, for a spreadsheet or the accountant's own software.
+#}
+
+{% block title %}{{ business.short_name or business.name }} {{ year }} - Books{% endblock %}
+{% block page_title %}{{ business.name }}{% endblock %}
+{% block page_subtitle %}{{ year }} books{% endblock %}
+
+{% macro money(v) %}{{ '-' if v < 0 }}${{ '{:,.2f}'.format(v|abs) }}{% endmacro %}
+
+{% block header_actions %}
+<a href="{{ url_for('books.year_csv', id=business.id, year=year) }}"
+   class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl">
+    Download CSV</a>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+
+    {% if s.unsorted or s.no_receipt %}
+    <div class="glass-card p-4 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-white">
+            {% if s.unsorted %}{{ s.unsorted | commas }} bank line{{ '' if s.unsorted == 1 else 's' }} not sorted{% endif %}{% if s.unsorted and s.no_receipt %}, {% endif %}{% if s.no_receipt %}{{ s.no_receipt | length | commas }} expense{{ '' if s.no_receipt|length == 1 else 's' }} without a receipt{% endif %}</p>
+        {% if s.unsorted %}
+        <a href="{{ url_for('bank.review') }}"
+           class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Sort them</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-3 gap-3">
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Income</p>
+            <p class="text-sm sm:text-2xl font-bold text-emerald-300 mt-1 tabular-nums whitespace-nowrap">{{ money(s.income_total) }}</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Expenses</p>
+            <p class="text-sm sm:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap">{{ money(s.expense_total) }}</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Net</p>
+            <p class="text-sm sm:text-2xl font-bold mt-1 tabular-nums whitespace-nowrap {{ 'text-emerald-300' if s.net >= 0 else 'text-red-300' }}">{{ money(s.net) }}</p>
+        </div>
+    </div>
+
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-3">Expenses by line</h2>
+        {% if s.tax_lines %}
+        <div class="divide-y divide-white/5">
+            {% for r in s.tax_lines %}
+            <div class="flex items-center justify-between gap-3 py-2.5 min-w-0">
+                <span class="text-sm text-white break-words min-w-0">{{ r.label }}{% if single %} <span class="text-surface-500">(line {{ r.number }})</span>{% endif %}</span>
+                <span class="text-sm font-semibold text-white tabular-nums shrink-0">{{ money(r.total) }}</span>
+            </div>
+            {% endfor %}
+            <div class="flex items-center justify-between gap-3 pt-3">
+                <span class="text-sm font-semibold text-white">Total</span>
+                <span class="text-sm font-bold text-white tabular-nums">{{ money(s.expense_total) }}</span>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400">No expenses in {{ year }}</p>
+        {% endif %}
+    </section>
+
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-3">By month</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-surface-400 uppercase tracking-wider">
+                    <th class="py-2 pr-4">Month</th><th class="py-2 pr-4 text-right">Income</th>
+                    <th class="py-2 pr-4 text-right">Expenses</th><th class="py-2 text-right">Net</th></tr></thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for k, v in s.by_month.items() %}
+                    <tr><td class="py-2 pr-4 text-white">{{ k }}</td>
+                        <td class="py-2 pr-4 text-right tabular-nums text-emerald-300">{{ money(v.income) }}</td>
+                        <td class="py-2 pr-4 text-right tabular-nums text-white">{{ money(v.expenses) }}</td>
+                        <td class="py-2 text-right tabular-nums text-white">{{ money(v.income - v.expenses) }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-3">Owners</h2>
+        {% if business.owners or s.owner_money %}
+        <div class="divide-y divide-white/5">
+            {% set named = business.owners | map(attribute='name') | list %}
+            {% for o in business.owners %}
+            {% set m = s.owner_money.get(o.name, {'in': 0, 'out': 0}) %}
+            <div class="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <span class="text-sm text-white">{{ o.name }}{% if o.share_percent is not none %} &middot; {{ '%g'|format(o.share_percent) }}%{% endif %}</span>
+                <span class="text-sm text-surface-300 tabular-nums">put in {{ money(m['in']) }} &middot; took out {{ money(m['out']) }}</span>
+            </div>
+            {% endfor %}
+            {% for who, m in s.owner_money.items() if who not in named %}
+            <div class="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <span class="text-sm text-amber-300">{{ who }}</span>
+                <span class="text-sm text-surface-300 tabular-nums">put in {{ money(m['in']) }} &middot; took out {{ money(m['out']) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <a href="{{ url_for('books.index') }}#company-{{ business.id }}"
+           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200">Add its owners</a>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

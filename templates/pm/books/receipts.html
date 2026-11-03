@@ -1,0 +1,40 @@
+{% extends "pm/base.html" %}
+
+{#
+  Receipts that matched no charge (receipts_service.py). Each one is a
+  charge on a card whose history is not in yet, or a personal purchase:
+  Open shows the receipt, Set aside takes it off this list for good.
+#}
+
+{% block title %}Receipts - Books{% endblock %}
+{% block page_title %}Receipts{% endblock %}
+{% block page_subtitle %}{{ rows | length | commas }} with no charge yet{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block content %}
+<div class="glass-card flex flex-col min-h-0 flex-1">
+    <div class="min-h-0 overflow-y-auto divide-y divide-white/5">
+        {% for r in rows %}
+        <div class="p-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="w-full sm:w-auto sm:flex-1 min-w-0">
+                <p class="text-sm font-medium text-white break-words">{{ r.vendor }} &middot; {{ r.subject }}</p>
+                <p class="text-xs text-surface-400 break-words">
+                    {% if r.received_on %}{{ r.received_on.strftime('%b') }} {{ r.received_on.day }}, {{ r.received_on.year }}{% endif %}
+                    &middot; {{ r.mailbox.address }}
+                    {% if r.amount %}&middot; ${{ '{:,.2f}'.format(r.amount) }}{% else %}&middot; no amount found{% endif %}</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 ml-auto">
+                <a href="{{ url_for('books.receipt_file', rid=r.id) }}" target="_blank" rel="noopener"
+                   class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40">Open</a>
+                <form method="POST" action="{{ url_for('books.receipt_ignore', rid=r.id) }}">
+                    <button type="submit"
+                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300">Set aside</button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="p-8 text-center text-surface-400">Every receipt is attached</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

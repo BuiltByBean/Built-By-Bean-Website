@@ -1,0 +1,96 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+
+{#
+  The monthly close: what is left, then one press. Three checks, each one a
+  reason the month's numbers could still change: bank lines nobody has
+  sorted, expenses without their receipt, and the bank's own balance not
+  agreeing with every line the board has read.
+#}
+
+{% block title %}{{ st.month.strftime('%B %Y') }} - Books{% endblock %}
+{% block page_title %}{{ st.month.strftime('%B %Y') }}{% endblock %}
+{% block page_subtitle %}{{ business.name }}{% endblock %}
+
+{% macro money(v) %}{{ '-' if v < 0 }}${{ '{:,.2f}'.format(v|abs) }}{% endmacro %}
+{% macro check(ok, text) %}
+<div class="flex items-start gap-3 py-2.5">
+    <span class="mt-0.5 shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full {{ 'bg-emerald-500/20 text-emerald-300' if ok else 'bg-amber-500/20 text-amber-300' }}">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+            {% if ok %}<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>{% else %}<path stroke-linecap="round" d="M12 8v5m0 3h.01"/>{% endif %}
+        </svg></span>
+    <span class="text-sm text-white break-words min-w-0">{{ text }}</span>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+
+    <div class="grid grid-cols-3 gap-3">
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Income</p>
+            <p class="text-sm sm:text-2xl font-bold text-emerald-300 mt-1 tabular-nums whitespace-nowrap">{{ money(s.income_total) }}</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Expenses</p>
+            <p class="text-sm sm:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap">{{ money(s.expense_total) }}</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Net</p>
+            <p class="text-sm sm:text-2xl font-bold mt-1 tabular-nums whitespace-nowrap {{ 'text-emerald-300' if s.net >= 0 else 'text-red-300' }}">{{ money(s.net) }}</p>
+        </div>
+    </div>
+
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <div class="divide-y divide-white/5">
+            {{ check(not st.unsorted, 'Every bank line sorted' if not st.unsorted else (st.unsorted ~ ' bank line' ~ ('' if st.unsorted == 1 else 's') ~ ' to sort')) }}
+            {{ check(not st.no_receipt, 'Every expense has its receipt' if not st.no_receipt else (st.no_receipt ~ ' expense' ~ ('' if st.no_receipt == 1 else 's') ~ ' without a receipt')) }}
+            {% for a in bank %}
+            {% if a.bank is none %}
+            {{ check(false, a.name ~ ': the bank has not reported a balance yet') }}
+            {% elif a.agrees %}
+            {{ check(true, a.name ~ ' agrees with the bank: ' ~ money(a.bank)) }}
+            {% else %}
+            {{ check(false, a.name ~ ': the bank says ' ~ money(a.bank) ~ ', the board has ' ~ money(a.board)) }}
+            {% endif %}
+            {% endfor %}
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-2 pt-4">
+            {% if st.unsorted %}
+            <a href="{{ url_for('bank.review') }}"
+               class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200">Sort them</a>
+            {% endif %}
+            {% if st.closed %}
+            <span class="inline-flex items-center min-h-[44px] px-3 text-sm font-semibold text-emerald-300">Closed {{ st.closed.closed_at.strftime('%b') }} {{ st.closed.closed_at.day }}</span>
+            <form method="POST" action="{{ url_for('books.reopen_month', id=business.id, ym=st.month.strftime('%Y-%m')) }}">
+                {{ confirm_button('Reopen', 'Reopen this month?') }}
+            </form>
+            {% elif st.finished %}
+            <form method="POST" action="{{ url_for('books.close_month', id=business.id, ym=st.month.strftime('%Y-%m')) }}">
+                <button type="submit"
+                        class="inline-flex items-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Close {{ st.month.strftime('%B') }}</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if st.closed and (st.closed.expenses_total|round(2) != s.expense_total or st.closed.income_total|round(2) != s.income_total) %}
+        <p class="text-sm text-amber-300 pt-2">Changed since it closed: expenses were {{ money(st.closed.expenses_total) }}, income {{ money(st.closed.income_total) }}.</p>
+        {% endif %}
+    </section>
+
+    {% if s.no_receipt %}
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-2">Without a receipt</h2>
+        <div class="divide-y divide-white/5">
+            {% for e in s.no_receipt %}
+            <a href="{{ url_for('pm.expense_edit', id=e.id) }}"
+               class="flex items-center justify-between gap-3 py-2.5 min-h-[44px] hover:bg-white/5 -mx-2 px-2 rounded-lg">
+                <span class="text-sm text-white break-words min-w-0">{{ e.date.strftime('%b') }} {{ e.date.day }} &middot; {{ e.description or category_labels.get(e.category, e.category) }}</span>
+                <span class="text-sm font-semibold text-white tabular-nums shrink-0">{{ money(e.amount) }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

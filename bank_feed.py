@@ -18,8 +18,12 @@ way to split the money across projects, never a second expense.
 What a line is:
   - void      the bank cancelled, failed or reversed it; any expense it made
               is removed
-  - transfer  money between the owner's own accounts (Mercury's internal and
-              treasury transfers, a card payoff once a rule says so)
+  - transfer  money between the company's own accounts (Mercury's internal
+              and treasury transfers, a card payoff once a rule says so)
+  - contribution / draw
+              an owner's own money going in or coming out (Michael moving
+              money in from his personal Chase is the first): neither income
+              nor an expense, and the year-end report says whose it was
   - expense   a business cost, booked once the line has SETTLED, in the
               books of the business the rule names, else the business whose
               bank it is. Mercury's own fees are expenses without a rule.
@@ -93,14 +97,21 @@ def mercury_get(token, path, params=None):
         raise BankError("Mercury answered with something that is not JSON") from err
 
 
-def mercury_accounts(token):
-    """{account id: name}. Also the check that a token works."""
+def mercury_accounts(token, balances=None):
+    """{account id: name}. Also the check that a token works. Pass a dict as
+    `balances` to have it filled with {account id: current balance}."""
     data = mercury_get(token, "/accounts")
     rows = data.get("accounts", data) if isinstance(data, dict) else data
     out = {}
     for a in rows or []:
         if isinstance(a, dict) and a.get("id"):
             out[a["id"]] = a.get("nickname") or a.get("name") or a.get("kind") or "Account"
+            if balances is not None:
+                value = a.get("currentBalance", a.get("availableBalance"))
+                try:
+                    balances[a["id"]] = round(float(value), 2)
+                except (TypeError, ValueError):
+                    pass
     return out
 
 
@@ -191,6 +202,8 @@ def classify(line, rules=None):
         rule = rule_for(line, rules)
         if rule is not None:
             line.disposition = rule.disposition
+            if rule.disposition in ("contribution", "draw"):
+                line.owner_name = rule.owner_name or ""
             if rule.disposition == "covered":
                 owner = rule.business_id or line.business_id
                 if not provider_books(rule.provider, owner):
@@ -331,7 +344,10 @@ def sync_connection(conn, fetch=None, accounts=None):
     counts = {"read": 0, "new": 0, "review": 0, "expense": 0}
     try:
         if accounts is None:
-            accounts = mercury_accounts(conn.token)
+            balances = {}
+            accounts = mercury_accounts(conn.token, balances)
+            if balances:
+                conn.balances_json = json.dumps(balances)
         if accounts:
             conn.accounts_json = json.dumps(accounts)
         else:
@@ -378,7 +394,7 @@ def reclassify_review(rules=None):
 
 
 def remember(pattern, disposition, vendor="", business_id=None, category="misc",
-             client_id=None, project_id=None, provider_id=None, note=""):
+             client_id=None, project_id=None, provider_id=None, note="", owner_name=""):
     """Write (or rewrite) the rule for a pattern. Returns the rule."""
     from models import db, VendorRule
     pattern = norm(pattern)[:120]
@@ -396,12 +412,13 @@ def remember(pattern, disposition, vendor="", business_id=None, category="misc",
     rule.project_id = project_id or None
     rule.provider_id = provider_id or None
     rule.note = (note or "")[:300]
+    rule.owner_name = (owner_name or "")[:120]
     db.session.flush()
     return rule
 
 
 def decide(line, disposition, *, business_id=None, category="misc", client_id=None,
-           project_id=None, vendor="", pattern="", keep=True):
+           project_id=None, vendor="", pattern="", keep=True, owner_name=""):
     """Settle one line from the review list. With `keep`, the answer becomes
     a rule and every waiting line like it is settled too."""
     from models import db, VendorRule
@@ -409,13 +426,15 @@ def decide(line, disposition, *, business_id=None, category="misc", client_id=No
     line.decided_at = now
     if keep and pattern:
         rule = remember(pattern, disposition, vendor=vendor, business_id=business_id,
-                        category=category, client_id=client_id, project_id=project_id)
+                        category=category, client_id=client_id, project_id=project_id,
+                        owner_name=owner_name)
         classify(line, VendorRule.query.all())
         line.decided_at = now
         db.session.commit()
         return reclassify_review()
     line.rule_id = None
     line.disposition = disposition
+    line.owner_name = (owner_name or "")[:120] if disposition in ("contribution", "draw") else ""
     book(line, manual={"business_id": business_id, "category": category,
                        "client_id": client_id, "project_id": project_id,
                        "vendor": vendor or line.counterparty})
@@ -441,8 +460,10 @@ he runs, an entertainment booking platform. A line is money out of one \
 company's bank unless its amount is positive. For each line, say what it \
 most likely is: a business expense (and whose: usually the company whose \
 bank paid it, but a charge for EntertainHQ's own services paid by Built by \
-Bean is EntertainHQ's), a transfer between his own accounts, money in, or a \
-personal purchase that does not belong in either company's books. Name the \
+Bean is EntertainHQ's), a transfer between the company's own accounts, \
+money an owner put in (contribution) or took out (draw), money in from \
+customers, or a personal purchase that does not belong in either company's \
+books. Michael's personal accounts are at Chase. Name the \
 vendor in plain words, and give the PATTERN: the shortest stable piece of \
 the counterparty or bank text that will appear on every future charge from \
 this vendor and on no other (e.g. "GITHUB", "GOOGLE WORKSPACE", not a \
@@ -457,7 +478,8 @@ def _suggest_schema(categories):
             "properties": {
                 "id": {"type": "integer"},
                 "disposition": {"type": "string",
-                                "enum": ["expense", "transfer", "income", "personal"]},
+                                "enum": ["expense", "contribution", "draw", "transfer",
+                                         "income", "personal"]},
                 "vendor": s, "pattern": s,
                 "business_id": {"type": "integer"},
                 "category": {"type": "string", "enum": categories},

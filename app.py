@@ -342,6 +342,8 @@ def create_app():
     app.register_blueprint(practices_bp)
     from pm.bank_routes import bank_bp
     app.register_blueprint(bank_bp)
+    from pm.books_routes import books_bp
+    app.register_blueprint(books_bp)
 
     # ── The people who may open this board ─────────────────
     from pm.users_routes import users_bp

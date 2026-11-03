@@ -114,12 +114,13 @@
                 {% set pre_biz = s.business_id or l.business_id %}
                 {% set pre_cat = s.category or 'misc' %}
                 {% set pre_proj = s.project_id or 0 %}
-                <form method="POST" action="{{ url_for('bank.decide', id=l.id) }}" class="space-y-3">
+                <form method="POST" action="{{ url_for('bank.decide', id=l.id) }}" class="space-y-3"
+                      x-data='{ disp: {{ pre_disp|tojson }} }'>
                     <input type="hidden" name="next" value="{{ request.full_path }}">
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div class="min-w-0">
                             <p class="text-xs font-medium text-surface-400 mb-1.5">What it is</p>
-                            {{ select_dropdown('disposition', disposition_options, pre_disp, full_width=true) }}
+                            {{ select_dropdown('disposition', disposition_options, pre_disp, full_width=true, model='disp') }}
                         </div>
                         <div class="min-w-0">
                             <p class="text-xs font-medium text-surface-400 mb-1.5">Whose books</p>
@@ -136,6 +137,11 @@
                         <div class="min-w-0">
                             <label for="vendor-{{ l.id }}" class="block text-xs font-medium text-surface-400 mb-1.5">Vendor</label>
                             <input id="vendor-{{ l.id }}" name="vendor" maxlength="120" value="{{ s.vendor or l.counterparty }}"
+                                   class="w-full min-w-0 input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white rounded-xl">
+                        </div>
+                        <div class="min-w-0" x-show="disp === 'contribution' || disp === 'draw'">
+                            <label for="owner-{{ l.id }}" class="block text-xs font-medium text-surface-400 mb-1.5">Which owner</label>
+                            <input id="owner-{{ l.id }}" name="owner_name" maxlength="120" value="{{ owners_by_business.get(l.business_id, '') }}"
                                    class="w-full min-w-0 input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white rounded-xl">
                         </div>
                         <div class="min-w-0">
