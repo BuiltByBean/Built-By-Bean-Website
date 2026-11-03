@@ -322,6 +322,20 @@ with application.app_context():
     check("and the read finishes on its own", got.last_ok and "1 new receipt" in (got.last_note or ""),
           got.last_note)
 
+print("5b. A Railway account that pulls its bills is not typed in")
+with application.app_context():
+    from models import ServiceProvider
+    db.session.add_all([
+        ServiceProvider(name="railway", display_name="Railway (pulls)", is_active=True,
+                        credentials_json=json.dumps({"workspace_id": "ws-1"})),
+        ServiceProvider(name="railway", display_name="Railway (typed)", is_active=True,
+                        credentials_json="{}")])
+    db.session.commit()
+ledger = c.get("/admin/expenses").get_data(as_text=True)
+check("the one that pulls is not asked to be entered",
+      "Railway (pulls): no costs recorded" not in ledger)
+check("the one typed by hand still is", "Railway (typed): no costs recorded" in ledger)
+
 print("6. EntertainHQ reads its own books")
 anon = application.test_client()
 

@@ -843,6 +843,18 @@ def _delete_entries_for(provider, resource_id, p_start, p_end):
 STALE_AFTER_DAYS = 3
 
 
+def pulls_itself(provider):
+    """A Railway account that names its workspace reads its own bills
+    (service_costs_service._sync_railway) and is not typed in by hand, so it
+    is a synced vendor like any other: healthy when its last pull worked."""
+    if provider.name != "railway":
+        return False
+    try:
+        return bool(json.loads(provider.credentials_json or "{}").get("workspace_id"))
+    except ValueError:
+        return False
+
+
 def vendor_health(providers):
     """Which vendors need something, and a count for the ones that do not.
 
@@ -860,7 +872,9 @@ def vendor_health(providers):
     now = datetime.now(timezone.utc)
 
     for p in providers:
-        if p.name in MANUAL_MONTHLY_PROVIDERS:
+        # 2026-11-03: the page still said "enter monthly" for both Railway
+        # accounts a day after their bills began pulling themselves.
+        if p.name in MANUAL_MONTHLY_PROVIDERS and not pulls_itself(p):
             attention.append({
                 "provider": p, "tone": "manual", "note": "enter monthly",
                 "href": url_for("service_costs.provider_monthly", id=p.id),
@@ -915,7 +929,10 @@ def months_missing_manual_costs(providers, lookback=1):
     out = []
     today = date.today().replace(day=1)
     for provider in providers:
-        if provider.name not in MANUAL_MONTHLY_PROVIDERS:
+        # One that pulls itself is asked about on Needs attention, with the
+        # grace a billing month that starts mid-month needs; asking here too
+        # put EntertainHQ's October bill on the page before it existed.
+        if provider.name not in MANUAL_MONTHLY_PROVIDERS or pulls_itself(provider):
             continue
         for i in range(1, lookback + 1):
             month = today
