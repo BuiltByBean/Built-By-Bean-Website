@@ -669,6 +669,11 @@ class Expense(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey(
         "businesses.id", ondelete="SET NULL", name="fk_expenses_business_id"),
         nullable=True, index=True)
+    # An owner who paid it out of their own pocket, by name. The company's
+    # books carry the expense AND the same amount as that owner putting money
+    # in, because that is what it was: EntertainHQ's first $599.86 (its LLC
+    # filing, Claude, Twilio, Google Play) went on Michael's own card.
+    paid_by = db.Column(db.String(120), nullable=True)
 
     business = db.relationship("Business", foreign_keys=[business_id])
     client = db.relationship("Client", backref="expenses")

@@ -163,6 +163,15 @@ with application.app_context():
     money = books_service.owner_money_between(bbb, date(2026, 1, 1), date(2027, 1, 1))
     check("the year credits the owner both ways",
           money.get("Michael Bean") == {"in": 5000.0, "out": 300.0}, money)
+    db.session.add(Expense(amount=301.0, description="Texas Secretary of State, LLC filing",
+                           category="taxes_licenses", date=date(2026, 10, 3), business_id=ehq.id,
+                           paid_by="Michael Bean"))
+    db.session.commit()
+    ehq_money = books_service.owner_money_between(ehq, date(2026, 1, 1), date(2027, 1, 1))
+    check("an expense an owner paid personally is that owner's money put in",
+          ehq_money.get("Michael Bean") == {"in": 301.0, "out": 0.0}, ehq_money)
+    paid = Expense.query.filter_by(paid_by="Michael Bean").one()
+    check("and says so in the export", books_service.source_of(paid) == "paid personally by Michael Bean")
 
     print("2. The year")
     s = books_service.summarize(bbb, date(2026, 1, 1), date(2027, 1, 1))
@@ -330,7 +339,8 @@ data = r.get_json() or {}
 check("signed, it answers", r.status_code == 200, r.status_code)
 check("its own sales are its income", data.get("income_total") == 250.0, data.get("income_total"))
 check("its expenses are its own and nobody else's",
-      data.get("expense_total") == 42.48 and len(data.get("expenses", [])) == 1, data.get("expense_total"))
+      data.get("expense_total") == round(42.48 + 301.0, 2) and len(data.get("expenses", [])) == 2,
+      data.get("expense_total"))
 check("each partner is listed with a share",
       sorted(o["name"] for o in data.get("owners", [])) == ["Kenali Kendrick", "Michael Bean", "Third Member"])
 check("a stranger is refused", signed({}, slug="nobody").status_code == 401)

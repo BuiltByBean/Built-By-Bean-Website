@@ -241,6 +241,10 @@ TOOLS = [
                              "description": "Whose books: business name or id. "
                                             "Default Built by Bean; EntertainHQ "
                                             "LLC keeps its own"},
+                "paid_by": {"type": "string",
+                            "description": "An owner who paid it from their own "
+                                           "pocket, by name; the books count it "
+                                           "as that owner's money put in"},
                 "date": {"type": "string", "description": "YYYY-MM-DD, "
                                                           "default today"},
                 "source": SOURCE,

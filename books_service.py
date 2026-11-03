@@ -107,9 +107,14 @@ def income_between(business, start, end, sales=None):
 
 
 def owner_money_between(business, start, end):
-    """{owner name: {"in": x, "out": y}} off settled bank lines."""
-    from models import BankTransaction
+    """{owner name: {"in": x, "out": y}} off settled bank lines, plus every
+    expense an owner paid personally, which is that owner putting money in."""
+    from models import BankTransaction, Expense
     out = {}
+    for e in (Expense.query.filter(Expense.business_id.in_(family_ids(business)),
+                                   Expense.paid_by.isnot(None), Expense.paid_by != "",
+                                   Expense.date >= start, Expense.date < end).all()):
+        out.setdefault(e.paid_by, {"in": 0.0, "out": 0.0})["in"] += e.amount
     for line in (BankTransaction.query.filter(BankTransaction.business_id.in_(family_ids(business)),
                                               BankTransaction.disposition.in_(("contribution", "draw")),
                                               BankTransaction.status == "sent",
@@ -126,6 +131,8 @@ def owner_money_between(business, start, end):
 
 def source_of(expense):
     """Where an expense came from, for the accountant's export."""
+    if expense.paid_by:
+        return f"paid personally by {expense.paid_by}"
     if expense.bank_lines.first() is not None:
         return "bank"
     from models import ServiceCostEntry

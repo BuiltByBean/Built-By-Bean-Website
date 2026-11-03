@@ -1036,6 +1036,7 @@ def log_expense():
         client_id=client.id if client else None,
         project_id=project.id if project else None,
         business_id=business_id,
+        paid_by=_cap(body.get("paid_by"), 120) or None,
     )
     db.session.add(expense)
     db.session.commit()
