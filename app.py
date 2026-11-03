@@ -873,10 +873,13 @@ def create_app():
         total_invoiced = (
             stripe_totals["open"] + stripe_totals["draft"] + scheduled_subscriptions
         )
-        # Material expenses only - exclude any time-entry-linked (billable time) rows.
-        total_expenses = db.session.query(db.func.sum(Expense.amount)).filter(
-            Expense.time_entry_id.is_(None)
-        ).scalar() or 0
+        # Material expenses only - exclude any time-entry-linked (billable time)
+        # rows - and only Built by Bean's books. This page is that company's;
+        # EntertainHQ's spending showed here once and took its profit $620 low.
+        import books_service
+        board_biz = books_service.board_business()
+        board_family = books_service.family_ids(board_biz) if board_biz else None
+        total_expenses = books_service.board_expense_total()
 
         # Unbilled: the dollar value of logged time not yet on a draft/open/paid
         # invoice - money in the pipeline that still needs to be billed.
@@ -907,9 +910,10 @@ def create_app():
                 + (stripe_totals["draft_by_customer"].get(cust, 0.0) if cust else 0.0)
                 + (scheduled_by_customer.get(cust, 0.0) if cust else 0.0)
             )
-            c_expenses = sum(e.amount for e in Expense.query.filter(
-                Expense.client_id == c.id, Expense.time_entry_id.is_(None)
-            ).all())
+            c_q = Expense.query.filter(Expense.client_id == c.id, Expense.time_entry_id.is_(None))
+            if board_family:
+                c_q = c_q.filter(Expense.business_id.in_(board_family))
+            c_expenses = sum(e.amount for e in c_q.all())
             client_financials.append({
                 "id": c.id,
                 "name": c.name,

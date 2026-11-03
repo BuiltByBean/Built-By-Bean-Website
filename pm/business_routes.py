@@ -33,7 +33,7 @@ import os
 import re
 import secrets
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
@@ -282,6 +282,12 @@ def lifetime_revenue(business, ask=False):
     # on two tiles. _fill refuses it; this holds for a row written elsewhere.
     if business.sales_source == "board" and not business.is_division:
         return round(get_stripe_invoice_totals()["revenue"], 2)
+    # A company with its own Stripe connected earns there, and the Books page
+    # already reads it; the tile reads the same rows rather than asking an app.
+    if business.stripe_key and not business.is_division:
+        import stripe_books
+        return round(sum(a for _, a, _ in stripe_books.income_between(
+            business, date(2000, 1, 1), date.today() + timedelta(days=1))), 2)
     if business.sales_source == "hub":
         if ask:
             age = None

@@ -76,12 +76,68 @@ def expenses_between(business, start, end):
             .order_by(Expense.date, Expense.id).all())
 
 
+def board_business():
+    """The company this board bills from (Built by Bean LLC): its Stripe is
+    the app's own, and the finance dashboard and the Taxes page are its."""
+    from models import Business
+    return (Business.query.filter(Business.sales_source == "board", Business.parent_id.is_(None))
+            .order_by(Business.id).first())
+
+
+def board_expense_total(start=None, end=None):
+    """The board company's expenses (its DBAs' included), all time unless a
+    period is given. The dashboard and the Taxes page read this, so neither
+    can count another company's spending as Built by Bean's."""
+    from models import Expense, db
+    business = board_business()
+    q = db.session.query(db.func.coalesce(db.func.sum(Expense.amount), 0.0)).filter(
+        Expense.time_entry_id.is_(None))
+    if business is not None:
+        q = q.filter(Expense.business_id.in_(family_ids(business)))
+    if start is not None:
+        q = q.filter(Expense.date >= start)
+    if end is not None:
+        q = q.filter(Expense.date < end)
+    return round(q.scalar() or 0.0, 2)
+
+
+def _stripe_paid_invoices():
+    """The board's Stripe invoices, live, or None when Stripe is not set up
+    (the tests, a dev machine). Live is the dashboard's source, and the books
+    read the same one: on 2026-11-03 the books read the local invoice rows and
+    came out $5.97 under the dashboard for the same year."""
+    try:
+        import stripe
+        if not stripe.api_key:
+            return None
+        from stripe_service import get_stripe_invoices
+        rows = get_stripe_invoices()
+    except Exception:  # noqa: BLE001 - fall back to the local rows
+        return None
+    return rows or None
+
+
 def income_between(business, start, end, sales=None):
     """[(date, amount, description)] of money earned, cash basis."""
     from models import BankTransaction, Invoice
     root = business.parent or business
     out = []
     if root.sales_source == "board":
+        live = _stripe_paid_invoices()
+        if live is not None:
+            for inv in live:
+                if inv.get("status") != "paid" or inv.get("catchup"):
+                    continue
+                when = inv.get("paid_at") or inv.get("issued_at")
+                when = when.date() if when else None
+                if when is None or not (start <= when < end):
+                    continue
+                amount = round((inv.get("amount_paid") or 0.0) - (inv.get("tax") or 0.0), 2)
+                label = f"Invoice {inv.get('number') or inv.get('id')}"
+                if inv.get("customer_name"):
+                    label += f", {inv['customer_name']}"
+                out.append((when, amount, label))
+            return sorted(out)
         for inv in Invoice.query.filter(Invoice.status == "paid").all():
             when = (inv.paid_at.date() if inv.paid_at else inv.issued_on)
             if when is None or not (start <= when < end) or inv.sales_tax_catchup:

@@ -134,7 +134,7 @@
                 {{ totals.profit | format_currency }}
             </p>
             <p class="text-xs text-surface-500 mt-1">
-                {{ totals.net | format_currency }} paid out by Stripe
+                {{ totals.earned | format_currency }} earned
                 less {{ totals.expenses | format_currency }} of expenses
             </p>
         </div>
@@ -284,7 +284,7 @@
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-surface-700">
-                        {% for h in ['Quarter','Due','Gross','Fees','Paid out','Expenses','Profit','Set aside','Estimated'] %}
+                        {% for h in ['Quarter','Due','Earned','Expenses','Profit','Set aside','Estimated'] %}
                         <th class="{% if loop.index <= 2 %}text-left{% else %}text-right{% endif %} py-3 px-3 text-xs font-semibold text-surface-400 uppercase tracking-wider">{{ h }}</th>
                         {% endfor %}
                     </tr>
@@ -294,9 +294,7 @@
                     <tr class="border-b border-surface-800 hover:bg-surface-800/40 transition-colors">
                         <td class="py-3 px-3 text-sm font-semibold text-white">{{ q.label }}</td>
                         <td class="py-3 px-3 text-sm whitespace-nowrap {% if q.due < today %}text-surface-500{% else %}text-accent-400{% endif %}">{{ q.due | format_date }}</td>
-                        <td class="py-3 px-3 text-right text-sm text-white">{{ q.gross | format_currency }}</td>
-                        <td class="py-3 px-3 text-right text-sm text-red-400">{{ q.fees | format_currency }}</td>
-                        <td class="py-3 px-3 text-right text-sm text-emerald-400">{{ q.net | format_currency }}</td>
+                        <td class="py-3 px-3 text-right text-sm text-emerald-400">{{ q.earned | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-red-400">{{ q.expenses | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm font-semibold {% if q.profit >= 0 %}text-white{% else %}text-red-400{% endif %}">{{ q.profit | format_currency }}</td>
                         <td class="py-3 px-3 text-right text-sm text-accent-400">{{ q.set_aside | format_currency }}</td>

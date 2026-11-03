@@ -103,17 +103,28 @@ def taxes_index():
         rows.append(row)
     rows.reverse()
 
-    # Material expenses only: a billable-time expense mirrors revenue rather
-    # than being a cost of trading.
-    expenses_by_quarter = {}
-    for e in Expense.query.filter(Expense.time_entry_id.is_(None)).all():
-        if e.date and e.date.year == year:
+    # Profit is the Books page's, quarter by quarter: what was earned (paid,
+    # less its sales tax) less Built by Bean's own expenses. It was Stripe's
+    # payouts less every company's expenses, which counted the sales tax as
+    # income, took Stripe's fee off twice (once in the payout, once as the
+    # expense the Stripe sync books) and charged EntertainHQ's costs to this
+    # return. Material expenses only, as everywhere.
+    import books_service
+    board_biz = books_service.board_business()
+    expenses_by_quarter, earned_by_quarter = {}, {}
+    if board_biz is not None:
+        for e in books_service.expenses_between(board_biz, date(year, 1, 1), date(year + 1, 1, 1)):
             q = _quarter(e.date)
             expenses_by_quarter[q] = expenses_by_quarter.get(q, 0.0) + (e.amount or 0)
+        for when, amount, _label in books_service.income_between(
+                board_biz, date(year, 1, 1), date(year + 1, 1, 1)):
+            q = _quarter(when)
+            earned_by_quarter[q] = earned_by_quarter.get(q, 0.0) + amount
 
     net_total = sum(r["net"] for r in rows)
-    expense_total = sum(expenses_by_quarter.values())
-    profit = net_total - expense_total
+    earned_total = round(sum(earned_by_quarter.values()), 2)
+    expense_total = round(sum(expenses_by_quarter.values()), 2)
+    profit = round(earned_total - expense_total, 2)
 
     calc = compute(
         profit,
@@ -136,10 +147,11 @@ def taxes_index():
     for q in (1, 2, 3, 4):
         in_q = [r for r in rows if r["quarter"] == q]
         spend = expenses_by_quarter.get(q, 0.0)
-        if not in_q and not spend:
+        earned = earned_by_quarter.get(q, 0.0)
+        if not in_q and not spend and not earned:
             continue
         q_net = sum(r["net"] for r in in_q)
-        q_profit = q_net - spend
+        q_profit = earned - spend
         quarters.append({
             "quarter": q,
             "label": f"Q{q}",
@@ -148,6 +160,7 @@ def taxes_index():
             "gross": sum(r["gross"] for r in in_q),
             "fees": sum(r["fee"] for r in in_q),
             "net": q_net,
+            "earned": earned,
             "expenses": spend,
             "profit": q_profit,
             "set_aside": sum(r["set_aside"] for r in in_q),
@@ -159,6 +172,7 @@ def taxes_index():
         "gross": sum(r["gross"] for r in rows),
         "fees": sum(r["fee"] for r in rows),
         "net": net_total,
+        "earned": earned_total,
         "expenses": expense_total,
         "profit": profit,
         "set_aside": sum(r["set_aside"] for r in rows),
