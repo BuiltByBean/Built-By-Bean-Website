@@ -74,10 +74,21 @@ def month_status(business, month):
 @books_bp.route("/admin/books/")
 @ceo_required
 def index():
+    """One company at a time, or the connections, never everything on one
+    long scroll (Michael, 2026-11-03: "this book's page is just one long
+    scroll. It's hard to follow"). `tab` is a company's id or "connections";
+    only the tab shown is worked out."""
     today = date.today()
     year = request.args.get("year", type=int) or today.year
+    all_companies = _companies()
+    tab = request.args.get("tab") or (str(all_companies[0].id) if all_companies else "connections")
+    tabs = [(str(b.id), b.short_name or b.name) for b in all_companies] + [("connections", "Connections")]
+    if tab not in {t for t, _ in tabs}:
+        tab = tabs[0][0]
     companies = []
-    for b in _companies():
+    for b in all_companies:
+        if str(b.id) != tab:
+            continue
         ystart, yend = date(year, 1, 1), date(year + 1, 1, 1)
         months = [month_status(b, m) for m in _months(min(today, date(year, 12, 1)))
                   if m.year == year]
@@ -96,6 +107,7 @@ def index():
     return render_template("pm/books/index.html", companies=companies, year=year,
                            mailboxes=mailboxes, waiting=waiting, today=today,
                            reading=receipts_service.reading, sources=sources,
+                           tab=tab, tabs=tabs,
                            business_options=[(b.id, b.name) for b in _companies()])
 
 
@@ -190,14 +202,14 @@ def owner_add():
     name = (request.form.get("name") or "").strip()[:120]
     if not name:
         flash("Name the owner.", "warning")
-        return redirect(url_for("books.index") + f"#company-{business.id}")
+        return redirect(url_for("books.index", tab=business.id))
     share = request.form.get("share_percent", type=float)
     db.session.add(BusinessOwner(business_id=business.id, name=name, share_percent=share))
     db.session.commit()
     total = sum(o.share_percent or 0 for o in business.owners)
     flash(f"{name} added." + ("" if abs(total - 100) < 0.01 else f" Shares add up to {total:g}%."),
           "success")
-    return redirect(url_for("books.index") + f"#company-{business.id}")
+    return redirect(url_for("books.index", tab=business.id))
 
 
 @books_bp.route("/admin/books/owners/<int:oid>/delete", methods=["POST"])
@@ -208,7 +220,7 @@ def owner_delete(oid):
     db.session.delete(owner)
     db.session.commit()
     flash("Removed.", "success")
-    return redirect(url_for("books.index") + f"#company-{bid}")
+    return redirect(url_for("books.index", tab=bid))
 
 
 @books_bp.route("/admin/books/mailboxes", methods=["POST"])
@@ -218,7 +230,7 @@ def mailbox_add():
     password = (request.form.get("password") or "").replace(" ", "").strip()
     if "@" not in address or not password:
         flash("Give the address and its app password.", "warning")
-        return redirect(url_for("books.index") + "#mailboxes")
+        return redirect(url_for("books.index", tab="connections"))
     box = ReceiptMailbox.query.filter_by(address=address).first() or ReceiptMailbox(address=address)
     box.password = password
     box.business_id = request.form.get("business_id", type=int) or None
@@ -231,7 +243,7 @@ def mailbox_add():
     db.session.add(box)
     db.session.commit()
     _read(box)
-    return redirect(url_for("books.index") + "#mailboxes")
+    return redirect(url_for("books.index", tab="connections"))
 
 
 def _read(box):
@@ -247,7 +259,7 @@ def _read(box):
 def mailbox_sync(mid):
     box = db.session.get(ReceiptMailbox, mid) or abort(404)
     _read(box)
-    return redirect(url_for("books.index") + "#mailboxes")
+    return redirect(url_for("books.index", tab="connections"))
 
 
 @books_bp.route("/admin/books/mailboxes/<int:mid>/delete", methods=["POST"])
@@ -257,7 +269,7 @@ def mailbox_delete(mid):
     db.session.delete(box)
     db.session.commit()
     flash("Disconnected. Receipts already attached stay on their expenses.", "success")
-    return redirect(url_for("books.index") + "#mailboxes")
+    return redirect(url_for("books.index", tab="connections"))
 
 
 @books_bp.route("/admin/books/receipts")
@@ -405,7 +417,7 @@ def statement_source_add():
     label = (request.form.get("label") or "").strip()[:120]
     if not label:
         flash("Name the card or account.", "warning")
-        return redirect(url_for("books.index") + "#statements")
+        return redirect(url_for("books.index", tab="connections"))
     kind = "personal" if request.form.get("kind") == "personal" else "business"
     conn = BankConnection(business_id=business.id, provider="statement", label=label, token="",
                           kind=kind, owner_name=(request.form.get("owner_name") or "").strip()[:120],
@@ -413,7 +425,7 @@ def statement_source_add():
     db.session.add(conn)
     db.session.commit()
     flash(f"{label} added. Upload its statements below.", "success")
-    return redirect(url_for("books.index") + "#statements")
+    return redirect(url_for("books.index", tab="connections"))
 
 
 @books_bp.route("/admin/books/statements/<int:cid>/upload", methods=["POST"])
@@ -427,7 +439,7 @@ def statement_upload(cid):
     files = [f for f in request.files.getlist("statement") if f and f.filename]
     if not files:
         flash("Choose the statement file you downloaded.", "warning")
-        return redirect(url_for("books.index") + "#statements")
+        return redirect(url_for("books.index", tab="connections"))
     total = {"read": 0, "new": 0}
     for f in files:
         raw = f.read(5 * 1024 * 1024)
@@ -435,14 +447,14 @@ def statement_upload(cid):
             rows = statements.parse(raw.decode("utf-8-sig", "replace"), conn.charges_positive)
         except statements.StatementError as err:
             flash(f"{f.filename}: {err}", "warning")
-            return redirect(url_for("books.index") + "#statements")
+            return redirect(url_for("books.index", tab="connections"))
         got = statements.import_rows(conn, rows)
         total["read"] += got["read"]
         total["new"] += got["new"]
     waiting = got.get("review", 0)
     flash(f"{conn.label}: {total['new']:,} new line{'' if total['new'] == 1 else 's'} of "
           f"{total['read']:,} read, {waiting:,} to sort.", "success")
-    return redirect(url_for("bank.review") if waiting else url_for("books.index") + "#statements")
+    return redirect(url_for("bank.review") if waiting else url_for("books.index", tab="connections"))
 
 
 @books_bp.route("/admin/books/statements/<int:cid>/delete", methods=["POST"])
@@ -455,4 +467,4 @@ def statement_source_delete(cid):
     db.session.delete(conn)
     db.session.commit()
     flash("Removed. The expenses it booked are still in the books.", "success")
-    return redirect(url_for("books.index") + "#statements")
+    return redirect(url_for("books.index", tab="connections"))

@@ -4,10 +4,10 @@
 {% from "pm/components/checkbox.html" import checkbox %}
 
 {#
-  Every company's books on one page (pm/books_routes.py says what each part
-  is). A company card holds its year so far, its months newest first with
-  what is left before each can close, and its owners; the mailboxes read
-  for receipts sit at the bottom because they serve every company at once.
+  One tab per company, plus Connections (pm/books_routes.py says what each
+  part is). A company tab holds its year so far, its months newest first
+  with what is left before each can close, and its owners. Connections holds
+  the card statements and the receipt mailboxes, which serve every company.
 #}
 
 {% block title %}Books - Built By Bean{% endblock %}
@@ -31,6 +31,15 @@
 
 {% block content %}
 <div class="space-y-6 stagger-in">
+
+    <nav aria-label="Books" class="flex flex-wrap gap-2">
+        {% for key, label in tabs %}
+        <a href="{{ url_for('books.index', tab=key, year=year) }}" {% if key == tab %}aria-current="page"{% endif %}
+           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
+                  {{ 'btn-brand text-white' if key == tab else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
+            {{ label }}</a>
+        {% endfor %}
+    </nav>
 
     {% for c in companies %}
     {% set b = c.business %}
@@ -111,6 +120,7 @@
     </section>
     {% endfor %}
 
+    {% if tab == 'connections' %}
     {# Cards and accounts with no feed (statements.py): Chase debit, personal
        cards. Each upload is read like a night of Mercury. relative z-30
        (LM-1): its pickers open over the mailboxes card below. #}
@@ -221,5 +231,6 @@
             </div>
         </form>
     </section>
+    {% endif %}
 </div>
 {% endblock %}
