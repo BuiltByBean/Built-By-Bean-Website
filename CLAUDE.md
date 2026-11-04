@@ -1435,6 +1435,12 @@ getting missed.
   as a TEXT node so every element box still measures inside the viewport. A
   wide table is fine inside its own `overflow-auto` container: the table
   scrolls, the page does not.
+- **A page fills the screen.** The first element of a page's content block
+  carries no `max-w-*` and no `mx-auto`: on 2026-11-04 twenty-nine pages sat in
+  a narrow column hugging the left with half the screen empty, and Michael
+  asked for them to fill it. Spread wide screens with grids that add columns;
+  only a paragraph of running prose may be held to a reading width. Check at
+  1600px as well as 375px.
 - **The window never scrolls.** The banner is a plain block at the top of
   `.pm-shell` and `#pm-scroll` under it is the one scroller, so every
   scrollbar starts at the banner's bottom edge and never runs up behind

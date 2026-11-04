@@ -9,7 +9,7 @@
 {% block page_subtitle %}Configure API credentials for cost tracking{% endblock %}
 
 {% block content %}
-<div x-data="{ providerType: '{{ provider.name if editing else '' }}' }" class="max-w-2xl mx-auto">
+<div x-data="{ providerType: '{{ provider.name if editing else '' }}' }">
     <form method="POST" class="space-y-6">
 
         <!-- Provider Type -->

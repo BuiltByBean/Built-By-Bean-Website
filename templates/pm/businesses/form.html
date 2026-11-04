@@ -31,7 +31,7 @@
                              business.label if editing else 'Businesses') }}{% endblock %}
 
 {% block content %}
-<div class="space-y-4 max-w-4xl">
+<div class="space-y-4">
     <form method="POST" action="{{ url_for('businesses.edit', id=business.id) if editing else url_for('businesses.new') }}"
           enctype="multipart/form-data" class="space-y-4"
           x-data='{ parent: {{ (business.parent_id | string if business.parent_id else "") | tojson }} }'>

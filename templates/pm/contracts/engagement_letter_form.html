@@ -8,7 +8,7 @@
 {% block page_subtitle %}Generate it, and send it straight to the client to sign{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl">
+<div >
     <div class="glass-card p-6">
         <form method="POST" action="{{ url_for('pm.generate_engagement_letter') }}"
               x-data='{ clientId: "", chosen: null, clients: {{ client_lookup|tojson }} }'

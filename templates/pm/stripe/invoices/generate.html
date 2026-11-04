@@ -9,7 +9,7 @@
 {% block page_subtitle %}Generate an invoice from {% if time_tracking %}time entries and {% endif %}expenses{% endblock %}
 
 {% block content %}
-<div x-data="invoiceGenerator()" class="max-w-5xl mx-auto space-y-6 stagger-in">
+<div x-data="invoiceGenerator()" class="space-y-6 stagger-in">
 
     <form method="POST" action="{{ url_for('stripe.invoice_create') }}" @submit="submitting = true">
 

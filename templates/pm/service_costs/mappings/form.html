@@ -20,7 +20,7 @@
 {% block page_subtitle %}Map a service resource to a client{% endblock %}
 
 {% block content %}
-<div x-data="mappingForm()" class="max-w-2xl mx-auto">
+<div x-data="mappingForm()">
     <form method="POST" class="space-y-6">
         {% if request.args.get('next') %}
         <input type="hidden" name="next" value="{{ request.args.get('next') }}">

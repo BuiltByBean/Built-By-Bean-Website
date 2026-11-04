@@ -14,7 +14,7 @@
 {% block page_subtitle %}{{ repo }} &middot; {{ count | commas }} {{ 'sighting' if presence else 'hit' }}{{ 's' if count != 1 }}{% if sha %} at {{ sha }}{% endif %}{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl space-y-4 stagger-in">
+<div class="space-y-4 stagger-in">
 
     <div class="glass-card p-4 sm:p-5 space-y-3">
         {% if intro %}<p class="text-sm text-surface-200">{{ intro }}</p>{% endif %}
