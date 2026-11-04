@@ -217,9 +217,63 @@ def provider_books(provider, business_id):
                 and business_id in _home_family())
 
 
+def booked_by_sync(line, provider):
+    """Whether this vendor's sync really holds this charge, as one row or as a
+    period's rows adding up to it. A sync reads one account: EntertainHQ's own
+    Claude plan and Railway workspace are on the same card under the same names,
+    and $261.57 of them was marked as booked by a sync that had never heard of
+    them, so it reached nobody's books. With nothing from the sync in that
+    window there is nothing to contradict the rule, so the rule stands."""
+    from models import ServiceCostEntry
+    target = round(-line.amount, 2)
+    entries = ServiceCostEntry.query.filter(
+        ServiceCostEntry.provider_id == provider.id,
+        ServiceCostEntry.period_start <= line.occurred_on + timedelta(days=5),
+        ServiceCostEntry.period_end >= line.occurred_on - timedelta(days=45)).all()
+    if not entries:
+        return True
+    periods = {}
+    for entry in entries:
+        amount = round(entry.allocated_amount or 0.0, 2)
+        if abs(amount - target) < 0.005:
+            return True
+        key = (entry.period_start, entry.period_end)
+        periods[key] = periods.get(key, 0.0) + amount
+    return any(abs(round(total, 2) - target) < 0.005 for total in periods.values())
+
+
+def other_company_for(line, provider, owner):
+    """The company a charge the sync does not hold belongs to, when something
+    says so: this vendor set up as that company's own account, or a receipt for
+    this amount in that company's own mailbox. None when nothing does, and then
+    a person decides, because a guess here moves money between companies."""
+    from models import Receipt, ReceiptMailbox, ServiceProvider
+    import receipts_service
+    twin = ServiceProvider.query.filter(ServiceProvider.name == provider.name,
+                                        ServiceProvider.is_active.is_(True),
+                                        ServiceProvider.account_business_id.isnot(None),
+                                        ServiceProvider.account_business_id != owner).first()
+    if twin is not None:
+        return twin.account_business_id
+    words = [w.lower() for w in re.findall(r"[A-Za-z]{4,}", line.counterparty or "")]
+    if not words:
+        return None
+    target = round(-line.amount, 2)
+    rows = (Receipt.query.join(ReceiptMailbox, Receipt.mailbox_id == ReceiptMailbox.id)
+            .filter(ReceiptMailbox.business_id.isnot(None), ReceiptMailbox.business_id != owner,
+                    Receipt.received_on >= line.occurred_on - timedelta(days=10),
+                    Receipt.received_on <= line.occurred_on + timedelta(days=5)).all())
+    for row in rows:
+        said = f"{row.vendor} {row.sender} {row.subject}".lower()
+        if words[0] in said and any(abs(a - target) < 0.005 for a in receipts_service.candidate_amounts(row)):
+            return row.mailbox.business_id
+    return None
+
+
 def classify(line, rules=None):
     """Set the line's disposition and rule, and book or unbook its expense."""
     rule = None
+    manual = None
     if line.status in VOID_STATUSES:
         line.disposition = "void"
     elif line.decided_at and line.rule_id is None and line.disposition != "review":
@@ -255,6 +309,15 @@ def classify(line, rules=None):
                 owner = rule.business_id or line.business_id
                 if not provider_books(rule.provider, owner):
                     line.disposition = "expense"
+                elif line.amount < 0 and not booked_by_sync(line, rule.provider):
+                    elsewhere = other_company_for(line, rule.provider, owner)
+                    if elsewhere:
+                        line.disposition = "expense"
+                        manual = {"business_id": elsewhere, "category": rule.category,
+                                  "vendor": rule.vendor or line.counterparty}
+                    else:
+                        line.disposition = "review"
+                    rule = None
         elif line.amount > 0 and line.kind not in REFUND_KINDS and not is_personal(line):
             line.disposition = "income"
         else:
@@ -263,7 +326,7 @@ def classify(line, rules=None):
         line.rule_id = rule.id
     elif not line.decided_at:
         line.rule_id = None
-    book(line, rule)
+    book(line, rule, manual)
     return line.disposition
 
 

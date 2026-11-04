@@ -14,8 +14,8 @@ Proves:
   2. An expense finds a message by its amount and its vendor, whatever the subject.
   3. Nothing short of the vendor and the exact charge attaches: a wrong receipt is
      worse than none.
-  4. One charge booked twice gets one receipt, which is what shows it; one bill
-     proves every line of itself.
+  4. One charge booked twice gets one receipt, which is what shows it; a line
+     inside a bill is not what was charged.
   5. Mail already kept is used rather than stored again, and mail not used is
      never stored.
   6. A small charge with no document gets its statement line, named as that, and
@@ -150,6 +150,7 @@ with application.app_context():
         "promo": exp(20.00, "Railway - something else", date(Y, 6, 30)),
         "plan": exp(20.00, "Railway - Hosting", date(Y, 9, 1)),
         "usage": exp(40.70, "Railway - Usage", date(Y, 9, 1)),
+        "whole": exp(60.70, "Railway - The whole bill", date(Y, 9, 2)),
         "first": exp(86.75, "Claude (28 Mar) [unallocated]", date(Y, 3, 28)),
         "second": exp(86.75, "Claude Code", date(Y, 4, 1)),
     }
@@ -191,10 +192,10 @@ with application.app_context():
     check("and the other stays missing, which is what shows it", receipt_of(ids["second"]) == "",
           receipt_of(ids["second"]))
     plan, usage = db.session.get(Expense, ids["plan"]), db.session.get(Expense, ids["usage"])
-    check("one bill proves each line of itself, as one file",
-          plan.receipt_filename and plan.receipt_filename == usage.receipt_filename,
-          (plan.receipt_filename, usage.receipt_filename))
-    check("the count is of expenses found", found == 7, found)
+    check("a line inside a bigger bill is not that bill's charge, so a row for it stays missing",
+          not plan.receipt_filename and not usage.receipt_filename, (plan.receipt_filename, usage.receipt_filename))
+    check("the row for what was really charged takes it", "Railway" in receipt_of(ids["whole"]), receipt_of(ids["whole"]))
+    check("the count is of expenses found", found == 6, found)
 
     print("5. Mail is used, not hoarded")
     used = {e.receipt_filename for e in Expense.query.all() if e.receipt_filename}

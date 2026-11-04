@@ -299,9 +299,33 @@ soon as a statement is uploaded.
 
 Oldest first on purpose: of two rows for one charge, the earlier takes the receipt
 and the other stays on Missing, and that is how a charge booked twice shows itself.
-A message whose total IS the charge proves one row; one where the charge is a line
-of a bigger bill proves each row of it (Railway's $20 plan row and its usage rows
-are one $60.70 receipt).
+One message proves one row, and only for what it gives as charged
+(`charged_amounts`). A line inside a bill is not a charge: Railway's $60.70 invoice
+lists a $20.00 plan and takes $20.00 of included usage off, so $40.70 left the bank.
+The first version accepted the line, which attached that invoice to a hand-typed
+$20 row and made a duplicate look real. A vendor's month split across rows is the
+sweep's to attach, and only when the rows add up to the bill. The sweep no longer
+attaches a receipt to a charge that does not name its vendor: Railway's April
+invoice, which mentions $20.00, sat on a $20 Twilio row for seven months.
+
+**What a vendor sync holds is checked, not assumed** (`bank_feed.booked_by_sync`).
+A `covered` rule used to mean any charge from that vendor was already booked. A sync
+reads one account, and EntertainHQ's own Claude plan and Railway workspace are on
+the same card under the same names, so $261.57 of its real charges sat marked as
+booked by a sync that had never heard of them. A charge now counts as covered only
+if the sync has it, as one row or as a period's rows adding up. If it does not, it
+goes to the company a twin provider or that company's own mailbox says it belongs
+to (`other_company_for`), and to review when nothing says, because a guess there
+moves money between companies. With nothing from the sync in that window the rule
+stands, or a new month would turn every charge into a review.
+
+**A correction leaves a record.** Reviewing receipts on 2026-11-03 found $261.27 of
+Built by Bean's expenses entered by hand on top of a charge already booked, a personal
+RuneScape subscription on the company's card, and the above. Michael approved each
+one, and migration `c3e7a1f90b42` applied them. `ExpenseCorrection` keeps every row
+removed, whole, with the reason, and the downgrade puts it back to the cent. Its ids
+are production's and each is matched with its amount and words too, so on any other
+database it does nothing.
 
 Where no document exists anywhere (a restaurant on a card, a bank's own fee),
 `attach_statement_lines` gives a charge under $75, a month old, with a bank line

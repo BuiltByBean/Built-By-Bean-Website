@@ -1392,6 +1392,22 @@ class ServiceProvider(db.Model):
         return f"<ServiceProvider {self.display_name}>"
 
 
+class ExpenseCorrection(db.Model):
+    """A row taken off the books, added to them or changed on them, and why.
+    Michael reviews these one by one and an accountant may ask about any of
+    them, so nothing is erased: what was removed is kept whole here and the
+    migration that did it can put it back to the cent."""
+    __tablename__ = "expense_corrections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(12), nullable=False)  # removed, added, changed
+    expense_id = db.Column(db.Integer, nullable=False, index=True)
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    reason = db.Column(db.String(300), nullable=False, default="")
+    snapshot_json = db.Column(db.Text, nullable=False, default="{}")
+    corrected_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class ServiceMapping(db.Model):
     __tablename__ = "service_mappings"
 

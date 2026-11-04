@@ -339,16 +339,18 @@ def match(receipt):
         exact = others if len(others) == 1 else []
     word = (receipt.vendor or "").lower()
     said = _words(f"{receipt.vendor} {receipt.subject}")
+    seen = f"{receipt.vendor} {receipt.sender} {receipt.subject}".lower()
 
     def named(e):
-        return (bool(word) and word in (e.description or "").lower()) or bool(said & _words(e.description))
+        return ((bool(word) and word in (e.description or "").lower()) or bool(said & _words(e.description))
+                or any(name in seen for name in vendor_names(e)))
 
-    # A single charge that names the vendor wins; a vendor's own split month
-    # beats a stranger's charge that merely costs the same.
-    if not any(named(e) for e in exact):
-        whole = _match_month_of_a_vendor(receipt, amounts)
-        if whole is not None or not exact:
-            return whole
+    # Only a charge that names the vendor. A stranger's charge that merely costs
+    # the same is not proved by this: Railway's April invoice, which mentions
+    # $20.00, sat on a $20 Twilio row for seven months.
+    exact = [e for e in exact if named(e)]
+    if not exact:
+        return _match_month_of_a_vendor(receipt, amounts)
 
     def score(e):
         return (not named(e), abs((e.date - receipt.received_on).days), e.id)
@@ -422,6 +424,11 @@ HUNT_MESSAGES = 25
 # The name a vendor signs its mail with, where the charge goes by another.
 SIGNED_AS = {"claude": {"anthropic"}, "chatgpt": {"openai"}, "openai": {"chatgpt"}}
 _CHARGE_WORD = re.compile(r"\b(charged|paid|payment|receipt|invoice|total|amount|purchase|order)\b", re.I)
+# The first figure after the words that give a charge. Not the whole line: a
+# message whose HTML strips down to one long line would then state every figure
+# in it. "Amount" alone is a column heading, so it needs its second word.
+_STATES_A_CHARGE = re.compile(r"\b(?:total|amount(?: due| paid| charged|:)|charged|paid|purchase of|payment of)"
+                              r"[^$\n]{0,80}?\$\s?([0-9,]+\.[0-9]{2})", re.I)
 # A statement line stands in only where a missing document is forgivable: the
 # IRS asks for a receipt from $75 up, and a month is long enough for one to
 # have turned up if it was ever coming.
@@ -459,11 +466,20 @@ def hunt_window(expense):
     return expense.date - timedelta(days=HUNT_BEFORE), expense.date + timedelta(days=HUNT_AFTER)
 
 
+def charged_amounts(text):
+    """What a message says was charged: the figure after each word that gives a
+    charge, or every figure when none does. A line item is not a charge:
+    Railway's $60.70 invoice lists a $20.00 plan and takes $20.00 of included
+    usage off, so $40.70 left the bank and no $20.00 ever did."""
+    text = _without_balances(text)
+    found = _STATES_A_CHARGE.findall(text) or _AMOUNT.findall(text)
+    return {round(float(a.replace(",", "")), 2) for a in found}
+
+
 def proves(got, charge, names):
     """Whether this message is proof of this charge. All of it, because a wrong
     receipt is worse than none: from the vendor, not a failure or a reminder,
-    about money, and stating the amount to the cent somewhere other than a
-    balance or a renewal price."""
+    about money, and giving the amount to the cent as what was charged."""
     said = f"{got['sender']} {got['subject']}".lower()
     if not any(name in said for name in names):
         return False
@@ -471,8 +487,7 @@ def proves(got, charge, names):
         return False
     if not _CHARGE_WORD.search(f"{got['subject']}\n{got['text']}"):
         return False
-    stated = _AMOUNT.findall(_without_balances(got["text"]))
-    return any(abs(float(a.replace(",", "")) - charge) < 0.005 for a in stated)
+    return any(abs(a - charge) < 0.005 for a in charged_amounts(got["text"]))
 
 
 def _receipt_row(mailbox, got):
@@ -538,16 +553,15 @@ def _hunt_one(mailbox, expense, messages):
         row = _receipt_row(mailbox, got)
         if row is None:
             continue
-        taken = row.status == "matched" and row.expense_id and row.expense_id != expense.id
-        # A message whose total IS this charge proves one charge. One where it
-        # is a line of a bigger bill (Railway's $20 plan inside a $60.70
-        # receipt) proves every row of that bill.
-        if taken and any(abs(a - charge) < 0.005 for a in candidate_amounts(row)):
+        # One message proves one charge. A vendor's month split across rows is
+        # the sweep's to attach (_match_month_of_a_vendor), and only when the
+        # rows add up to the bill. A second row left wanting is how a charge
+        # booked twice shows itself.
+        if row.status == "matched" and row.expense_id and row.expense_id != expense.id:
             continue
         old = expense.receipt_filename
         _attach(expense, row.filename, row.original_name)
-        if not taken:
-            row.expense_id, row.status = expense.id, "matched"
+        row.expense_id, row.status = expense.id, "matched"
         db.session.flush()
         if old and old != row.filename and not in_use(old):
             _remove(old)
