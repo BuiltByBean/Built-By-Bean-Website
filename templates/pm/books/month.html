@@ -46,7 +46,9 @@
             {{ check(not st.unsorted, 'Every bank line sorted' if not st.unsorted else (st.unsorted ~ ' bank line' ~ ('' if st.unsorted == 1 else 's') ~ ' to sort')) }}
             {{ check(not st.no_receipt, 'Every expense has its receipt' if not st.no_receipt else (st.no_receipt ~ ' expense' ~ ('' if st.no_receipt == 1 else 's') ~ ' without a receipt')) }}
             {% for a in bank %}
-            {% if a.bank is none %}
+            {% if a.message %}
+            {{ check(a.agrees, a.message) }}
+            {% elif a.bank is none %}
             {{ check(false, a.name ~ ': the bank has not reported a balance yet') }}
             {% elif a.agrees %}
             {{ check(true, a.name ~ ' agrees with the bank: ' ~ money(a.bank)) }}

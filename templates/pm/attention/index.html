@@ -71,6 +71,22 @@
             {% include "pm/attention/_deadlines.html" %}
             {# What is live and broken (live_watch.attention_rows). #}
             {% include "pm/attention/_live.html" %}
+            {# The books: what the night found they need (books_upkeep.py). #}
+            {% for b in books %}
+            <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3" data-books-row>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <span class="font-medium text-white break-words min-w-0">{{ b.title }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-300 shrink-0">{{ b.label }}</span>
+                    </div>
+                    {% if b.detail %}<p class="text-sm text-surface-300 break-words">{{ b.detail }}</p>{% endif %}
+                </div>
+                <div class="shrink-0 flex items-center gap-2">
+                    <a href="{{ b.link }}"
+                       class="min-h-[44px] inline-flex items-center px-4 text-sm font-semibold rounded-xl btn-brand transition-all">Open</a>
+                </div>
+            </div>
+            {% endfor %}
 
             {% for bill in bills %}
             <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
@@ -93,7 +109,7 @@
             </div>
             {% endfor %}
 
-            {% if not messages and not bills and not night and not live and not (tax and (tax.standing or tax.flags or tax.deadlines)) %}
+            {% if not messages and not bills and not night and not live and not books and not (tax and (tax.standing or tax.flags or tax.deadlines)) %}
             <div class="p-8 sm:p-12 text-center">
                 <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>

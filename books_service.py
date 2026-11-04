@@ -408,8 +408,12 @@ def bank_check(business, through):
     board has every movement; a difference is a line missing or history read
     from after the account opened."""
     from models import BankConnection, BankTransaction, db
+    import statements
     out = []
     for conn in BankConnection.query.filter(BankConnection.business_id.in_(family_ids(business))).all():
+        if conn.provider == "statement":
+            out.append(_statement_check(conn, through, statements))
+            continue
         balances = conn.balances
         for account_id, name in conn.accounts.items():
             total = (db.session.query(db.func.coalesce(db.func.sum(BankTransaction.amount), 0.0))
@@ -421,3 +425,29 @@ def bank_check(business, through):
                         "agrees": bank is not None and abs(bank - (total or 0.0)) < 0.005,
                         "read_from": conn.synced_from})
     return out
+
+
+def _statement_check(conn, through, statements):
+    """A card or account with no feed, held two ways. Its uploads have to
+    reach past `through` (a statement not uploaded is a month the books cannot
+    see), and where its export carries a balance (Chase checking), the lines
+    between the earliest opening and the latest closing it showed have to add
+    up to the difference, or a statement in between is missing. A card export
+    carries no balance, so reaching the date is all it can show."""
+    label = conn.label or "Statement"
+    reached = statements.statement_through(conn)
+    row = {"name": label, "bank": conn.balance, "board": statements.board_balance(conn),
+           "read_from": conn.opening_on, "as_of": conn.balance_on, "statement": True}
+    if through is not None and (reached is None or reached < through):
+        row.update(agrees=False, message=f"{label}: no statement uploaded past "
+                                         + (f"{reached:%b %d}".replace(" 0", " ") if reached else "the start"))
+        return row
+    if conn.balance is None or row["board"] is None:
+        row.update(agrees=True, message=f"{label}: statements uploaded through "
+                                        + f"{reached:%b %d}".replace(" 0", " "))
+        return row
+    agrees = abs(conn.balance - row["board"]) < 0.005
+    row["agrees"] = agrees
+    row["message"] = (f"{label} agrees with its statement: ${conn.balance:,.2f}" if agrees else
+                      f"{label}: the statement says ${conn.balance:,.2f}, the board has ${row['board']:,.2f}")
+    return row

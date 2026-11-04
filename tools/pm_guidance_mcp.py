@@ -189,6 +189,32 @@ TOOLS = [
         },
     },
     {
+        "name": "bank_review",
+        "description": (
+            "For the /bank skill only (.claude/skills/bank): the bank lines no "
+            "rule has settled yet, each with the board's own suggestion, plus "
+            "the companies, categories, projects, every rule and the recent "
+            "lines settled by hand. Read this before bank_decide."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "description": "How many lines, newest first (default 150)"}},
+        },
+    },
+    {
+        "name": "bank_decide",
+        "description": (
+            "For the /bank skill: settle waiting bank lines. Each decision is "
+            "{id, disposition (expense, personal, contribution, draw, transfer, "
+            "income), business_id, category, project_id, vendor, pattern, keep, "
+            "owner_name}. With keep and a pattern it becomes a rule, and every "
+            "waiting line like it is settled too. Only settle what you are sure of."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"decisions": {"type": "array", "items": {"type": "object"}}},
+            "required": ["decisions"],
+        },
+    },
+    {
         "name": "report_lesson",
         "description": (
             "File a lesson back to the project manager the moment something "
@@ -612,6 +638,48 @@ def tool_tend_finished(args):
     return err or "Recorded on the History tab."
 
 
+def tool_bank_review(args):
+    limit = int(args.get("limit") or 150)
+    text, err = _http("GET", f"/api/guidance/bank/review?limit={limit}")
+    if err:
+        return err
+    data = json.loads(text)
+    out = [f"{data['waiting']} lines waiting; {len(data['lines'])} shown, newest first.", "",
+           "COMPANIES (id | name | owners):"]
+    out += [f"  {c['id']} | {c['name']}" + (f" (DBA of {c['dba_of']})" if c.get("dba_of") else "")
+            + f" | {', '.join(c['owners']) or 'none on file'}" for c in data["companies"]]
+    out += ["", "CATEGORIES: " + ", ".join(data["categories"]), "",
+            "PROJECTS (id | name | client):"]
+    out += [f"  {p['id']} | {p['name']} | {p['client']}" for p in data["projects"]]
+    out += ["", "RULES ALREADY KNOWN (pattern -> vendor, disposition, company, category):"]
+    out += [f"  {r['pattern']} -> {r['vendor']}, {r['disposition']}, {r['business_id']}, {r['category']}"
+            + (" (personal cards only)" if r.get("applies_to") == "personal" else "") for r in data["rules"]]
+    out += ["", "RECENTLY SETTLED BY HAND, NO RULE (counterparty | amount | as | account):"]
+    out += [f"  {s['counterparty']} | {s['amount']:.2f} | {s['disposition']} | {s['account']}"
+            for s in data["settled_by_hand"]]
+    out += ["", "WAITING (id | date | amount | account | counterparty | bank text | merchant type | pattern hint):"]
+    for l in data["lines"]:
+        out.append(f"  {l['id']} | {l['date']} | {l['amount']:.2f} | {l['account']} | {l['counterparty']} | "
+                   f"{l['bank_text']} | {l['merchant_category']} | {l['pattern_hint']}")
+        s = l.get("suggestion")
+        if s:
+            out.append(f"      board suggests: {s.get('disposition')} / {s.get('vendor')} / company "
+                       f"{s.get('business_id')} / {s.get('category')} / pattern '{s.get('pattern') or ''}' "
+                       f"({s.get('confidence')}, {s.get('source') or 'earlier'}: {s.get('why')})")
+    return "\n".join(out)
+
+
+def tool_bank_decide(args):
+    data, err = _post("/api/guidance/bank/decide", args)
+    if err:
+        return err
+    lines = [f"{r['id']}: " + (r.get("error") or r.get("skipped") or
+                               f"{r['settled']}" + (" (rule written)" if r.get("rule") else ""))
+             for r in data.get("results", [])]
+    return ("\n".join(lines) + f"\n{data.get('settled_alike', 0)} more settled by the rules written. "
+            f"{data.get('still_waiting', 0)} still waiting.")
+
+
 def tool_report_lesson(args):
     data, err = _post("/api/guidance/lessons", args)
     if err:
@@ -751,6 +819,8 @@ HANDLERS = {
     "change_map": tool_change_map,
     "file_gaps": tool_file_gaps,
     "tend_finished": tool_tend_finished,
+    "bank_review": tool_bank_review,
+    "bank_decide": tool_bank_decide,
     "report_lesson": tool_report_lesson,
     "suggest_update": tool_suggest_update,
     "get_clients": tool_get_clients,

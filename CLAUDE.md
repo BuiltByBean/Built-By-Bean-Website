@@ -742,6 +742,81 @@ company card. A contribution rule only matches money in, a draw only money
 out. The nightly Mercury read skips statement accounts.
 `tools/test_statements.py`.
 
+## The books keep themselves
+
+Michael, 2026-11-04: everything automated, and nothing on the server calls a
+paid model (`docs/automation_gaps.md`, items 2, 13, 14 and 15). Each piece is a
+step of the nightly cost-sync (`night.step` in `sync_costs._sweep`), and what
+needs him is a `BooksFlag` row written by the night and drawn on Needs
+attention (`books_upkeep.attention_rows`). The flag is a table because the
+sidebar badge is built on every page and a month's books read Stripe live: a
+check that costs seconds belongs to the night, never to the badge.
+
+**The bank review settles itself as far as it can.** `bank_review.suggest_free`
+gives every waiting line a suggestion with no model, first answer wins: the same
+counterparty settled by hand before (`counterparty_key` drops store numbers and
+processors), a receipt for the same amount to the cent, a vendor the board
+already pays, then the bank's merchant category (Mercury's, or the Category
+column a Chase card export carries). Only the first three carry a `pattern`, so
+only they write a rule when accepted; "Food & Drink" is not a vendor. It runs
+nightly after the bank feed and after every statement upload, and never
+overwrites a suggestion without its own `source`. What is left is the `/bank`
+skill (`.claude/skills/bank/SKILL.md`), run in a Claude Code session on his
+plan: `bank_review` and `bank_decide` in the bridge, `/api/guidance/bank/review`
+and `/bank/decide` behind the door (`pm/bank_door_routes.py`, a blueprint nested
+in `guidance_bp` so its bearer gate covers it by construction), settling through
+the same `bank_feed.decide` as the review page. `tools/test_bank_review.py`.
+
+**Statements ask for themselves and reconcile.** An upload keeps the balance
+before its oldest row and on its newest (`balances_of` reads the file's order
+from the balances themselves, and trusts neither order if the arithmetic fails),
+and `bank_check` holds the lines in between to the difference, so a month never
+uploaded is a disagreement rather than a silence. A card export has no balance:
+reaching past the month's end is all it can show. A source with nothing past
+last month's end (its newest statement line, or an upload after that day) is one
+row, "October statement to upload".
+
+**Chase's alert emails are lines the day the card is used.** With Chase's "a card
+transaction is higher than $0.00" alert on (the Chase playbook says where; the
+"online, phone or mail" alert it replaced was retired 2026-02-17), each email in
+a receipt mailbox becomes a `CardAlert` and then a provisional line, `kind
+"alert"`, on the source whose last four digits it names, classified and booked
+like any other. A source learns its digits from the first alert whose charge is
+already on exactly one source. The CSV folds over an alert's line by amount to
+the cent within days (`_fold_alert`), keeping its expense; an alert inside what
+the upload covers that it did not confirm was declined or changed by a tip, and
+is cancelled with its expense. Only statement lines count as an upload, so the
+upload stays the check that closes a month. `tools/test_statement_checks.py`.
+
+**A month closes itself** once nothing is unsorted, EVERY expense has its
+receipt (Michael's change: not only those over $75; a statement line stand-in
+counts as in) and every account agrees, with `MonthClose.note` "Closed by the
+nightly run". Otherwise ONE row per company names the newest finished month and
+why ("October will not close: 3 unsorted, 1 receipt") and counts the earlier
+ones. Mercury is held against its CURRENT balance, so if its history starts
+after the account opened, every month waits on that row until it is explained.
+Closing by hand clears the row at once. `tools/test_month_close.py`.
+
+**Vendors follow the bank.** A flat provider (Claude) takes its amount and day
+from its last settled line (`follow_flat_from_bank`): for each recent month with
+exactly ONE such charge, the entry becomes that charge on its day and the old
+guess goes. A month with two is left to review, because EntertainHQ's own Claude
+plan is on the same card under the same name and choosing between them moves
+money between companies. A prepaid vendor (`PREPAID_PROVIDERS`, Twilio) is the
+other way round: its top-up is the expense, even under a covered rule
+(`bank_feed.is_prepaid`), and its usage rows record and attribute and book no
+expense. A recurring expense whose vendor has a rule is ended (the bank books
+every charge now, and fixed-amount children were the duplicates `adopt` missed
+whenever the price moved), and a child no bank line claimed within ten days is
+one row. `tools/test_vendors_follow_bank.py`.
+
+**A receipt with no bank line** from a vendor the board already pays (its rules,
+providers and known vendors), within five days on any connection, is a card the
+board cannot see: one row, listed on `/admin/books/checks`. Only receipts old
+enough that every connection's lines reach five days past them, and only the
+last 45 days, so it clears itself; Set aside takes one off at once.
+`tools/test_receipt_no_line.py`.
+
 ## What a month of usage cost
 
 `service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows

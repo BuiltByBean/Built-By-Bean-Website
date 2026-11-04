@@ -26,7 +26,7 @@ import csv
 import io
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
@@ -163,8 +163,9 @@ def year_csv(id, year):
 def month_page(id, ym):
     business = db.session.get(Business, id) or abort(404)
     status = month_status(business, _month(ym))
+    month_end = books_service.month_bounds(status["month"])[1] - timedelta(days=1)
     return render_template("pm/books/month.html", business=business, st=status,
-                           s=status["summary"], bank=books_service.bank_check(business, date.today()),
+                           s=status["summary"], bank=books_service.bank_check(business, month_end),
                            category_labels=dict(EXPENSE_CATEGORY_CHOICES))
 
 
@@ -185,6 +186,8 @@ def close_month(id, ym):
     row.note = (request.form.get("note") or "")[:300]
     db.session.add(row)
     db.session.commit()
+    import books_upkeep
+    books_upkeep.month_closed_by_hand(id, start)
     flash(f"{start:%B %Y} is closed.", "success")
     return redirect(url_for("books.month_page", id=id, ym=ym))
 
@@ -198,6 +201,22 @@ def reopen_month(id, ym):
         db.session.commit()
     flash("Reopened.", "success")
     return redirect(url_for("books.month_page", id=id, ym=ym))
+
+
+@books_bp.route("/admin/books/checks")
+@ceo_required
+def checks():
+    """The detail behind a books row on Needs attention: the receipts from
+    known vendors that no bank line matches, or the recurring expenses no bank
+    line has claimed (books_upkeep.py writes both each night)."""
+    from models import BooksFlag
+    kind = request.args.get("kind", "receipts")
+    if kind not in ("receipts", "recurring"):
+        abort(404)
+    flag = BooksFlag.query.filter_by(kind=kind, key="all").first()
+    names = {b.id: (b.short_name or b.name) for b in Business.query.all()}
+    return render_template("pm/books/checks.html", kind=kind, flag=flag,
+                           items=flag.items if flag else [], business_names=names)
 
 
 @books_bp.route("/admin/books/owners", methods=["POST"])
@@ -319,7 +338,11 @@ def receipt_ignore(rid):
     r = db.session.get(Receipt, rid) or abort(404)
     r.status = "ignored"
     db.session.commit()
+    import books_upkeep
+    books_upkeep.receipt_set_aside(rid)
     flash("Set aside.", "success")
+    if request.form.get("next") == "checks":
+        return redirect(url_for("books.checks", kind="receipts"))
     return redirect(url_for("books.receipts"))
 
 

@@ -36,6 +36,15 @@ def _existing_entry(provider_id, resource_id, period_start, period_end, mapping_
     ).first()
 
 
+# Vendors paid by topping up a balance in advance. Twilio is the one: a $20
+# recharge leaves the bank, and the month's usage is drawn from the balance in
+# amounts that never add up to any one charge. So the bank line is the expense
+# (bank_feed.is_prepaid) and the usage rows only say which client used what:
+# they are recorded and attributed and book no expense, or the same money would
+# count twice, once as the top-up and once as the usage it paid for.
+PREPAID_PROVIDERS = {"twilio"}
+
+
 def _month_bounds(when=None):
     """The calendar month `when` falls in, first and last day inclusive.
 
@@ -370,6 +379,86 @@ def _sync_flat(provider):
     return count
 
 
+FOLLOW_DAYS = 70
+
+
+def follow_flat_from_bank(today=None):
+    """A flat provider's amount and day are what its last settled bank line
+    says (docs/automation_gaps.md, item 15).
+
+    `monthly_cost` and `billing_day` were typed once, so a plan change booked
+    the old amount on the old day and the real charge then fell to review as
+    a charge the sync did not hold. Now, for each month of the last ten weeks
+    with exactly ONE charge from this vendor that is Built by Bean's (its rule
+    is "covered" by this provider, the line was not settled by hand, and no
+    other company's twin account or mailbox claims it), the month's entry is
+    that charge, on its day and to the cent, any other entry the provider
+    wrote in that month goes, and the provider takes the newest charge's
+    amount and day for the months to come.
+
+    A month with two such charges is left alone: EntertainHQ's own Claude plan
+    is on the same card under the same name, and which is whose is a judgement,
+    so the one the old figure does not explain waits on review as before.
+    Returns how many charges it wrote or corrected.
+    """
+    import bank_feed
+    from models import BankTransaction, VendorRule
+    today = today or date.today()
+    rules = VendorRule.query.all()
+    changed = 0
+    for provider in ServiceProvider.query.filter_by(name="flat", is_active=True).all():
+        if not provider.is_ours:
+            continue
+        mine = {r.id for r in rules if r.provider_id == provider.id and r.disposition == "covered"}
+        if not mine:
+            continue
+        by_month = {}
+        for line in (BankTransaction.query.filter(
+                BankTransaction.status == "sent", BankTransaction.amount < 0,
+                BankTransaction.occurred_on >= today - timedelta(days=FOLLOW_DAYS))
+                .order_by(BankTransaction.occurred_on, BankTransaction.id).all()):
+            if line.decided_at and line.rule_id is None:
+                continue  # somebody settled this one line by hand
+            rule = bank_feed.rule_for(line, rules)
+            if rule is None or rule.id not in mine:
+                continue
+            owner = rule.business_id or line.business_id
+            if not bank_feed.provider_books(provider, owner):
+                continue
+            if bank_feed.other_company_for(line, provider, owner):
+                continue
+            by_month.setdefault(_month_bounds(line.occurred_on), []).append(line)
+        newest = None
+        resource = f"{provider.name}:subscription"
+        for (first, last), lines in sorted(by_month.items()):
+            if len(lines) != 1:
+                continue
+            line = lines[0]
+            amount = round(-line.amount, 2)
+            day = line.occurred_on
+            for entry in ServiceCostEntry.query.filter(
+                    ServiceCostEntry.provider_id == provider.id,
+                    ServiceCostEntry.resource_identifier == resource,
+                    ServiceCostEntry.period_start >= first,
+                    ServiceCostEntry.period_start <= last).all():
+                if entry.period_start != day:
+                    discard_entry(entry)
+            before = ServiceCostEntry.query.filter_by(provider_id=provider.id, resource_identifier=resource,
+                                                      period_start=day, period_end=day).first()
+            if before is None or abs((before.raw_amount or 0) - amount) >= 0.005:
+                _record_cost_entry(provider, resource, day, day, amount, provider.display_name,
+                                   {"billing_day": day.day, "flat_rate": amount, "bank_line": line.id})
+                changed += 1
+            db.session.flush()
+            bank_feed.classify(line, rules)
+            newest = line
+        if newest is not None:
+            provider.monthly_cost = round(-newest.amount, 2)
+            provider.billing_day = newest.occurred_on.day
+    db.session.commit()
+    return changed
+
+
 # ── AWS Cost Explorer ───────────────────────────────────────
 
 
@@ -550,7 +639,7 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
         entry.description = description if attributed else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
-        if not provider.is_ours:
+        if not provider.is_ours or provider.name in PREPAID_PROVIDERS:
             # Their account, their card. The cost is worth recording and worth
             # seeing against them; it is not money this business spent, so it
             # never becomes an Expense. Any expense a previous sync wrote for

@@ -1,7 +1,11 @@
 """Each business's bank, read nightly, and the expenses its lines make.
 
     python bank_feed.py            # every connection
-    python bank_feed.py --suggest  # and ask Claude about the lines nobody knows
+    python bank_feed.py --suggest  # and ask the paid API about the lines nobody knows
+
+Every night the board's own suggester (bank_review.py, no model) answers what
+it can from past decisions, receipts and the merchant category; the rest is
+the /bank skill's, run in a Claude Code session on Michael's plan.
 
 Michael, 2026-11-03: "I use an unbelievable amount of services ... I need my
 expense tracking automated to like the highest degree ... broken out
@@ -217,6 +221,13 @@ def provider_books(provider, business_id):
                 and business_id in _home_family())
 
 
+def is_prepaid(provider):
+    """A vendor paid in advance by top-ups (Twilio): its bank line is the
+    expense and its usage sync writes no expense of its own."""
+    from service_costs_service import PREPAID_PROVIDERS
+    return bool(provider is not None and provider.name in PREPAID_PROVIDERS)
+
+
 def booked_by_sync(line, provider):
     """Whether this vendor's sync really holds this charge, as one row or as a
     period's rows adding up to it. A sync reads one account: EntertainHQ's own
@@ -307,7 +318,14 @@ def classify(line, rules=None):
                     line.owner_name = ""
             if rule.disposition == "covered":
                 owner = rule.business_id or line.business_id
-                if not provider_books(rule.provider, owner):
+                if is_prepaid(rule.provider):
+                    # A top-up is the money that left; the vendor's usage rows
+                    # are only how it splits across clients and book nothing
+                    # (service_costs_service.PREPAID_PROVIDERS). A $20 top-up
+                    # never equals a month of usage, so "covered" could never
+                    # find it and every one fell to review.
+                    line.disposition = "expense"
+                elif not provider_books(rule.provider, owner):
                     line.disposition = "expense"
                 elif line.amount < 0 and not booked_by_sync(line, rule.provider):
                     elsewhere = other_company_for(line, rule.provider, owner)
@@ -797,6 +815,14 @@ def main():
     from app import create_app
     app = create_app()
     sync_all(app)
+    # The board's own suggestion for every waiting line, from its own history,
+    # receipts and the bank's merchant category. No model, so it runs every
+    # night; what it cannot answer is the /bank skill's (bank_review.py).
+    with app.app_context():
+        import bank_review
+        from models import db
+        print(f"  bank: {bank_review.suggest_free():,} waiting lines carry a suggestion", flush=True)
+        db.session.commit()
     # Off unless asked for, like the curator (Michael, 2026-11-04: nothing
     # billed to the API while the paid steps are off). Lines still sort by
     # rule every night; Ask Claude on the Bank page is the press that spends.

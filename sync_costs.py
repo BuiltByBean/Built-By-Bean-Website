@@ -106,6 +106,19 @@ def _sweep(night):
     run("store_ids_service", "store ids")
     # Each company's own Stripe: its sales and its fees.
     run("stripe_books", "company Stripe books")
+
+    def books(label, call):
+        def go():
+            with night.app.app_context():
+                return call()
+        night.step(label, go)
+
+    import books_upkeep
+    import service_costs_service
+    import statements
+    # Chase's per-transaction alert emails, as provisional lines on the card
+    # each names, before the bank feed so tonight's suggestions see them.
+    books("card alerts", statements.sync_alerts)
     # Each business's bank, after the vendor syncs so a line a vendor's sync
     # covers finds that vendor's expense already written.
     run("bank_feed", "bank feed")
@@ -122,6 +135,13 @@ def _sweep(night):
     # store versions, tiles, maps and checklist steps (live_night.py).
     import live_night
     live_night.steps(night)
+    # The books keep themselves (books_upkeep.py), after the bank and the
+    # receipts they read. Month close last, because it reads all of it.
+    books("flat vendors follow the bank",
+          lambda: f"{service_costs_service.follow_flat_from_bank():,} charges written from the bank")
+    books("recurring expenses", books_upkeep.end_recurring)
+    books("receipts with no bank line", books_upkeep.receipts_without_line)
+    books("month close", books_upkeep.close_months)
     # Last, because it reads what the sweep filed and what the audit found.
     # Off unless CURATOR_ENABLED (it is the paid step).
     run("curate_practices", "curator")

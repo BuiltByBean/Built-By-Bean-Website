@@ -183,9 +183,19 @@ def attention_counts():
     # services live with no tile (live_watch.attention_rows, database only).
     import live_watch
     live = len(live_watch.attention_rows())
-    return {"messages": messages, "bills": bills, "night": night, "live": live,
+    books = len(_books_rows())
+    return {"messages": messages, "bills": bills, "night": night, "live": live, "books": books,
             "hosting": increases_due_count(), "deadlines": tax,
-            "total": messages + bills + night + tax + live}
+            "total": messages + bills + night + tax + live + books}
+
+
+def _books_rows():
+    """What the books need (books_upkeep.attention_rows): a month that will
+    not close and why, statements to upload, receipts with no bank line,
+    recurring expenses no bank line claimed. Worked out by the night and
+    read here from a table, because this runs on every page."""
+    import books_upkeep
+    return books_upkeep.attention_rows()
 
 
 @attention_bp.route("/")
@@ -203,9 +213,11 @@ def index():
     tax_total = len(tax["standing"]) + len(tax["flags"]) + len(tax["deadlines"])
     import live_watch
     live = live_watch.attention_rows(force=True)
+    books = _books_rows()
     return render_template("pm/attention/index.html", messages=messages,
-                           bills=bills, night=night, tax=tax, live=live,
-                           total=len(messages) + len(bills) + (1 if night else 0) + tax_total + len(live),
+                           bills=bills, night=night, tax=tax, live=live, books=books,
+                           total=len(messages) + len(bills) + (1 if night else 0) + tax_total + len(live)
+                           + len(books),
                            here=url_for("attention.index"))
 
 

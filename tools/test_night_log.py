@@ -93,7 +93,8 @@ with application.app_context():
 check("every step is recorded, the invoice import included with no vendors",
       names[:2] == ["vendor costs", "Stripe invoices"] and "curator" in names
       and "Comptroller" in names and "project dates" in names
-      and len(names) == len(set(names)) >= 12, names)
+      and len(names) == len(set(names)) >= 12
+      and {"bank feed", "receipts", "month close", "leads refresh"} <= set(names), names)
 check("a clean night is ok and exits 0", latest.status == "ok" and code == 0)
 
 c = application.test_client()

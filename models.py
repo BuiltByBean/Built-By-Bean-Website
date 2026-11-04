@@ -987,6 +987,19 @@ class BankConnection(db.Model):
     # {account id: current balance} as Mercury last reported it, for the
     # monthly close to hold the books against.
     balances_json = db.Column(db.Text, default="{}")
+    # A statement source's own reconciliation (statements.py). A checking
+    # export carries the balance after every row, so an upload leaves the
+    # balance on its newest day and the balance before its oldest row; the
+    # lines in between have to add up to the difference, or a statement is
+    # missing. A card export carries no balance and these stay empty.
+    balance = db.Column(db.Float, nullable=True)
+    balance_on = db.Column(db.Date, nullable=True)
+    opening_balance = db.Column(db.Float, nullable=True)
+    opening_on = db.Column(db.Date, nullable=True)
+    # The card or account's last four digits, as the bank's alert emails
+    # name it ("(...1234)"). Learned from the first alert whose charge is
+    # already on exactly one source, or typed.
+    last_four = db.Column(db.String(8), default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     business = db.relationship("Business", backref=db.backref(
@@ -1138,6 +1151,79 @@ class BankTransaction(db.Model):
 
     def __repr__(self):
         return f"<BankTransaction {self.occurred_on} {self.amount} {self.counterparty}>"
+
+
+class CardAlert(db.Model):
+    """One per-transaction alert email from the bank (Chase's "a card
+    transaction higher than $0.00"), read out of a receipt mailbox.
+
+    It becomes a provisional bank line on the statement source whose last
+    four digits it names, so the books are current the day the card is
+    used; the downloaded statement later folds over it by date and amount
+    (statements.py). One whose card is not known yet waits here until a
+    source learns its last four.
+    """
+
+    __tablename__ = "card_alerts"
+    __table_args__ = (
+        db.UniqueConstraint("mailbox_id", "message_key", name="uq_card_alerts_mailbox_message"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    mailbox_id = db.Column(db.Integer, db.ForeignKey(
+        "receipt_mailboxes.id", ondelete="CASCADE", name="fk_card_alerts_mailbox_id"),
+        nullable=False, index=True)
+    message_key = db.Column(db.String(200), nullable=False)
+    last_four = db.Column(db.String(8), default="")
+    occurred_on = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Float, nullable=False)  # the bank's sign: money out is negative
+    merchant = db.Column(db.String(200), default="")
+    subject = db.Column(db.String(300), default="")
+    line_id = db.Column(db.Integer, db.ForeignKey(
+        "bank_transactions.id", ondelete="SET NULL", name="fk_card_alerts_line_id"),
+        nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class BooksFlag(db.Model):
+    """One thing the books need from Michael, worked out by the nightly run
+    (books_upkeep.py) and shown as one Needs attention row.
+
+    Kept rather than computed on the page, because the sidebar badge is
+    built on every page the board draws, and a month's books read Stripe
+    live: a check that costs seconds belongs to the night. `kind` is what
+    it is (month, receipt_no_line, recurring_unclaimed), `key` makes it one
+    row per company or month, and `items_json` is the detail the books'
+    checks page lists.
+    """
+
+    __tablename__ = "books_flags"
+    __table_args__ = (
+        db.UniqueConstraint("kind", "key", name="uq_books_flags_kind_key"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(30), nullable=False)
+    key = db.Column(db.String(80), nullable=False, default="")
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_books_flags_business_id"),
+        nullable=True, index=True)
+    title = db.Column(db.String(200), nullable=False, default="")
+    detail = db.Column(db.String(300), default="")
+    link = db.Column(db.String(300), default="")
+    count = db.Column(db.Integer, nullable=False, default=0)
+    items_json = db.Column(db.Text, default="[]")
+    checked_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business")
+
+    @property
+    def items(self):
+        import json
+        try:
+            return json.loads(self.items_json or "[]") or []
+        except ValueError:
+            return []
 
 
 class BusinessOwner(db.Model):
