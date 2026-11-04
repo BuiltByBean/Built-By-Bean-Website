@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/tickets/_status.html" import status_control with context %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/status_badge.html" import badge %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
@@ -54,52 +55,16 @@
     </div>
 
     <!-- Quick Status Change -->
-    {% if ticket.from_desk %}
-    {# Its desk carries out the status and is read back (support_service). #}
-    {% if current_user.is_ceo %}
-    <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=ticket.id) }}"
-          class="flex flex-wrap items-center gap-2 mb-4 relative z-30">
-        <input type="hidden" name="next" value="{{ request.full_path }}">
-        <span class="text-xs font-medium text-surface-400">On its desk:</span>
-        {% if ticket.status not in ('resolved', 'dismissed') %}
-            {% if ticket.status != 'in-progress' %}
-            <button type="submit" name="status" value="in-progress"
-                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700">In progress</button>
-            {% endif %}
-            {% if not ticket.desk_external %}
-            <div class="w-48">{{ select_dropdown("notify", [('tell', 'Tell them'), ('verify', 'Ask them to confirm'), ('quiet', 'Quietly')], 'tell', size="sm", full_width=true) }}</div>
-            {% endif %}
-            <button type="submit" name="status" value="resolved"
-                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Resolve</button>
-            <button type="submit" name="status" value="dismissed"
-                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700">Close</button>
-        {% else %}
-            <button type="submit" name="status" value="in-progress"
-                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700">Reopen</button>
-        {% endif %}
-        {% if ticket.origin_url and ticket.origin_url.startswith('http') %}
-        <a href="{{ ticket.origin_url }}" target="_blank" rel="noopener"
-           class="inline-flex items-center min-h-[44px] px-3 rounded-lg border border-brand-500/40 text-xs font-medium text-brand-400 hover:bg-brand-500/10">Open on its desk</a>
-        {% endif %}
-    </form>
+    {# A press that reaches a person says what goes out and waits for a
+       second press (tickets/_status.html). #}
+    <div class="mb-4">
+    {{ status_control(ticket, support_app.name if support_app else '', request.full_path,
+                      can_desk=current_user.is_ceo, statuses=statuses, status_labels=status_labels) }}
+    {% if ticket.from_desk and ticket.origin_url and ticket.origin_url.startswith('http') %}
+    <a href="{{ ticket.origin_url }}" target="_blank" rel="noopener"
+       class="mt-2 inline-flex items-center min-h-[44px] px-3 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-400 hover:bg-brand-500/10">Open on its desk</a>
     {% endif %}
-    {% else %}
-    {# flex-wrap: four status pills on one line ran off a 375 screen. #}
-    <div class="flex flex-wrap items-center gap-2 mb-4">
-        <span class="text-xs font-medium text-surface-400">Status:</span>
-        {% for val, label in ticket_status_choices %}
-        <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=ticket.id) }}" class="inline">
-            <input type="hidden" name="next" value="{{ request.full_path }}">
-            <input type="hidden" name="status" value="{{ val }}">
-            <button type="submit"
-                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg transition-colors
-                           {% if ticket.status == val %}bg-brand-600 text-white shadow-sm{% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
-                {{ label }}
-            </button>
-        </form>
-        {% endfor %}
     </div>
-    {% endif %}
 
     {% if ticket.description %}
     <div class="mb-4">

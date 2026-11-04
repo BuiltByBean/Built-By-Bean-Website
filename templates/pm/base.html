@@ -558,6 +558,11 @@
         fresh.querySelectorAll('[data-live]').forEach(node => {
             const key = node.getAttribute('data-live');
             if (wanted && !wanted.has(key)) return;
+            /* A region inside a region that was just swapped came in with it
+               and is already the fresh one. Swapping it again replaces the
+               node with itself, which removes it: every ticket card inside
+               the results vanished on a filter change (2026-11-04). */
+            if (node.ownerDocument === document) return;
             const stale = document.querySelector('[data-live="' + key + '"]');
             if (stale) stale.replaceWith(document.adoptNode(node));
         });

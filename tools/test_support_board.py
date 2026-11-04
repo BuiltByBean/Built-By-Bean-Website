@@ -533,6 +533,38 @@ plain = c.get("/admin/tickets?status=waiting").get_data(as_text=True)
 check("and the next look drops it", f'data-live="ticket-{k13_id}"' not in plain)
 c.post(f"/admin/tickets/{k13_id}/triage", data={"status": "new", "next": nxt})
 
+# ── 6b. A press that reaches a person asks first ───────────────────────
+print("6b. A press that reaches a person asks first")
+import html as _html  # noqa: E402
+with application.app_context():
+    t9 = Ticket(business_id=ehq_id, origin="entertainhq", origin_ref="jd:9", description="Ninth",
+                status="new", reporter_name="Kenali Kendrick", waiting_on="you", waiting_since=NOW)
+    db.session.add(t9)
+    db.session.commit()
+    t9_id = t9.id
+page = _html.unescape(c.get("/admin/tickets?status=all").get_data(as_text=True))
+start = page.index(f'data-live="ticket-{t9_id}"')
+card = page[start:page.index('data-live="ticket-', start + 20) if page.find('data-live="ticket-', start + 20) > 0 else len(page)]
+check("a desk card's Resolve is not a submit", 'name="status" value="resolved"' not in card)
+check("it names the outcome and the person", "Resolve and tell Kenali" in card and "Resolve quietly" in card)
+check("and says what goes out, and to whom",
+      "texts and emails Kenali that it is fixed" in card and "Nothing is texted or emailed to Kenali" in card)
+check("In progress says it posts a note to their thread", "a note that you are working on it to Kenali" in card)
+calls = len(desk_calls)
+r = c.post(f"/admin/tickets/{t9_id}/triage", data={"status": "resolved", "next": "/admin/tickets"})
+check("the server refuses a company Resolve that does not say whether to tell them",
+      len(desk_calls) == calls and r.status_code == 302)
+with application.app_context():
+    check("and nothing changed", db.session.get(Ticket, t9_id).status == "new")
+kpage = _html.unescape(c.get("/admin/tickets?status=all&app=kuper").get_data(as_text=True))
+import re as _re  # noqa: E402
+check("a hub card says its app is told and shows them",
+      _re.search(r"Kuper Plumbing is told this is Resolved, and shows it to (Cason|the reporter)\.", kpage) is not None)
+check("and its status presses are not submits either",
+      'type="submit" name="status"' not in kpage.split('Raised here')[0])
+check("a tile's name is a filter press, not a page load",
+      "appPick = (appPick === 'kuper'" in kpage and "app=kuper&amp;" not in kpage.split('data-live="tabs"')[0])
+
 # ── 7. The page ─────────────────────────────────────────────────────────
 print("7. The page")
 signed("/admin/api/hub/tickets", {"ticket_id": 13, "description": "Second open one.", "status": "new"})
@@ -559,14 +591,14 @@ check("the tiles carry the quick links", 'href="https://status.entertainhq.com"'
 check("a desk not connected says so", "Desk not connected" in page)
 
 page = c.get(f"/admin/tickets?status=all&business={ehq_id}").get_data(as_text=True)
-check("the business filter keeps EntertainHQ's alone", page.count('data-live-key="ticket-') == 2, page.count('data-live-key="ticket-'))
+check("the business filter keeps EntertainHQ's alone", page.count('data-live-key="ticket-') == 3, page.count('data-live-key="ticket-'))
 page = c.get(f"/admin/tickets?status=all&business={bbb_id}").get_data(as_text=True)
 check("Built by Bean's are its clients' tickets", page.count('data-live-key="ticket-') == 3, page.count('data-live-key="ticket-'))
 page = c.get("/admin/tickets?status=all&app=kuper").get_data(as_text=True)
 check("the app filter", page.count('data-live-key="ticket-') == 3)
 
 detail = c.get(f"/admin/tickets/{jd5_id}").get_data(as_text=True)
-check("a desk ticket's page opens, with its desk's buttons and no edit", "On its desk" in detail and "Edit ticket" not in detail)
+check("a desk ticket's page opens, with its desk's buttons and no edit", "Open on its desk" in detail and "Resolve" in detail and "Edit ticket" not in detail)
 r = c.get(f"/admin/tickets/{jd5_id}/edit")
 check("and its edit form sends you back", r.status_code == 302)
 dash = c.get("/admin/")

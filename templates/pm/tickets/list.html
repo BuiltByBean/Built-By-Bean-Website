@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/clear_filters.html" import clear_filters %}
+{% from "pm/tickets/_status.html" import status_control with context %}
 
 {#
   Client support: one board across every business (Michael, 2026-11-04).
@@ -72,8 +73,11 @@
 <div class="snap-start shrink-0 w-[85%] sm:w-80 lg:w-auto min-w-0 rounded-2xl border p-3 sm:p-4 flex flex-col gap-2
             {% if f.app == a.origin %}border-brand-500/60 bg-brand-500/10{% else %}border-surface-700 bg-surface-800/40{% endif %}">
   <div class="flex items-start gap-2 min-w-0">
-    <a href="{{ url_for('pm.tickets_list', status=status_filter, app=('' if f.app == a.origin else a.origin), category=f.category) }}"
-       class="min-w-0 flex-1 flex flex-col items-stretch rounded-xl -m-1 p-1 hover:bg-white/5">
+    {# Picking a tile is picking it in the App filter: the bar applies it in
+       place and every other filter stays as it was. #}
+    <button type="button" :aria-pressed="appPick === '{{ a.origin }}'"
+            @click="appPick = (appPick === '{{ a.origin }}' ? '' : '{{ a.origin }}'); $nextTick(() => document.getElementById('support-filters').requestSubmit())"
+            class="min-w-0 flex-1 flex flex-col items-stretch text-left rounded-xl -m-1 p-1 hover:bg-white/5">
       <span class="block text-sm font-semibold text-white truncate">{{ a.name }}</span>
       <span class="flex items-center gap-1.5 mt-0.5 text-xs text-surface-400 min-w-0">
         <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ 'bg-emerald-400' if ok else 'bg-amber-400' }}" aria-hidden="true"></span>
@@ -84,7 +88,7 @@
           {%- else -%}Not answering: {{ read_note }}{%- endif -%}
         </span>
       </span>
-    </a>
+    </button>
     {% if can_answer_desk %}
     <a href="{{ url_for('support.edit', id=a.id) }}" aria-label="{{ a.name }} settings" title="Settings"
        class="inline-flex items-center justify-center w-11 h-11 -mt-1 -mr-1 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 shrink-0">
@@ -226,39 +230,10 @@
     {%- for c in categories -%}{%- set o.category = o.category + [(c, category_labels[c])] -%}{%- endfor -%}
     {%- for b in billing_buckets -%}{%- set o.billing = o.billing + [(b, billing_labels[b])] -%}{%- endfor -%}
 
-    {# Status: presses, applied on the press. A desk ticket's go to its desk
-       and are read back; resolving one of a company's own asks whether to
-       tell the reporter, as the desk's own Resolve does. #}
-    {% if t.from_desk %}
-      {% if can_answer_desk %}
-      <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
-            action="{{ url_for('pm.ticket_triage', id=t.id) }}" class="flex flex-wrap items-center gap-2">
-        <input type="hidden" name="next" value="{{ here }}">
-        {% if not closed %}
-          {% if t.status != 'in-progress' %}
-          <button type="submit" name="status" value="in-progress" class="min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-300 hover:bg-surface-700">In progress</button>
-          {% endif %}
-          {% if not t.desk_external %}
-          <div class="w-48">{{ select_dropdown("notify", [('tell', 'Tell them'), ('verify', 'Ask them to confirm'), ('quiet', 'Quietly')], 'tell', full_width=true) }}</div>
-          {% endif %}
-          <button type="submit" name="status" value="resolved" class="min-h-[44px] px-3 rounded-xl btn-brand text-sm font-medium text-white">Resolve</button>
-          <button type="submit" name="status" value="dismissed" class="min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-300 hover:bg-surface-700">Close</button>
-        {% else %}
-          <button type="submit" name="status" value="in-progress" class="min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-300 hover:bg-surface-700">Reopen</button>
-        {% endif %}
-      </form>
-      {% endif %}
-    {% else %}
-    <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
-          action="{{ url_for('pm.ticket_triage', id=t.id) }}" class="flex flex-wrap gap-2" role="group" aria-label="Status">
-      <input type="hidden" name="next" value="{{ here }}">
-      {% for s in statuses %}
-      <button type="submit" name="status" value="{{ s }}" {% if t.status == s %}aria-pressed="true"{% endif %}
-              class="min-h-[44px] px-3 rounded-xl text-sm font-medium transition-colors
-                     {% if t.status == s %}bg-brand-600 text-white{% else %}border border-white/10 text-surface-300 hover:bg-surface-700{% endif %}">{{ status_labels[s] }}</button>
-      {% endfor %}
-    </form>
-    {% endif %}
+    {# Status: a press that reaches a person says what goes out and waits
+       for a second press (tickets/_status.html). #}
+    {{ status_control(t, a.name if a else '', here, can_desk=can_answer_desk, live='tabs tiles nav-support',
+                      statuses=statuses, status_labels=status_labels) }}
 
     {# The rest apply on the pick or when the minutes box is left. Kind and
        priority are the desk's on a desk ticket, so there they are not here. #}
@@ -307,6 +282,9 @@
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
+{# One value both the tiles and the App filter read and write. display:
+   contents, so the page's column layout is untouched. #}
+<div class="contents" x-data='{ appPick: {{ f.app | tojson }} }'>
 {# The health of every app, at a glance. A row that scrolls sideways on a
    phone, inside its own box (the page never does), and a grid from lg up. #}
 <div data-live="tiles"
@@ -347,7 +325,7 @@
   {# Standing still because the page stands still; relative z-30 per LM-1
      so the filter panels paint over the ticket cards. The pick is the apply
      (liveFilter in base.html). #}
-  <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
+  <form id="support-filters" method="GET" x-data="liveFilter()" @submit.prevent="apply()"
         class="shrink-0 relative z-30 grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-3 mb-4">
     <input type="hidden" name="status" value="{{ status_filter }}">
     {% if f.client_id %}<input type="hidden" name="client_id" value="{{ f.client_id }}">{% endif %}
@@ -359,7 +337,7 @@
     {# On a phone the app already says whose business it is, and two
        pickers fit where three were cut off. #}
     <div class="hidden sm:block min-w-0 sm:w-52">{{ select_dropdown("business", ns.biz, f.business or '', on_change="apply()", full_width=true) }}</div>
-    <div class="min-w-0 sm:w-52">{{ select_dropdown("app", ns.app, f.app, on_change="apply()", full_width=true) }}</div>
+    <div class="min-w-0 sm:w-52">{{ select_dropdown("app", ns.app, f.app, on_change="apply()", full_width=true, model="appPick") }}</div>
     <div class="min-w-0 sm:w-44">{{ select_dropdown("category", ns.cat, f.category, on_change="apply()", full_width=true) }}</div>
     <span data-live="clear" class="col-span-2 inline-flex items-center sm:ml-auto empty:hidden">
       {%- if f.business or f.app or f.category != 'all' or f.client_id -%}{{ clear_filters(href=url_for('pm.tickets_list', status=status_filter)) }}{%- endif -%}
@@ -393,5 +371,6 @@
   {% for t in out_of_scope %}{{ ticket_card(t) }}{% endfor %}
   {% endif %}
   </div>
+</div>
 </div>
 {% endblock %}

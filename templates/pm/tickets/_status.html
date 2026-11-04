@@ -1,0 +1,107 @@
+{#
+  A ticket's status presses, shared by the board's open row and the ticket's
+  own page.
+
+  Catalogue rule "A button that sends something says what it will do, then
+  waits for a second click". A status that leaves this board reaches a person:
+  EntertainHQ's desk posts "<name> is working on this now" to the reporter's
+  My Tickets thread on In progress, and on Resolve texts and emails them
+  (EntertainHQ app.py _desk_set_status); a hub app is told the new status and
+  shows it to them (Kuper's /api/hub/status applies it and sends nothing). So
+  the first press names what will go out and to whom, and only the second one
+  acts. A ticket raised here reaches nobody, so its presses act at once.
+
+  Every sentence below is what that app's code does, read on 2026-11-04. If an
+  app's handling changes, change its sentence.
+
+    t         the ticket
+    app_name  what the board calls its app
+    here      where the press returns to
+    can_desk  whether this login may act on a desk (the desk records it as Michael)
+    live      the data-live regions a press also swaps, on the board
+#}
+{% macro status_control(t, app_name, here, can_desk=false, live='', statuses=(), status_labels={}) %}
+{%- set who = ((t.reporter_name or '').split(' ')[0]) or 'the reporter' -%}
+{%- set closed = t.status in ('resolved', 'dismissed') -%}
+{%- set btn = 'min-h-[44px] px-3 rounded-xl text-sm font-medium transition-colors' -%}
+{%- set quiet = btn ~ ' border border-white/10 text-surface-300 hover:bg-surface-700' -%}
+{%- if t.from_desk -%}
+  {%- if not can_desk -%}{{ '' }}{%- else -%}
+  {%- set desk = (app_name or 'Its') ~ "'s desk" -%}
+  {%- if t.desk_external -%}
+    {%- set choices = [] if closed else ([] if t.status == 'in-progress' else [('in-progress', 'Mark in progress')]) + [('resolved:', 'Resolve'), ('dismissed', 'Close')] -%}
+    {%- set say = {
+      'in-progress': desk ~ ' marks this In progress and sends ' ~ who ~ "'s app a note that you are working on it.",
+      'resolved:': desk ~ ' marks this Resolved and tells ' ~ who ~ "'s app, which lets " ~ who ~ ' know it is fixed.',
+      'dismissed': desk ~ ' closes this and tells ' ~ who ~ "'s app.",
+    } -%}
+  {%- else -%}
+    {%- set choices = [] if closed else ([] if t.status == 'in-progress' else [('in-progress', 'Mark in progress')]) + [('resolved:tell', 'Resolve and tell ' ~ who), ('resolved:verify', 'Resolve, ask ' ~ who ~ ' to confirm'), ('resolved:quiet', 'Resolve quietly'), ('dismissed', 'Close')] -%}
+    {%- set say = {
+      'in-progress': desk ~ ' marks this In progress and posts a note that you are working on it to ' ~ who ~ "'s My Tickets thread.",
+      'resolved:tell': desk ~ ' marks this Resolved and texts and emails ' ~ who ~ ' that it is fixed.',
+      'resolved:verify': desk ~ ' marks this Resolved and texts and emails ' ~ who ~ ' asking them to confirm it is fixed.',
+      'resolved:quiet': desk ~ ' marks this Resolved. Nothing is texted or emailed to ' ~ who ~ '.',
+      'dismissed': desk ~ ' closes this. ' ~ who ~ ' sees it closed on My Tickets; nothing is texted or emailed.',
+    } -%}
+  {%- endif -%}
+  {%- if closed -%}
+    {%- set choices = [('in-progress', 'Reopen')] -%}
+    {%- set _ = say.update({'in-progress': desk ~ ' reopens this as In progress and ' ~ ('sends ' ~ who ~ "'s app" if t.desk_external else 'posts to ' ~ who ~ "'s My Tickets thread") ~ ' a note that you are working on it.'}) -%}
+  {%- endif -%}
+  {{ _asking(t, here, live, choices, say, quiet) }}
+  {%- endif -%}
+{%- elif t.origin != 'local' -%}
+  {%- set choices = [] -%}
+  {%- set say = {} -%}
+  {%- for s in statuses -%}
+    {%- if s != t.status -%}
+      {%- set _ = choices.append((s, status_labels[s])) -%}
+      {%- set _ = say.update({s: (app_name or 'Their app') ~ ' is told this is ' ~ status_labels[s] ~ ', and shows it to ' ~ who ~ '.'}) -%}
+    {%- endif -%}
+  {%- endfor -%}
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="{{ btn }} inline-flex items-center bg-brand-600 text-white" aria-current="true">{{ status_labels[t.status] }}</span>
+    {{ _asking(t, here, live, choices, say, quiet, inline=true) }}
+  </div>
+{%- else -%}
+  {# Raised here: nobody else sees it, so a press is the change. #}
+  <form method="POST" data-live-action {% if live %}data-live-scope data-live-also="{{ live }}"{% endif %}
+        action="{{ url_for('pm.ticket_triage', id=t.id) }}" class="flex flex-wrap gap-2" role="group" aria-label="Status">
+    <input type="hidden" name="next" value="{{ here }}">
+    {% for s in statuses %}
+    <button type="submit" name="status" value="{{ s }}" {% if t.status == s %}aria-pressed="true"{% endif %}
+            class="{{ btn }} {{ 'bg-brand-600 text-white' if t.status == s else 'border border-white/10 text-surface-300 hover:bg-surface-700' }}">{{ status_labels[s] }}</button>
+    {% endfor %}
+  </form>
+{%- endif -%}
+{% endmacro %}
+
+{#- The two-step press itself: the choices, then one sentence saying what
+    goes out and to whom, with Cancel and the verb on the right. The verb is
+    disabled and reads "Sending..." while it runs; a refusal comes back as the
+    flash and the card as it was, so it recovers on its own. -#}
+{% macro _asking(t, here, live, choices, say, quiet, inline=false) %}
+{%- if choices -%}
+<form method="POST" data-live-action {% if live %}data-live-scope data-live-also="{{ live }}"{% endif %}
+      action="{{ url_for('pm.ticket_triage', id=t.id) }}"
+      x-data='{ ask: "", busy: false, say: {{ say | tojson }}, verbs: {{ dict(choices) | tojson }} }'
+      @submit="busy = true"
+      class="{{ 'contents' if inline else 'flex flex-wrap items-center gap-2' }}">
+  <input type="hidden" name="next" value="{{ here }}">
+  <input type="hidden" name="status" :value="ask.split(':')[0]">
+  <input type="hidden" name="notify" :value="ask.split(':')[1] || ''">
+  {% for value, label in choices %}
+  <button type="button" x-show="!ask" @click="ask = '{{ value }}'" class="{{ quiet }}">{{ label }}</button>
+  {% endfor %}
+  <div x-show="ask" style="display: none" class="w-full flex flex-wrap items-center gap-2">
+    <p class="min-w-0 grow basis-64 text-sm text-surface-200" x-text="say[ask]"></p>
+    <div class="w-full sm:w-auto flex flex-wrap justify-end gap-2">
+      <button type="button" @click="ask = ''" :disabled="busy" class="{{ quiet }}">Cancel</button>
+      <button type="submit" :disabled="busy" class="min-h-[44px] px-4 rounded-xl text-sm font-semibold btn-brand text-white disabled:opacity-60"
+              x-text="busy ? 'Sending...' : verbs[ask]"></button>
+    </div>
+  </div>
+</form>
+{%- endif -%}
+{% endmacro %}
