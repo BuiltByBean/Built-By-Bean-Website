@@ -1063,11 +1063,18 @@
                 Leads
             </a>
             <a href="{{ url_for('pm.tickets_list') }}"
-               class="sidebar-link {% if request.endpoint and 'ticket' in request.endpoint %}active{% endif %}">
+               class="sidebar-link {% if request.endpoint and ('ticket' in request.endpoint or request.endpoint.startswith('support.')) %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
                 Client support
+                {# Exactly the Waiting on you tab. Always rendered, so a reply
+                   that empties the tab can swap the badge away. #}
+                <span data-live="nav-support" class="ml-auto">
+                    {%- if support_waiting %}
+                    <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ support_waiting | commas }}</span>
+                    {%- endif %}
+                </span>
             </a>
             <a href="{{ url_for('contracts.contracts_index') }}"
                class="sidebar-link {% if request.endpoint and ('contract' in request.endpoint or request.endpoint in ('pm.engagement_letter_form', 'pm.generate_engagement_letter', 'pm.sow_form', 'pm.generate_sow')) %}active{% endif %}">
@@ -1509,7 +1516,7 @@
     /* Regions outside the content that a new page may still change: the flash
        strip, and the two sidebar counts. Everything else in the sidebar is
        identical on every page and is left alone. */
-    var LIVE = ['flash', 'nav-attention', 'nav-workspace'];
+    var LIVE = ['flash', 'nav-attention', 'nav-workspace', 'nav-support'];
     var FILES = /\.(pdf|png|jpe?g|gif|svg|ico|csv|zip|xlsx?|docx?|txt)$/i;
 
     function swappable(a, ev) {

@@ -1,14 +1,15 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/status_badge.html" import badge %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
 
-{% block back %}{{ back_link(url_for('pm.tickets_list'), 'Tickets') }}{% endblock %}
+{% block back %}{{ back_link(url_for('pm.tickets_list'), 'Client support') }}{% endblock %}
 {% block page_title %}{{ ticket.display_title }}{% endblock %}
 {# The project is optional now, so the subtitle leads with the client, which
    is the one thing every ticket has. #}
-{% block page_subtitle %}{{ ticket.client.name }}{% if ticket.project %} &middot; {{ ticket.project.name }}{% endif %}{% if ticket.origin != 'local' %} &middot; via {{ ticket.origin }}{% endif %}{% endblock %}
+{% block page_subtitle %}{{ ticket.who }}{% if ticket.project %} &middot; {{ ticket.project.name }}{% endif %}{% if ticket.origin != 'local' %} &middot; via {{ support_app.name if support_app else ticket.origin }}{% endif %}{% endblock %}
 
 {% block header_actions %}
 <div class="flex items-center gap-2">
@@ -30,7 +31,10 @@
        class="px-3 py-2 min-h-[44px] bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
         Add Expense
     </a>
+    {# A desk ticket's words are its desk's; there is nothing here to edit. #}
+    {% if not ticket.from_desk and ticket.client_id %}
     {{ icon_button('edit', 'Edit ticket', href=url_for('pm.ticket_edit', id=ticket.id)) }}
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -50,6 +54,36 @@
     </div>
 
     <!-- Quick Status Change -->
+    {% if ticket.from_desk %}
+    {# Its desk carries out the status and is read back (support_service). #}
+    {% if current_user.is_ceo %}
+    <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=ticket.id) }}"
+          class="flex flex-wrap items-center gap-2 mb-4 relative z-30">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <span class="text-xs font-medium text-surface-400">On its desk:</span>
+        {% if ticket.status not in ('resolved', 'dismissed') %}
+            {% if ticket.status != 'in-progress' %}
+            <button type="submit" name="status" value="in-progress"
+                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700">In progress</button>
+            {% endif %}
+            {% if not ticket.desk_external %}
+            <div class="w-48">{{ select_dropdown("notify", [('tell', 'Tell them'), ('verify', 'Ask them to confirm'), ('quiet', 'Quietly')], 'tell', size="sm", full_width=true) }}</div>
+            {% endif %}
+            <button type="submit" name="status" value="resolved"
+                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Resolve</button>
+            <button type="submit" name="status" value="dismissed"
+                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700">Close</button>
+        {% else %}
+            <button type="submit" name="status" value="in-progress"
+                    class="min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg bg-surface-800 text-surface-300 hover:bg-surface-700">Reopen</button>
+        {% endif %}
+        {% if ticket.origin_url and ticket.origin_url.startswith('http') %}
+        <a href="{{ ticket.origin_url }}" target="_blank" rel="noopener"
+           class="inline-flex items-center min-h-[44px] px-3 rounded-lg border border-brand-500/40 text-xs font-medium text-brand-400 hover:bg-brand-500/10">Open on its desk</a>
+        {% endif %}
+    </form>
+    {% endif %}
+    {% else %}
     {# flex-wrap: four status pills on one line ran off a 375 screen. #}
     <div class="flex flex-wrap items-center gap-2 mb-4">
         <span class="text-xs font-medium text-surface-400">Status:</span>
@@ -65,6 +99,7 @@
         </form>
         {% endfor %}
     </div>
+    {% endif %}
 
     {% if ticket.description %}
     <div class="mb-4">
@@ -110,7 +145,7 @@
                         {# Says out loud whether it actually reached them. A reply
                            that only ever sat in this database, presented as sent,
                            is the failure this column exists to make visible. #}
-                        &middot; {{ "delivered" if note.delivered_at else "not sent to their app yet" }}
+                        &middot; {{ "delivered" if note.delivered_at else ("not sent to the desk yet" if ticket.from_desk else "not sent to their app yet") }}
                     {% endif %}
                 </p>
             </div>
@@ -120,11 +155,13 @@
         {% endfor %}
         </div>
 
+        {% if not ticket.from_desk or current_user.is_ceo %}
         <form method="POST" data-live-action action="{{ url_for('pm.ticket_reply', id=ticket.id) }}" class="flex gap-2 mt-3">
             <input type="text" name="body" required placeholder="Reply to {{ ticket.reporter_name or 'them' }}"
                    class="input-ring flex-1 min-w-0 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
             <button type="submit" class="shrink-0 px-4 py-2.5 min-h-[44px] bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
         </form>
+        {% endif %}
     </div>
 
     {% if ticket.detailed_notes %}

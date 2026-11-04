@@ -19,11 +19,12 @@ from werkzeug.utils import secure_filename
 from config import Config
 import hub
 import signadoc_service
+import support_service
 import time
 from tax_engine import compute as tax_compute
 from models import (
     db, Client, Project, Ticket, TicketNote, Expense, TimeEntry,
-    Document, User, Business,
+    Document, User, Business, SupportApp,
     Invoice, InvoiceLineItem, TimerSession, TaxSetting,
     ServiceProvider, ServiceCostEntry, ServiceMapping,
     Playbook, PlaybookStep, ProjectPlaybook, ProjectPlaybookStep,
@@ -385,6 +386,10 @@ def create_app():
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)
 
+    # ── Client support: each app's links and desk door ───────
+    from pm.support_routes import support_bp
+    app.register_blueprint(support_bp)
+
     # ── Pluralism Project ──────────────────────────────────
     from pluralism import pluralism_bp
     app.register_blueprint(pluralism_bp)
@@ -675,7 +680,15 @@ def create_app():
                 workspace_new = workspace_counts(current_user.id)["total"]
             except Exception:
                 db.session.rollback()
+        # The Client support badge: exactly the Waiting on you tab.
+        support_waiting = 0
+        if current_user.is_authenticated and not str(current_user.get_id()).startswith("bs_"):
+            try:
+                support_waiting = support_service.waiting_count()
+            except Exception:
+                db.session.rollback()
         return {
+            "support_waiting": support_waiting,
             "attention_total": attention.get("total", 0),
             "hosting_due": attention.get("hosting", 0),
             "workspace_new": workspace_new,
@@ -969,7 +982,7 @@ def create_app():
         ).order_by(Ticket.due_date.asc()).all():
             deadlines.append({
                 "kind": "ticket", "when": tk.due_date, "title": tk.display_title,
-                "where": tk.client.name + (f" · {tk.project.name}" if tk.project else ""),
+                "where": tk.who + (f" · {tk.project.name}" if tk.project else ""),
                 "url": url_for("pm.ticket_detail", id=tk.id),
             })
         for pr in Project.query.filter(
@@ -1610,7 +1623,16 @@ def create_app():
         ticket.reporter_email = (data.get("reporter_email") or "")[:200]
         if data.get("priority") in TICKET_PRIORITIES:
             ticket.priority = data["priority"]
+        # The customer's own "Did this solve it?", when their app asks. Theirs
+        # to say, so it is taken on every update, never set here.
+        if isinstance(data.get("solved"), bool):
+            ticket.said_solved = data["solved"]
+        if data.get("verification_requested_at") and ticket.verify_requested_at is None:
+            ticket.verify_requested_at = support_service.parse_time(data["verification_requested_at"])
+        if data.get("verified_at"):
+            ticket.verified_at = support_service.parse_time(data["verified_at"])
         ticket.updated_at = datetime.now(timezone.utc)
+        support_service.refresh_waiting(ticket)
         return ticket, created
 
     @pm_bp.route("/api/hub/status", methods=["POST"])
@@ -1640,9 +1662,11 @@ def create_app():
                                         origin_ticket_id=their_id).first()
         if ticket is None:
             return jsonify({"error": "no such ticket here yet"}), 404
+        support_service.status_changed(ticket, ticket.status, status)
         ticket.status = status
         ticket.hub_status_sent = status
         ticket.updated_at = datetime.now(timezone.utc)
+        support_service.refresh_waiting(ticket)
         db.session.commit()
         app.logger.info("hub: %s/%s is now %s", client.origin_slug, their_id, status)
         return jsonify({"ok": True}), 200
@@ -1680,16 +1704,26 @@ def create_app():
         if existing is not None:
             return jsonify({"ok": True, "id": existing.id, "duplicate": True}), 200
 
+        # A note from their side is the reporter's, unless the app says it
+        # was its own staff answering in its own admin (EntertainHQ's central
+        # desk sends the same key). Those count as a reply for the response
+        # time and never reopen anything.
+        staff = data.get("is_staff_reply") is True
         db.session.add(TicketNote(
             ticket_id=ticket.id,
             origin_note_id=their_note,
             author_name=(data.get("author_name") or "")[:200],
             body=(data.get("body") or "")[:5000],
-            is_staff_reply=False,          # it came from them, by definition
+            is_staff_reply=staff,
+            delivered_at=datetime.now(timezone.utc) if staff else None,
         ))
         ticket.updated_at = datetime.now(timezone.utc)
-        if ticket.status == "resolved":
+        if staff:
+            support_service.staff_replied(ticket)
+        elif ticket.status == "resolved":
+            support_service.status_changed(ticket, "resolved", "in-progress")
             ticket.status = "in-progress"
+        support_service.refresh_waiting(ticket)
         db.session.commit()
         return jsonify({"ok": True}), 201
 
@@ -1717,89 +1751,134 @@ def create_app():
         )
         return query.order_by(bugs_first, priority_rank, Ticket.created_at.desc())
 
-    def _ticket_counts():
-        """Header badges. Each counts EXACTLY what clicking it shows.
+    # The tabs, in the order the board shows them. Waiting on you leads and is
+    # where the page opens: the question the board answers first is who is
+    # waiting on Michael (approved 2026-11-04).
+    SUPPORT_TABS = (("waiting", "Waiting on you"), ("open", "Open"),
+                    ("follow-up", "Circle back"), ("resolved", "Resolved"),
+                    ("out-of-scope", "Out of scope"), ("all", "All"))
 
-        Out of scope is excluded from "open" because the open board excludes it:
-        it renders in its own section underneath. A badge that counts what the
-        list below it does not show is the badge lying.
-        """
-        out = {name: 0 for name in TICKET_STATUSES}
-        out["follow-up"] = out["out-of-scope"] = out["open"] = 0
-        for t in Ticket.query.all():
-            out[t.status] = out.get(t.status, 0) + 1
-            if t.followup_flagged:
-                out["follow-up"] += 1
-            if t.out_of_scope:
-                out["out-of-scope"] += 1
-            elif t.status not in TICKET_CLOSED_STATUSES:
-                out["open"] += 1
-        out["total"] = sum(out[name] for name in TICKET_STATUSES)
-        return out
+    def _support_filters():
+        """The filters every tab shares, read once from the query string."""
+        return {
+            "business": request.args.get("business", type=int),
+            "app": (request.args.get("app") or "").strip(),
+            "category": request.args.get("category", "all"),
+            "client_id": request.args.get("client_id", type=int),
+        }
+
+    def _support_scope(query, f, board_business_id):
+        """Business, app, kind and client: everything but the tab."""
+        if f["business"]:
+            if f["business"] == board_business_id:
+                # The board company's tickets carry no business: they are its
+                # clients' and its own.
+                query = query.filter(db.or_(Ticket.business_id == f["business"],
+                                            Ticket.business_id.is_(None)))
+            else:
+                query = query.filter(Ticket.business_id == f["business"])
+        if f["app"]:
+            query = query.filter(Ticket.origin == f["app"])
+        if f["category"] in TICKET_CATEGORIES:
+            query = query.filter(Ticket.category == f["category"])
+        if f["client_id"]:
+            query = query.filter(Ticket.client_id == f["client_id"])
+        return query
+
+    def _support_tab(query, tab):
+        if tab == "waiting":
+            return support_service.waiting_query(query)
+        if tab == "open":
+            return query.filter(~Ticket.status.in_(TICKET_CLOSED_STATUSES),
+                                Ticket.out_of_scope.is_(False))
+        if tab == "follow-up":
+            # The flag, so this list can hold a finished ticket I still want to
+            # talk about. That is the entire point of it.
+            return query.filter(Ticket.followup_flagged.is_(True))
+        if tab == "out-of-scope":
+            return query.filter(Ticket.out_of_scope.is_(True))
+        if tab == "resolved":
+            return query.filter(Ticket.status.in_(TICKET_CLOSED_STATUSES),
+                                Ticket.out_of_scope.is_(False))
+        # All: out of scope renders in its own section below, so it is not
+        # also in the list above it. One ticket, one place on the page.
+        return query.filter(Ticket.out_of_scope.is_(False))
+
+    def _ticket_counts(f=None, board_business_id=None):
+        """Tab counts. Each counts EXACTLY what clicking it shows, under the
+        same filters, because a count that ignores the filter beside it is the
+        badge lying."""
+        f = f or {"business": None, "app": "", "category": "all", "client_id": None}
+        base = _support_scope(Ticket.query, f, board_business_id)
+        return {key: _support_tab(base, key).count() for key, _ in SUPPORT_TABS}
 
     @pm_bp.route("/tickets")
     @login_required
     def tickets_list():
-        status_filter = request.args.get("status", "open")
-        category_filter = request.args.get("category", "all")
-        client_filter = request.args.get("client_id", type=int)
+        """One support board across every business (Michael, 2026-11-04).
 
-        query = Ticket.query
-        if status_filter == "open":
-            query = query.filter(~Ticket.status.in_(TICKET_CLOSED_STATUSES))
-        elif status_filter == "follow-up":
-            # The flag, so this list can hold a finished ticket I still want to
-            # talk about. That is the entire point of it.
-            query = query.filter(Ticket.followup_flagged.is_(True))
-        elif status_filter == "out-of-scope":
-            query = query.filter(Ticket.out_of_scope.is_(True))
-        elif status_filter in TICKET_STATUSES:
-            query = query.filter(Ticket.status == status_filter)
-        if status_filter in ("open", "all"):
-            # They render in their own section below, so they must not also be
-            # in the list above it. One ticket, one place on the page.
-            query = query.filter(Ticket.out_of_scope.is_(False))
-        if category_filter in TICKET_CATEGORIES:
-            query = query.filter(Ticket.category == category_filter)
-        if client_filter:
-            query = query.filter(Ticket.client_id == client_filter)
+        App tiles across the top, each with its health and its quick links;
+        one list under them, filtered by business, app and kind.
+        """
+        support_service.ensure_apps()
+        from books_service import board_business
+        board = board_business()
+        board_id = board.id if board else None
+        tab = request.args.get("status", "waiting")
+        if tab not in dict(SUPPORT_TABS):
+            tab = "waiting"
+        f = _support_filters()
 
-        # Notes come with the tickets rather than one query per card. The
-        # board already walked them for the unread count; now the cards expand
-        # to show the conversation itself, and a query per ticket to do it
-        # would be paid on every board load whether anything is expanded or not.
-        board = query.options(selectinload(Ticket.notes),
-                              joinedload(Ticket.client),
-                              joinedload(Ticket.project))
-        tickets = _ticket_board_order(board).all()
+        scoped = _support_scope(Ticket.query, f, board_id)
+        board_q = _support_tab(scoped, tab).options(
+            selectinload(Ticket.notes), joinedload(Ticket.client),
+            joinedload(Ticket.project), joinedload(Ticket.business))
+        if tab == "waiting":
+            # Longest wait first: the one who has waited longest is next.
+            tickets = board_q.order_by(Ticket.waiting_since.asc(), Ticket.id.asc()).all()
+        elif tab in ("resolved", "out-of-scope"):
+            tickets = board_q.order_by(Ticket.updated_at.desc(), Ticket.id.desc()).all()
+        else:
+            tickets = _ticket_board_order(board_q).order_by(Ticket.id.desc()).all()
 
-        # A separate query rather than sorted to the bottom of the main one:
+        # A separate list rather than sorted to the bottom of the main one:
         # they are not work in the queue, and anything that filters the board
         # must not interleave them back in.
         out_of_scope = []
-        if status_filter in ("open", "all"):
-            oos = Ticket.query.filter(Ticket.out_of_scope.is_(True))
-            if category_filter in TICKET_CATEGORIES:
-                oos = oos.filter(Ticket.category == category_filter)
-            if client_filter:
-                oos = oos.filter(Ticket.client_id == client_filter)
-            out_of_scope = (oos.options(selectinload(Ticket.notes),
-                                        joinedload(Ticket.client),
-                                        joinedload(Ticket.project))
-                            .order_by(Ticket.updated_at.desc()).all())
+        if tab in ("open", "all"):
+            out_of_scope = (scoped.filter(Ticket.out_of_scope.is_(True))
+                            .options(selectinload(Ticket.notes), joinedload(Ticket.client),
+                                     joinedload(Ticket.project), joinedload(Ticket.business))
+                            .order_by(Ticket.updated_at.desc(), Ticket.id.desc()).all())
+
+        app_rows = [a for a in support_service.apps() if not a.moved_to]
+        health = support_service.health(app_rows)
+        hub_by_origin = {c.origin_slug: c for c in Client.query.filter(
+            Client.origin_slug.isnot(None)).all()}
+        apps_by_origin = {a.origin: a for a in support_service.apps()}
+
+        # Which businesses can be picked: the board company, then each desk's.
+        businesses, seen = [], set()
+        for b in [board] + [a.business for a in app_rows]:
+            if b is not None and b.id not in seen:
+                businesses.append(b)
+                seen.add(b.id)
+        has_local = Ticket.query.filter(Ticket.origin == "local").first() is not None
 
         return render_template(
             "pm/tickets/list.html",
-            tickets=tickets, out_of_scope=out_of_scope, counts=_ticket_counts(),
-            clients=Client.query.order_by(Client.name).all(),
-            status_filter=status_filter, category_filter=category_filter,
-            client_filter=client_filter,
+            tickets=tickets, out_of_scope=out_of_scope,
+            counts=_ticket_counts(f, board_id), tabs=SUPPORT_TABS,
+            status_filter=tab, f=f, board_id=board_id,
+            apps=app_rows, health=health, hub_by_origin=hub_by_origin,
+            apps_by_origin=apps_by_origin, businesses=businesses, has_local=has_local,
+            span=support_service.span,
             statuses=TICKET_STATUSES, status_labels=TICKET_STATUS_LABELS,
             categories=TICKET_CATEGORIES, category_labels=TICKET_CATEGORY_LABELS,
             priority_labels=TICKET_PRIORITY_LABELS,
             billing_labels=TICKET_BILLING_LABELS,
             billing_buckets=TICKET_BILLING_BUCKETS,
-            stale=stale_hub_clients(),
+            can_answer_desk=bool(getattr(current_user, "is_ceo", False)),
         )
 
     @pm_bp.route("/tickets/resync", methods=["POST"])
@@ -1813,19 +1892,22 @@ def create_app():
         identical on the board and only one of them is fine.
         """
         results = pull_all_tickets()
-        if not results:
-            flash("No client app is wired up to be asked.", "warning")
-            return redirect(request.form.get("next") or url_for("pm.tickets_list"))
+        desks = support_service.pull_all_desks(force=True)
+        if not results and not desks:
+            flash("No app is wired up to be asked.", "warning")
+            return redirect(_safe_next(url_for("pm.tickets_list")))
         created = sum(c for _, c, _, _ in results)
         updated = sum(u for _, _, u, _ in results)
         broken = [c.name for c, _, _, note in results if "read," not in note]
+        broken += [a.name for a, note in desks if " read," not in note]
+        results = results + [(a, 0, 0, note) for a, note in desks]
         if broken:
-            flash(f"{created} new, {updated} updated. Could not reach: "
+            flash(f"Asked {len(results)} app{'' if len(results) == 1 else 's'}. Could not reach: "
                   f"{', '.join(broken)}.", "warning")
         else:
-            flash(f"{created} new, {updated} updated, from "
-                  f"{len(results)} app{'' if len(results) == 1 else 's'}.", "success")
-        return redirect(request.form.get("next") or url_for("pm.tickets_list"))
+            flash(f"Asked {len(results)} app{'' if len(results) == 1 else 's'}: "
+                  f"{created} new from the hub, every desk read.", "success")
+        return redirect(_safe_next(url_for("pm.tickets_list")))
 
     @pm_bp.route("/tickets/new", methods=["GET", "POST"])
     @login_required
@@ -1859,6 +1941,8 @@ def create_app():
                 due_date=form.due_date.data,
             )
             db.session.add(ticket)
+            db.session.flush()
+            support_service.refresh_waiting(ticket)
             db.session.commit()
             flash(f"Ticket '{ticket.display_title}' created.", "success")
             return redirect(url_for("pm.ticket_detail", id=ticket.id))
@@ -1879,6 +1963,7 @@ def create_app():
             db.session.commit()
         return render_template(
             "pm/tickets/detail.html", ticket=ticket,
+            support_app=support_service.app_for(ticket.origin),
             documents=ticket.documents.order_by(Document.uploaded_at.desc()).all(),
             expenses=ticket.expenses.order_by(Expense.date.desc()).all(),
             time_entries=ticket.time_entries.order_by(TimeEntry.date.desc()).all(),
@@ -1892,6 +1977,11 @@ def create_app():
     @login_required
     def ticket_edit(id):
         ticket = db.session.get(Ticket, id) or abort(404)
+        if ticket.from_desk or ticket.client_id is None:
+            # Its words and its triage are its own desk's, and a form here
+            # would write a copy the next read overwrites.
+            flash("This one lives on its own desk. Change it there.", "warning")
+            return redirect(url_for("pm.ticket_detail", id=ticket.id))
         form = TicketForm(obj=ticket)
         form.client_id.choices = [
             (c.id, c.name) for c in Client.query.order_by(Client.name).all()
@@ -1903,8 +1993,11 @@ def create_app():
         if request.method == "GET" and not ticket.project_id:
             form.project_id.data = 0
         if form.validate_on_submit():
+            old_status = ticket.status
             form.populate_obj(ticket)
             ticket.project_id = form.project_id.data or None
+            support_service.status_changed(ticket, old_status, ticket.status)
+            support_service.refresh_waiting(ticket)
             db.session.commit()
             flash(f"Ticket '{ticket.display_title}' updated.", "success")
             return redirect(url_for("pm.ticket_detail", id=ticket.id))
@@ -1929,12 +2022,29 @@ def create_app():
         one of them cannot blank the other three.
         """
         ticket = db.session.get(Ticket, id) or abort(404)
-        if "status" in request.form and request.form["status"] in TICKET_STATUSES:
-            ticket.status = request.form["status"]
-        if "category" in request.form and request.form["category"] in TICKET_CATEGORIES:
-            ticket.category = request.form["category"]
-        if "priority" in request.form and request.form["priority"] in TICKET_PRIORITIES:
-            ticket.priority = request.form["priority"]
+        if ticket.from_desk:
+            # The desk owns status, kind and priority. A status pressed here is
+            # carried out BY the desk, as its own button would, and only read
+            # back; kind and priority are the desk's alone. What stays here is
+            # what never travels: billing.
+            want = request.form.get("status")
+            if want and want != ticket.status:
+                if not current_user.is_ceo:
+                    flash("Only Michael answers on a business's desk.", "error")
+                    return redirect(_safe_next(url_for("pm.tickets_list")))
+                why = support_service.desk_set_status(ticket, want, request.form.get("notify"))
+                if why:
+                    flash(f"Not changed: {why}", "error")
+                    return redirect(_safe_next(url_for("pm.tickets_list")))
+        else:
+            if "status" in request.form and request.form["status"] in TICKET_STATUSES:
+                support_service.status_changed(ticket, ticket.status, request.form["status"])
+                ticket.status = request.form["status"]
+                support_service.refresh_waiting(ticket)
+            if "category" in request.form and request.form["category"] in TICKET_CATEGORIES:
+                ticket.category = request.form["category"]
+            if "priority" in request.form and request.form["priority"] in TICKET_PRIORITIES:
+                ticket.priority = request.form["priority"]
         if "billing_bucket" in request.form:
             bucket = request.form["billing_bucket"]
             # Anything unrecognised clears it back to undecided rather than
@@ -1993,17 +2103,33 @@ def create_app():
         if not body:
             flash("Write something first.", "error")
             return redirect(request.referrer or url_for("pm.ticket_detail", id=id))
-        db.session.add(TicketNote(
+        if ticket.from_desk and not current_user.is_ceo:
+            # The desk records the reply as the login it acts for, which is
+            # Michael's: nobody else may put words in his name.
+            flash("Only Michael answers on a business's desk.", "error")
+            return redirect(_safe_next(url_for("pm.ticket_detail", id=id)))
+        note = TicketNote(
             ticket_id=ticket.id,
             author_name=current_user.full_name,
             body=body[:5000],
             is_staff_reply=True,
-        ))
+            created_at=datetime.now(timezone.utc),
+        )
+        db.session.add(note)
         ticket.updated_at = datetime.now(timezone.utc)
+        support_service.staff_replied(ticket)
+        support_service.refresh_waiting(ticket)
         db.session.commit()
         # Name every destination. Saying only "sent" is how Talent Booker's own
         # thread came to look like a feature that did not exist.
-        if ticket.origin == "local" or not ticket.client.origin_base_url:
+        if ticket.from_desk:
+            why = support_service.desk_reply(ticket, note)
+            if why:
+                flash(f"Posted here, but not sent to the desk yet ({why}). "
+                      f"It tries again for two days.", "warning")
+            else:
+                flash("Sent through its desk.", "success")
+        elif ticket.origin == "local" or ticket.client is None or not ticket.client.origin_base_url:
             flash("Posted to the thread. Their app is not wired up to receive it yet.",
                   "success")
         else:
@@ -2037,6 +2163,8 @@ def create_app():
         sent = skipped = failed = 0
         stale = (Ticket.query
                  .filter(Ticket.origin != "local",
+                         # A desk's ticket is the desk's: never down the hub.
+                         Ticket.origin_ref.is_(None),
                          db.or_(Ticket.hub_status_sent.is_(None),
                                 Ticket.hub_status_sent != Ticket.status))
                  .limit(limit).all())
@@ -2077,15 +2205,20 @@ def create_app():
         so in as many words on the ticket.
         """
         sent = skipped = failed = 0
+        moved = support_service.moved_origins()
         pending = (TicketNote.query
+                   .join(Ticket, TicketNote.ticket_id == Ticket.id)
                    .filter(TicketNote.is_staff_reply.is_(True),
-                           TicketNote.delivered_at.is_(None))
+                           TicketNote.delivered_at.is_(None),
+                           # A desk's ticket is the desk's: never down the hub.
+                           Ticket.origin_ref.is_(None))
                    .order_by(TicketNote.created_at)
                    .limit(limit).all())
         for note in pending:
             ticket = note.ticket
             client = ticket.client if ticket else None
             if (ticket is None or client is None or ticket.origin == "local"
+                    or ticket.origin in moved
                     or not client.origin_base_url or not client.ingest_secret
                     or not ticket.origin_ticket_id):
                 skipped += 1
@@ -2177,12 +2310,19 @@ def create_app():
     PULL_ALL_SINCE = "1970-01-01T00:00:00+00:00"
 
     def hub_clients():
-        """Every client whose app this board is wired to talk to."""
-        return (Client.query
-                .filter(Client.origin_slug.isnot(None),
-                        Client.origin_base_url != "",
-                        Client.ingest_secret != "")
-                .order_by(Client.name).all())
+        """Every client whose app this board is wired to talk to.
+
+        Less any whose tickets now reach the board through another app's desk
+        (J&D's Talent Booker, through EntertainHQ's since 2026-11-01): asking
+        both would show every ticket twice.
+        """
+        moved = support_service.moved_origins()
+        return [c for c in (Client.query
+                            .filter(Client.origin_slug.isnot(None),
+                                    Client.origin_base_url != "",
+                                    Client.ingest_secret != "")
+                            .order_by(Client.name).all())
+                if c.origin_slug not in moved]
 
     def pull_client_tickets(client, since=None, limit=500):
         """Ask one client's app for what it has, and take it in.
@@ -2313,6 +2453,42 @@ def create_app():
         threading.Thread(target=loop, daemon=True, name="hub-ticket-puller").start()
 
     _start_ticket_puller()
+
+    def _start_desk_puller():
+        """Read every business's own support desk on a schedule.
+
+        Ten minutes by default: a desk is where the customer's words land first
+        and Michael may answer there, so the board should not lag far behind
+        it, and the desk's door allows sixty calls a minute across every caller,
+        so a pass is one list plus at most a couple of dozen threads. Replies
+        that did not reach a desk on the press are retried on the same beat.
+        Only reads and retries what Michael pressed; it never answers anything.
+        """
+        import threading
+
+        interval = int(os.environ.get("DESK_PULL_INTERVAL_SECONDS", "600"))
+        if interval <= 0 or os.environ.get("DESK_PULL_DISABLED") == "1":
+            return
+        if getattr(app, "_desk_puller_started", False):
+            return
+        app._desk_puller_started = True
+        first_delay = int(os.environ.get("DESK_PULL_FIRST_DELAY_SECONDS", "90"))
+
+        def loop():
+            time.sleep(first_delay)
+            while True:
+                try:
+                    with app.app_context():
+                        support_service.pull_all_desks()
+                        support_service.deliver_desk_replies()
+                except Exception as exc:                # noqa: BLE001
+                    # A dead thread is a schedule that silently stops.
+                    app.logger.warning("support: desk pass failed: %s", exc)
+                time.sleep(interval)
+
+        threading.Thread(target=loop, daemon=True, name="support-desk-puller").start()
+
+    _start_desk_puller()
 
     def _start_invoice_importer():
         """Write Stripe's invoices down on a schedule, starting shortly after

@@ -475,10 +475,20 @@ class Ticket(db.Model):
     # The aggregation key, and the reason this table exists. Every ticket
     # belongs to a client whether or not it belongs to a project: a bug report
     # from a live app is not project work until I decide it is.
+    #
+    # Nullable since 2026-11-04, when the board became the support board for
+    # every business Michael owns: a ticket from EntertainHQ's or Data
+    # Dungeon's own desk was raised by THAT business's customer, who is no
+    # client of this board. Such a ticket carries `business_id` instead. A
+    # ticket with neither is the board company's (Built by Bean's).
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"),
-                          nullable=False, index=True)
+                          nullable=True, index=True)
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
                            nullable=True, index=True)
+    business_id = db.Column(db.Integer,
+                            db.ForeignKey("businesses.id", ondelete="CASCADE",
+                                          name="fk_tickets_business_id"),
+                            nullable=True, index=True)
 
     # Where it came from. `origin` is the app's own slug ("kuper", "talent-booker"),
     # `origin_ticket_id` is its id over there, and the pair is unique so the same
@@ -487,6 +497,34 @@ class Ticket(db.Model):
     origin = db.Column(db.String(40), nullable=False, default="local", index=True)
     origin_ticket_id = db.Column(db.Integer, nullable=True)
     origin_url = db.Column(db.String(500), default="")
+    # A ticket read from a business's own support desk (support_service.py) is
+    # keyed by the desk's own name for it, "<company>:<id>", because the desk
+    # holds one numbering per company and an integer alone collides. Null for
+    # a hub ticket, so the hub's drains can tell the two apart: the desk owns
+    # its tickets, and nothing on the hub's queues may ever send one.
+    origin_ref = db.Column(db.String(80), nullable=True)
+    # The desk's own updated_at the last time its whole thread was read, so a
+    # pull only asks again for the tickets that moved.
+    origin_updated_at = db.Column(db.DateTime, nullable=True)
+
+    # Who has to speak next: "you" (the customer spoke last, or nobody has
+    # answered yet), "them" (the last word was ours), or "" once it is closed.
+    # Stored rather than worked out on render so the sidebar badge and the
+    # Waiting on you tab are one cheap query and always the same number.
+    waiting_on = db.Column(db.String(10), nullable=False, default="", server_default="")
+    waiting_since = db.Column(db.DateTime, nullable=True)
+    # What the health tiles are made of. Each is stamped when it is SEEN to
+    # happen (or read from a desk that saw it), never backdated by a guess: a
+    # ticket that arrived already resolved has no resolved_at, because "now"
+    # would make every imported fix look instant.
+    first_reply_at = db.Column(db.DateTime, nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    reopen_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    verify_requested_at = db.Column(db.DateTime, nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    # The customer's own answer to "Did this solve it?", when their app asks.
+    # Null is "not asked or not answered", never "no".
+    said_solved = db.Column(db.Boolean, nullable=True)
 
     # Denormalised on purpose: there is no user row here for Cason or Kenali and
     # there should not be. They do not log into this app.
@@ -529,6 +567,7 @@ class Ticket(db.Model):
 
     client = db.relationship("Client", back_populates="tickets")
     project = db.relationship("Project", back_populates="tickets")
+    business = db.relationship("Business")
     # Cascade is required rather than tidy: ticket_id is NOT NULL on the note,
     # so the default on parent-delete is to null the child FK, which raises and
     # 500s the delete.
@@ -544,7 +583,29 @@ class Ticket(db.Model):
     __table_args__ = (
         # Named, because SQLite batch mode cannot drop an unnamed constraint.
         db.UniqueConstraint("origin", "origin_ticket_id", name="uq_ticket_origin"),
+        db.UniqueConstraint("origin", "origin_ref", name="uq_ticket_origin_ref"),
     )
+
+    @property
+    def from_desk(self):
+        """Read from a business's own support desk, which owns it."""
+        return bool(self.origin_ref)
+
+    @property
+    def desk_external(self):
+        """A desk ticket that another app sent to that desk (J&D's Talent
+        Booker on EntertainHQ's). The desk resolves those without a notify
+        choice, because their own app tells the reporter."""
+        return (self.origin_ref or "").startswith("hub.")
+
+    @property
+    def who(self):
+        """Whose ticket, for a list: the client, else the business."""
+        if self.client is not None:
+            return self.client.name
+        if self.business is not None:
+            return self.business.label
+        return ""
 
     @property
     def display_title(self):
@@ -651,6 +712,91 @@ class TicketNote(db.Model):
 
     def __repr__(self):
         return f"<TicketNote {self.id} on Ticket {self.ticket_id}>"
+
+
+class SupportApp(db.Model):
+    """One app whose tickets reach the support board, and its links.
+
+    Two kinds. A HUB app is a client's app speaking the signed ticket hub
+    (hub.py): its credentials stay on its Client row, and this row only adds
+    the quick links. A DESK app is one of Michael's own businesses with a
+    support desk of its own (EntertainHQ, Data Dungeon): the desk owns its
+    tickets, and the board reads them and answers them through the desk's API
+    door (support_service.py), exactly as a click on that desk would.
+
+    Rows are made on first sight from the defaults in support_service.DEFAULTS
+    and then edited on the support board, never the other way round.
+    """
+
+    __tablename__ = "support_apps"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # The ticket origin it answers for: a client's origin_slug, or the slug the
+    # board files a desk's tickets under.
+    origin = db.Column(db.String(40), nullable=False)
+    name = db.Column(db.String(120), nullable=False, default="")
+    kind = db.Column(db.String(10), nullable=False, default="hub", server_default="hub")
+    business_id = db.Column(db.Integer,
+                            db.ForeignKey("businesses.id", ondelete="SET NULL",
+                                          name="fk_support_apps_business_id"),
+                            nullable=True, index=True)
+    support_url = db.Column(db.String(300), default="")
+    admin_url = db.Column(db.String(300), default="")
+    site_url = db.Column(db.String(300), default="")
+    status_url = db.Column(db.String(300), default="")
+    # The desk's API door: where it answers, the bearer key (typed here once
+    # and never shown again), and the desk login a call acts for.
+    desk_url = db.Column(db.String(300), default="")
+    desk_key = db.Column(db.Text, nullable=True)
+    desk_acting_for = db.Column(db.String(200), default="")
+    # An app whose tickets now arrive through another app's desk (J&D's Talent
+    # Booker sends to EntertainHQ's since 2026-11-01). The board stops asking
+    # it directly, so each ticket is shown once.
+    moved_to = db.Column(db.String(40), default="")
+    pulled_at = db.Column(db.DateTime, nullable=True)
+    pull_note = db.Column(db.String(300), default="")
+    sort_order = db.Column(db.Integer, nullable=False, default=100, server_default="100")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business")
+
+    __table_args__ = (
+        db.UniqueConstraint("origin", name="uq_support_apps_origin"),
+    )
+
+    @property
+    def is_desk(self):
+        return self.kind == "desk"
+
+    @property
+    def desk_secret(self):
+        """The key typed on the board, else a variable on the service named
+        DESK_KEY_<ORIGIN> (DESK_KEY_ENTERTAINHQ), so connecting a desk never
+        waits on somebody pasting a key."""
+        import os
+        if self.desk_key:
+            return self.desk_key
+        return os.environ.get("DESK_KEY_" + (self.origin or "").upper().replace("-", "_"), "")
+
+    @property
+    def desk_ready(self):
+        return bool(self.is_desk and self.desk_url and self.desk_secret and self.desk_acting_for)
+
+    @property
+    def links(self):
+        """The quick links, in the order the tile shows them, only those set."""
+        out = []
+        for key, label in (("support_url", "Support desk"), ("admin_url", "Admin"),
+                           ("site_url", "Live site"), ("status_url", "Status page")):
+            url = getattr(self, key) or ""
+            if url:
+                out.append((key, label, url))
+        return out
+
+    def __repr__(self):
+        return f"<SupportApp {self.origin} ({self.kind})>"
 
 
 class Expense(db.Model):

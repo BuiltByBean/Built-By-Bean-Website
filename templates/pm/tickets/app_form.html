@@ -1,0 +1,90 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One app on the support board: the four quick links its tile carries, and for
+  a business's own desk, the API door the board reads it through. The key is
+  typed once and never shown again; the form only says whether one is on file.
+
+  The desk card holds a dropdown with nothing below it inside the card, and
+  carries relative z-30 anyway (LM-1) so its panel paints over the Save row.
+#}
+
+{% set field = 'w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
+{% set lbl = 'block text-sm font-medium text-surface-300 mb-1.5' %}
+
+{% block title %}{{ app.name }} - Client support{% endblock %}
+{% block page_title %}{{ app.name }}{% endblock %}
+{% block page_subtitle %}{{ 'Its own support desk' if app.is_desk else 'Tickets over the hub' }}{% endblock %}
+{% block back %}{{ back_link(url_for('pm.tickets_list', app=app.origin), 'Client support') }}{% endblock %}
+
+{# Save sits in the header, never at the bottom of a scroll. #}
+{% block header_actions %}
+<button type="submit" form="support-app-form"
+        class="inline-flex items-center justify-center min-h-[44px] px-6 text-sm font-semibold rounded-xl btn-brand text-white">
+    Save</button>
+{% endblock %}
+
+{% block content %}
+<form id="support-app-form" method="POST" class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Quick links</h3>
+        <div>
+            <label for="a-name" class="{{ lbl }}">Name on the tile</label>
+            <input id="a-name" name="name" maxlength="120" value="{{ app.name }}" class="{{ field }}">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {% for key, label, ph in [('support_url', 'Support desk', 'https://example.com/admin/support'),
+                                      ('admin_url', 'Admin', 'https://example.com/admin'),
+                                      ('site_url', 'Live site', 'https://example.com'),
+                                      ('status_url', 'Status page', 'https://status.example.com')] %}
+            <div class="min-w-0">
+                <label for="a-{{ key }}" class="{{ lbl }}">{{ label }}</label>
+                <input id="a-{{ key }}" type="url" name="{{ key }}" maxlength="300"
+                       value="{{ app[key] or '' }}" placeholder="{{ ph }}" class="{{ field }}">
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if app.is_desk %}
+    <div class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Its desk</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="min-w-0">
+                <label for="a-desk" class="{{ lbl }}">Desk answers at</label>
+                <input id="a-desk" type="url" name="desk_url" maxlength="300" value="{{ app.desk_url or '' }}"
+                       placeholder="https://app.entertainhq.com" class="{{ field }}">
+            </div>
+            <div class="min-w-0">
+                <label for="a-as" class="{{ lbl }}">Answers as</label>
+                <input id="a-as" type="email" name="desk_acting_for" maxlength="200" value="{{ app.desk_acting_for or '' }}"
+                       placeholder="you@example.com" class="{{ field }}">
+            </div>
+            <div class="min-w-0">
+                <p class="{{ lbl }}">Tickets belong to</p>
+                {% set ns = namespace(opts=[('', 'No business')]) %}
+                {% for b in businesses %}{% set ns.opts = ns.opts + [(b.id, b.label)] %}{% endfor %}
+                {{ select_dropdown('business_id', ns.opts, app.business_id or '', 'No business', full_width=true) }}
+            </div>
+            <div class="min-w-0">
+                <label for="a-key" class="{{ lbl }}">{{ 'Replace the key' if app.desk_key else 'API key' }}</label>
+                <input id="a-key" type="password" name="desk_key" autocomplete="off" class="{{ field }} font-mono"
+                       placeholder="{{ 'On file' if app.desk_key else ('Read from the service' if app.desk_secret else 'Paste the desk key') }}">
+            </div>
+        </div>
+        {% if app.desk_key %}
+        {{ checkbox('forget_key', label='Remove the key on file') }}
+        {% endif %}
+        {% if app.pulled_at or app.pull_note %}
+        <p class="text-xs text-surface-400 break-words">
+            Last read {{ app.pulled_at | format_date }}{% if app.pull_note %}: {{ app.pull_note }}{% endif %}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</form>
+{% endblock %}

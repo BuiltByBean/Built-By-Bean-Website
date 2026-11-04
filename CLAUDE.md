@@ -1176,6 +1176,78 @@ respects. Two builders is two shapes and two ingest paths is two answers
 to "what may an update touch", and in both cases the copy that drifts is
 the one nobody watches.
 
+## One support board across every business
+
+Michael, 2026-11-04: "each app I have already has its own built in ticket
+system ... so just needs to be way more user friendly as an overall customer
+support board for all my businesses. but making sure those systems talk to
+each other properly ... the health of my clients satisfaction rates at a
+glance. quick nav buttons over to those site own portal". He approved each
+piece: one inbox with app tiles on top, Waiting on you first; response and
+fix times now with a customer rating added in each app later; four quick
+links per app; answering from here through each app's own desk; J&D under
+EntertainHQ; and a sidebar badge.
+
+`/admin/tickets` (Client support) is `support_service.py`, the ticket routes
+in app.py, and `pm/support_routes.py` (each app's links and desk door, CEO
+only). Tickets reach it two ways and are owned differently:
+
+- **The hub** (above): a client's app owns the words, the board owns status.
+  Unchanged, except that a note may say `is_staff_reply: true` (the app's own
+  staff answered in its admin): it counts as a reply and reopens nothing.
+- **A desk**: EntertainHQ and Data Dungeon run support desks of their own,
+  where their partners triage, and the DESK owns those tickets. The board reads
+  EntertainHQ's through its API door (`/support/api/tickets`, Bearer
+  `SUPPORT_API_KEY`, `acting_for` on every call; its repo's
+  docs/SUPPORT_API.md), and a reply or a status pressed here goes through that
+  door exactly as a click on the desk would, then is read back. The board keeps
+  no triage of its own for a desk ticket: kind and priority are the desk's,
+  status changes only by reading the desk. Only billing, circle back and out of
+  scope stay here, and they never travel. Desk writes are CEO only, because the
+  desk records them as the login they act for.
+
+A desk ticket is keyed `Ticket.origin_ref = "<company>:<id>"`, because the
+desk numbers per company. **The hub's two drains skip anything with an
+origin_ref**, which is the whole separation: a desk ticket can never be sent
+down the hub. Its client is null and `business_id` says whose it is; a ticket
+with neither is Built by Bean's. A reply written here and later read back from
+the desk is matched by its words, so the thread never shows it twice. A reply
+the desk refused stays on the thread as "not sent to the desk yet" and is
+retried for two days (`DESK_REPLY_FRESH`), never sent late after that.
+
+**J&D is shown once.** Talent Booker has sent its tickets to EntertainHQ's desk
+since 2026-11-01, so `SupportApp.moved_to` takes it off `hub_clients()` and a
+ticket the board already held from it is ADOPTED when the desk's copy arrives
+(`hub.talent-booker:<id>` matches `origin_ticket_id`): same row, same marks,
+its old note ids cleared because the desk's would collide with them.
+
+`SupportApp` is one row per app on the board, made on first sight from
+`support_service.DEFAULTS` (defaults in code, edits in the database): its four
+links (an http(s) URL or nothing, since they land in an href), and for a desk
+its door, key and login. The key is typed on the app's settings page and never
+shown again, or read from a variable on the web service named
+`DESK_KEY_<ORIGIN>` (`DESK_KEY_ENTERTAINHQ`), so connecting a desk never waits
+on somebody pasting a key. The desk puller runs every ten minutes (`DESK_PULL_INTERVAL_SECONDS`)
+in its own thread and skips a desk read in the last eight minutes, so two
+gunicorn workers read once; a pass is one list call plus at most 25 threads,
+because the door allows 60 calls a minute across every caller, Michael's own
+sessions included.
+
+**The health tiles** (`support_service.health`, last 30 days) are made of
+timestamps stamped when they were seen to happen, never backdated:
+`waiting_on`/`waiting_since` (who speaks next, stored so the badge and the
+Waiting on you tab are one query and the same number), `first_reply_at`,
+`resolved_at`, `reopen_count`, `verify_requested_at`/`verified_at` (EntertainHQ
+asks "did this fix it?") and `said_solved`, the customer's own answer when an
+app sends `solved` (none does yet; filed as a gap on each blueprint). A ticket
+that arrived already resolved has no resolved_at, because "now" would make every
+imported fix look instant. A figure with nothing behind it says "None yet".
+
+Data Dungeon has a full desk (`/admin/support`) and no door yet, so its tile
+says "Desk not connected" until it builds EntertainHQ's door (filed as its
+gap). `tools/test_support_board.py` runs both round trips, the desk against a
+fake EntertainHQ desk served over real HTTP in the door's own shapes.
+
 ## The mail comes in
 
 `pm/mail_service.py` reads Michael's Gmail over IMAP with the same app

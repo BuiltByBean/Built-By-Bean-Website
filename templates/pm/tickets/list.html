@@ -2,34 +2,148 @@
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/clear_filters.html" import clear_filters %}
 
+{#
+  Client support: one board across every business (Michael, 2026-11-04).
+
+  App tiles across the top, one per app whose tickets reach the board, each
+  with its health and its quick links; tap a tile's name to filter to it. One
+  list under them, Waiting on you first, filtered by business, app and kind.
+
+  A desk ticket (EntertainHQ's, Data Dungeon's) is its desk's: status goes
+  through the desk's own door and is read back, kind and priority are the
+  desk's, and only billing stays here. A hub ticket keeps the old rule: the
+  app owns the words, this board owns status.
+
+  The window never scrolls: the tiles, tabs and filters stand still and the
+  results are the one scroller (LM-4). The filter bar carries relative z-30 so
+  its panels paint over the cards (LM-1); so does each card's triage row while
+  it holds focus.
+#}
+
 {% block page_title %}Client support{% endblock %}
-{% block page_subtitle %}Every client, worst first{% endblock %}
+{% block page_subtitle %}Every business, who is waiting first{% endblock %}
 
 {% block header_actions %}
 <div class="flex flex-wrap items-center gap-2">
-    {# The schedule is the safety net; this is the press for when waiting for
-       it is not an answer. #}
+    {# The schedules are the safety net; this is the press for when waiting
+       for them is not an answer. Asks every hub app and reads every desk. #}
     <form method="POST" data-live-action action="{{ url_for('pm.tickets_resync') }}">
         <input type="hidden" name="next" value="{{ request.full_path }}">
-        <button type="submit"
+        <button type="submit" aria-label="Ask every app now" title="Ask every app now"
                 class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-            Resync
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span class="hidden sm:inline">Resync</span>
         </button>
     </form>
     <a href="{{ url_for('pm.ticket_create') }}"
        class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New ticket
     </a>
 </div>
 {% endblock %}
+
+{# Four links, four glyphs, none used for anything else on the board. #}
+{% set LINK_GLYPHS = {
+  'support_url': 'M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728M15.536 8.464a5 5 0 010 7.072M8.464 15.536a5 5 0 010-7.072M13 12a1 1 0 11-2 0 1 1 0 012 0z',
+  'admin_url': 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  'site_url': 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9',
+  'status_url': 'M3 12h4l3-8 4 16 3-8h4'
+} %}
+{% set TONE = {'good': 'text-emerald-400', 'ok': 'text-amber-400', 'bad': 'text-red-400', '': 'text-surface-300'} %}
+
+{% macro app_tile(a) %}
+{%- set h = health[a.origin] -%}
+{%- set tones = h.tones or {} -%}
+{%- set hub_client = hub_by_origin.get(a.origin) -%}
+{%- if a.is_desk -%}
+  {%- set read_at, read_note, ok = a.pulled_at, a.pull_note, (' read,' in (a.pull_note or '')) -%}
+{%- elif hub_client -%}
+  {%- set read_at, read_note, ok = hub_client.hub_pulled_at, hub_client.hub_pull_note, ('read,' in (hub_client.hub_pull_note or '')) -%}
+{%- else -%}
+  {%- set read_at, read_note, ok = none, '', false -%}
+{%- endif -%}
+<div class="snap-start shrink-0 w-[85%] sm:w-80 lg:w-auto min-w-0 rounded-2xl border p-3 sm:p-4 flex flex-col gap-2 sm:gap-3
+            {% if f.app == a.origin %}border-brand-500/60 bg-brand-500/10{% else %}border-surface-700 bg-surface-800/40{% endif %}">
+  <div class="flex items-start gap-2 min-w-0">
+    {# The name is the filter: selecting a tile means "show me this app". #}
+    <a href="{{ url_for('pm.tickets_list', status=status_filter, app=('' if f.app == a.origin else a.origin), category=f.category) }}"
+       class="min-w-0 flex-1 flex flex-col items-stretch rounded-lg -m-1 p-1 hover:bg-white/5">
+      <span class="block text-sm font-semibold text-white truncate">{{ a.name }}</span>
+      <span class="flex items-center gap-1.5 mt-0.5 text-xs text-surface-400 min-w-0">
+        <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ 'bg-emerald-400' if ok else 'bg-amber-400' }}" aria-hidden="true"></span>
+        <span class="truncate">
+          {%- if a.is_desk and not a.desk_ready -%}Desk not connected
+          {%- elif not read_at -%}Not asked yet
+          {%- elif ok -%}{{ a.business.label if a.business else 'Built by Bean' }} &middot; read {{ span(now.replace(tzinfo=none) - read_at.replace(tzinfo=none)) }} ago
+          {%- else -%}Not answering: {{ read_note }}{%- endif -%}
+        </span>
+      </span>
+    </a>
+    {% if can_answer_desk %}
+    <a href="{{ url_for('support.edit', id=a.id) }}" aria-label="Edit {{ a.name }}'s links" title="Edit links"
+       class="inline-flex items-center justify-center w-11 h-11 -mt-1 -mr-1 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    </a>
+    {% endif %}
+  </div>
+
+  <p class="text-sm {{ TONE[tones.get('oldest', '')] if h.waiting else 'text-surface-300' }}">
+    {%- if h.waiting -%}
+      <span class="text-lg font-semibold">{{ h.waiting | commas }}</span> waiting on you, longest {{ span(h.oldest) }}
+    {%- else -%}
+      Nobody waiting on you{% if h.open %} &middot; {{ h.open | commas }} open{% endif %}
+    {%- endif -%}
+  </p>
+
+  {# One wrapping row of short labels, so a phone tile stays short enough
+     to leave the list room under it. #}
+  <dl class="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+    <div class="min-w-0">
+      <dt class="text-surface-400">First reply</dt>
+      <dd class="font-semibold {{ TONE[tones.get('first_reply', '')] }}">{{ span(h.first_reply) if h.first_reply is not none else 'None yet' }}</dd>
+    </div>
+    <div class="min-w-0">
+      <dt class="text-surface-400">To fix</dt>
+      <dd class="font-semibold {{ TONE[tones.get('fix', '')] }}">{{ span(h.fix) if h.fix is not none else 'None yet' }}</dd>
+    </div>
+    <div class="min-w-0">
+      <dt class="text-surface-400">Reopened</dt>
+      <dd class="font-semibold {{ TONE[tones.get('reopen', '')] }}">{{ ((h.reopen * 100) | round | int) ~ '%' if h.reopen is not none else 'None yet' }}</dd>
+    </div>
+    {% if h.confirmed %}
+    <div class="min-w-0">
+      <dt class="text-surface-400">Confirmed</dt>
+      <dd class="font-semibold {{ TONE[tones.get('confirmed', '')] }}">{{ h.confirmed[0] }} of {{ h.confirmed[1] }}</dd>
+    </div>
+    {% endif %}
+    {% if h.solved %}
+    <div class="min-w-0">
+      <dt class="text-surface-400">Said solved</dt>
+      <dd class="font-semibold {{ TONE[tones.get('solved', '')] }}">{{ h.solved[0] }} of {{ h.solved[1] }}</dd>
+    </div>
+    {% endif %}
+  </dl>
+
+  {% if a.links %}
+  <div class="flex flex-wrap gap-2 mt-auto">
+    {% for key, label, url in a.links %}
+    <a href="{{ url }}" target="_blank" rel="noopener" aria-label="{{ a.name }} {{ label | lower }}" title="{{ label }}"
+       class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="{{ LINK_GLYPHS[key] }}"/></svg>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
 
 {#
   One card, used by the board and by the out-of-scope section below it, so the
   two cannot drift into showing different things about the same ticket.
 #}
 {% macro ticket_card(t) %}
+{%- set a = apps_by_origin.get(t.origin) -%}
 <div data-live-key="ticket-{{ t.id }}"
      class="rounded-2xl border border-surface-700 bg-surface-800/40 p-4 mb-3" x-data="{ open: false }">
   <div class="flex flex-wrap items-center gap-2 mb-2">
@@ -37,16 +151,23 @@
     <span class="px-2 py-0.5 rounded-lg text-xs font-semibold
       {% if t.category == 'bug' %}bg-red-500/15 text-red-400
       {% else %}bg-brand-500/15 text-brand-400{% endif %}">
-      {{ category_labels[t.category] }}</span>
+      {{ category_labels.get(t.category, t.category) }}</span>
 
     <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-300">
-      {{ status_labels[t.status] }}</span>
+      {{ status_labels.get(t.status, t.status) }}</span>
+
+    {% if t.waiting_on == 'you' and t.status not in ('resolved', 'dismissed') %}
+    <span class="px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400">
+      Waiting on you{% if t.waiting_since %} {{ span(now.replace(tzinfo=none) - t.waiting_since.replace(tzinfo=none)) }}{% endif %}</span>
+    {% elif t.waiting_on == 'them' %}
+    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-400">Waiting on them</span>
+    {% endif %}
 
     {% if t.priority != 'normal' %}
     <span class="px-2 py-0.5 rounded-lg text-xs font-medium
       {% if t.priority == 'urgent' %}bg-amber-500/15 text-amber-400
       {% else %}bg-surface-700 text-surface-400{% endif %}">
-      {{ priority_labels[t.priority] }}</span>
+      {{ priority_labels.get(t.priority, t.priority) }}</span>
     {% endif %}
 
     {# Both of these sit ALONGSIDE the status, never instead of it. That is the
@@ -72,23 +193,23 @@
           :aria-expanded="open">
     <span class="min-w-0 flex-1 text-sm font-medium text-white group-hover:text-brand-500">
       <span x-show="!open" class="block truncate">{{ t.display_title }}</span>
-      <span x-show="open" style="display: none" class="block whitespace-pre-line">{{ t.full_title }}</span>
+      <span x-show="open" style="display: none" class="block whitespace-pre-line break-words">{{ t.full_title }}</span>
     </span>
     <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
-         :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+         :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
     </svg>
   </button>
 
-  <p class="mt-1 text-xs text-surface-400">
-    {{ t.client.name }}{% if t.project %} · {{ t.project.name }}{% endif %}
-    {% if t.origin != 'local' %} · via {{ t.origin }}{% endif %}
-    {% if t.reporter_name %} · {{ t.reporter_name }}{% endif %}
+  <p class="mt-1 text-xs text-surface-400 break-words">
+    {{ a.name if a else ('Raised here' if t.origin == 'local' else t.origin) }}
+    {%- if t.who %} &middot; {{ t.who }}{% endif %}
+    {%- if t.project %} &middot; {{ t.project.name }}{% endif %}
+    {%- if t.reporter_name %} &middot; {{ t.reporter_name }}{% endif %}
     {% if t.unread_for_dev() %}
     <span class="ml-1 px-1.5 py-0.5 rounded bg-brand-600 text-white font-semibold">{{ t.unread_for_dev() }} new</span>
     {% endif %}
   </p>
-
 
   <div x-show="open" style="display: none"
        class="mt-3 pt-3 border-t border-surface-700 space-y-4">
@@ -96,16 +217,17 @@
     {% if t.title and t.description %}
     <div>
       <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">What they said</h4>
-      <p class="text-sm text-surface-200 whitespace-pre-line">{{ t.description }}</p>
+      <p class="text-sm text-surface-200 whitespace-pre-line break-words">{{ t.description }}</p>
     </div>
     {% endif %}
 
-    {% if t.source_label or t.source_path %}
-    <p class="text-xs text-surface-400">
-      Reported from {{ t.source_label or t.source_path }}
-      {% if t.origin_url %}
-      &middot; <a href="{{ t.origin_url }}" target="_blank" rel="noopener"
-                  class="text-brand-500 hover:text-brand-600">open in their app</a>
+    {% if t.source_label or t.source_path or t.origin_url %}
+    <p class="text-xs text-surface-400 break-words">
+      {% if t.source_label or t.source_path %}Reported from {{ t.source_label or t.source_path }}{% endif %}
+      {% if t.origin_url and t.origin_url.startswith('http') %}
+      <a href="{{ t.origin_url }}" target="_blank" rel="noopener"
+         class="inline-flex items-center ml-1 px-2.5 py-1 rounded-lg border border-brand-500/40 text-brand-400 hover:bg-brand-500/10">
+        {{ 'Open on its desk' if t.from_desk else 'Open in their app' }}</a>
       {% endif %}
     </p>
     {% endif %}
@@ -114,12 +236,12 @@
       <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Conversation</h4>
       {% for note in t.notes %}
       <div class="mb-2 flex {% if note.is_staff_reply %}justify-end{% endif %}">
-        <div class="max-w-[85%] rounded-2xl px-3.5 py-2
+        <div class="max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2
           {% if note.is_staff_reply %}bg-brand-600 text-white{% else %}bg-surface-800 text-surface-100{% endif %}">
-          <p class="text-sm whitespace-pre-line">{{ note.body }}</p>
+          <p class="text-sm whitespace-pre-line break-words">{{ note.body }}</p>
           <p class="mt-1 text-xs {% if note.is_staff_reply %}text-white/70{% else %}text-surface-400{% endif %}">
             {{ note.author_name or "Them" }} &middot; {{ note.created_at | format_date }}
-            {%- if note.is_staff_reply %} &middot; {{ "delivered" if note.delivered_at else "not sent to their app yet" }}{% endif %}
+            {%- if note.is_staff_reply and not note.delivered_at %} &middot; not sent {{ 'to the desk' if t.from_desk else 'to their app' }} yet{% endif %}
           </p>
         </div>
       </div>
@@ -127,53 +249,102 @@
       <p class="text-sm text-surface-400 mb-2">Nothing said yet.</p>
       {% endfor %}
 
-      {# Answers from here and comes back here. `next` is what keeps the board
-         from throwing you at the detail page for a one-line reply. #}
+      {# Answers from here and comes back here. A desk ticket's reply goes
+         through its desk, which records it as Michael's, so only he sees the
+         box there. #}
+      {% if not t.from_desk or can_answer_desk %}
       <form method="POST" data-live-action action="{{ url_for('pm.ticket_reply', id=t.id) }}" class="flex gap-2 mt-2">
         <input type="hidden" name="next" value="{{ request.full_path }}">
         <input type="text" name="body" required placeholder="Reply to {{ t.reporter_name or 'them' }}"
+               aria-label="Reply to {{ t.reporter_name or 'them' }}"
                class="input-ring flex-1 min-w-0 px-3.5 py-2 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
         <button type="submit" class="shrink-0 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
       </form>
+      {% endif %}
     </div>
 
     {% if t.detailed_notes %}
     <div>
       <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Detailed notes</h4>
-      <p class="text-sm text-surface-200 whitespace-pre-line">{{ t.detailed_notes }}</p>
+      <p class="text-sm text-surface-200 whitespace-pre-line break-words">{{ t.detailed_notes }}</p>
     </div>
     {% endif %}
   </div>
 
-  {# Triage: status, priority, category and billing are four independent facts,
-     so they are four controls and one Save.
-
-     Blank leads the billing list and is NOT "Free": undecided work must not
-     read as free. #}
   {%- set o = namespace(status=[], priority=[], category=[], billing=[('', 'Not classified')]) -%}
   {%- for s in statuses -%}{%- set o.status = o.status + [(s, status_labels[s])] -%}{%- endfor -%}
   {%- for p in ['urgent','soon','normal','backlog'] -%}{%- set o.priority = o.priority + [(p, priority_labels[p])] -%}{%- endfor -%}
   {%- for c in categories -%}{%- set o.category = o.category + [(c, category_labels[c])] -%}{%- endfor -%}
   {%- for b in billing_buckets -%}{%- set o.billing = o.billing + [(b, billing_labels[b])] -%}{%- endfor -%}
+
+  {% if t.from_desk %}
+  {# The desk carries out the status and is read back. Resolving one of a
+     company's own tickets asks whether to tell the reporter, because that is
+     the choice the desk's own Resolve asks for. #}
+  {% if can_answer_desk %}
   <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
-        class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-2">
+        class="mt-3 flex flex-wrap items-center gap-2 relative focus-within:z-30">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    {% if t.status not in ('resolved', 'dismissed') %}
+      {% if t.status != 'in-progress' %}
+      <button type="submit" name="status" value="in-progress"
+              class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">In progress</button>
+      {% endif %}
+      {% if not t.desk_external %}
+      <div class="w-44">
+        {{ select_dropdown("notify", [('tell', 'Tell them'), ('verify', 'Ask them to confirm'), ('quiet', 'Quietly')], 'tell', size="sm", full_width=true) }}
+      </div>
+      {% endif %}
+      <button type="submit" name="status" value="resolved"
+              class="px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Resolve</button>
+      <button type="submit" name="status" value="dismissed"
+              class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">Close</button>
+    {% else %}
+      <button type="submit" name="status" value="in-progress"
+              class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">Reopen</button>
+    {% endif %}
+  </form>
+  {% endif %}
+  {# Billing never travels, so it is set here whatever the desk says. #}
+  <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
+        class="mt-2 flex flex-wrap items-center gap-2 relative focus-within:z-30">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <div class="min-w-0 flex-1 basis-40 sm:flex-none sm:w-56">{{ select_dropdown("billing_bucket", o.billing, t.billing_bucket or '', "Not classified", size="sm", full_width=true) }}</div>
+    <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
+           aria-label="Minutes billed"
+           class="input-ring w-24 min-w-0 min-h-[44px] sm:min-h-0 px-2 py-2 text-xs bg-surface-800/50 text-white rounded-lg">
+    <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Save</button>
+  </form>
+  {% else %}
+  {# Triage: status, priority, category and billing are four independent facts,
+     so they are four controls and one Save.
+
+     Blank leads the billing list and is NOT "Free": undecided work must not
+     read as free. #}
+  <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
+        class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-2 relative focus-within:z-30">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
     {{ select_dropdown("status", o.status, t.status, size="sm", full_width=true) }}
     {{ select_dropdown("priority", o.priority, t.priority, size="sm", full_width=true) }}
     {{ select_dropdown("category", o.category, t.category, size="sm", full_width=true) }}
     {{ select_dropdown("billing_bucket", o.billing, t.billing_bucket or '', "Not classified", size="sm", full_width=true) }}
     <div class="flex gap-2">
       <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
-             class="input-ring w-full min-w-0 px-2 py-2 text-xs bg-surface-800/50 text-white rounded-lg">
+             aria-label="Minutes billed"
+             class="input-ring w-full min-w-0 min-h-[44px] sm:min-h-0 px-2 py-2 text-xs bg-surface-800/50 text-white rounded-lg">
       <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Save</button>
     </div>
   </form>
+  {% endif %}
 
   <div class="mt-2 flex flex-wrap gap-2">
     <form method="POST" data-live-action action="{{ url_for('pm.ticket_flag', id=t.id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
       <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">
         {{ "Stop circling back" if t.followup_flagged else "Circle back on this" }}</button>
     </form>
     <form method="POST" data-live-action action="{{ url_for('pm.ticket_scope', id=t.id) }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
       <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">
         {{ "Bring back in scope" if t.out_of_scope else "Out of scope" }}</button>
     </form>
@@ -184,84 +355,71 @@
 </div>
 {% endmacro %}
 
-{# The window never scrolls here: the board is the page, so the board is
+{# The window never scrolls here: the board is the page, so the results are
    the scroller (LM-4). #}
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
-{#
-  A client app that has stopped talking, named.
-
-  Tickets arrive because their app pushes them, so an app whose sender stopped
-  delivered nothing and said nothing, and this page drew a quiet week. The
-  board asks daily now and records when it last asked; a stamp that has stopped
-  moving is the pipe, not the week. Only the ones that need saying appear.
-#}
-{% if stale %}
-<div class="glass-card p-4 mb-4 border-amber-500/40 flex flex-wrap items-center gap-3">
-  <div class="min-w-0 flex-1">
-    <p class="text-sm font-semibold text-white">
-      {{ stale | length }} client app{{ '' if stale | length == 1 else 's' }} not answering
-    </p>
-    <p class="text-xs text-surface-400 mt-0.5">
-      {% for c in stale %}{{ c.name }}{% if c.hub_pull_note %} ({{ c.hub_pull_note }}){% else %} (never asked){% endif %}{{ ', ' if not loop.last }}{% endfor %}
-    </p>
-  </div>
-  <form method="POST" data-live-action action="{{ url_for('pm.tickets_resync') }}" class="shrink-0">
-    <input type="hidden" name="next" value="{{ request.full_path }}">
-    <button type="submit"
-            class="inline-flex items-center px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
-      Try now
-    </button>
-  </form>
+{# The health of every app, at a glance. A row that scrolls sideways on a
+   phone, inside its own box (the page never does), and a grid from lg up. #}
+<div data-live="tiles"
+     class="shrink-0 mb-4 -mx-1 px-1 pb-1 flex gap-3 overflow-x-auto snap-x snap-mandatory lg:mx-0 lg:px-0 lg:pb-0 lg:grid lg:grid-cols-[repeat(auto-fit,minmax(17rem,1fr))] lg:overflow-visible">
+  {% for a in apps %}{{ app_tile(a) }}{% else %}
+  <p class="text-sm text-surface-400">No app sends tickets here yet.</p>
+  {% endfor %}
 </div>
-{% endif %}
 
-<div class="glass-card p-6 flex flex-col min-h-0">
-  {# Each tab counts EXACTLY what clicking it shows. data-live: the tabs
-     carry the filters in their links and their counts, so they swap in
-     with the board when a filter changes. #}
-  <div data-live="tabs" class="shrink-0 flex flex-wrap gap-2 mb-5">
-    {% for key, label in [("open", "Open"), ("follow-up", "Circle back"), ("resolved", "Resolved"), ("out-of-scope", "Out of scope"), ("all", "All")] %}
-    {% set n = counts.get('total' if key == 'all' else key) %}
-    <a href="{{ url_for('pm.tickets_list', status=key, category=category_filter, client_id=client_filter) }}"
-       class="px-4 py-2 rounded-xl text-sm font-medium transition-colors
+<div class="glass-card p-4 sm:p-6 flex flex-col flex-1 min-h-0">
+  {# Each tab counts EXACTLY what clicking it shows, under the filters beside
+     it. A row that scrolls sideways on a phone rather than wrapping into
+     three. #}
+  <div data-live="tabs" class="shrink-0 flex gap-2 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
+    {% for key, label in tabs %}
+    {% set n = counts.get(key) %}
+    <a href="{{ url_for('pm.tickets_list', status=key, business=f.business, app=f.app, category=f.category, client_id=f.client_id) }}"
+       class="shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap
        {% if key == status_filter %}bg-brand-600 text-white shadow-lg shadow-brand-500/25
        {% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
-      {{ label }}{% if n %} <span class="opacity-70">{{ n }}</span>{% endif %}
+      {{ label }}{% if n %}<span class="ml-1.5 opacity-70">{{ n | commas }}</span>{% endif %}
     </a>
     {% endfor %}
   </div>
 
   {# Standing still because the page stands still; relative z-30 per LM-1
-     so the filter panels paint over the ticket cards. The pick is the
-     apply (liveFilter in base.html): the board, the tabs and the clear
-     control swap in from the server. #}
+     so the filter panels paint over the ticket cards. The pick is the apply
+     (liveFilter in base.html). #}
   <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
-        class="shrink-0 relative z-30 flex flex-wrap items-center gap-3 mb-6">
+        class="shrink-0 relative z-30 grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-3 mb-4">
     <input type="hidden" name="status" value="{{ status_filter }}">
-    {% set ns = namespace(cat=[["all", "All kinds"]], cli=[["", "All clients"]]) %}
+    {% if f.client_id %}<input type="hidden" name="client_id" value="{{ f.client_id }}">{% endif %}
+    {% set ns = namespace(biz=[["", "Business"]], app=[["", "App"]], cat=[["all", "Kind"]]) %}
+    {% for b in businesses | sort(attribute='label') %}{% set ns.biz = ns.biz + [[b.id, b.label]] %}{% endfor %}
+    {% for a in apps | sort(attribute='name') %}{% set ns.app = ns.app + [[a.origin, a.name]] %}{% endfor %}
+    {% if has_local %}{% set ns.app = ns.app + [["local", "Raised here"]] %}{% endif %}
     {% for c in categories %}{% set ns.cat = ns.cat + [[c, category_labels[c]]] %}{% endfor %}
-    {% for c in clients %}{% set ns.cli = ns.cli + [[c.id, c.name]] %}{% endfor %}
-    {{ select_dropdown("category", ns.cat, category_filter, on_change="apply()") }}
-    {{ select_dropdown("client_id", ns.cli, client_filter, on_change="apply()") }}
-    <span data-live="clear" class="ml-auto inline-flex items-center">
-      {% if category_filter != 'all' or client_filter %}{{ clear_filters(href=url_for('pm.tickets_list', status=status_filter)) }}{% endif %}
+    <div class="min-w-0 sm:w-52">{{ select_dropdown("business", ns.biz, f.business or '', on_change="apply()", full_width=true, size="sm") }}</div>
+    <div class="min-w-0 sm:w-52">{{ select_dropdown("app", ns.app, f.app, on_change="apply()", full_width=true, size="sm") }}</div>
+    <div class="min-w-0 sm:w-44">{{ select_dropdown("category", ns.cat, f.category, on_change="apply()", full_width=true, size="sm") }}</div>
+    <span data-live="clear" class="col-span-3 inline-flex items-center sm:ml-auto empty:hidden">
+      {%- if f.business or f.app or f.category != 'all' or f.client_id -%}{{ clear_filters(href=url_for('pm.tickets_list', status=status_filter)) }}{%- endif -%}
     </span>
   </form>
 
   {# The scroller: the board scrolls inside it, the scrollbar starts here,
      and the out-of-scope pile rides along at its bottom. #}
-  <div data-live="results" class="min-h-0 overflow-y-auto">
+  <div data-live="results" class="min-h-0 flex-1 overflow-y-auto">
   {% if tickets %}
     {% for t in tickets %}{{ ticket_card(t) }}{% endfor %}
   {% elif not out_of_scope %}
   <div class="text-center py-12">
-    <p class="text-surface-400 mb-4">Nothing here.</p>
-    <a href="{{ url_for('pm.ticket_create') }}" class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      Raise one
-    </a>
+    <p class="text-surface-400 mb-4">
+      {%- if status_filter == 'waiting' -%}Nobody is waiting on you.
+      {%- elif status_filter == 'open' -%}Nothing open.
+      {%- elif status_filter == 'follow-up' -%}Nothing to circle back on.
+      {%- elif status_filter == 'resolved' -%}Nothing resolved yet.
+      {%- elif status_filter == 'out-of-scope' -%}Nothing ruled out of scope.
+      {%- else -%}No tickets.{%- endif -%}
+    </p>
   </div>
   {% endif %}
 
