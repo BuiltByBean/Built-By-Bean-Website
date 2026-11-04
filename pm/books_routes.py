@@ -286,9 +286,13 @@ def receipts():
     missing = (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
                                     Expense.amount > 0, Expense.date >= receipts_service.BOOKS_START)
                .order_by(Expense.date.desc(), Expense.id.desc()).all())
+    statement_only = (Expense.query.filter(
+        Expense.receipt_original_name.like(receipts_service.STATEMENT_PROOF + "%"),
+        Expense.time_entry_id.is_(None))
+        .order_by(Expense.date.desc(), Expense.id.desc()).all())
     names = {b.id: (b.short_name or b.name) for b in Business.query.all()}
     return render_template("pm/books/receipts.html", rows=rows, missing=missing, view=view,
-                           business_names=names)
+                           statement_only=statement_only, business_names=names)
 
 
 @books_bp.route("/admin/books/receipts/<int:rid>/file")
@@ -462,6 +466,12 @@ def statement_upload(cid):
         got = statements.import_rows(conn, rows)
         total["read"] += got["read"]
         total["new"] += got["new"]
+    # The charges just arrived, so go and look for their receipts now rather
+    # than tonight. On its own thread, because a big statement outlives the page.
+    import receipts_service
+    from models import ReceiptMailbox
+    for box in ReceiptMailbox.query.all():
+        receipts_service.sync_in_background(current_app._get_current_object(), box.id)
     waiting = got.get("review", 0)
     flash(f"{conn.label}: {total['new']:,} new line{'' if total['new'] == 1 else 's'} of "
           f"{total['read']:,} read, {waiting:,} to sort.", "success")

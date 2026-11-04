@@ -298,6 +298,9 @@ def slow_fetch(mailbox, since):
 
 
 receipts_service.fetch = slow_fetch
+# The hunt opens the real mailbox; this read is about the thread, not the mail.
+real_hunt = receipts_service.hunt
+receipts_service.hunt = lambda mailbox, finder=None: 0
 started = time.time()
 r = c.post("/admin/books/mailboxes", data={"address": "mbean@entertainhq.com", "password": "abcd efgh",
                                            "business_id": ids["ehq"]}, follow_redirects=True)
@@ -317,6 +320,7 @@ for _ in range(50):
         break
     time.sleep(0.1)
 receipts_service.fetch = real_fetch
+receipts_service.hunt = real_hunt
 with application.app_context():
     got = db.session.get(ReceiptMailbox, second_id)
     check("and the read finishes on its own", got.last_ok and "1 new receipt" in (got.last_note or ""),

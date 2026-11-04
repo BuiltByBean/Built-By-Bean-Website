@@ -278,6 +278,42 @@ hub cannot disagree.
 
 `tools/test_books.py`.
 
+**An expense goes and finds its own receipt** (Michael, 2026-11-03: "getting
+receipts for the expenses on the books right now, and a way to automate getting
+those receipts going forward"). The sweep above starts from the mail, and 31
+expenses sat on Missing while their receipts were in the mailbox, for three
+reasons: Gmail's search matches whole words, so `subject:charged` never returned
+Twilio's "recharged" and the code's own substring test never saw it; Twilio writes
+"we charged the card $10.03 to bring the balance to $20.00" and the read took the
+last figure on the line (`_without_balances` now takes balances and renewal prices
+out first); and a vendor's month is dated its last day, weeks from its bill.
+
+`receipts_service.hunt` starts from the expense instead: for each one without a
+receipt, this year and last, it asks the mailbox for that exact amount around that
+date, whatever the subject. It takes a message only when the sender or subject
+names the vendor (`vendor_names`, `SIGNED_AS` for Claude and ChatGPT, whose mail is
+signed Anthropic and OpenAI) and the amount is stated somewhere other than a
+balance or a renewal, because a wrong receipt is worse than none. It stores only
+mail it uses. It runs inside every mailbox read, so nightly, on Read now, and as
+soon as a statement is uploaded.
+
+Oldest first on purpose: of two rows for one charge, the earlier takes the receipt
+and the other stays on Missing, and that is how a charge booked twice shows itself.
+A message whose total IS the charge proves one row; one where the charge is a line
+of a bigger bill proves each row of it (Railway's $20 plan row and its usage rows
+are one $60.70 receipt).
+
+Where no document exists anywhere (a restaurant on a card, a bank's own fee),
+`attach_statement_lines` gives a charge under $75, a month old, with a bank line
+behind it, a PDF of that line. It is named `STATEMENT_PROOF`, has its own tab
+("Statement only") because a stand-in in the same list as a receipt is a guess
+wearing a fact's clothes, and a real receipt turning up later replaces it and
+removes the file. From $75 up it stays on Missing. Mail that has matched nothing for
+45 days is set aside (`set_aside_old_unmatched`), because most of what the sweep
+keeps is a mortgage notice or a car payment; the hunt can still use it. That one is
+a loop over rows and not `Query.update`: the bulk update left SQLite locked for the
+commit after it, on a thread beside a page. `tools/test_receipt_hunt.py`.
+
 **One company, one set of figures** (Michael, 2026-11-03: "does my finances
 every page settle with each from a numbers standpoint?"). They did not: the
 finance dashboard summed every company's expenses, the Taxes page took

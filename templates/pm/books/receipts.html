@@ -18,7 +18,7 @@
 {% block content %}
 <div class="flex flex-col flex-1 min-h-0 gap-5">
     <nav aria-label="Receipts" class="shrink-0 flex flex-wrap gap-2">
-        {% for key, label, n in [('missing', 'Missing', missing|length), ('unmatched', 'Unmatched', rows|length)] %}
+        {% for key, label, n in [('missing', 'Missing', missing|length), ('statement', 'Statement only', statement_only|length), ('unmatched', 'Unmatched', rows|length)] %}
         <a href="{{ url_for('books.receipts', view=key) }}" {% if view == key %}aria-current="page"{% endif %}
            class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
                   {{ 'btn-brand text-white' if view == key else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
@@ -51,7 +51,7 @@
             <div class="p-8 text-center text-surface-400">Every receipt is attached</div>
             {% endfor %}
             {% else %}
-            {% for e in missing %}
+            {% for e in (statement_only if view == 'statement' else missing) %}
             <div class="p-4 flex flex-wrap items-center justify-between gap-3">
                 <div class="w-full sm:w-auto sm:flex-1 min-w-0">
                     <p class="text-sm font-medium text-white break-words">{{ e.description }}</p>
@@ -63,11 +63,11 @@
                 <div class="flex items-center gap-3 shrink-0 ml-auto">
                     <span class="text-sm font-semibold text-white tabular-nums">${{ '{:,.2f}'.format(e.amount) }}</span>
                     <a href="{{ url_for('pm.expense_edit', id=e.id) }}"
-                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:border-brand-500/40 hover:text-brand-300">Add receipt</a>
+                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:border-brand-500/40 hover:text-brand-300">{{ 'Replace' if view == 'statement' else 'Add receipt' }}</a>
                 </div>
             </div>
             {% else %}
-            <div class="p-8 text-center text-surface-400">Every expense has its receipt</div>
+            <div class="p-8 text-center text-surface-400">{{ 'No expense is relying on its statement line' if view == 'statement' else 'Every expense has its receipt' }}</div>
             {% endfor %}
             {% endif %}
         </div>

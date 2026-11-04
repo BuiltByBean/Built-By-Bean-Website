@@ -18,6 +18,15 @@ charge a day before its email). The closest date wins, and a tie goes to
 the expense whose description shares a word with the sender. A receipt
 that matches nothing waits on the Books page: it may be a charge on a card
 whose history is not in yet, or a personal purchase.
+
+That sweep starts from the mail and only sees subjects with the right words,
+so it never met a Twilio recharge, a Cloudflare confirmation or Google's "Thank
+you". The hunt starts from the expense: for each one with no receipt it asks
+the mailbox for that exact amount around that date, and takes a message only
+from the vendor it was paid to. Where no document exists anywhere (a restaurant
+on a card, a bank's own fee) a small charge gets the bank's statement line as
+its proof after a month, named as exactly that, and a real receipt arriving
+later replaces it.
 """
 import email
 import hashlib
@@ -42,6 +51,8 @@ SEARCH_WORDS = ("receipt", "invoice", "payment", "order", "billing", "charged", 
 NOT_A_CHARGE = ("will renew", "upcoming", "reminder", "failed", "declined", "past due",
                 "action required", "trial ends", "expiring")
 _AMOUNT = re.compile(r"(?:US)?\$\s?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})")
+_NOT_THE_CHARGE = re.compile(r"\b(?:balance (?:to|of|is)|renews?|next (?:bill|charge|payment))\b"
+                             r"[^\n.$]*(?:\$\s?[0-9,]+\.[0-9]{2})?", re.I)
 # Whole words: "Subtotal" is not the total.
 _TOTALISH = re.compile(r"(total|amount paid|amount charged|charged|paid|amount due|grand total)",
                        re.I)
@@ -90,11 +101,20 @@ def pdf_text(data):
         return ""
 
 
+def _without_balances(text):
+    """A message's text with the figures that are not the charge taken out.
+    Twilio says "we charged the card $10.03 to bring the balance to $20.00" and
+    Squarespace "renews on Mar 20, 2027 for $20.00": read as they stand, those
+    are a $20 charge that never happened."""
+    return _NOT_THE_CHARGE.sub("", text or "")
+
+
 def read_amount(text):
     """The charge a receipt is for: the amount on a line that says total or
     paid, the last such line winning (totals come last); otherwise the
     largest amount on it. None when it names no amount."""
     best = None
+    text = _without_balances(text)
     for line in (text or "").splitlines():
         found = [float(a.replace(",", "")) for a in _AMOUNT.findall(line)]
         if found and _TOTALISH.search(line):
@@ -121,13 +141,14 @@ def vendor_of(sender):
     return (parts[-1] if parts else domain).capitalize()[:120]
 
 
-def parse(raw):
+def parse(raw, any_subject=False):
     """One raw message -> the receipt it is, or None. Returns a dict with
-    key, sender, vendor, subject, received_on, amount, file (bytes),
-    file_name, file_ext."""
+    key, sender, vendor, subject, received_on, amount, text, file (bytes),
+    file_name, file_ext. The sweep only takes subjects that read as a receipt;
+    the hunt has already named the amount and the vendor, so it takes any."""
     msg = email.message_from_bytes(raw)
     subject = _decode(msg.get("Subject"))
-    if not looks_like_receipt(subject):
+    if not any_subject and not looks_like_receipt(subject):
         return None
     sender = _decode(msg.get("From"))
     try:
@@ -159,17 +180,15 @@ def parse(raw):
                 f"<b>Date:</b> {msg.get('Date')}</p><hr>{body}").encode("utf-8")
         file_name, ext = (re.sub(r"[^\w .-]+", "", subject)[:80] or "receipt") + ".html", "html"
     return {"key": key, "sender": sender[:200], "vendor": vendor_of(sender), "subject": subject[:300],
-            "received_on": received, "amount": amount, "file": file, "file_name": file_name,
+            "received_on": received, "amount": amount, "text": text, "file": file, "file_name": file_name,
             "file_ext": ext}
 
 
 # ── The mailbox ──────────────────────────────────────────
 
 
-def fetch(mailbox, since):
-    """Raw messages since `since` whose subject reads like a receipt. Gmail
-    is asked with its own search, which reaches every label; anything else
-    gets the plain IMAP equivalent."""
+def _connect(mailbox):
+    """The mailbox, open read only: nothing here can mark, move or delete."""
     try:
         conn = imaplib.IMAP4_SSL(mailbox.imap_host, 993, timeout=30)
         conn.login(mailbox.address, mailbox.password or "")
@@ -177,11 +196,19 @@ def fetch(mailbox, since):
         raise MailboxError("The mailbox refused the app password. Make a new one and save it.") from err
     except OSError as err:
         raise MailboxError(f"Could not reach {mailbox.imap_host}: {str(err)[:100]}") from err
+    folder = '"[Gmail]/All Mail"' if "gmail" in mailbox.imap_host else "INBOX"
+    status, _ = conn.select(folder, readonly=True)
+    if status != "OK":
+        conn.select("INBOX", readonly=True)
+    return conn
+
+
+def fetch(mailbox, since):
+    """Raw messages since `since` whose subject reads like a receipt. Gmail
+    is asked with its own search, which reaches every label; anything else
+    gets the plain IMAP equivalent."""
+    conn = _connect(mailbox)
     try:
-        folder = '"[Gmail]/All Mail"' if "gmail" in mailbox.imap_host else "INBOX"
-        status, _ = conn.select(folder, readonly=True)
-        if status != "OK":
-            conn.select("INBOX", readonly=True)
         if "gmail" in mailbox.imap_host:
             # Single words only: a quoted phrase inside the quoted IMAP
             # argument would need escaping Gmail does not document. parse()
@@ -385,6 +412,249 @@ def attach_filings():
     return done
 
 
+# ── The hunt: from the expense to its receipt ──────────────
+
+# A card posts days after the order, and a typed expense is dated by whoever
+# typed it, so the search is wider than the sweep's match. The vendor's name
+# and the amount to the cent are what make it safe.
+HUNT_BEFORE, HUNT_AFTER = 12, 5
+HUNT_MESSAGES = 25
+# The name a vendor signs its mail with, where the charge goes by another.
+SIGNED_AS = {"claude": {"anthropic"}, "chatgpt": {"openai"}, "openai": {"chatgpt"}}
+_CHARGE_WORD = re.compile(r"\b(charged|paid|payment|receipt|invoice|total|amount|purchase|order)\b", re.I)
+# A statement line stands in only where a missing document is forgivable: the
+# IRS asks for a receipt from $75 up, and a month is long enough for one to
+# have turned up if it was ever coming.
+STATEMENT_PROOF = "Card statement line"
+STATEMENT_UNDER = 75.0
+STATEMENT_AFTER_DAYS = 30
+# Most of what the sweep keeps is a mortgage notice or a car payment. Past this
+# age nothing is coming that would match it, so it stops asking to be read.
+UNMATCHED_DAYS = 45
+
+
+def vendor_names(expense):
+    """The names mail from whoever was paid would carry: the first real word of
+    the expense, and of the bank's own line when there is one."""
+    from models import BankTransaction
+    line = BankTransaction.query.filter_by(expense_id=expense.id).first()
+    names = set()
+    for text in (expense.description, line.counterparty if line else ""):
+        words = [w.split("'")[0].lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9']+", text or "")]
+        first = next((w for w in words if len(w) >= 4), None)
+        if first:
+            names.add(first)
+            names |= SIGNED_AS.get(first, set())
+    return names
+
+
+def hunt_window(expense):
+    """Where its receipt would be, as (from, before). A vendor's month is dated
+    its last day, and its bill came whenever in that month it came: Cloudflare's
+    September row is dated the 30th and its invoice the 8th."""
+    from models import ServiceCostEntry
+    entry = ServiceCostEntry.query.filter_by(expense_id=expense.id).first()
+    if entry is not None and entry.period_start and entry.period_end and entry.period_end > entry.period_start:
+        return entry.period_start - timedelta(days=3), entry.period_end + timedelta(days=HUNT_AFTER)
+    return expense.date - timedelta(days=HUNT_BEFORE), expense.date + timedelta(days=HUNT_AFTER)
+
+
+def proves(got, charge, names):
+    """Whether this message is proof of this charge. All of it, because a wrong
+    receipt is worse than none: from the vendor, not a failure or a reminder,
+    about money, and stating the amount to the cent somewhere other than a
+    balance or a renewal price."""
+    said = f"{got['sender']} {got['subject']}".lower()
+    if not any(name in said for name in names):
+        return False
+    if any(word in got["subject"].lower() for word in NOT_A_CHARGE):
+        return False
+    if not _CHARGE_WORD.search(f"{got['subject']}\n{got['text']}"):
+        return False
+    stated = _AMOUNT.findall(_without_balances(got["text"]))
+    return any(abs(float(a.replace(",", "")) - charge) < 0.005 for a in stated)
+
+
+def _receipt_row(mailbox, got):
+    """The board's row for this message, kept the first time it proves
+    something. The hunt never stores mail it does not use."""
+    from models import db, Receipt
+    row = Receipt.query.filter_by(mailbox_id=mailbox.id, message_key=got["key"]).first()
+    if row is not None:
+        return row
+    row = Receipt(mailbox_id=mailbox.id, message_key=got["key"], sender=got["sender"], vendor=got["vendor"],
+                  subject=got["subject"], received_on=got["received_on"], amount=got["amount"],
+                  filename=_store(got["file"], got["file_ext"]), original_name=got["file_name"][:300],
+                  status="unmatched")
+    try:
+        with db.session.begin_nested():
+            db.session.add(row)
+            db.session.flush()
+    except IntegrityError:
+        return Receipt.query.filter_by(mailbox_id=mailbox.id, message_key=got["key"]).first()
+    return row
+
+
+def _find(conn, mailbox, amount, lo, hi):
+    """Raw messages in a window that mention an amount."""
+    text = f"{amount:,.2f}"
+    if "gmail" in mailbox.imap_host:
+        query = f"{text} after:{lo:%Y/%m/%d} before:{hi:%Y/%m/%d} -in:spam -in:trash"
+        status, data = conn.search(None, "X-GM-RAW", f'"{query}"')
+    else:
+        status, data = conn.search(None, "SINCE", lo.strftime("%d-%b-%Y"), "BEFORE", hi.strftime("%d-%b-%Y"),
+                                   "TEXT", f'"{text}"')
+    found = []
+    for mid in ((data[0] or b"").split() if status == "OK" else [])[-HUNT_MESSAGES:]:
+        status, parts = conn.fetch(mid, "(BODY.PEEK[])")
+        if status == "OK" and parts and isinstance(parts[0], tuple):
+            found.append(parts[0][1])
+    return found
+
+
+def waiting_for_a_receipt():
+    """Oldest first, so of two rows for one charge the earlier takes the receipt
+    and the other stays on Missing, which is what shows it was booked twice.
+    This year and last: far enough back to reach a typed expense from before
+    the books began, and not a search that grows every night for ever."""
+    from models import db, Expense
+    rows = (Expense.query.filter(Expense.time_entry_id.is_(None),
+                                 Expense.date >= date(date.today().year - 1, 1, 1),
+                                 db.or_(Expense.receipt_filename.is_(None),
+                                        Expense.receipt_original_name.like(STATEMENT_PROOF + "%")))
+            .order_by(Expense.date, Expense.id).all())
+    return [e for e in rows if e.charged > 0]
+
+
+def _hunt_one(mailbox, expense, messages):
+    """Attach the best of `messages` to `expense`. Returns True if one was."""
+    from models import db
+    charge = expense.charged
+    names = vendor_names(expense)
+    hits = [got for got in (parse(raw, any_subject=True) for raw in messages)
+            if got is not None and proves(got, charge, names)]
+    hits.sort(key=lambda g: (abs((g["received_on"] - expense.date).days) if g["received_on"] else 9999, g["key"]))
+    for got in hits:
+        row = _receipt_row(mailbox, got)
+        if row is None:
+            continue
+        taken = row.status == "matched" and row.expense_id and row.expense_id != expense.id
+        # A message whose total IS this charge proves one charge. One where it
+        # is a line of a bigger bill (Railway's $20 plan inside a $60.70
+        # receipt) proves every row of that bill.
+        if taken and any(abs(a - charge) < 0.005 for a in candidate_amounts(row)):
+            continue
+        old = expense.receipt_filename
+        _attach(expense, row.filename, row.original_name)
+        if not taken:
+            row.expense_id, row.status = expense.id, "matched"
+        db.session.flush()
+        if old and old != row.filename and not in_use(old):
+            _remove(old)
+        db.session.commit()
+        return True
+    return False
+
+
+def hunt(mailbox, finder=None):
+    """Look in one mailbox for every expense still without a receipt. Returns
+    how many were found. `finder(amount, lo, hi)` is the mailbox in a test."""
+    from models import db
+    expenses = waiting_for_a_receipt()
+    if not expenses:
+        return 0
+    # Nothing held open across the network: this runs for minutes on a thread,
+    # beside pages and the nightly job that all want to write.
+    db.session.commit()
+    conn = None
+    if finder is None:
+        conn = _connect(mailbox)
+        finder = lambda amount, lo, hi: _find(conn, mailbox, amount, lo, hi)  # noqa: E731
+    found = 0
+    try:
+        for expense in expenses:
+            lo, hi = hunt_window(expense)
+            if _hunt_one(mailbox, expense, finder(expense.charged, lo, hi)):
+                found += 1
+    finally:
+        if conn is not None:
+            try:
+                conn.logout()
+            except Exception:  # noqa: BLE001
+                pass
+    return found
+
+
+def _remove(filename):
+    try:
+        os.remove(os.path.join(_receipts_dir(), filename))
+    except OSError:
+        pass
+
+
+def statement_line_pdf(line, expense):
+    """The bank's record of a charge, written out as a document. It says what
+    it is: the proof of payment, not the merchant's receipt."""
+    from fpdf import FPDF
+
+    def clean(text):
+        return str(text or "").encode("latin-1", "replace").decode("latin-1")
+
+    pdf = FPDF(format="Letter")
+    pdf.set_auto_page_break(True, margin=18)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, STATEMENT_PROOF, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, "The bank's record of this charge, not the merchant's receipt.", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    conn = line.connection
+    for label, value in (("Merchant, as the bank shows it", line.counterparty),
+                         ("Date", line.occurred_on.strftime("%b %d, %Y").replace(" 0", " ")),
+                         ("Amount", f"${abs(line.amount):,.2f}"),
+                         ("Account", conn.label if conn else line.account_name),
+                         ("Card holder", (conn.owner_name if conn else "") or "The company"),
+                         ("Company", expense.business.name if expense.business else ""),
+                         ("Booked as", expense.description)):
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(62, 7, clean(label))
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.multi_cell(0, 7, clean(value), new_x="LMARGIN", new_y="NEXT")
+    return bytes(pdf.output())
+
+
+def attach_statement_lines():
+    """Give a small charge that no mailbox has proved its statement line."""
+    from models import db, BankTransaction, Expense
+    cutoff = date.today() - timedelta(days=STATEMENT_AFTER_DAYS)
+    done = 0
+    rows = (db.session.query(BankTransaction, Expense).join(Expense, BankTransaction.expense_id == Expense.id)
+            .filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
+                    Expense.date <= cutoff, BankTransaction.status == "sent").all())
+    for line, expense in rows:
+        if not 0 < expense.charged < STATEMENT_UNDER:
+            continue
+        name = _store(statement_line_pdf(line, expense), "pdf")
+        when = line.occurred_on.isoformat()
+        account = line.connection.label if line.connection else "bank"
+        _attach(expense, name, f"{STATEMENT_PROOF}, {account}, {when}.pdf"[:300])
+        done += 1
+    db.session.commit()
+    return done
+
+
+def set_aside_old_unmatched():
+    """Mail nothing has wanted for this long stops asking to be read. Kept, and
+    the hunt can still use it if a charge for it ever turns up."""
+    from models import db, Receipt
+    cutoff = date.today() - timedelta(days=UNMATCHED_DAYS)
+    rows = Receipt.query.filter(Receipt.status == "unmatched", Receipt.received_on < cutoff).all()
+    for row in rows:
+        row.status = "ignored"
+    db.session.commit()
+    return len(rows)
+
+
 def in_use(filename, but_not_expense_id=None):
     """Whether a receipt file still proves something: one document can stand
     for a whole split month, so deleting one expense must not delete it."""
@@ -455,10 +725,19 @@ def sync_mailbox(mailbox, fetcher=None):
         db.session.commit()
         return {"error": str(err)}
     counts["matched"] += rematch()
+    # A test's fetcher stands in for the mailbox, and these need the real one.
+    hunt_stopped = ""
+    if fetcher is None:
+        try:
+            counts["matched"] += hunt(mailbox)
+        except (MailboxError, imaplib.IMAP4.error, OSError) as err:
+            hunt_stopped = f". The search for missing receipts stopped: {str(err)[:120]}"
+        counts["matched"] += attach_statement_lines()
+        set_aside_old_unmatched()
     mailbox.last_ok = True
     mailbox.last_synced_at = now
     mailbox.last_note = (f"{counts['new']:,} new receipt{'' if counts['new'] == 1 else 's'}, "
-                         f"{counts['matched']:,} attached")
+                         f"{counts['matched']:,} attached{hunt_stopped}")[:300]
     db.session.commit()
     return counts
 
