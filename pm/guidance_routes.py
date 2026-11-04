@@ -51,6 +51,8 @@ guidance_bp = Blueprint("guidance", __name__, url_prefix="/api/guidance")
 # The bank review for the /bank skill, behind this blueprint's gate.
 from pm.bank_door_routes import bank_door_bp  # noqa: E402
 guidance_bp.register_blueprint(bank_door_bp)
+from pm.org_door_routes import org_door_bp  # noqa: E402
+guidance_bp.register_blueprint(org_door_bp)
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 

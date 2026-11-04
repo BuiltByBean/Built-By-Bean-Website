@@ -8,9 +8,9 @@
   the list, and the person replaces it on first sign-in.
 #}
 
-{% block title %}{{ 'Edit ' ~ person.full_name if person else 'Add someone' }} - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('users.index'), 'Users') }}{% endblock %}
-{% block page_title %}{{ person.full_name if person else 'Add someone' }}{% endblock %}
+{% block title %}{{ 'Edit ' ~ person.full_name if person else 'Add a login' }} - Org - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('users.index'), 'Logins') }}{% endblock %}
+{% block page_title %}{{ person.full_name if person else 'Add a login' }}{% endblock %}
 {% block page_subtitle %}{% if person %}{{ person.username }} &middot; {{ person.email }}{% else %}New account{% endif %}{% endblock %}
 
 {% block content %}

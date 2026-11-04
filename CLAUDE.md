@@ -1637,9 +1637,55 @@ was built into them before the catalogue existed - the code is the
 truth about what a site has, the ledger is the truth about what was
 billed, and Cerebro asks the code first when the ledger is silent.
 
+## Org (was Team)
+
+Michael, 2026-11-04: "Team I want this to be renamed to org and place where I
+can see all my orgs for each business. steal from the entertain hq admin org
+site and ensure that org pages communicate properly between apps."
+`/admin/org` (`pm/org_routes.py`, logic in `org_service.py`, CEO only) is one
+tab per business, DBAs included, then **Logins**, which is the old Users page
+(`users_bp` now under `/admin/org/logins`, endpoint names unchanged;
+`/admin/users` answers 301 for a GET and 307 for its four write shapes). Each
+business has EntertainHQ's four views (People, Org chart, Responsibilities,
+Departments) plus who owns what. The sidebar link sits after Client support;
+the Team section is gone. Icon concept `org` (EntertainHQ's three boxes).
+
+His picks, one per question:
+- **The board is the one store** for every business's org (`OrgPerson`,
+  `OrgDepartment`, `org_person_depts`, `OrgResponsibility`, `OrgState`), the
+  way it is for sales tax. EntertainHQ's admin Organization page is to read and
+  save the same rows over the hub: `POST /api/hub/org` (the org, and the app's
+  logins if it sends them), `/api/hub/org/save` (one change, the same body the
+  board's own form posts) and `/api/hub/org/import` (its rows, once). Signed
+  per business like the tax and books doors.
+- **A save names the version it read** (`version` on every row). A stale one
+  is refused from either door ("changed since you opened it"; the hub answers
+  409 with the org as it is), so neither side writes over an edit it did not
+  see. The person page and every row sit in live regions so a save brings the
+  new version in; two saves in a row is a test.
+- **The import** is keyed by the app's ids (`app_ref` "entertainhq:12", per
+  table: person 3 and responsibility 3 are different rows) and applies only to
+  an empty org or over an earlier import nobody has edited since
+  (`can_import`). EntertainHQ's live org (3 people, 9 departments, 114
+  responsibilities) came over on 2026-11-04 through the god door
+  (`/api/guidance/org/import`), read from its D1 by a session, because this
+  repo is public and those rows do not belong in a file here.
+- **Shares are the board's** (`BusinessOwner`, now with `person_id`, linked by
+  name). A share is typed on the person page or on Books; the hub never takes
+  one. A DBA has no owners of its own and shows its company's.
+- **Logins are each app's own.** An app reports its list on each call
+  (`OrgState.app_logins_json`); a person holding one cannot be taken off the
+  chart from either door. The board's own logins are the Logins tab, and each
+  person says which board login matches their email.
+
+EntertainHQ's half (switching its D1 page to these doors, then its import) and
+Data Dungeon's (a door of its own) are gaps on their blueprints, not code here.
+`tools/test_org.py`, and `tools/test_org_browser.py` measures every Org page at
+320, 375 and 1600, the kept tab rows, an open picker and saving in place.
+
 ## Users
 
-`pm/users_routes.py`, CEO only, guarded on the route by `ceo_required`
+`pm/users_routes.py` (Org's Logins tab since 2026-11-04), CEO only, guarded on the route by `ceo_required`
 (one decorator per audience) and not merely hidden in the nav. Four
 titles: the CEO runs the board and its people; CTO, CMO and member are
 titles with every other door and no Team section. The old values "owner"

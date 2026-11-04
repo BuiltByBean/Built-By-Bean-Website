@@ -1,30 +1,35 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
+{% from "pm/org/_kit.html" import org_head %}
 
 {#
-  Everyone who may open this board, the switched-off ones last.
+  Everyone who may open this board, the switched-off ones last. The Logins
+  tab of Org since 2026-11-04 (Team became Org); each business's tab says
+  which of its people hold one of these.
 
   A temporary password appears here exactly once, straight after an
   account is made or reset, and is gone on the next load. It is the only
   time the board ever shows one, and it is never stored in the clear.
 #}
 
-{% block title %}Users - Built By Bean{% endblock %}
-{% block page_title %}Users{% endblock %}
+{% block title %}Logins - Org - Built By Bean{% endblock %}
+{% block page_title %}Org{% endblock %}
 {% block page_subtitle %}Who can open this board{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block header_actions %}
 <a href="{{ url_for('users.create') }}"
    class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">
-    {{ icon('add', 'w-4 h-4') }}
-    Add someone
+    {{ icon('add-person', 'w-4 h-4') }}
+    Add a login
 </a>
 {% endblock %}
 
 {% block content %}
-<div data-live="results" class="flex flex-col flex-1 min-h-0 gap-4 stagger-in">
+{{ org_head(tabs, 'logins') }}
+<div data-panel="org" class="flex flex-col flex-1 min-h-0">
+<div data-live="results" class="flex flex-col flex-1 min-h-0 gap-4">
 
     {% if reveal %}
     <div class="shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5">
@@ -100,5 +105,6 @@
             {% endfor %}
         </div>
     </div>
+</div>
 </div>
 {% endblock %}

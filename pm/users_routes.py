@@ -22,7 +22,10 @@ from flask_login import login_required, current_user
 
 from models import db, User
 
-users_bp = Blueprint("users", __name__, url_prefix="/admin/users")
+# Under Org since 2026-11-04 (Team became Org): the Logins tab. The endpoint
+# names are unchanged, so every url_for still lands; /admin/users redirects
+# (pm/org_routes.py, old_users_bp).
+users_bp = Blueprint("users", __name__, url_prefix="/admin/org/logins")
 
 # Letters and digits that cannot be misread over a phone: no 0/O, no 1/l/I.
 ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -74,7 +77,9 @@ def index():
     # Set by create and reset, read here once, gone. Never a flash: the
     # generic flash strip would print it too.
     reveal = session.pop("user_reveal", None)
-    return render_template("pm/users/index.html", people=people, reveal=reveal)
+    from pm.org_routes import org_tabs
+    return render_template("pm/users/index.html", people=people, reveal=reveal,
+                           tabs=org_tabs("logins"))
 
 
 @users_bp.route("/new", methods=["GET", "POST"])

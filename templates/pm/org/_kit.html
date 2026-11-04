@@ -1,0 +1,44 @@
+{#
+  Org's pieces. The business row is the Finances tab kit (finances/_kit.html),
+  kept across a page swap as "org-tabs"; a department wears its tone, the set
+  EntertainHQ's Organization page uses (gold, blue, sky, teal, green, amber,
+  red, gray); a person is their initials in a disc.
+#}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
+
+{% set TONE = {
+    'gold': 'bg-yellow-400/15 text-yellow-200 border-yellow-400/25',
+    'blue': 'bg-blue-500/15 text-blue-200 border-blue-500/25',
+    'sky': 'bg-sky-500/15 text-sky-200 border-sky-500/25',
+    'teal': 'bg-teal-500/15 text-teal-200 border-teal-500/25',
+    'green': 'bg-emerald-500/15 text-emerald-200 border-emerald-500/25',
+    'amber': 'bg-amber-500/15 text-amber-200 border-amber-500/25',
+    'red': 'bg-red-500/15 text-red-200 border-red-500/25',
+    'gray': 'bg-white/10 text-surface-200 border-white/15',
+} %}
+
+{% macro org_head(tabs, active) %}
+{{ fin_script() }}
+{{ fin_tabs('org', active, tabs, 'Businesses') }}
+{% endmacro %}
+
+{% macro dept_pill(d) %}
+<span class="inline-flex items-center max-w-full px-2 py-0.5 rounded-md border text-[11px] font-medium {{ TONE.get(d.tone, TONE['gray']) }}"><span class="truncate">{{ d.name }}</span></span>
+{% endmacro %}
+
+{% macro avatar(p, size='w-10 h-10 text-sm') %}
+<span aria-hidden="true" class="{{ size }} shrink-0 inline-flex items-center justify-center rounded-full bg-brand-500/20 text-brand-200 font-semibold">{{ p.initials }}</span>
+{% endmacro %}
+
+{% macro logins(p, business) %}
+{% if p.board_login or p.app_login %}
+<span class="inline-flex flex-wrap gap-1.5">
+    {% if p.board_login %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-brand-500/10 text-brand-300 {{ 'opacity-60' if not p.board_login.active }}">Board {{ p.board_login.title }}</span>
+    {% endif %}
+    {% if p.app_login %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-white/5 text-surface-300">{{ business.label }} login</span>
+    {% endif %}
+</span>
+{% endif %}
+{% endmacro %}

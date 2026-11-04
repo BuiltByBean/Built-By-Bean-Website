@@ -1,0 +1,352 @@
+{% extends "pm/base.html" %}
+{% from "pm/org/_kit.html" import org_head, dept_pill, avatar, logins, TONE %}
+{% from "pm/finances/_kit.html" import fin_tabs %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button %}
+
+{#
+  One business's org (Michael, 2026-11-04: Team becomes Org, "a place where I
+  can see all my orgs for each business", taken from EntertainHQ's admin
+  Organization page). The business row and the view row are kept across a
+  page swap; switching either replaces only the innermost panel
+  ("org-view"), so the rows above it never redraw. Every change posts in
+  place (data-live-action) and swaps the region it changed, so the page
+  never moves under the press. A list whose rows hold pickers scrolls with
+  the page rather than inside a box, which would clip the open panels.
+#}
+
+{% block title %}Org - {{ business.label }} - Built By Bean{% endblock %}
+{% block page_title %}Org{% endblock %}
+{% block page_subtitle %}{{ business.name }}{% endblock %}
+
+{% block content %}
+{{ org_head(tabs, business.id | string) }}
+
+<div data-panel="org">
+{{ fin_tabs('org-view', view, view_tabs, 'Views') }}
+
+<div data-panel="org-view" class="flex flex-col gap-4">
+
+    <div data-live="org-tiles" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">People</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">{{ data.people | length | commas }}</p>
+            <p class="text-xs text-surface-400 mt-1 truncate">{% set n = data.people | selectattr('board_login') | list | length %}{{ n }} board {{ 'login' if n == 1 else 'logins' }}</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Departments</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">{{ data.departments | length | commas }}</p>
+            <p class="text-xs text-surface-400 mt-1 truncate">{{ data.departments | selectattr('people') | list | length }} staffed</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Responsibilities</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">{{ data.responsibilities | length | commas }}</p>
+            <p class="text-xs text-surface-400 mt-1 truncate">{{ data.responsibilities | rejectattr('owner') | list | length }} unassigned</p>
+        </div>
+        <div class="glass-card p-4 min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Owners</p>
+            <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">{{ data.owners | length | commas }}</p>
+            <p class="text-xs text-surface-400 mt-1 truncate">
+                {% if data.business.dba_of %}{{ data.business.dba_of }}'s{% elif data.owners %}{{ '%g' % share_total }}% recorded{% else %}None recorded{% endif %}</p>
+        </div>
+    </div>
+
+    {# ── People ─────────────────────────────────────────── #}
+    {% if view == 'people' %}
+    <form method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action data-live-reset
+          class="glass-card p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+        <input type="hidden" name="what" value="person"><input type="hidden" name="op" value="create">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="min-w-0">
+            <label for="org-new-name" class="block text-xs font-medium text-surface-400 mb-1.5">Name</label>
+            <input id="org-new-name" name="name" maxlength="120" required
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div class="min-w-0">
+            <label for="org-new-title" class="block text-xs font-medium text-surface-400 mb-1.5">Title</label>
+            <input id="org-new-title" name="title" maxlength="120"
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div class="min-w-0">
+            <label for="org-new-email" class="block text-xs font-medium text-surface-400 mb-1.5">Email</label>
+            <input id="org-new-email" name="email" type="email" maxlength="200"
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div class="min-w-0">
+            <label for="org-new-phone" class="block text-xs font-medium text-surface-400 mb-1.5">Phone</label>
+            <input id="org-new-phone" name="phone" type="tel" maxlength="40"
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <button type="submit"
+                class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand">
+            {{ icon('add-person', 'w-4 h-4') }} Add
+        </button>
+    </form>
+
+    <div data-live="org-people">
+        {% if data.people %}
+        <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
+            {% for p in data.people %}
+            <a href="{{ url_for('org.person', bid=business.id, pid=p.id) }}"
+               class="glass-card p-4 sm:p-5 flex gap-3 min-w-0 hover:border-brand-500/40 transition-colors">
+                {{ avatar(p) }}
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-start justify-between gap-2 min-w-0">
+                        <div class="min-w-0">
+                            <p class="font-medium text-white truncate">{{ p.name }}</p>
+                            <p class="text-sm text-surface-300 truncate">{{ p.title or 'No title yet' }}</p>
+                        </div>
+                        {% if p.share_percent is not none %}
+                        <span class="shrink-0 text-sm font-semibold text-white tabular-nums">{{ '%g' % p.share_percent }}%</span>
+                        {% endif %}
+                    </div>
+                    {% if p.depts %}
+                    <div class="mt-2 flex flex-wrap gap-1.5 max-w-full">
+                        {% for d in p.depts if depts[d] %}{{ dept_pill(depts[d]) }}{% endfor %}
+                    </div>
+                    {% endif %}
+                    <p class="mt-2 text-xs text-surface-400 break-words">
+                        {% if p.supervisor and people[p.supervisor] %}Reports to {{ people[p.supervisor].name }}{% else %}The top{% endif %}
+                        &middot; {{ p.reports }} {{ 'report' if p.reports == 1 else 'reports' }}
+                        &middot; {{ p.owns }} {{ 'responsibility' if p.owns == 1 else 'responsibilities' }}
+                    </p>
+                    {% if p.email or p.phone %}
+                    <p class="text-xs text-surface-400 truncate">{{ p.email }}{% if p.email and p.phone %} &middot; {% endif %}{{ p.phone }}</p>
+                    {% endif %}
+                    <div class="mt-2">{{ logins(p, business) }}</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty glass-card p-6 text-sm text-surface-300">Nobody on {{ business.label }}'s org yet.</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── Org chart ──────────────────────────────────────── #}
+    {% if view == 'chart' %}
+    <style>
+        /* Top-down from lg, with the lines drawn by the list itself; under lg
+           the same list reads as an indented outline, so nothing scrolls
+           sideways on a phone. */
+        .org-tree ul { list-style: none; margin: 0; padding: 0; }
+        .org-tree li { position: relative; }
+        .org-tree li > ul { margin-left: 1.25rem; padding-left: 1rem; border-left: 1px solid rgba(255,255,255,.12); }
+        .org-tree li > ul > li { padding-top: .75rem; }
+        .org-tree li > ul > li::before { content: ""; position: absolute; left: -1rem; top: 2.25rem; width: 1rem; border-top: 1px solid rgba(255,255,255,.12); }
+        @media (min-width: 1024px) {
+            .org-tree > ul { display: flex; justify-content: center; gap: 2rem; }
+            .org-tree li { display: flex; flex-direction: column; align-items: center; }
+            /* Siblings are spaced by their own padding, not a gap, so the line
+               across the top of them runs unbroken from one to the next. */
+            .org-tree li > ul { display: flex; justify-content: center; gap: 0; margin: 0; padding: .75rem 0 0; border-left: 0; position: relative; }
+            .org-tree li > ul::before { content: ""; position: absolute; top: 0; left: 50%; height: .75rem; border-left: 1px solid rgba(255,255,255,.18); }
+            .org-tree li > ul > li { padding: .75rem .75rem 0; }
+            .org-tree li > ul > li::before { left: 0; right: 0; top: 0; width: auto; border-top: 1px solid rgba(255,255,255,.18); }
+            .org-tree li > ul > li:first-child::before { left: 50%; }
+            .org-tree li > ul > li:last-child::before { right: 50%; }
+            .org-tree li > ul > li:only-child::before { display: none; }
+            .org-tree li > ul > li::after { content: ""; position: absolute; top: 0; left: 50%; height: .75rem; border-left: 1px solid rgba(255,255,255,.18); }
+        }
+    </style>
+    {% macro node(n) %}
+    {% set p = people[n.person.id] %}
+    <li>
+        <a href="{{ url_for('org.person', bid=business.id, pid=p.id) }}"
+           class="glass-card flex items-center gap-3 p-3 w-full lg:w-60 min-w-0 hover:border-brand-500/40 transition-colors">
+            {{ avatar(p) }}
+            <span class="min-w-0 flex-1">
+                <span class="block font-medium text-white truncate">{{ p.name }}</span>
+                <span class="block text-xs text-surface-300 truncate">{{ p.title or 'No title yet' }}</span>
+                <span class="block text-[11px] text-surface-400 truncate">{{ p.reports }} {{ 'report' if p.reports == 1 else 'reports' }} &middot; {{ p.owns }} {{ 'responsibility' if p.owns == 1 else 'responsibilities' }}</span>
+            </span>
+        </a>
+        {% if n.reports %}
+        <ul>{% for k in n.reports %}{{ node(k) }}{% endfor %}</ul>
+        {% endif %}
+    </li>
+    {% endmacro %}
+    {% if tree %}
+    <div class="org-tree glass-card p-4 sm:p-6 overflow-x-auto">
+        <ul>{% for n in tree %}{{ node(n) }}{% endfor %}</ul>
+    </div>
+    {% else %}
+    <div class="empty glass-card p-6 text-sm text-surface-300">Nobody on {{ business.label }}'s chart yet.
+        <a href="{{ url_for('org.business', bid=business.id, view='people') }}"
+           class="ml-2 inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl border border-white/15 text-surface-200 hover:text-white">{{ icon('add-person', 'w-4 h-4') }} Add someone</a></div>
+    {% endif %}
+    {% endif %}
+
+    {# ── Responsibilities ───────────────────────────────── #}
+    {% if view == 'responsibilities' %}
+    {% set dept_opts = data.departments | map(attribute='id') | list %}
+    {% set dept_choices = [] %}{% for d in data.departments %}{% set _ = dept_choices.append((d.id, d.name)) %}{% endfor %}
+    {% set owner_choices = [('', 'Unassigned')] %}{% for p in data.people %}{% set _ = owner_choices.append((p.id, p.name)) %}{% endfor %}
+    {% if data.departments %}
+    <form method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action data-live-reset
+          class="glass-card relative z-30 p-4 sm:p-5 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_14rem_14rem_auto] gap-3 items-end">
+        <input type="hidden" name="what" value="responsibility"><input type="hidden" name="op" value="create">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="min-w-0">
+            <label for="org-new-resp" class="block text-xs font-medium text-surface-400 mb-1.5">New responsibility</label>
+            <input id="org-new-resp" name="title" maxlength="200" required
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div class="min-w-0">
+            <span class="block text-xs font-medium text-surface-400 mb-1.5">Department</span>
+            {{ select_dropdown('dept', dept_choices, data.departments[0].id, 'Department', full_width=true) }}
+        </div>
+        <div class="min-w-0">
+            <span class="block text-xs font-medium text-surface-400 mb-1.5">Whose</span>
+            {{ select_dropdown('owner', owner_choices, '', 'Unassigned', full_width=true) }}
+        </div>
+        <button type="submit" class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand">
+            {{ icon('add', 'w-4 h-4') }} Add
+        </button>
+    </form>
+    {% else %}
+    <div class="empty glass-card p-6 text-sm text-surface-300">Every responsibility belongs to a department, and {{ business.label }} has none yet.
+        <a href="{{ url_for('org.business', bid=business.id, view='departments') }}"
+           class="ml-2 inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl border border-white/15 text-surface-200 hover:text-white">{{ icon('add', 'w-4 h-4') }} Add a department</a></div>
+    {% endif %}
+
+    <div data-live="org-resps" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 items-start">
+        {% for owner_id, label in columns %}
+        {% set mine = data.responsibilities | selectattr('owner', 'equalto', owner_id) | list %}
+        {% if owner_id is not none or mine %}
+        <section class="relative focus-within:z-30 rounded-2xl border border-white/10 bg-surface-900/40 p-3 min-w-0">
+            <h2 class="flex items-center justify-between gap-2 px-1 pb-2 text-sm font-semibold text-white">
+                <span class="truncate">{{ label }}</span>
+                <span class="text-xs font-medium text-surface-400 tabular-nums">{{ mine | length | commas }}</span>
+            </h2>
+            {% if mine %}
+            <div class="flex flex-col gap-2">
+                {% for r in mine %}
+                <div data-live-key="resp-{{ r.id }}" x-data="{ open: false }"
+                     class="relative focus-within:z-30 rounded-xl border border-white/10 bg-surface-800/70 p-3 min-w-0">
+                    <button type="button" @click="open = !open" :aria-expanded="open ? 'true' : 'false'" aria-expanded="false"
+                            class="w-full text-left flex items-start justify-between gap-2 min-h-[44px]">
+                        <span class="min-w-0">
+                            <span class="block text-sm text-white break-words">{{ r.title }}</span>
+                            {% if r.dept and depts[r.dept] %}<span class="mt-1.5 inline-flex max-w-full">{{ dept_pill(depts[r.dept]) }}</span>{% endif %}
+                        </span>
+                        <span class="shrink-0 text-surface-400 transition-transform" :class="open && 'rotate-180'">{{ icon('expand', 'w-4 h-4') }}</span>
+                    </button>
+                    <div x-show="open" x-cloak class="mt-3 flex flex-col gap-3">
+                        <form method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action
+                              class="flex flex-col gap-3">
+                            <input type="hidden" name="what" value="responsibility"><input type="hidden" name="op" value="update">
+                            <input type="hidden" name="id" value="{{ r.id }}"><input type="hidden" name="version" value="{{ r.version }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <div>
+                                <label for="resp-title-{{ r.id }}" class="block text-xs font-medium text-surface-400 mb-1.5">What it is</label>
+                                <input id="resp-title-{{ r.id }}" name="title" value="{{ r.title }}" maxlength="200" required
+                                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+                            </div>
+                            <div>
+                                <label for="resp-details-{{ r.id }}" class="block text-xs font-medium text-surface-400 mb-1.5">What it covers</label>
+                                <textarea id="resp-details-{{ r.id }}" name="details" rows="3" maxlength="4000"
+                                          class="input-ring w-full min-w-0 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl resize-y">{{ r.details }}</textarea>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3">
+                                <div class="min-w-0">
+                                    <span class="block text-xs font-medium text-surface-400 mb-1.5">Whose</span>
+                                    {{ select_dropdown('owner', owner_choices, r.owner or '', 'Unassigned', full_width=true) }}
+                                </div>
+                                <div class="min-w-0">
+                                    <span class="block text-xs font-medium text-surface-400 mb-1.5">Department</span>
+                                    {{ select_dropdown('dept', dept_choices, r.dept or '', 'Department', full_width=true) }}
+                                </div>
+                            </div>
+                            <button type="submit" class="self-end inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand">
+                                {{ icon('done', 'w-4 h-4') }} Save</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action class="self-end">
+                            <input type="hidden" name="what" value="responsibility"><input type="hidden" name="op" value="delete">
+                            <input type="hidden" name="id" value="{{ r.id }}"><input type="hidden" name="version" value="{{ r.version }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            {{ confirm_button('Delete', 'Delete it?') }}
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty px-1 py-2 text-xs text-surface-400">Nothing yet</p>
+            {% endif %}
+        </section>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Departments ────────────────────────────────────── #}
+    {% if view == 'departments' %}
+    {% set tone_choices = [] %}{% for t in data.tones %}{% set _ = tone_choices.append((t, t | capitalize)) %}{% endfor %}
+    <form method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action data-live-reset
+          class="glass-card relative z-30 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_12rem_auto] gap-3 items-end">
+        <input type="hidden" name="what" value="department"><input type="hidden" name="op" value="create">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="min-w-0">
+            <label for="org-new-dept" class="block text-xs font-medium text-surface-400 mb-1.5">New department</label>
+            <input id="org-new-dept" name="name" maxlength="80" required
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div class="min-w-0">
+            <span class="block text-xs font-medium text-surface-400 mb-1.5">Colour</span>
+            {{ select_dropdown('tone', tone_choices, 'gold', 'Colour', full_width=true) }}
+        </div>
+        <button type="submit" class="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand">
+            {{ icon('add', 'w-4 h-4') }} Add
+        </button>
+    </form>
+
+    <div data-live="org-depts">
+        {% if data.departments %}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {% for d in data.departments %}
+            <div class="glass-card relative focus-within:z-30 p-4 flex flex-col gap-3 min-w-0">
+            <form id="dept-form-{{ d.id }}" method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action
+                  class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_10rem] gap-3 items-end min-w-0">
+                <input type="hidden" name="what" value="department"><input type="hidden" name="op" value="update">
+                <input type="hidden" name="id" value="{{ d.id }}"><input type="hidden" name="version" value="{{ d.version }}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="min-w-0">
+                    <label for="dept-name-{{ d.id }}" class="flex items-center gap-2 text-xs font-medium text-surface-400 mb-1.5">
+                        {{ dept_pill(d) }}
+                        <span class="truncate">{{ d.people }} {{ 'person' if d.people == 1 else 'people' }} &middot; {{ d.responsibilities }} {{ 'responsibility' if d.responsibilities == 1 else 'responsibilities' }}</span>
+                    </label>
+                    <input id="dept-name-{{ d.id }}" name="name" value="{{ d.name }}" maxlength="80" required
+                           class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+                </div>
+                <div class="min-w-0">
+                    {{ select_dropdown('tone', tone_choices, d.tone, 'Colour', full_width=true) }}
+                </div>
+            </form>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <button type="submit" form="dept-form-{{ d.id }}"
+                        class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand">
+                    {{ icon('done', 'w-4 h-4') }} Save</button>
+                {% if not d.responsibilities %}
+                <form method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action>
+                    <input type="hidden" name="what" value="department"><input type="hidden" name="op" value="delete">
+                    <input type="hidden" name="id" value="{{ d.id }}"><input type="hidden" name="version" value="{{ d.version }}">
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    {{ confirm_button('Delete', 'Delete it?') }}
+                </form>
+                {% endif %}
+            </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty glass-card p-6 text-sm text-surface-300">{{ business.label }} has no departments yet.</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+</div>
+{% endblock %}

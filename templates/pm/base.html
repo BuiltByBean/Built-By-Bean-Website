@@ -1058,8 +1058,8 @@
             <div class="my-2 border-t border-white/10"></div>
 
             {# Michael's groups (2026-11-04, second pass): what he runs (his
-               businesses, what they have built, their support and, once it
-               lands, Org), then the client work (clients, the paper, the
+               businesses, what they have built, their support and Org),
+               then the client work (clients, the paper, the
                pipeline), then how to build (the Handbook and the MVP Builder
                that starts the next one). Dividers, no headings: he named the
                groups by what is in them, not by a word over them. #}
@@ -1090,6 +1090,16 @@
                     {%- endif %}
                 </span>
             </a>
+            {# Org (was Team, 2026-11-04): every business's people, and the
+               board's own logins as its last tab. CEO only, because it
+               carries who owns what. #}
+            {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
+            <a href="{{ url_for('org.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith(('org.', 'users.')) %}active{% endif %}">
+                {{ icon('org') }}
+                Org
+            </a>
+            {% endif %}
             <div class="my-2 border-t border-white/10"></div>
 
             <a href="{{ url_for('pm.clients_list') }}"
@@ -1192,19 +1202,6 @@
                 Invoices
             </a>
 
-            {# Who may open this board. CEO only: a member has no business
-               in the list of people, so the section is not drawn for them
-               rather than drawn and refused. #}
-            {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
-            <div class="my-2 border-t border-white/10"></div>
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Team</p>
-            <a href="{{ url_for('users.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('users.') %}active{% endif %}">
-                {{ icon('users') }}
-                Users
-            </a>
-            {% endif %}
         </nav>
 
         <!-- Footer -->

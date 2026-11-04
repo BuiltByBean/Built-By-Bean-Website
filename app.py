@@ -374,9 +374,12 @@ def create_app():
     from pm.books_routes import books_bp
     app.register_blueprint(books_bp)
 
-    # ── The people who may open this board ─────────────────
+    # ── Org: every business's people, and the board's logins ─
     from pm.users_routes import users_bp
     app.register_blueprint(users_bp)
+    from pm.org_routes import org_bp, old_users_bp
+    app.register_blueprint(org_bp)
+    app.register_blueprint(old_users_bp)
 
     # ── Every business in the trade area ───────────────────
     from pm.leads_routes import leads_bp

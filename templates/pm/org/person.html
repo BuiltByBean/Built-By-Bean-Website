@@ -1,0 +1,148 @@
+{% extends "pm/base.html" %}
+{% from "pm/org/_kit.html" import org_head, dept_pill, avatar, logins %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One person on a business's org: their place on the chart picked both ways
+  (Reports to, Direct reports), their departments, how to reach them, their
+  share when the business has its own owners, and what is theirs to do. The
+  same fields EntertainHQ's person page has. Save and Take off sit in the
+  header with Back; the form names the version it read, so an edit made in
+  EntertainHQ's admin meanwhile is never written over.
+#}
+
+{% block title %}{{ person.name }} - Org - Built By Bean{% endblock %}
+{% block page_title %}Org{% endblock %}
+{% block page_subtitle %}{{ business.name }}{% endblock %}
+{% block back %}{{ back_link(url_for('org.business', bid=business.id), business.label) }}{% endblock %}
+
+{% block header_actions %}
+<button type="submit" form="org-person-form"
+        class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand">
+    {{ icon('done', 'w-4 h-4') }} Save
+</button>
+{% if not me.app_login %}
+<form method="POST" action="{{ url_for('org.save', bid=business.id) }}">
+    <input type="hidden" name="what" value="person"><input type="hidden" name="op" value="delete">
+    <input type="hidden" name="id" value="{{ person.id }}"><input type="hidden" name="version" value="{{ person.version }}">
+    {% call confirm_button(question='Take ' ~ person.name ~ ' off?',
+                           btn_class='inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors',
+                           btn_attrs='aria-label="Take ' ~ person.name ~ ' off the chart"') %}{{ icon('delete', 'w-5 h-5') }}{% endcall %}
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{{ org_head(tabs, business.id | string) }}
+
+<div data-panel="org">
+<div data-live="org-person" class="flex flex-col gap-4">
+    <div class="glass-card p-4 sm:p-5 flex flex-wrap items-center gap-4 min-w-0">
+        {{ avatar(me, 'w-14 h-14 text-lg') }}
+        <div class="min-w-0 grow basis-64">
+            <p class="text-lg font-semibold text-white break-words">{{ person.name }}</p>
+            <p class="text-sm text-surface-300 break-words">{{ person.title or 'No title yet' }}</p>
+            {% if chain %}
+            <p class="mt-1 text-xs text-surface-400 break-words">{% for c in chain %}{{ c.name }}{% if not loop.last %} &rsaquo; {% endif %}{% endfor %} &rsaquo; {{ person.name }}</p>
+            {% endif %}
+            {% if me.depts %}<div class="mt-2 flex flex-wrap gap-1.5">{% for d in me.depts if depts[d] %}{{ dept_pill(depts[d]) }}{% endfor %}</div>{% endif %}
+        </div>
+        <div class="flex flex-col items-start sm:items-end gap-1.5">
+            {% if me.share_percent is not none %}<span class="text-xl font-bold text-white tabular-nums">{{ '%g' % me.share_percent }}%</span>{% endif %}
+            {{ logins(me, business) }}
+        </div>
+    </div>
+
+    <form id="org-person-form" method="POST" action="{{ url_for('org.save', bid=business.id) }}" data-live-action
+          class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        <input type="hidden" name="what" value="person"><input type="hidden" name="op" value="update">
+        <input type="hidden" name="id" value="{{ person.id }}"><input type="hidden" name="version" value="{{ person.version }}">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <input type="hidden" name="has_depts" value="1"><input type="hidden" name="has_reports" value="1">
+
+        <div class="glass-card relative z-30 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="min-w-0">
+                <label for="p-name" class="block text-xs font-medium text-surface-400 mb-1.5">Name</label>
+                <input id="p-name" name="name" value="{{ person.name }}" maxlength="120" required
+                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div class="min-w-0">
+                <label for="p-title" class="block text-xs font-medium text-surface-400 mb-1.5">Title</label>
+                <input id="p-title" name="title" value="{{ person.title or '' }}" maxlength="120"
+                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div class="min-w-0">
+                <label for="p-email" class="block text-xs font-medium text-surface-400 mb-1.5">Email</label>
+                <input id="p-email" name="email" type="email" value="{{ person.email or '' }}" maxlength="200"
+                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div class="min-w-0">
+                <label for="p-phone" class="block text-xs font-medium text-surface-400 mb-1.5">Phone</label>
+                <input id="p-phone" name="phone" type="tel" value="{{ person.phone or '' }}" maxlength="40"
+                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div class="min-w-0">
+                <span class="block text-xs font-medium text-surface-400 mb-1.5">Reports to</span>
+                {{ select_dropdown('supervisor', supervisors, person.supervisor_id or '', 'Nobody: the top', full_width=true) }}
+            </div>
+            {% if not business.is_division %}
+            <div class="min-w-0">
+                <label for="p-share" class="block text-xs font-medium text-surface-400 mb-1.5">Share of the company, %</label>
+                <input id="p-share" name="share_percent" type="number" step="0.01" min="0" max="100"
+                       value="{{ '%g' % me.share_percent if me.share_percent is not none else '' }}"
+                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="flex flex-col gap-4 min-w-0">
+            <fieldset class="glass-card p-4 sm:p-5 min-w-0">
+                <legend class="px-1 text-xs font-semibold uppercase tracking-wider text-surface-400">Departments</legend>
+                {% if data.departments %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                    {% for d in data.departments %}
+                    {{ checkbox(name='depts', value=d.id, checked=(d.id in me.depts), label=d.name) }}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty text-sm text-surface-400">No departments yet.</p>
+                {% endif %}
+            </fieldset>
+            <fieldset class="glass-card p-4 sm:p-5 min-w-0">
+                <legend class="px-1 text-xs font-semibold uppercase tracking-wider text-surface-400">Direct reports</legend>
+                {% if report_choices %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                    {% for x in report_choices %}
+                    {{ checkbox(name='reports', value=x.id, checked=(x.supervisor == person.id), label=x.name) }}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty text-sm text-surface-400">Nobody who could report to {{ person.name }}.</p>
+                {% endif %}
+            </fieldset>
+        </div>
+    </form>
+
+    <section class="glass-card p-4 sm:p-5 min-w-0">
+        <h2 class="text-sm font-semibold text-white mb-3">{{ person.name.split(' ')[0] }}'s responsibilities</h2>
+        {% if mine %}
+        <ul class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {% for r in mine %}
+            <li class="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-surface-800/60 p-3 min-w-0">
+                <span class="text-sm text-white break-words min-w-0">{{ r.title }}</span>
+                {% if r.dept and depts[r.dept] %}<span class="shrink-0 max-w-[45%]">{{ dept_pill(depts[r.dept]) }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty text-sm text-surface-400">Nothing is {{ person.name.split(' ')[0] }}'s yet.
+            <a href="{{ url_for('org.business', bid=business.id, view='responsibilities') }}"
+               class="ml-2 inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl border border-white/15 text-surface-200 hover:text-white">Responsibilities</a></p>
+        {% endif %}
+    </section>
+</div>
+</div>
+{% endblock %}

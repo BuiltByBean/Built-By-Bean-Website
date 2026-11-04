@@ -1395,6 +1395,11 @@ class BusinessOwner(db.Model):
     name = db.Column(db.String(120), nullable=False)
     share_percent = db.Column(db.Float, nullable=True)
     note = db.Column(db.String(300), default="")
+    # The person on the business's org this owner is (org_service links them
+    # by name). Null for an owner nobody has put on the org yet.
+    person_id = db.Column(db.Integer, db.ForeignKey(
+        "org_people.id", ondelete="SET NULL", name="fk_business_owners_person_id"),
+        nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     business = db.relationship("Business", backref=db.backref(
@@ -1402,6 +1407,137 @@ class BusinessOwner(db.Model):
 
     def __repr__(self):
         return f"<BusinessOwner {self.name} {self.share_percent}%>"
+
+
+# ── Org: the people of each business ───────────────────────
+#
+# Michael, 2026-11-04: Team becomes Org, "a place where I can see all my orgs
+# for each business ... ensure that org pages communicate properly between
+# apps". The board is the ONE store for every business's org (his pick), the
+# way it is for sales tax: EntertainHQ's admin Organization page reads and
+# saves these rows over the hub (org_service.py, /api/hub/org*), so the two
+# never hold two copies. Every row carries `version`; a save names the version
+# it read and is refused if the row moved since, so neither side ever writes
+# over an edit it did not see. `app_ref` is the row's id in the app it came
+# from ("entertainhq:12"), so the one-time import is keyed on ids that do not
+# move.
+
+org_person_depts = db.Table(
+    "org_person_depts",
+    db.Column("person_id", db.Integer, db.ForeignKey(
+        "org_people.id", ondelete="CASCADE", name="fk_org_person_depts_person_id"), primary_key=True),
+    db.Column("dept_id", db.Integer, db.ForeignKey(
+        "org_departments.id", ondelete="CASCADE", name="fk_org_person_depts_dept_id"),
+        primary_key=True, index=True),
+)
+
+
+class OrgPerson(db.Model):
+    __tablename__ = "org_people"
+    __table_args__ = (
+        db.UniqueConstraint("business_id", "app_ref", name="uq_org_people_business_app_ref"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_org_people_business_id"),
+        nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False, default="")
+    title = db.Column(db.String(120), default="")
+    email = db.Column(db.String(200), default="")
+    phone = db.Column(db.String(40), default="")
+    supervisor_id = db.Column(db.Integer, db.ForeignKey(
+        "org_people.id", ondelete="SET NULL", name="fk_org_people_supervisor_id"),
+        nullable=True, index=True)
+    app_ref = db.Column(db.String(60), nullable=True)
+    version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "org_people", cascade="all, delete-orphan", order_by="OrgPerson.name"))
+    supervisor = db.relationship("OrgPerson", remote_side=[id], backref="reports")
+    departments = db.relationship("OrgDepartment", secondary=org_person_depts,
+                                  order_by="OrgDepartment.sort", backref="people")
+
+    @property
+    def initials(self):
+        words = [w for w in (self.name or "").split() if w][:2]
+        return "".join(w[0] for w in words).upper() or "?"
+
+
+class OrgDepartment(db.Model):
+    __tablename__ = "org_departments"
+    __table_args__ = (
+        db.UniqueConstraint("business_id", "app_ref", name="uq_org_departments_business_app_ref"),
+    )
+
+    TONES = ("gold", "blue", "sky", "teal", "green", "amber", "red", "gray")
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_org_departments_business_id"),
+        nullable=False, index=True)
+    name = db.Column(db.String(80), nullable=False)
+    tone = db.Column(db.String(12), nullable=False, default="gold")
+    sort = db.Column(db.Integer, nullable=False, default=0)
+    app_ref = db.Column(db.String(60), nullable=True)
+    version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+
+    business = db.relationship("Business", backref=db.backref(
+        "org_departments", cascade="all, delete-orphan",
+        order_by="(OrgDepartment.sort, OrgDepartment.id)"))
+
+
+class OrgResponsibility(db.Model):
+    """A standing duty, not a task with a due date: whose it is, and the one
+    department it belongs to. Unassigned is an owner of null."""
+
+    __tablename__ = "org_responsibilities"
+    __table_args__ = (
+        db.UniqueConstraint("business_id", "app_ref", name="uq_org_responsibilities_business_app_ref"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_org_responsibilities_business_id"),
+        nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    details = db.Column(db.Text, default="")
+    owner_id = db.Column(db.Integer, db.ForeignKey(
+        "org_people.id", ondelete="SET NULL", name="fk_org_responsibilities_owner_id"),
+        nullable=True, index=True)
+    dept_id = db.Column(db.Integer, db.ForeignKey(
+        "org_departments.id", ondelete="SET NULL", name="fk_org_responsibilities_dept_id"),
+        nullable=True, index=True)
+    sort = db.Column(db.Integer, nullable=False, default=0)
+    created_by = db.Column(db.String(200), default="")
+    app_ref = db.Column(db.String(60), nullable=True)
+    version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "org_responsibilities", cascade="all, delete-orphan",
+        order_by="(OrgResponsibility.sort, OrgResponsibility.id)"))
+    owner = db.relationship("OrgPerson", backref="responsibilities")
+    department = db.relationship("OrgDepartment", backref="responsibilities")
+
+
+class OrgState(db.Model):
+    """What the board knows about one business's org beyond its rows: the
+    logins its own app last reported (each app's logins are its own truth),
+    when, and when the org was last imported and last edited, which is what
+    keeps a late import from writing over an edit made since."""
+
+    __tablename__ = "org_state"
+
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_org_state_business_id"), primary_key=True)
+    app_logins_json = db.Column(db.Text, default="[]")
+    reported_at = db.Column(db.DateTime, nullable=True)
+    imported_at = db.Column(db.DateTime, nullable=True)
+    edited_at = db.Column(db.DateTime, nullable=True)
 
 
 class StripeActivity(db.Model):
