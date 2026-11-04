@@ -31,7 +31,7 @@ from flask_login import login_required
 import app_blueprints
 from models import (db, AppBlueprint, Client, Feature, Product, Playbook,
                     MvpPackage, MvpPackageItem)
-from pm.products_routes import playbook_lines
+from pm.products_routes import playbook_lines, price_list_context
 
 mvp_bp = Blueprint("mvp", __name__, url_prefix="/admin/mvp")
 
@@ -389,6 +389,14 @@ def mvp_index():
                            packages=packages,
                            client_options=[(c.id, c.name) for c in clients],
                            statuses=MvpPackage.STATUSES)
+
+
+@mvp_bp.route("/price-list")
+@login_required
+def price_list():
+    """What I sell, priced, with the Sell flow: the old Products page, now a
+    tab here (2026-11-04). The presses on it post to products_routes."""
+    return render_template("pm/mvp/price_list.html", **price_list_context())
 
 
 @mvp_bp.route("/new", methods=["POST"])

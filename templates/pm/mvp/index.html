@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/mvp/_tabs.html" import mvp_tabs %}
 
 {#
   Every package that has been scoped, and where each one stands. A package
@@ -21,6 +22,8 @@
 
 {% block content %}
 <div class="space-y-5 stagger-in">
+
+    {{ mvp_tabs('packages') }}
 
     {# relative z-30 per CLAUDE.md LM-1: the client dropdown opens over the
        package list below. #}

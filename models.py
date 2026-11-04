@@ -3508,7 +3508,7 @@ class Note(db.Model):
                         "pm.project_detail", {"id": self.project_id}))
         if self.product:
             out.append(("product", self.product.name,
-                        "products.products_index", {}))
+                        "mvp.price_list", {}))
         if self.playbook:
             out.append(("playbook", self.playbook.display_name,
                         "playbooks.playbook_detail", {"slug": self.playbook.slug}))

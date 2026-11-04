@@ -93,7 +93,7 @@ def _evidence(chips, projects):
                 if hit:
                     when = getattr(hit, "created_at", None)
                     by_project[p.id] = (True, "sold" + (f" {when:%b %Y}" if when else ""),
-                                        url_for("products.products_index"))
+                                        url_for("mvp.price_list"))
                 elif p.id in applied:
                     by_project[p.id] = (True, "runbook applied",
                                         url_for("pm.project_detail", id=p.id))

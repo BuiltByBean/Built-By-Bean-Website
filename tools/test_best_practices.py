@@ -129,12 +129,16 @@ check("its page redirects here", r.status_code == 302 and r.headers["Location"].
 
 print("6. Products have left Best Practices, and the sell flow still works")
 check("no Products tab in the strip", "/admin/products/" not in body.split('aria-label="Handbook"', 1)[-1].split("</nav>", 1)[0])
-check("a Products link of its own in the sidebar",
-      re.search(r'</svg>\s*Products\s*</a>', body) is not None)
-products = c.get(f"/admin/products/?sell={product_id}").get_data(as_text=True)
-check("the Products page keeps its prices", "5,000" in products)
-check("and is titled Products", re.search(r'id="pm-page-title"[^>]*>\s*Products', products) is not None)
-check("the products page carries that Sell button", f'data-sell="{product_id}"' in products)
+# Since 2026-11-04 the prices are the MVP Builder's Price list tab, and the
+# old address forwards there carrying ?sell= (tools/test_price_list.py).
+r = c.get(f"/admin/products/?sell={product_id}")
+check("the old Products address forwards to the price list",
+      r.status_code == 302 and f"/admin/mvp/price-list?sell={product_id}" in r.headers["Location"],
+      (r.status_code, r.headers.get("Location")))
+products = c.get(f"/admin/mvp/price-list?sell={product_id}").get_data(as_text=True)
+check("the price list keeps its prices", "5,000" in products)
+check("and sits in the MVP Builder", re.search(r'id="pm-page-title"[^>]*>\s*MVP Builder', products) is not None)
+check("the price list carries that Sell button", f'data-sell="{product_id}"' in products)
 check("and reads the id it was given", f'const want = "{product_id}";' in products)
 
 print("7. The door is untouched")

@@ -2,17 +2,21 @@
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/mvp/_tabs.html" import mvp_tabs %}
 
 {#
-  The catalogue, and who has bought from it.
+  The price list, and who has bought from it. A tab of the MVP Builder since
+  2026-11-04 (Michael: Products folds into the builder); it was the Products
+  page at /admin/products, which now redirects here with its query string, so
+  the Everything tab's "Sell it" (?sell=<id>) still opens the dialog.
 
   Selling one thing does three: records it, puts the vendor's runbook on the
   project, and opens the add-on contract already filled in. The sell dialog is
   one form so those cannot come apart.
 #}
 
-{% block title %}Products - Built By Bean{% endblock %}
-{% block page_title %}Products{% endblock %}
+{% block title %}Price list - MVP Builder - Built By Bean{% endblock %}
+{% block page_title %}MVP Builder{% endblock %}
 {% block page_subtitle %}What I sell, and who has it{% endblock %}
 
 {#
@@ -90,6 +94,8 @@
                setTimeout(() => this.copied = false, 1800); } catch (e) {}
        }
      }'>
+
+    {{ mvp_tabs('prices') }}
 
     {# One card per category, in the order a sale is discussed, each with
        its count. A category with nothing to sell in it does not appear. #}

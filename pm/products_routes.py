@@ -14,6 +14,11 @@ A sale always lands on a project, even when nothing custom was built. Somebody
 buying only a signing portal still needs somewhere for the runbook, the
 hosting fee and the tickets to live, so a standalone purchase makes a small
 project rather than giving those three a second home to be looked for in.
+
+The page itself is the MVP Builder's Price list tab since 2026-11-04 (Michael:
+"Products folds into the MVP Builder"). Its view is `mvp.price_list`, built from
+`price_list_context` here; `/admin/products/` redirects there with its query
+string, and the presses on it still post to this blueprint and come back there.
 """
 import re
 from datetime import datetime, timezone
@@ -164,6 +169,14 @@ def build_prompt(sale):
 @products_bp.route("/")
 @login_required
 def products_index():
+    """Moved: the price list is a tab of the MVP Builder. The query string
+    rides along, because the Everything tab's "Sell it" is ?sell=<id>."""
+    return redirect(url_for("mvp.price_list", **request.args.to_dict(flat=True)))
+
+
+def price_list_context():
+    """Everything the price list draws. One function, so the page it moved
+    into renders exactly what this page did."""
     products = (Product.query.filter_by(is_active=True)
                 .order_by(Product.sort_order, Product.name).all())
     sales = (ProductSale.query
@@ -202,13 +215,12 @@ def products_index():
     if stray:
         groups.append({"key": "other", "label": "Everything else", "products": stray})
 
-    return render_template("pm/products/index.html",
-                           products=products, groups=groups, sales=sales, prompts=prompts,
-                           clients=clients, projects=projects,
-                           variants=variants, hosted=hosted, logos=logos,
-                           default_hosting_fee=DEFAULT_HOSTING_FEE,
-                           sold_count=sold_count,
-                           today=datetime.now(timezone.utc).date().isoformat())
+    return dict(products=products, groups=groups, sales=sales, prompts=prompts,
+                clients=clients, projects=projects,
+                variants=variants, hosted=hosted, logos=logos,
+                default_hosting_fee=DEFAULT_HOSTING_FEE,
+                sold_count=sold_count,
+                today=datetime.now(timezone.utc).date().isoformat())
 
 
 @products_bp.route("/<int:id>/price", methods=["POST"])
@@ -231,7 +243,7 @@ def product_price(id):
         product.monthly_price = None
     db.session.commit()
     flash(f"{product.name} price updated.", "success")
-    return redirect(url_for("products.products_index"))
+    return redirect(url_for("mvp.price_list"))
 
 
 @products_bp.route("/sell", methods=["POST"])
@@ -248,7 +260,7 @@ def product_sell():
     client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
     if not product or not client:
         flash("Pick a client and a product.", "warning")
-        return redirect(url_for("products.products_index"))
+        return redirect(url_for("mvp.price_list"))
 
     project = db.session.get(Project, request.form.get("project_id", type=int) or 0)
     if project is not None and project.client_id != client.id:
@@ -256,7 +268,7 @@ def product_sell():
         # runbook and the contract against it would put all three on the wrong
         # client at once.
         flash("That project belongs to a different client.", "warning")
-        return redirect(url_for("products.products_index"))
+        return redirect(url_for("mvp.price_list"))
 
     if project is None:
         name = (request.form.get("new_project_name") or "").strip() \
@@ -359,4 +371,4 @@ def sale_delete(id):
     db.session.delete(sale)
     db.session.commit()
     flash(f"{name} removed from {who}.", "success")
-    return redirect(url_for("products.products_index"))
+    return redirect(url_for("mvp.price_list"))

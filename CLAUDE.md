@@ -17,8 +17,8 @@ it. This file is for lessons about THIS repo's own code.
 
 **No money lives in Best Practices** (Michael, 2026-11-03: "no price shit left
 over"). `Feature.typical_value` is gone, the guidance door takes no price and
-hands none out, and Products, which carries prices and the sell flow, is a
-sidebar link of its own. Vendor costs inside a playbook ("$99 a year") are facts
+hands none out, and the price list with its sell flow is the MVP Builder's
+Price list tab. Vendor costs inside a playbook ("$99 a year") are facts
 about the vendor and stay.
 
 On 2026-11-02 the owner called the old Catalogue, five sidebar links and
@@ -107,6 +107,15 @@ ask for and the checklist, with the runbook one get_playbook away (Twilio's is
 46,000 characters). `/api/guidance/brief?full=1` is still every rule in full.
 `REFERENCE_REPOS` says which GitHub repo a reference project is, because the
 prompt named a Windows folder that no longer exists. `tools/test_mvp_prompt.py`.
+
+**The price list is a tab of the builder** (Michael, 2026-11-04: Products folds
+into the MVP Builder). `pm/mvp/_tabs.html` is the strip, Packages and Price list;
+`mvp.price_list` (`/admin/mvp/price-list`) draws `pm/mvp/price_list.html` from
+`products_routes.price_list_context`, and the presses on it (price, sell, erase a
+sale) still post to the `products` blueprint and come back there.
+`/admin/products/` redirects with its query string, because the Handbook's "Sell
+it" is `?sell=<id>`. The SOW the builder opens carries `package_id`, so the
+package is contracted when that SOW is signed. `tools/test_price_list.py`.
 
 **A catalogue that grows needs a test on what it is assembled into.** Nothing
 failed as the prompt grew from a page to a megabyte: every test read the features
@@ -334,9 +343,9 @@ night has a failed step or no night has finished in 26 hours; it links to
 
 **The sidebar's Work section is Michael's order** (2026-11-04): Businesses,
 Notes, Clients, Leads, Projects, Client support (Tickets in the code), Contracts,
-MVP Builder, Products, My Apps, Handbook (Best Practices in the code and URLs),
-Time. Notes and Projects give way to the Workspace when it lands, and Products
-folds into the MVP Builder.
+MVP Builder, My Apps, Handbook (Best Practices in the code and URLs), Time. Notes
+and Projects give way to the Workspace when it lands. Products folded into the
+MVP Builder the same day and has no link of its own.
 
 ## The books stand on the bank
 
@@ -1068,7 +1077,22 @@ written and leaves a marker; Stop refuses to end the turn (exit 2, reason
 on stderr) while that marker has no report_lesson or suggest_update
 after it in the transcript, at most twice, never when stop_hook_active.
 `tools/hooks/install.py` merges them into ~/.claude/settings.json without
-touching anything else; the bootstrap runs it. Hooks print UTF-8 on
+touching anything else; the bootstrap runs it.
+
+**Time logs itself** (audit item 3, 2026-11-04). The fourth hook, SessionEnd
+(`session_end.py`), reads the transcript's timestamps into stretches with no gap
+over 15 minutes, finds the repo with git (a worktree answers with its main
+repo), and posts the stretches to `/api/guidance/time` with the session id.
+`session_time.py` maps the repo to `Project.repo` or a tile's `github_url`,
+skips Michael's own (his own client row, a business, a tile under Personal
+projects), picks build or maintenance from the phase and go-live date, rewrites
+its own entry on a re-run (`TimeEntry.session_ref`, unique), never touches an
+invoiced one, and keeps the stretches (`spans_json`) so sessions open side by
+side on one project bill an hour once. It skips a session that called log_time
+itself, and the Stop hook no longer asks for time, because two entries for one
+session bill the hour twice. What each run did is in
+`~/.claude/pm-guidance/session-time.log`. `tools/test_session_time.py` runs the
+real script against a live server. Hooks print UTF-8 on
 purpose - Windows hands them cp1252 and one minus sign in a rule killed
 the injection after its header.
 
@@ -1345,6 +1369,31 @@ nothing - which is why `SignaDocError` now carries the portal's own status
 code and `None` when it was never reached. `tools/test_contract_tidy.py`
 proves both halves.
 
+## A contract does what it says when it is signed, not sent
+
+Audit item 6, 2026-11-04. The SOW wrote the client's stage and contract revenue,
+and the project's fee, budget, dates and phase, as it was SENT; a hosting
+agreement wrote its fee the same way. A decline or a void took none of it back,
+and the package, its products and the lead were moved by hand once somebody
+noticed. `contract_effects.py` is the one place it happens now. The form builds
+a proposal (`sow_effects`, `hosting_effects`) and `create_request` keeps it on
+the request (`effects_json`). Sent moves the client and their lead to "proposal
+sent", forward only. `completed` (`_apply` in `pm/contract_routes.py`) applies
+it once: client and lead to contracted, the project made if it does not exist
+(with the default runbooks), its fee, budget, delivery date and window, the
+package to contracted and its products written as `ProductSale` rows with their
+runbooks. A declined or voided one puts back what `undo_json` saved, unless the
+record has moved on or another contract for that client is out or signed. A
+contract downloaded to sign on paper applies as it is downloaded
+(`apply_if_paper`), because there is no envelope to report back.
+
+`_apply` moves the status with a compare-and-set and `apply_signed` claims
+`effects_applied_at` the same way, because every gunicorn worker runs the
+signature watcher (`start_signature_watcher`, every 15 minutes,
+`SIGNATURE_REFRESH_SECONDS`, 0 is off, audit item 4) and two of them see the
+same completion. The watcher sleeps first, so a boot asks nothing. Rows sent
+before this have no proposal and are left alone. `tools/test_signed_not_sent.py`.
+
 ## The revenue share, which is not a partnership
 
 `contract_docs.build_partnership`, the form at `/admin/contracts/new/partnership`,
@@ -1421,8 +1470,9 @@ as a fee update - the fee `RAISE_STEP` ($25/month) higher, the fee it
 cancels, the first of next month as the start, the reason - and what is
 left is reading it and sending it through the normal signing flow. The
 sidebar badge on Hosting is that count, cached ten minutes. The fee only
-lands on the project when the agreement goes out, through the same route
-as every hosting agreement. `contract_docs.HOSTING_LAPSE` is the clause
+lands on the project when the agreement is SIGNED (or downloaded to sign on
+paper), through the same route as every hosting agreement; until then the
+row keeps offering the draft, so check Contracts before drafting a second. `contract_docs.HOSTING_LAPSE` is the clause
 that says what the fee is for and what stops when it stops being paid -
 read into the SOW, the standalone agreement and every fee update from
 that one place, so no two documents can describe it differently.
