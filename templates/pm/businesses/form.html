@@ -88,6 +88,13 @@
                     <input id="b-formed" type="date" name="formed_on"
                            value="{{ business.formed_on.isoformat() if business.formed_on else '' }}" class="{{ field }}">
                 </div>
+                {# A DBA's Assumed Name Certificate runs up to ten years; its
+                   renewal is on the deadline list (deadlines.py). #}
+                <div x-show="parent" x-cloak>
+                    <label for="b-assumed" class="{{ lbl }}">Assumed name filed on</label>
+                    <input id="b-assumed" type="date" name="assumed_name_filed_on"
+                           value="{{ business.assumed_name_filed_on.isoformat() if business.assumed_name_filed_on else '' }}" class="{{ field }}">
+                </div>
                 <div>
                     <label for="b-launched" class="{{ lbl }}">Launched on</label>
                     <input id="b-launched" type="date" name="launched_on"

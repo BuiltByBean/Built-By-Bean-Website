@@ -37,6 +37,7 @@
     'due': ('Due', 'bg-amber-500/15 text-amber-300'),
     'open': ('Building up', 'bg-surface-800 text-surface-300'),
     'filed': ('Filed', 'bg-emerald-900/30 text-emerald-400'),
+    'drafted': ('Needs reference', 'bg-amber-500/15 text-amber-300'),
 } %}
 {% set b = business %}
 
@@ -309,7 +310,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-2 min-w-0">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Sales tax</h3>
-                {% if b.sales_tax_first_sale %}
+                {% if owed_from %}
                 <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-sky-900/30 text-sky-300">{{ b.sales_tax_frequency | capitalize }}</span>
                 {% else %}
                 <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-surface-800 text-surface-300">No taxable sales yet</span>
@@ -355,9 +356,17 @@
                 <span class="text-xs whitespace-nowrap {{ 'text-surface-500' if loc.closed_on else 'text-emerald-400' }}">
                     {% if loc.closed_on %}Closed {{ loc.closed_on | format_date }}{% if not loc.closure_filed %}, not told the state{% endif %}
                     {% else %}Since {{ loc.opened_on | format_date }}{% endif %}</span>
+                <span class="w-full text-xs text-surface-400 break-words">
+                    {{ '%g' | format(6.25 + (loc.local_rate or 0)) }}% ({{ '%g' | format(loc.local_rate or 0) }}% local,
+                    {{ loc.rate_source or 'not checked yet' }}){% if loc.rate_note %} &middot; <span class="text-amber-300">{{ loc.rate_note }}</span>{% endif %}
+                    {% if loc.permit_listed == false and not loc.closed_on %} &middot; <span class="text-amber-300">not on the permit list</span>{% endif %}</span>
             </div>
             {% endfor %}
         </div>
+        {% endif %}
+
+        {% if not owed_from %}
+        <p class="text-sm text-amber-300 break-words">No first sale, permit date, filed return or location date on file, so no returns are counted.</p>
         {% endif %}
 
         <div class="flex justify-end">
@@ -366,6 +375,8 @@
                 Every return</a>
         </div>
     </div>
+
+    {% include "pm/businesses/_state_record.html" %}
     {% endif %}
 </div>
 {% endblock %}

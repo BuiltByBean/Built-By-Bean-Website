@@ -1,0 +1,104 @@
+{% extends "pm/base.html" %}
+
+{#
+  Every date the state or the IRS holds Michael to, soonest first
+  (deadlines.build). A row on Needs attention is the same row from ten days
+  out. Done is proved by a record where one exists (a filed return, the
+  Comptroller's report year, an IRS line on the bank) and pressed where none
+  does.
+#}
+
+{% set PILL = {
+    'now': ('Reference', 'bg-amber-500/15 text-amber-300'),
+    'late': ('Late', 'bg-red-900/30 text-red-300'),
+    'soon': ('Soon', 'bg-amber-500/15 text-amber-300'),
+    'upcoming': ('Coming up', 'bg-surface-800 text-surface-300'),
+    'no_date': ('No date', 'bg-surface-800 text-amber-300'),
+    'done': ('Done', 'bg-emerald-900/30 text-emerald-400'),
+} %}
+{% set press = 'inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors' %}
+{% set quiet = 'border border-white/15 text-surface-200 hover:bg-surface-700' %}
+
+{% block title %}Deadlines - Built By Bean{% endblock %}
+{% block page_title %}Taxes{% endblock %}
+{% block page_subtitle %}Deadlines{% endblock %}
+
+{% macro deadline_row(d) %}
+{% set pill = PILL[d.status] %}
+<div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-white/10 min-w-0" data-deadline="{{ d.key }}">
+    <div class="min-w-0 flex-1 space-y-0.5">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ pill[1] }}">{{ pill[0] }}</span>
+            <span class="text-sm font-semibold text-white break-words min-w-0">{{ d.title }}</span>
+        </div>
+        <p class="text-xs text-surface-400 break-words">
+            {{ d.business.label if d.business else 'You' }}
+            {%- if d.status != 'no_date' %} &middot; due {{ d.due | format_date }}{% endif %}
+            {%- if d.note %} &middot; {{ d.note }}{% endif %}</p>
+        {% if d.done %}<p class="text-xs text-emerald-400 break-words">{{ d.done }}</p>{% endif %}
+    </div>
+    <div class="shrink-0 flex items-center gap-2 ml-auto">
+        {% if d.url %}<a href="{{ d.url }}" class="{{ press }} {{ quiet }}">Open</a>{% endif %}
+        {% if d.proof == 'press' and d.status != 'no_date' %}
+        <form method="POST" action="{{ url_for('taxes_deadlines.undo' if d.done else 'taxes_deadlines.done') }}">
+            <input type="hidden" name="key" value="{{ d.key }}">
+            <button type="submit" class="{{ press }} {{ quiet if d.done else 'btn-brand text-white font-semibold' }}">
+                {{ 'Undo' if d.done else 'Done' }}</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="space-y-4 stagger-in">
+    {% with here = 'deadlines' %}{% include "pm/taxes/_sales_tabs.html" %}{% endwith %}
+
+    {% for b in standing %}
+    <div class="glass-card p-4 sm:p-5 min-w-0 bg-red-500/10 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-red-200 break-words min-w-0 flex-1">
+            <span class="font-semibold text-white">{{ b.label }}</span>: its right to transact business in Texas is {{ b.franchise_status | lower }}.</p>
+        <a href="{{ url_for('businesses.detail', id=b.id) }}#state" class="{{ press }} btn-brand text-white font-semibold">Open it</a>
+    </div>
+    {% endfor %}
+
+    {% if flags %}
+    <div class="glass-card p-4 sm:p-5 min-w-0 space-y-2">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Changed in the state's records</h3>
+        {% for f in flags %}
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-white/10 min-w-0">
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-white break-words">{{ f.title }}</p>
+                <p class="text-xs text-surface-400 break-words">
+                    {% if f.old_value %}<span class="line-through">{{ f.old_value }}</span> {% endif %}{{ f.new_value }}
+                    &middot; {{ f.created_at | format_date }}</p>
+            </div>
+            <form method="POST" action="{{ url_for('taxes_deadlines.flag_seen', id=f.id) }}" class="ml-auto">
+                <button type="submit" class="{{ press }} btn-brand text-white font-semibold">Seen</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% set groups = [
+        ('Needs you', rows | selectattr('status', 'in', ['now', 'late', 'soon']) | list),
+        ('Coming up', rows | selectattr('status', 'equalto', 'upcoming') | list),
+        ('Not on file', rows | selectattr('status', 'equalto', 'no_date') | list),
+        ('Done', rows | selectattr('status', 'equalto', 'done') | list),
+    ] %}
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        {% for title, list in groups if list %}
+        <div class="glass-card p-4 sm:p-5 min-w-0 space-y-2">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">{{ title }}</h3>
+            {% for d in list %}{{ deadline_row(d) }}{% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% if not rows %}
+    <div class="glass-card p-8 text-center">
+        <p class="text-surface-300">No deadlines on file.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

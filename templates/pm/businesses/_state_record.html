@@ -1,0 +1,63 @@
+{#
+  What the State of Texas says about this company, read nightly from the
+  Comptroller's franchise tax search and its list of active sales tax permits
+  (comptroller.py), with a press to read it now. A number that finds no
+  permit is said in words here and on the returns page.
+#}
+{% set b = business %}
+{% set active = (b.franchise_status or '') | upper == 'ACTIVE' %}
+<div id="state" class="glass-card p-5 sm:p-6 min-w-0 space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">What the state says</h3>
+            {% if b.franchise_status %}
+            <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md {{ 'bg-emerald-900/30 text-emerald-400' if active else 'bg-red-500/25 text-red-200' }}">{{ b.franchise_status | capitalize }}</span>
+            {% endif %}
+        </div>
+        <form method="POST" action="{{ url_for('taxes_deadlines.read_now', id=b.id) }}" class="ml-auto">
+            <button type="submit"
+                    class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">
+                Read now</button>
+        </form>
+    </div>
+
+    {% if b.franchise_status and not active %}
+    <p class="text-sm text-red-200 break-words">Its right to transact business in Texas is {{ b.franchise_status | lower }}. It cannot trade until that is put right with the Comptroller.</p>
+    {% endif %}
+    {% if b.permit_status == 'none' %}
+    <p class="text-sm text-amber-300 break-words">The state's list of active sales tax permits has nothing under {{ b.texas_taxpayer_number }}.</p>
+    {% endif %}
+    {% if b.comptroller_note %}
+    <p class="text-sm text-amber-300 break-words">{{ b.comptroller_note }}</p>
+    {% endif %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+        {% for label, value in [
+            ('Registered agent', b.registered_agent),
+            ('Registered office', b.registered_office),
+            ('Franchise tax mailing address', b.mailing_address),
+            ('EIN', b.ein),
+            ('Last franchise report on file', b.franchise_report_year),
+            ('Secretary of State', (b.sos_status or '') | capitalize),
+            ('Sales tax permit', {'found': 'On the active list', 'none': 'Not found'}.get(b.permit_status, '')),
+        ] %}
+        <div class="min-w-0 p-3 rounded-xl bg-surface-800/40">
+            <p class="text-xs text-surface-400">{{ label }}</p>
+            {% if value %}
+            <p class="text-sm font-semibold break-words {{ 'text-amber-300' if value == 'Not found' else 'text-white' }}">{{ value }}</p>
+            {% else %}
+            <p class="text-sm font-medium text-surface-400">Not read yet</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-xs text-surface-400">
+            {%- if b.comptroller_checked_at %}Read {{ b.comptroller_checked_at | format_date }}{% else %}Not read yet{% endif -%}
+        </p>
+        <a href="{{ url_for('taxes_deadlines.index') }}"
+           class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:bg-surface-700 transition-colors">
+            Deadlines</a>
+    </div>
+</div>

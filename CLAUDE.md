@@ -954,6 +954,79 @@ paid three times the tax. And a quarter with no sales is still a return to
 file. `/admin/taxes/sales/guide` is the whole routine in Michael's words,
 including how a new business gets registered and linked.
 
+## What the state says, and one deadline list
+
+Audit items 8 and 12 and faults 4 and 5 (2026-11-04). `comptroller.py` runs
+nightly as the "Comptroller" step, after the bank, and reads three free public
+sources with no key:
+
+- **The franchise tax search** (`comptroller.texas.gov/data-search/franchise-tax/<n>`,
+  JSON). Standing (`rightToTransactTX`), SOS status, registered agent and
+  office, mailing address and EIN are the STATE'S fields: they are kept on
+  `Business` and a change writes a `ComptrollerFlag`, shown once on Needs
+  attention with a Seen press. The typed fields (SOS file number, formed on)
+  are filled only when empty, and a difference is flagged, never overwritten.
+  `reportYear` becomes `franchise_report_year`, which is what marks a May 15
+  report done. Standing that is not ACTIVE is a red row that cannot be
+  dismissed while it lasts.
+- **The permit list** (`jrea-zgmq`). Fills NAICS, permit date and first sale
+  when empty (1961-09-01 is the file's "unknown"), matches each outlet to a
+  location by its five digit number or, for a location typed before its
+  number was known, by town, makes one it has never seen, and flags an outlet
+  that drops off. A number with no rows sets `permit_status = "none"` and the
+  business page and the returns page say so in words. Built by Bean's
+  32093304155 found none on 2026-11-04 while it was filing returns; Michael is
+  asking the Comptroller why.
+- **The quarterly city rate workbook** (`city-rates.xlsx`), read without a
+  library (`read_xlsx`). Its sheet name is the only place it names its quarter,
+  so a file still saying last quarter writes nothing and is tried tomorrow. A
+  town with more than one rate is not guessed, a location outside city limits
+  is left, a rate changed by hand on the form becomes `rate_source = "typed"`
+  and is never overwritten, and a change to one the file set is flagged.
+
+**A Comptroller charge drafts its return** (`draft_filings`). A bank or
+statement line to the state from the last 120 days, with no return recorded
+within the window `books_service.filing_payment` uses, is matched to the
+newest unfiled period ended before it whose tax plus estimated penalty (or
+less the discount) fits the charge within a card fee, plus interest room when
+late; Built by Bean's real Q2 return ($436.79 off the card for $339.90 of tax)
+drafts as Apr-Jun 2026. The draft carries everything but the reference number,
+reads as "drafted" (`sales_tax.status_of`), asks for its reference on Needs
+attention, and opens on its form. A draft is built with `business=`, not
+`business_id=`, or a second charge the same night drafts the same period
+(the test caught that). Taking a draft off writes `DeadlineDone("nodraft:<line>")`
+so the next night does not draft it again. `search_mail` searches every
+receipt mailbox for Comptroller mail and fills references when one states
+them near the date and amount; nobody had seen whether eSystems mails a
+confirmation when this was written, so the night's note says how many it found.
+
+**Periods** (fault 5). A period is `(year, n)`: n 1 to 4 a quarter, 101 to 112
+a month, 10 the year, all in `SalesTaxFiling.quarter` and the hub's `quarter`,
+so every quarterly row, URL and code is unchanged. A month or year has no
+WebFile code: nobody has filed one and a guessed number on the radio button is
+worse than none. A return filed under one frequency stays listed after the
+Comptroller moves the business to another, and the months inside it are not
+owed again (`business_routes.owed_periods`). **Where counting starts** (fault
+4) is `sales_tax.owed_from`: first sale, else permit registration, else the
+earliest return filed, else the first location; with none the pages say "no
+returns are counted" rather than drawing an empty list.
+
+**`deadlines.py`** is one list, `/admin/taxes/deadlines` (CEO only, a tab on
+the sales tax pages): sales tax by period, the franchise report and PIR every
+May 15 from the year after formation, a 1065 and K-1s for a company with more
+than one `BusinessOwner`, the 1040 and Schedule C, the four estimates, and a
+DBA's assumed name certificate ten years from `assumed_name_filed_on` (due the
+day before it lapses, never rolled past it). Every date rolls with
+`sales_tax.working_day`, the Taxes page's estimate dates included. A record
+proves done where one exists (a filing, the report year, an IRS line on any
+bank or statement within 30 days of an estimate, each line used once);
+otherwise Done and Undo write `DeadlineDone`. Federal and estimate dates start
+at `LIST_STARTED` (2026-11-01), because the board knew none of them before and
+every past one would read as late. Needs attention carries a deadline from
+`LEAD_DAYS` (10) out and once late, for the CEO only, cached ten minutes for
+the badge. `tools/test_comptroller.py` (`--live` asks the state),
+`tools/test_deadlines.py`, `tools/test_tax_periods.py`.
+
 ## Tickets travel both ways
 
 Tickets are PUSHED here by each client app's outbox, and `hub.fetch` is

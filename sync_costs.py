@@ -110,6 +110,10 @@ def _sweep(night):
     # Weekly, though asked every night: the lead list from the public record,
     # then websites and site reads for the new rows only. No model.
     run("leads_refresh", "leads refresh")
+    # What the state says: franchise standing and report year, the permit
+    # list, the quarterly local rates, and a return drafted from each
+    # Comptroller charge. After the bank, so tonight's charges are in.
+    run("comptroller", "Comptroller")
     # Last, because it reads what the sweep filed and what the audit found.
     # Off unless CURATOR_ENABLED (it is the paid step).
     run("curate_practices", "curator")

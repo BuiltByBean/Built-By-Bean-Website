@@ -1,0 +1,77 @@
+{#
+  The CEO's tax rows on Needs attention (deadlines.attention_rows): a company
+  whose right to transact is not ACTIVE, which cannot be dismissed while it
+  lasts; a change in the state's records, seen once; and every deadline ten
+  days out or late. `tax` is empty for anyone else.
+#}
+{% if tax %}
+{% set pill = 'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider shrink-0' %}
+{% set press = 'min-h-[44px] inline-flex items-center px-4 text-sm font-semibold rounded-xl transition-all' %}
+
+{% for b in tax.standing %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 bg-red-500/10" data-standing-row>
+    <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-medium text-white truncate max-w-full">{{ b.label }}</span>
+            <span class="{{ pill }} bg-red-500/25 text-red-200">{{ b.franchise_status }}</span>
+        </div>
+        <p class="text-sm text-red-200 break-words">Its right to transact business in Texas is not active</p>
+    </div>
+    <div class="shrink-0 flex items-center gap-2">
+        <a href="{{ url_for('businesses.detail', id=b.id) }}" class="{{ press }} btn-brand">Open it</a>
+    </div>
+</div>
+{% endfor %}
+
+{% for f in tax.flags %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3" data-flag-row>
+    <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-medium text-white break-words min-w-0">{{ f.title }}</span>
+            <span class="{{ pill }} bg-sky-500/15 text-sky-300">State record</span>
+        </div>
+        {% if f.old_value or f.new_value %}
+        <p class="text-sm text-surface-200 break-words">
+            {% if f.old_value %}<span class="text-surface-400 line-through">{{ f.old_value }}</span> {% endif %}{{ f.new_value }}</p>
+        {% endif %}
+    </div>
+    <div class="shrink-0 flex items-center gap-2">
+        <a href="{{ url_for('businesses.detail', id=f.business_id) }}"
+           class="{{ press }} border border-white/10 text-surface-200 hover:border-brand-500/40">Open</a>
+        <form method="POST" action="{{ url_for('taxes_deadlines.flag_seen', id=f.id) }}">
+            <input type="hidden" name="next" value="{{ here }}">
+            <button type="submit" class="{{ press }} btn-brand">Seen</button>
+        </form>
+    </div>
+</div>
+{% endfor %}
+
+{% for d in tax.deadlines %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3" data-deadline-row="{{ d.key }}">
+    <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-medium text-white break-words min-w-0">{{ d.business.label if d.business else 'You' }}</span>
+            {% if d.status == 'late' %}<span class="{{ pill }} bg-red-500/15 text-red-300">Late</span>
+            {% elif d.status == 'now' %}<span class="{{ pill }} bg-amber-500/15 text-amber-300">Reference</span>
+            {% else %}<span class="{{ pill }} bg-amber-500/15 text-amber-300">Due {{ d.due | format_date }}</span>{% endif %}
+        </div>
+        <p class="text-sm text-surface-200 break-words">{{ d.title }}</p>
+        <p class="text-xs text-surface-400">
+            {%- if d.note %}{{ d.note }}{% else %}Due {{ d.due | format_date }}{% endif -%}
+        </p>
+    </div>
+    <div class="shrink-0 flex items-center gap-2">
+        {% if d.url %}
+        <a href="{{ d.url }}" class="{{ press }} {{ 'btn-brand' if d.proof == 'record' else 'border border-white/10 text-surface-200 hover:border-brand-500/40' }}">Open</a>
+        {% endif %}
+        {% if d.proof == 'press' %}
+        <form method="POST" action="{{ url_for('taxes_deadlines.done') }}">
+            <input type="hidden" name="key" value="{{ d.key }}">
+            <input type="hidden" name="next" value="{{ here }}">
+            <button type="submit" class="{{ press }} btn-brand">Done</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endif %}

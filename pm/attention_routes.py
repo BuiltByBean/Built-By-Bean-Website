@@ -134,6 +134,33 @@ def _night_problem():
     return None
 
 
+def _is_ceo():
+    from flask_login import current_user
+    return bool(getattr(current_user, "is_authenticated", False)
+                and getattr(current_user, "is_ceo", False))
+
+
+def _deadline_count(force=False):
+    if not _is_ceo():
+        return 0
+    import deadlines
+    return deadlines.attention_count(force)
+
+
+def _deadline_rows():
+    """{standing, flags, deadlines} for the page, or empty for anyone but
+    the CEO. A table that does not exist yet reads as nothing."""
+    empty = {"standing": [], "flags": [], "deadlines": []}
+    if not _is_ceo():
+        return empty
+    import deadlines
+    try:
+        return deadlines.attention_rows()
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        return empty
+
+
 def attention_counts():
     """The sidebar's badges.
 
@@ -148,9 +175,12 @@ def attention_counts():
     # has anywhere else to be answered. Hosting rides along for its own badge
     # and is not a row here.
     night = 1 if _night_problem() else 0
+    # Tax deadlines, the state's flags and a company's standing: the CEO's
+    # alone, like the returns pages they link to (deadlines.py).
+    tax = _deadline_count()
     return {"messages": messages, "bills": bills, "night": night,
-            "hosting": increases_due_count(),
-            "total": messages + bills + night}
+            "hosting": increases_due_count(), "deadlines": tax,
+            "total": messages + bills + night + tax}
 
 
 @attention_bp.route("/")
@@ -164,9 +194,11 @@ def index():
     # something the reader may have just entered.
     bills = _bills_to_enter(force=True)
     night = _night_problem()
+    tax = _deadline_rows()
+    tax_total = len(tax["standing"]) + len(tax["flags"]) + len(tax["deadlines"])
     return render_template("pm/attention/index.html", messages=messages,
-                           bills=bills, night=night,
-                           total=len(messages) + len(bills) + (1 if night else 0),
+                           bills=bills, night=night, tax=tax,
+                           total=len(messages) + len(bills) + (1 if night else 0) + tax_total,
                            here=url_for("attention.index"))
 
 

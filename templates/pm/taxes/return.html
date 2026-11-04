@@ -21,6 +21,7 @@
     'due': ('Due', 'bg-amber-500/15 text-amber-300'),
     'open': ('Building up', 'bg-surface-800 text-surface-300'),
     'filed': ('Filed', 'bg-emerald-900/30 text-emerald-400'),
+    'drafted': ('Needs reference', 'bg-amber-500/15 text-amber-300'),
 } %}
 {% set pill = PILL[status] %}
 {% set field = 'w-full min-w-0 input-ring px-4 py-3 text-sm bg-surface-800 text-white rounded-xl placeholder-surface-500' %}
@@ -319,11 +320,13 @@
     {% if status != 'open' or filing %}
     {# ── Record it: off the confirmation page, never worked out ── #}
     {% set f = filing %}
-    <div x-data="{ open: {{ 'false' if filing else 'true' }} }" class="glass-card min-w-0 relative z-30">
+    {# A return the board drafted from the bank charge opens on its form:
+       the reference number is the one thing left to type. #}
+    <div x-data="{ open: {{ 'false' if filing and not filing.is_draft else 'true' }} }" class="glass-card min-w-0 relative z-30">
         <button type="button" @click="open = !open" :aria-expanded="open"
                 class="w-full min-h-[44px] p-4 sm:p-5 flex items-center justify-between gap-3 text-left">
             <span class="text-sm font-semibold uppercase tracking-wider text-surface-400">
-                {{ 'Correct the record' if filing else 'Record it' }}</span>
+                {{ 'Type the reference number' if filing and filing.is_draft else ('Correct the record' if filing else 'Record it') }}</span>
             <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform" :class="open ? 'rotate-180' : ''"
                  fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>

@@ -303,22 +303,89 @@ def quarter_of(day):
     return day.year, (day.month - 1) // 3 + 1
 
 
+# A period is (year, n), and n says which kind it is, so a row written under
+# one frequency still reads right after the Comptroller moves the business to
+# another (it does so by letter, once state tax passes $1,500 a quarter):
+#
+#   1 to 4      a quarter, as every return was until 2026-11-04
+#   101 to 112  a month (100 + the month)
+#   10          the whole year
+#
+# `SalesTaxFiling.quarter` and the hub's "quarter" carry n. Every quarterly
+# row and every URL that existed is unchanged, which is why it is encoded in
+# the one column rather than split into two (audit fault 5: the form offered
+# monthly and yearly and every function here was quarterly only).
+MONTH_BASE = 100
+YEAR_PERIOD = 10
+FREQUENCIES = ("quarterly", "monthly", "yearly")
+
+
+def valid_period(n):
+    return n in (1, 2, 3, 4, YEAR_PERIOD) or MONTH_BASE + 1 <= n <= MONTH_BASE + 12
+
+
+def period_of(day, frequency="quarterly"):
+    """The (year, n) a day falls in, for a business filing at `frequency`."""
+    if frequency == "monthly":
+        return day.year, MONTH_BASE + day.month
+    if frequency == "yearly":
+        return day.year, YEAR_PERIOD
+    return quarter_of(day)
+
+
+def next_period(year, n):
+    if n == YEAR_PERIOD:
+        return year + 1, YEAR_PERIOD
+    if n > MONTH_BASE:
+        return (year + 1, MONTH_BASE + 1) if n == MONTH_BASE + 12 else (year, n + 1)
+    return (year + 1, 1) if n == 4 else (year, n + 1)
+
+
+def previous_period(year, n):
+    if n == YEAR_PERIOD:
+        return year - 1, YEAR_PERIOD
+    if n > MONTH_BASE:
+        return (year - 1, MONTH_BASE + 12) if n == MONTH_BASE + 1 else (year, n - 1)
+    return (year - 1, 4) if n == 1 else (year, n - 1)
+
+
 def period_code(year, quarter):
     """WebFile's name for a quarter: the year's last two digits, then the
     quarter. 262 is April to June 2026, and it is the number on the radio
-    button that has to be picked."""
-    return f"{year % 100:02d}{quarter}"
+    button that has to be picked.
+
+    A month or a year has no code here: nobody has filed one yet, the
+    Comptroller's pages do not print the format, and a wrong number on the
+    radio button is worse than none. The label names the period instead."""
+    if quarter in (1, 2, 3, 4):
+        return f"{year % 100:02d}{quarter}"
+    return ""
 
 
 def period_label(year, quarter):
+    if quarter == YEAR_PERIOD:
+        return f"Jan–Dec {year}"
+    if quarter > MONTH_BASE:
+        return f"{_MONTHS[quarter - MONTH_BASE - 1]} {year}"
     first = 3 * quarter - 3
     return f"{_MONTHS[first]}–{_MONTHS[first + 2]} {year}"
 
 
 def quarter_bounds(year, quarter):
+    """First and last day of any period (the name is from when every period
+    was a quarter)."""
+    if quarter == YEAR_PERIOD:
+        return date(year, 1, 1), date(year, 12, 31)
+    if quarter > MONTH_BASE:
+        month = quarter - MONTH_BASE
+        nxt = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        return date(year, month, 1), nxt - timedelta(days=1)
     start = date(year, 3 * quarter - 2, 1)
     nxt = date(year + 1, 1, 1) if quarter == 4 else date(year, 3 * quarter + 1, 1)
     return start, nxt - timedelta(days=1)
+
+
+period_bounds = quarter_bounds
 
 
 def _nth_weekday(year, month, weekday, n):
@@ -359,34 +426,65 @@ def federal_holidays(year):
     return {d for d in days if d.year == year}
 
 
-def due_date(year, quarter):
-    """The 20th of the month after the quarter, moved to a working day.
-
-    A due date on a Saturday, a Sunday or a federal legal holiday moves to
-    the next working day, as many days on as it takes: Q4 2029 is due on
-    Sunday 2030-01-20, then MLK Day, so Tuesday the 22nd.
-    """
-    _start, end = quarter_bounds(year, quarter)
-    day = date(end.year + (1 if end.month == 12 else 0), end.month % 12 + 1, 20)
+def working_day(day):
+    """`day`, or the next day that is not a Saturday, a Sunday or a federal
+    legal holiday, as many days on as it takes. Every Texas and federal due
+    date on the board moves this way."""
     while day.weekday() >= 5 or day in federal_holidays(day.year):
         day += timedelta(days=1)
     return day
 
 
-def periods_owed(first_sale, today):
-    """Every quarter from the first taxable sale through today's.
+def due_date(year, quarter):
+    """The 20th of the month after the period, moved to a working day.
 
-    Today's quarter is included while it is still running, so the page can
+    A due date on a Saturday, a Sunday or a federal legal holiday moves to
+    the next working day, as many days on as it takes: Q4 2029 is due on
+    Sunday 2030-01-20, then MLK Day, so Tuesday the 22nd. A month or a year
+    is due the same way: the 20th of the month after it ends.
+    """
+    _start, end = quarter_bounds(year, quarter)
+    return working_day(date(end.year + (1 if end.month == 12 else 0), end.month % 12 + 1, 20))
+
+
+def owed_from(first_sale, registered_on=None, filed=(), opened=()):
+    """The day returns are counted from, and what it was read off.
+
+    The first taxable sale when it is on file. Without it, the permit's
+    registration (a permit holder owes a return every period from then,
+    sales or not), then the earliest period already filed, then the first
+    location's opening. It used to be the first sale or nothing, so a blank
+    field hid every return the business owed (audit fault 4). (None, None)
+    only when the board knows none of them, and the pages say so.
+    """
+    if first_sale:
+        return first_sale, "first sale"
+    if registered_on:
+        return registered_on, "permit registered"
+    days = [quarter_bounds(y, n)[0] for y, n in filed if valid_period(n)]
+    if days:
+        return min(days), "first return filed"
+    days = [d for d in opened if d]
+    if days:
+        return min(days), "first location opened"
+    return None, None
+
+
+def periods_owed(first_sale, today, frequency="quarterly"):
+    """Every period from the first taxable sale through today's.
+
+    Today's period is included while it is still running, so the page can
     show what is building up before it is due.
     """
     if not first_sale:
         return []
-    year, q = quarter_of(first_sale)
-    end = quarter_of(today)
+    frequency = frequency if frequency in FREQUENCIES else "quarterly"
+    period = period_of(first_sale, frequency)
+    end = period_of(today, frequency)
     out = []
-    while (year, q) <= end:
-        out.append((year, q))
-        year, q = (year + 1, 1) if q == 4 else (year, q + 1)
+    while quarter_bounds(*period)[0] <= quarter_bounds(*end)[0]:
+        out.append(period)
+        period = next_period(*period)
     return out
 
 
@@ -411,9 +509,13 @@ def charges_if_paid_on(tax, due, on):
 
 
 def status_of(year, quarter, filing, today):
-    """One word for where a period stands: filed, late, due or open."""
+    """One word for where a period stands: filed, drafted, late, due or open.
+
+    Drafted is a return the board wrote from the Comptroller's charge on the
+    bank (comptroller.draft_filings): the money has gone, so it is not late,
+    but it has no reference number yet, which is the proof it was filed."""
     if filing is not None:
-        return "filed"
+        return "filed" if str(getattr(filing, "reference_number", "filed") or "").strip() else "drafted"
     _start, end = quarter_bounds(year, quarter)
     if today <= end:
         return "open"

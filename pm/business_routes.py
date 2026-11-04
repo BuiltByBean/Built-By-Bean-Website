@@ -237,13 +237,43 @@ def return_for(business, year, quarter, sales, share):
     return sales_tax.build_return(business.location_on, mine, share, year=year, quarter=quarter)
 
 
+def owed_start(business):
+    """(day, what it was read off) that returns are counted from, or
+    (None, None). sales_tax.owed_from says why it is not only the first sale."""
+    return sales_tax.owed_from(
+        business.sales_tax_first_sale, business.sales_tax_registered_on,
+        [(f.year, f.quarter) for f in business.filings],
+        [loc.opened_on for loc in business.locations])
+
+
+def owed_periods(business, today):
+    """Every (year, n) owed, oldest first, at the business's frequency.
+
+    A period already filed under another frequency (the Comptroller moved the
+    business by letter) is kept in the list, so a recorded return never
+    vanishes from the page because the frequency field changed."""
+    start, _why = owed_start(business)
+    owed = sales_tax.periods_owed(start, today, business.sales_tax_frequency)
+    filed = [(f.year, f.quarter) for f in business.filings if sales_tax.valid_period(f.quarter)]
+    spans = [sales_tax.quarter_bounds(*p) for p in filed]
+
+    def covered(p):
+        # A month inside a quarter already filed is not owed again.
+        s, e = sales_tax.quarter_bounds(*p)
+        return any(a <= s and e <= b for a, b in spans)
+
+    owed = [p for p in owed if p in filed or not covered(p)]
+    owed += [p for p in filed if p not in owed]
+    return sorted(set(owed), key=lambda p: (sales_tax.quarter_bounds(*p)[0], -p[1]))
+
+
 def periods_for(business, today, board=None):
     """Every period this business has owed a return for, newest first.
 
     One fetch for the whole range, then each period sliced out of it, so an
     app is asked once per page rather than once per quarter.
     """
-    owed = sales_tax.periods_owed(business.sales_tax_first_sale, today)
+    owed = owed_periods(business, today)
     if not owed:
         return [], None
     first_start, _ = sales_tax.quarter_bounds(*owed[0])
@@ -345,7 +375,7 @@ def detail(id):
         # Its tax is its parent's: no numbers, no permit, no returns here.
         return render_template(
             "pm/businesses/detail.html", business=business,
-            revenue=lifetime_revenue(business, ask=True), next=None, late=0,
+            revenue=lifetime_revenue(business, ask=True), next=None, late=0, owed_from=None,
             esystems_url=ESYSTEMS_URL, map_counts=_map_for(business)["counts"],
             **_papers(business))
     today = date.today()
@@ -355,12 +385,13 @@ def detail(id):
     # time does that. The revenue may ask, briefly, when its answer is old.
     periods, _note = (periods_for(business, today, board) if business.sales_source != "hub"
                       else _periods_without_figures(business, today))
-    urgent = next((p for p in periods if p["status"] in ("late", "due")), None)
+    urgent = next((p for p in periods if p["status"] in ("late", "due", "drafted")), None)
     return render_template(
         "pm/businesses/detail.html", business=business,
         revenue=lifetime_revenue(business, ask=True),
         next=urgent or next((p for p in periods if p["status"] == "open"), None),
         late=sum(1 for p in periods if p["status"] == "late"),
+        owed_from=owed_start(business)[0],
         esystems_url=ESYSTEMS_URL, map_counts=_map_for(business)["counts"],
             **_papers(business))
 
@@ -513,7 +544,7 @@ def _logo_apps():
 
 def _periods_without_figures(business, today):
     out = []
-    for year, quarter in reversed(sales_tax.periods_owed(business.sales_tax_first_sale, today)):
+    for year, quarter in reversed(owed_periods(business, today)):
         filing = business.filing_for(year, quarter)
         out.append({"year": year, "quarter": quarter,
                     "code": sales_tax.period_code(year, quarter),
@@ -572,6 +603,8 @@ def _fill(business):
     business.conceived_on = _date("conceived_on")
     business.formed_on = _date("formed_on")
     business.launched_on = _date("launched_on")
+    if "assumed_name_filed_on" in request.form:
+        business.assumed_name_filed_on = _date("assumed_name_filed_on")
     if business.conceived_on and business.launched_on and business.conceived_on > business.launched_on:
         return "The idea has to come before the launch."
     business.franchise_tax_webfile = _webfile("franchise_tax_webfile")
@@ -654,7 +687,13 @@ def _fill_location(loc):
     loc.address = _text("address", 300)
     loc.county = _text("county", 60)
     rate = _money(request.form.get("local_rate"))
-    loc.local_rate = min(10.0, max(0.0, rate)) if rate is not None else 2.0
+    rate = min(10.0, max(0.0, rate)) if rate is not None else 2.0
+    # A rate somebody changed by hand is theirs from then on (a special
+    # district the city file cannot place, say): the nightly read only sets
+    # rates nobody typed (comptroller.read_rates).
+    if loc.local_rate is None or abs(rate - loc.local_rate) > 0.00001:
+        loc.rate_source = "typed"
+    loc.local_rate = rate
     loc.opened_on = _date("opened_on")
     loc.closed_on = _date("closed_on")
     if loc.opened_on and loc.closed_on and loc.closed_on < loc.opened_on:
@@ -721,7 +760,8 @@ def returns_index():
         if b.sales_source == "board" and board is None:
             board = _board_rows()
         periods, note = periods_for(b, today, board)
-        groups.append({"business": b, "periods": periods, "note": note})
+        groups.append({"business": b, "periods": periods, "note": note,
+                       "owed_from": owed_start(b)[0]})
     return render_template("pm/taxes/returns.html", groups=groups, today=today)
 
 
@@ -732,7 +772,7 @@ def _business_by_slug(slug):
 @business_bp.route("/admin/taxes/sales/returns/<slug>/<int:year>/q<int:quarter>")
 @ceo_required
 def return_page(slug, year, quarter):
-    if quarter not in (1, 2, 3, 4):
+    if not sales_tax.valid_period(quarter):
         abort(404)
     business = _business_by_slug(slug)
     today = date.today()
@@ -942,6 +982,14 @@ def filing_delete(id):
         if os.path.exists(path):
             os.remove(path)
     books_service.unsettle_sales_tax(filing)
+    if filing.drafted_from_line_id:
+        # A draft taken off is a "no" to that charge: the nightly read must
+        # not draft it again (comptroller.NO_DRAFT).
+        import comptroller
+        from models import DeadlineDone
+        key = f"{comptroller.NO_DRAFT}{filing.drafted_from_line_id}"
+        if DeadlineDone.query.filter_by(key=key).first() is None:
+            db.session.add(DeadlineDone(key=key, done_by=getattr(current_user, "username", "") or ""))
     db.session.delete(filing)
     db.session.commit()
     flash("Record removed. The return itself is still filed with the state.", "success")
@@ -1131,7 +1179,7 @@ def hub_returns():
             except (KeyError, TypeError, ValueError):
                 continue
     periods = []
-    for year, quarter in reversed(sales_tax.periods_owed(business.sales_tax_first_sale, today)):
+    for year, quarter in reversed(owed_periods(business, today)):
         filing = business.filing_for(year, quarter)
         figures = (return_for(business, year, quarter, sales, business.taxable_share)
                    if sales is not None else None)
@@ -1164,7 +1212,7 @@ def _period_from(data):
         year, quarter = int(data.get("year")), int(data.get("quarter"))
     except (TypeError, ValueError):
         return None
-    return (year, quarter) if 2000 <= year <= 2100 and quarter in (1, 2, 3, 4) else None
+    return (year, quarter) if 2000 <= year <= 2100 and sales_tax.valid_period(quarter) else None
 
 
 @business_bp.route("/api/hub/tax/filings", methods=["POST"])

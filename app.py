@@ -316,6 +316,9 @@ def create_app():
     # ── Every business owned, and the returns each one files ─
     from pm.business_routes import business_bp
     app.register_blueprint(business_bp)
+    # The deadline list and what the state's own records say (comptroller.py).
+    from pm.deadline_routes import deadline_bp
+    app.register_blueprint(deadline_bp)
 
     # ── Signatures (SignaDoc) ───────────────────────────────
     from pm.contract_routes import contracts_bp, send_generated, start_signature_watcher

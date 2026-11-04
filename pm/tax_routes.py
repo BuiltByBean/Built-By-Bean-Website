@@ -21,9 +21,9 @@ from tax_engine import FILING_STATUSES, compute, table_for
 
 tax_bp = Blueprint("taxes", __name__, url_prefix="/admin/taxes")
 
-# US estimated payments fall due the month after each quarter closes, and Q4's
-# lands in the following January.
-_QUARTER_DUE = {1: (4, 15), 2: (6, 15), 3: (9, 15), 4: (1, 15)}
+# US estimated payments: Apr 15, Jun 15, Sep 15 and the next Jan 15, each
+# moved past a weekend or federal holiday the way a sales tax return's is
+# (deadlines.estimate_due; it did not roll until 2026-11-04).
 
 
 def _quarter(when):
@@ -31,8 +31,8 @@ def _quarter(when):
 
 
 def _due_date(year, quarter):
-    month, day = _QUARTER_DUE[quarter]
-    return date(year + 1 if quarter == 4 else year, month, day)
+    import deadlines
+    return deadlines.estimate_due(year, quarter)
 
 
 def _money(field, current):

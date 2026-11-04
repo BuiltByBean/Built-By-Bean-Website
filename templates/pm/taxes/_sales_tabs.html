@@ -11,5 +11,7 @@
        class="{{ tab }} {{ 'btn-brand' if here == 'returns' else off }}">Returns</a>
     <a href="{{ url_for('businesses.guide') }}" {% if here == 'guide' %}aria-current="page"{% endif %}
        class="{{ tab }} {{ 'btn-brand' if here == 'guide' else off }}">How to file</a>
+    <a href="{{ url_for('taxes_deadlines.index') }}" {% if here == 'deadlines' %}aria-current="page"{% endif %}
+       class="{{ tab }} {{ 'btn-brand' if here == 'deadlines' else off }}">Deadlines</a>
     {% endif %}
 </div>

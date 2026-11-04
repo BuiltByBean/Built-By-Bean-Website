@@ -1849,6 +1849,31 @@ class Business(db.Model):
     sales_source = db.Column(db.String(12), nullable=False, default="manual",
                              server_default="manual")
 
+    # What the Comptroller's franchise tax search says, read nightly
+    # (comptroller.py). Theirs, not typed: a change is flagged
+    # (ComptrollerFlag) and the column takes the new value. `franchise_status`
+    # is rightToTransactTX, ACTIVE or FORFEITED, and anything but ACTIVE is a
+    # loud row on Needs attention. `franchise_report_year` is the last report
+    # on file, so this year's May 15 report is done once it catches up.
+    ein = db.Column(db.String(12), default="")
+    franchise_status = db.Column(db.String(30), default="")
+    sos_status = db.Column(db.String(30), default="")
+    registered_agent = db.Column(db.String(200), default="")
+    registered_office = db.Column(db.String(300), default="")
+    mailing_address = db.Column(db.String(300), default="")
+    franchise_report_year = db.Column(db.Integer, nullable=True)
+    comptroller_checked_at = db.Column(db.DateTime, nullable=True)
+    comptroller_note = db.Column(db.String(300), default="")
+    # Whether the state's list of active sales tax permits (jrea-zgmq) has
+    # this taxpayer number: "found", "none", or blank before the first read.
+    # Built by Bean's number found none on 2026-11-04 while it was filing
+    # returns, so the board says so in words rather than reading as fine.
+    permit_status = db.Column(db.String(10), default="")
+    permit_checked_at = db.Column(db.DateTime, nullable=True)
+    # A DBA's Assumed Name Certificate runs up to ten years from filing, and
+    # the renewal is a deadline (deadlines.py).
+    assumed_name_filed_on = db.Column(db.Date, nullable=True)
+
     # Its own admin site, where a partner in it works.
     admin_url = db.Column(db.String(300), default="")
     # The hub, as Client has it: who it says it is, where it answers, and the
@@ -2015,6 +2040,19 @@ class BusinessLocation(db.Model):
     closed_on = db.Column(db.Date, nullable=True)
     closure_filed = db.Column(db.Boolean, nullable=False, default=False,
                               server_default=db.false())
+    # From the state's permit list (jrea-zgmq), nightly: the outlet's town,
+    # whether it is inside that town's limits (the city rate file only holds
+    # towns), and whether the outlet was on the list at the last read. True
+    # then False is an outlet that dropped off, which is flagged.
+    city = db.Column(db.String(80), default="")
+    inside_city_limits = db.Column(db.Boolean, nullable=True)
+    permit_listed = db.Column(db.Boolean, nullable=True)
+    permit_seen_at = db.Column(db.DateTime, nullable=True)
+    # Where `local_rate` came from: blank is the 2.0 every location started
+    # with, "typed" is a rate changed by hand (left alone from then on), and
+    # "Comptroller Oct26" is that quarter's city rate file (comptroller.read_rates).
+    rate_source = db.Column(db.String(40), default="")
+    rate_note = db.Column(db.String(200), default="")
 
     business = db.relationship("Business", back_populates="locations")
 
@@ -2303,6 +2341,12 @@ class SalesTaxFiling(db.Model):
     locations_json = db.Column(db.Text, default="[]")
     notes = db.Column(db.Text, default="")
     recorded_by = db.Column(db.String(80), default="")
+    # A return the board drafted from the Comptroller's charge on the bank
+    # (comptroller.draft_filings): everything but the reference number, which
+    # is the proof it was filed and is still typed (or read from the mail).
+    drafted_from_line_id = db.Column(db.Integer, db.ForeignKey(
+        "bank_transactions.id", ondelete="SET NULL", name="fk_sales_tax_filings_drafted_from_line_id"),
+        nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -2314,7 +2358,12 @@ class SalesTaxFiling(db.Model):
 
     @property
     def period_code(self):
-        return f"{self.year % 100:02d}{self.quarter}"
+        import sales_tax
+        return sales_tax.period_code(self.year, self.quarter)
+
+    @property
+    def is_draft(self):
+        return not (self.reference_number or "").strip()
 
     @property
     def penalties(self):
@@ -2335,7 +2384,66 @@ class SalesTaxFiling(db.Model):
         return rows if isinstance(rows, list) else []
 
     def __repr__(self):
-        return f"<SalesTaxFiling {self.business_id} {self.period_code}>"
+        return f"<SalesTaxFiling {self.business_id} {self.year} {self.quarter}>"
+
+
+class ComptrollerFlag(db.Model):
+    """Something the state's records say that changed, for Michael to see once.
+
+    Written by the nightly read (comptroller.py): the registered agent or
+    office moved, the standing left ACTIVE, an outlet dropped off the permit
+    list, a location's local rate changed in the quarterly file, or the
+    taxpayer number stopped (or started) finding a permit. One row per thing
+    seen, shown on Needs attention until it is marked seen. Standing that is
+    not ACTIVE is ALSO a row that cannot be dismissed while it lasts
+    (deadlines.attention_rows), because a forfeited company cannot trade.
+    """
+
+    __tablename__ = "comptroller_flags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="CASCADE", name="fk_comptroller_flags_business_id"),
+        nullable=False, index=True)
+    location_id = db.Column(db.Integer, db.ForeignKey(
+        "business_locations.id", ondelete="SET NULL", name="fk_comptroller_flags_location_id"),
+        nullable=True, index=True)
+    # standing, agent, office, mailing, sos, ein, formed, permit, outlet, rate
+    kind = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    old_value = db.Column(db.String(300), default="")
+    new_value = db.Column(db.String(300), default="")
+    seen_at = db.Column(db.DateTime, nullable=True, index=True)
+    seen_by = db.Column(db.String(80), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business", backref=db.backref(
+        "comptroller_flags", cascade="all, delete-orphan", lazy="dynamic"))
+    location = db.relationship("BusinessLocation")
+
+    def __repr__(self):
+        return f"<ComptrollerFlag {self.kind} {self.title}>"
+
+
+class DeadlineDone(db.Model):
+    """A deadline Michael said is done, for the ones no record can prove.
+
+    The deadline list (deadlines.py) proves what it can by itself: a sales
+    tax return by its filing, the franchise report by the Comptroller's
+    report year, an estimate by an IRS line on the bank. A 1065, a 1040 or a
+    DBA renewal leaves nothing the board can read, so its Done press writes
+    one of these, keyed by the deadline's own key, and Undo takes it away.
+    """
+
+    __tablename__ = "deadline_done"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(80), nullable=False, unique=True)
+    done_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    done_by = db.Column(db.String(80), default="")
+
+    def __repr__(self):
+        return f"<DeadlineDone {self.key}>"
 
 
 class BusinessDocument(db.Model):
