@@ -39,6 +39,8 @@ from models import (db, Feature, Playbook, PlaybookStep, Product,
                     ServiceProvider, ServiceMapping, ServiceCostEntry,
                     ProviderInvoice)
 from models import AppLink  # the My Apps tile (register_app)
+from models import AppBlueprint  # a whole app end to end (app_blueprints.py)
+import app_blueprints
 import store_versions_service  # the two store pages' live versions for a phone app
 from pm.apps_routes import _normalise as _normalise_url, _refresh_icon as _refresh_app_icon
 
@@ -289,6 +291,23 @@ def playbook_detail(slug):
                     "runbook": "\n".join(playbook_lines(playbook))})
 
 
+@guidance_bp.route("/blueprints")
+def blueprints():
+    rows = (AppBlueprint.query.filter_by(is_active=True)
+            .order_by(AppBlueprint.sort_order, AppBlueprint.name).all())
+    return jsonify({"blueprints": [
+        {"slug": b.slug, "name": b.name, "one_liner": b.one_liner or ""} for b in rows]})
+
+
+@guidance_bp.route("/blueprints/<slug>")
+def blueprint_detail(slug):
+    row = AppBlueprint.query.filter_by(slug=slug, is_active=True).first()
+    if row is None:
+        return jsonify({"error": "no such blueprint"}), 404
+    return jsonify({"slug": row.slug, "name": row.name,
+                    "blueprint": "\n".join(app_blueprints.blueprint_lines(row))})
+
+
 @guidance_bp.route("/products")
 def products():
     rows = (Product.query.filter_by(is_active=True)
@@ -463,6 +482,10 @@ TEXT_FIELDS = {
                  "access_grant_md", "your_steps_md", "traps_md", "verify_md",
                  "steps"),
     "product": ("name", "summary", "prompt_intro", "playbook_slug"),
+    # A whole app end to end (app_blueprints.py). `stages` is its structured
+    # field, the build order, carried as a list the way a playbook's steps are.
+    "blueprint": ("name", "one_liner", "source_repos", "shape_md", "parts_md",
+                  "connections_md", "tweaks_md", "traps_md", "stages"),
 }
 # No prices through this door, in or out. What something sells for is
 # Michael's, typed on the Products page and the SOW.
@@ -471,7 +494,8 @@ TEXT_FIELDS = {
 # name or a path is replaced whole.
 APPENDABLE = {"summary", "gold_standard_md", "pitfalls_md", "client_only_md",
               "access_grant_md", "your_steps_md", "traps_md", "verify_md",
-              "prompt_intro", "steps"}
+              "prompt_intro", "steps", "shape_md", "parts_md", "connections_md",
+              "tweaks_md", "stages"}
 
 # The most one proposal's text may carry, and past it the door refuses
 # rather than cuts. An append grows a field without limit, so a replace has
@@ -484,7 +508,8 @@ TEXT_MAX = 60000
 
 # Which prose field a bare lesson lands in when the entry already exists.
 LESSON_FIELD = {"feature": "pitfalls_md", "rule": "pitfalls_md",
-                "playbook": "traps_md", "product": "summary"}
+                "playbook": "traps_md", "product": "summary",
+                "blueprint": "traps_md"}
 
 
 def _fields_for(kind):
@@ -498,6 +523,8 @@ def _target(kind, slug):
         return Playbook.query.filter_by(slug=slug).first()
     if kind == "product":
         return Product.query.filter_by(slug=slug).first()
+    if kind == "blueprint":
+        return AppBlueprint.query.filter_by(slug=slug).first()
     return None
 
 
@@ -630,6 +657,39 @@ def _revert_steps(proposal, playbook):
     return True, ""
 
 
+def _apply_stages(proposal, blueprint):
+    """Append to or rewrite a blueprint's build order, snapshotting it."""
+    payload = json.loads(proposal.payload_json or "{}")
+    stages, err, _ = app_blueprints.normalise_stages(payload.get(app_blueprints.STAGE_FIELD))
+    if err:
+        return False, err
+    current = app_blueprints.stages_snapshot(blueprint)
+    if proposal.mode == "append":
+        have = {s["title"].strip().lower() for s in current}
+        fresh = [s for s in stages if s["title"].strip().lower() not in have]
+        if not fresh:
+            return False, "already there"
+        app_blueprints.write_stages(blueprint, fresh, len(current) + 1)
+    else:
+        app_blueprints.clear_stages(blueprint)
+        app_blueprints.write_stages(blueprint, stages, 1)
+    proposal.previous = app_blueprints.stages_text(current)
+    payload["previous_stages"] = current
+    proposal.payload_json = json.dumps(payload)
+    return True, ""
+
+
+def _revert_stages(proposal, blueprint):
+    payload = json.loads(proposal.payload_json or "{}")
+    previous = payload.get("previous_stages")
+    if previous is None:
+        return False, "nothing recorded to put back"
+    app_blueprints.clear_stages(blueprint)
+    if previous:
+        app_blueprints.write_stages(blueprint, previous, 1)
+    return True, ""
+
+
 def _create_from(kind, payload, project):
     """Build the row a `create` proposal describes. Returns (row, error)."""
     name = _cap(payload.get("name") or payload.get("display_name"), 160)
@@ -693,10 +753,29 @@ def _create_from(kind, payload, project):
             prompt_intro=_cap(payload.get("prompt_intro"), 4000),
             sort_order=last + 10,
         )
+    elif kind == "blueprint":
+        last = db.session.query(db.func.max(AppBlueprint.sort_order)).scalar() or 0
+        app_id, business_id = app_blueprints.match_links(name)
+        row = AppBlueprint(
+            slug=slug, name=name,
+            one_liner=_cap(payload.get("one_liner"), 400),
+            source_repos=_cap(payload.get("source_repos"), 400),
+            shape_md=_cap(payload.get("shape_md"), TEXT_MAX),
+            parts_md=_cap(payload.get("parts_md"), TEXT_MAX),
+            connections_md=_cap(payload.get("connections_md"), TEXT_MAX),
+            tweaks_md=_cap(payload.get("tweaks_md"), TEXT_MAX),
+            traps_md=_cap(payload.get("traps_md"), TEXT_MAX),
+            app_id=app_id, business_id=business_id, sort_order=last + 10,
+        )
     else:
         return None, "unknown kind"
     db.session.add(row)
     db.session.flush()
+    if kind == "blueprint" and payload.get(app_blueprints.STAGE_FIELD):
+        stages, err, _ = app_blueprints.normalise_stages(payload.get(app_blueprints.STAGE_FIELD))
+        if err:
+            return None, err
+        app_blueprints.write_stages(row, stages)
     if kind == "playbook" and payload.get("steps"):
         steps, err = normalise_steps(payload.get("steps"))
         if err:
@@ -735,6 +814,8 @@ def apply_proposal(proposal):
         return False, f"{field} is not a field a session may change"
     if field == STEP_FIELD:
         return _apply_steps(proposal, row)
+    if field == app_blueprints.STAGE_FIELD:
+        return _apply_stages(proposal, row)
     old = getattr(row, field)
 
     if proposal.mode == "append":
@@ -774,6 +855,8 @@ def revert_proposal(proposal):
     field = proposal.field
     if field == STEP_FIELD:
         return _revert_steps(proposal, row)
+    if field == app_blueprints.STAGE_FIELD:
+        return _revert_stages(proposal, row)
     if field not in _fields_for(proposal.kind):
         return False, f"{field} is no longer a field here"
     setattr(row, field, proposal.previous or "")
@@ -791,17 +874,22 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
     it, folds it into one, or discards it. Nobody has to press anything.
     """
     if kind not in CatalogueProposal.KIND_LABELS:
-        return {"error": "kind must be feature, rule, playbook or product"}, 400
+        return {"error": "kind must be feature, rule, playbook, product or blueprint"}, 400
     if mode not in ("append", "replace", "create", "retire"):
         return {"error": "mode must be append, replace, create or retire"}, 400
     if not project:
         return {"error": "project is required - a change with no provenance "
                          "is a change nobody can weigh"}, 400
 
+    unmatched = []
     if mode == "create":
         payload = payload or {}
         if not (payload.get("name") or payload.get("display_name")):
             return {"error": "a create needs a name"}, 400
+        if kind == "blueprint" and payload.get(app_blueprints.STAGE_FIELD):
+            stages, err, unmatched = app_blueprints.normalise_stages(payload[app_blueprints.STAGE_FIELD])
+            if err:
+                return {"error": err}, 400
     else:
         if not slug:
             return {"error": "slug is required unless creating"}, 400
@@ -822,10 +910,17 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
                 return {"error": err}, 400
             payload = {"steps": steps}
             text = text or steps_text(steps)
+        if mode != "retire" and field == app_blueprints.STAGE_FIELD:
+            stages, err, unmatched = app_blueprints.normalise_stages(
+                (payload or {}).get(app_blueprints.STAGE_FIELD))
+            if err:
+                return {"error": err}, 400
+            payload = {app_blueprints.STAGE_FIELD: stages}
+            text = text or app_blueprints.stages_text(stages)
         if not text:
             return {"error": "text is required"}, 400
 
-    keeps_payload = mode == "create" or field == STEP_FIELD
+    keeps_payload = mode == "create" or field in (STEP_FIELD, app_blueprints.STAGE_FIELD)
     proposal = CatalogueProposal(
         kind=kind, target_slug=slug or None, field=field or "*", mode=mode,
         proposed=text or "", reason=reason, project=project,
@@ -844,11 +939,18 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
         proposal.status = "applied"
         proposal.decided_at = datetime.now(timezone.utc)
         db.session.commit()
-        return {"action": "applied", "id": proposal.id,
-                "slug": proposal.target_slug,
-                "note": "Applied on arrival. The nightly curator may merge or "
-                        "tighten it, and it can be reverted from the History "
-                        "tab of Best Practices."}, 200
+        out = {"action": "applied", "id": proposal.id,
+               "slug": proposal.target_slug,
+               "note": "Applied on arrival. The nightly curator may merge or "
+                       "tighten it, and it can be reverted from the History "
+                       "tab of Best Practices."}
+        if unmatched:
+            # Said rather than guessed: a stage that links a playbook nobody
+            # wrote would read as covered when it is not.
+            out["unmatched"] = unmatched
+            out["note"] += (" Not linked, because nothing in Best Practices is called "
+                            + "; ".join(unmatched) + ".")
+        return out, 200
 
     # Held for the curator: raw material, not yet a change.
     proposal.previous = None

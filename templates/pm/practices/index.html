@@ -3,7 +3,7 @@
 {% from "pm/components/clear_filters.html" import clear_filters %}
 
 {#
-  Everything: one search across every rule, feature and playbook.
+  Everything: one search across every rule, feature, blueprint and playbook.
 
   Every entry is on the page and the bar filters them in place, as the
   features page always did: the keystroke is the apply, and the URL keeps
@@ -91,6 +91,8 @@
                         {% endif %}
                         {% if e.type == 'playbook' and e.steps %}
                         <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ e.steps }} steps</span>
+                        {% elif e.type == 'blueprint' and e.steps %}
+                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ e.steps }} stages</span>
                         {% endif %}
                     </span>
                     {% if e.line %}
@@ -139,6 +141,17 @@
                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Edit</a>
                         <a href="{{ e.open }}"
                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Open the playbook</a>
+                    </div>
+                {% elif e.type == 'blueprint' %}
+                    {% for s in e.sections[:2] %}
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">{{ s.heading }}</p>
+                        <div class="prose-pm text-sm text-surface-200 break-words">{{ s.body | markdown }}</div>
+                    </div>
+                    {% endfor %}
+                    <div class="flex justify-end">
+                        <a href="{{ e.open }}"
+                           class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Open the blueprint</a>
                     </div>
                 {% endif %}
             </div>

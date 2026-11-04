@@ -89,6 +89,29 @@ prompt named a Windows folder that no longer exists. `tools/test_mvp_prompt.py`.
 failed as the prompt grew from a page to a megabyte: every test read the features
 and none measured the text. The number was only found by asking for it.
 
+**Blueprints: a whole app to start from** (Michael, 2026-11-04: "if I'm
+starting a brand new project ... it can basically look at a full end-to-end
+app and how everything integrated into it ... we're not saying we're going to
+copy this one-to-one ... and then we'll make that 10% tweaks"). A playbook is
+one vendor; a blueprint is one app: what it is, its parts, how they talk, the
+build order (each stage linking the playbooks and features it leans on), what
+changes per project, and the traps that live between systems. The model is
+`AppBlueprint` with `AppBlueprintStage` rows, because a Flask Blueprint is
+already a thing in every route file; the screen says Blueprints, a tab of Best
+Practices (`pm/app_blueprints_routes.py`). Shared logic is `app_blueprints.py`:
+`normalise_stages` resolves each playbook and feature named by slug OR name and
+REPORTS the ones that match nothing rather than storing a guess, because a
+stage linking a runbook nobody wrote reads as covered; `blueprint_lines` is the
+one text the door (`get_blueprint`, `/api/guidance/blueprints`) and the MVP
+Builder share. Written only through the door (`suggest_update`, kind
+`blueprint`, `stages` as its structured field like a playbook's `steps`), with
+Revert in History. A package in the MVP Builder can "Start from" one, and its
+prompt then opens with the whole plan before THE STACK. The first three,
+2026-11-04, were read from the repos: EntertainHQ (Talent Booker is the same
+product), Kuper Plumbing and Data Dungeon. Sessions write lists straight under
+a line of prose, which the markdown renderer runs into one paragraph, so the
+page puts the blank line in (`tidy_md`). `tools/test_blueprints.py`.
+
 ## The god door
 
 Other Claude sessions reach the catalogue live through

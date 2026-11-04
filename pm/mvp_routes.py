@@ -28,7 +28,8 @@ from flask import (Blueprint, Response, render_template, redirect, url_for,
                    flash, request, abort)
 from flask_login import login_required
 
-from models import (db, Client, Feature, Product, Playbook,
+import app_blueprints
+from models import (db, AppBlueprint, Client, Feature, Product, Playbook,
                     MvpPackage, MvpPackageItem)
 from pm.products_routes import playbook_lines
 
@@ -268,6 +269,20 @@ def build_package_prompt(package):
                    for line in package.summary.strip().splitlines())
         out.append("")
 
+    # The whole app this starts from, when the package names one: the
+    # session reads the end-to-end plan first, so every part is lined up
+    # before the first table, and the features below are the changes to it.
+    blueprint = package.blueprint if package.blueprint and package.blueprint.is_active else None
+    if blueprint is not None:
+        out.append("START FROM THIS BLUEPRINT")
+        out.append(f"  This build is a {blueprint.name} shaped app. It is not a copy: "
+                   "take the parts, the connections and the build order below as the "
+                   "plan, then change what THE JOB and the features after it say is "
+                   "different. Say which parts you are leaving out and why before you "
+                   f"start. get_blueprint {blueprint.slug} gives the same text again.")
+        out.append("")
+        out.extend("  " + line if line else "" for line in app_blueprints.blueprint_lines(blueprint))
+
     out.append("THE STACK")
     out.append("  Build it the way the reference projects are built, unless "
                "this document says otherwise: Flask, SQLAlchemy with Alembic "
@@ -429,7 +444,10 @@ def package_detail(id):
                            chosen_features=chosen_features,
                            chosen_products=chosen_products,
                            categories=Feature.CATEGORIES,
-                           statuses=MvpPackage.STATUSES)
+                           statuses=MvpPackage.STATUSES,
+                           blueprint_options=[("", "Nothing, build from the features")] + [
+                               (str(b.id), b.name) for b in AppBlueprint.query.filter_by(is_active=True)
+                               .order_by(AppBlueprint.sort_order, AppBlueprint.name).all()])
 
 
 @mvp_bp.route("/<int:id>", methods=["POST"])
@@ -440,6 +458,9 @@ def package_update(id):
     if name:
         package.name = name
     package.summary = (request.form.get("summary") or "").strip()
+    if "blueprint_id" in request.form:
+        chosen = request.form.get("blueprint_id", type=int)
+        package.blueprint_id = chosen if chosen and db.session.get(AppBlueprint, chosen) else None
     if request.form.get("status") in MvpPackage.STATUS_LABELS:
         package.status = request.form["status"]
     db.session.commit()

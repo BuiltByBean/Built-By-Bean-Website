@@ -7,7 +7,7 @@ of ~/.claude/CLAUDE.md is left alone) or `.\tools\bootstrap_guidance.ps1 -Key
 <PM_GUIDANCE_KEY>` on Windows, which also register the bridge.
 
 Every session on this machine carries the pm-guidance tools: get_rules,
-get_feature_guidance, get_playbook, report_lesson, suggest_update,
+get_feature_guidance, get_playbook, get_blueprint, report_lesson, suggest_update,
 get_clients, upsert_project, log_expense, log_time,
 register_hosting_resource and register_app. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
@@ -19,7 +19,11 @@ lesson. That is the harness enforcing this order, not a request.
 
 - Before building anything, call get_rules and follow the brief. When a
   feature is in play, call get_feature_guidance for it. Setting up a
-  vendor: get_playbook. All of this is Best Practices at /admin/practices,
+  vendor: get_playbook. Starting a new app that resembles one already
+  built (multi-tenant, phone apps, a trades back office): get_blueprint
+  first, so the whole plan is lined up, and append to that blueprint when
+  you change how an app with one fits together. All of this is Best
+  Practices at /admin/practices,
   and it holds no prices: what something sells for is not yours to set.
 - A new thing a client could ask for is a FEATURE, and it is what the MVP
   Builder picks from and the client reads: a short plain name ("Online

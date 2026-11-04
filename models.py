@@ -2709,6 +2709,127 @@ class PlaybookStep(db.Model):
         return f"<PlaybookStep {self.position} {self.title[:30]}>"
 
 
+class AppBlueprint(db.Model):
+    """A whole app, end to end: what to start a new project of that shape from.
+
+    Michael, 2026-11-04: a playbook is one vendor, and a new project of a
+    known shape (multi-tenant, push, the stores, like EntertainHQ) runs the
+    same dozen playbooks in the same order. A blueprint is that order and
+    everything that joins the pieces: the parts, how they talk, the build
+    order, what changes from one project to the next, and the traps that live
+    between systems rather than inside one. "Not copy it one to one ... here's
+    the idea of everything that we need to get lined up", so the session has
+    the end-to-end plan and makes the ten percent of tweaks.
+
+    The screen says Blueprint; the code says AppBlueprint because a Flask
+    Blueprint is already a thing in every file that would import this. Written
+    by sessions through the door (suggest_update, kind blueprint), never typed
+    on a page, the same as playbooks.
+    """
+
+    __tablename__ = "app_blueprints"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(80), nullable=False, unique=True)
+    name = db.Column(db.String(160), nullable=False)
+    one_liner = db.Column(db.String(400), default="")
+    # The repos it was read from, "BuiltByBean/EntertainHQ, ...".
+    source_repos = db.Column(db.String(400), default="")
+    shape_md = db.Column(db.Text, default="")
+    parts_md = db.Column(db.Text, default="")
+    connections_md = db.Column(db.Text, default="")
+    tweaks_md = db.Column(db.Text, default="")
+    traps_md = db.Column(db.Text, default="")
+    # The tile it came from and the business whose map draws it, when there
+    # are ones; matched by name when it is filed.
+    app_id = db.Column(db.Integer, db.ForeignKey(
+        "app_links.id", ondelete="SET NULL", name="fk_app_blueprints_app_id"),
+        nullable=True, index=True)
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="SET NULL", name="fk_app_blueprints_business_id"),
+        nullable=True, index=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    app = db.relationship("AppLink")
+    business = db.relationship("Business")
+    stages = db.relationship("AppBlueprintStage", back_populates="blueprint",
+                             cascade="all, delete-orphan", lazy="dynamic",
+                             order_by="AppBlueprintStage.position")
+
+    SECTIONS = (
+        ("shape_md", "What it is"),
+        ("parts_md", "The parts"),
+        ("connections_md", "How they talk"),
+        ("tweaks_md", "What changes per project"),
+        ("traps_md", "Traps between the systems"),
+    )
+
+    @property
+    def display_name(self):
+        return self.name
+
+    @property
+    def sections(self):
+        return [{"field": f, "heading": h, "body": getattr(self, f) or ""} for f, h in self.SECTIONS]
+
+    @property
+    def playbook_slugs(self):
+        """Every playbook the stages name, in build order, once each."""
+        seen = []
+        for stage in self.stages.all():
+            for slug in stage.playbook_list:
+                if slug not in seen:
+                    seen.append(slug)
+        return seen
+
+    def __repr__(self):
+        return f"<AppBlueprint {self.slug}>"
+
+
+class AppBlueprintStage(db.Model):
+    """One stage of a blueprint's build order: what to stand up, and the
+    playbooks and features it leans on, kept as slugs so a renamed entry
+    still resolves and a retired one simply drops out."""
+
+    __tablename__ = "app_blueprint_stages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    blueprint_id = db.Column(db.Integer, db.ForeignKey(
+        "app_blueprints.id", ondelete="CASCADE", name="fk_app_blueprint_stages_blueprint_id"),
+        nullable=False, index=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    title = db.Column(db.String(200), nullable=False)
+    detail_md = db.Column(db.Text, default="")
+    playbooks_json = db.Column(db.Text, default="[]")
+    features_json = db.Column(db.Text, default="[]")
+
+    blueprint = db.relationship("AppBlueprint", back_populates="stages")
+
+    @staticmethod
+    def _list(raw):
+        import json
+        try:
+            out = json.loads(raw or "[]")
+        except ValueError:
+            return []
+        return [s for s in out if isinstance(s, str)]
+
+    @property
+    def playbook_list(self):
+        return self._list(self.playbooks_json)
+
+    @property
+    def feature_list(self):
+        return self._list(self.features_json)
+
+    def __repr__(self):
+        return f"<AppBlueprintStage {self.position} {self.title[:30]}>"
+
+
 class ProjectPlaybook(db.Model):
     """A playbook applied to a project: this vendor, on this build.
 
@@ -3488,7 +3609,8 @@ class CatalogueProposal(db.Model):
     decided_at = db.Column(db.DateTime, nullable=True)
 
     KIND_LABELS = {"feature": "Feature", "rule": "Rule",
-                   "playbook": "Playbook", "product": "Product"}
+                   "playbook": "Playbook", "product": "Product",
+                   "blueprint": "Blueprint"}
 
     @property
     def is_live(self):
@@ -3561,10 +3683,16 @@ class MvpPackage(db.Model):
     # it. This becomes the SOW's project description and the prompt's opening.
     summary = db.Column(db.Text, default="")
     status = db.Column(db.String(20), nullable=False, default="scoping")
+    # The whole app this build starts from, when there is one: its blueprint
+    # opens the prompt and the features below are the tweaks.
+    blueprint_id = db.Column(db.Integer, db.ForeignKey(
+        "app_blueprints.id", ondelete="SET NULL", name="fk_mvp_packages_blueprint_id"),
+        nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
+    blueprint = db.relationship("AppBlueprint")
     client = db.relationship("Client", backref=db.backref(
         "mvp_packages", lazy="dynamic", cascade="all, delete-orphan"))
     items = db.relationship("MvpPackageItem", back_populates="package",

@@ -83,6 +83,22 @@ TOOLS = [
         },
     },
     {
+        "name": "get_blueprint",
+        "description": (
+            "A whole app the owner has built, end to end: what it is, its "
+            "parts, how they talk to each other, the build order with the "
+            "playbooks and features each stage needs, what changes per "
+            "project, and the traps between systems. Call this at the START "
+            "of a new project that resembles one, so the whole plan is lined "
+            "up before the first table. With no name it lists them."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"name": {
+                "type": "string",
+                "description": "Blueprint name or slug, e.g. entertainhq; empty to list"}},
+        },
+    },
+    {
         "name": "report_lesson",
         "description": (
             "File a lesson back to the project manager the moment something "
@@ -156,14 +172,21 @@ TOOLS = [
             "where a step with a client message is one that waits on the "
             "client; append adds steps to the end, replace rewrites the "
             "whole list. product: name, summary, prompt_intro, "
-            "playbook_slug. For a create, put the new "
-            "entry's fields in payload (name plus any of the above, steps "
-            "included for a playbook)."),
+            "playbook_slug. blueprint (a whole app end to end): name, "
+            "one_liner, source_repos, shape_md, parts_md, connections_md, "
+            "tweaks_md, traps_md, and stages, the build order: "
+            "payload.stages, a list of {title, detail_md, playbooks: [names "
+            "or slugs], features: [names or slugs]}; a name that matches "
+            "nothing is reported back and left out. When you change how an "
+            "app with a blueprint is put together, append to it. For a "
+            "create, put the new entry's fields in payload (name plus any of "
+            "the above, steps included for a playbook, stages for a "
+            "blueprint)."),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "kind": {"type": "string",
-                         "enum": ["feature", "rule", "playbook", "product"]},
+                         "enum": ["feature", "rule", "playbook", "product", "blueprint"]},
                 "slug": {"type": "string",
                          "description": "The entry's slug (not for create)"},
                 "field": {"type": "string",
@@ -441,6 +464,23 @@ def tool_get_playbook(args):
     return f"No runbook for {vendor!r}. There are runbooks for: {names}"
 
 
+def tool_get_blueprint(args):
+    name = (args.get("name") or "").strip().lower().replace(" ", "-")
+    listing, list_err = _http("GET", "/api/guidance/blueprints")
+    if list_err:
+        return list_err
+    rows = json.loads(listing).get("blueprints", [])
+    if not name:
+        if not rows:
+            return "No blueprints yet."
+        return "\n".join(f"{b['slug']}: {b['name']}. {b['one_liner']}" for b in rows)
+    slug = next((b["slug"] for b in rows if name in (b["slug"], b["name"].lower().replace(" ", "-"))), name)
+    text, err = _http("GET", f"/api/guidance/blueprints/{slug}")
+    if err is None:
+        return json.loads(text)["blueprint"]
+    return f"No blueprint called {name!r}. There are: " + (", ".join(b["slug"] for b in rows) or "none yet")
+
+
 def tool_report_lesson(args):
     data, err = _post("/api/guidance/lessons", args)
     if err:
@@ -573,6 +613,7 @@ HANDLERS = {
     "get_rules": tool_get_rules,
     "get_feature_guidance": tool_get_feature_guidance,
     "get_playbook": tool_get_playbook,
+    "get_blueprint": tool_get_blueprint,
     "report_lesson": tool_report_lesson,
     "suggest_update": tool_suggest_update,
     "get_clients": tool_get_clients,

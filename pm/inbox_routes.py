@@ -9,6 +9,8 @@ the top, then every change newest first, each with Revert. The URL stayed
 put because sessions and older notes link to it.
 """
 import json
+
+import app_blueprints
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, render_template, redirect, url_for, flash, abort, request
@@ -46,6 +48,9 @@ FIELD_LABELS = {
     "steps": "the checklist", "check_pattern": "scanner",
     "check_globs": "scanner files", "check_exclude": "scanner exclusions",
     "check_unless": "scanner exceptions", "check_fixture": "scanner fixture",
+    "shape_md": "what it is", "parts_md": "the parts", "connections_md": "how they talk",
+    "tweaks_md": "what changes per project", "source_repos": "repos",
+    "stages": "the build order",
 }
 
 MODE_VERBS = {"append": "Added to", "replace": "Rewrote", "create": "Created",
@@ -67,8 +72,11 @@ def _decorate(rows):
             except ValueError:
                 p.payload = {}
         p.payload.pop("previous_steps", None)
+        p.payload.pop("previous_stages", None)
         if isinstance(p.payload.get("steps"), list):
             p.payload["steps"] = steps_text(p.payload["steps"])
+        if isinstance(p.payload.get("stages"), list):
+            p.payload["stages"] = app_blueprints.stages_text(p.payload["stages"])
     return rows
 
 

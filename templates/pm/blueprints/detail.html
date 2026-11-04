@@ -1,0 +1,105 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+
+{#
+  One blueprint, in the order a new project needs it: what the app is, its
+  parts, how they talk, the build order with the playbooks and features each
+  stage leans on, what changes from one project to the next, and the traps
+  that live between systems. The same text a session gets from get_blueprint
+  and the MVP Builder's prompt opens with (app_blueprints.blueprint_lines).
+
+  The build order sits after "How they talk" because a stage only makes sense
+  once you know what it is joining. Playbook chips open the runbook; feature
+  chips open Best Practices on that entry.
+#}
+
+{% block title %}{{ b.name }} - Blueprints{% endblock %}
+{% block back %}{{ back_link(url_for('blueprints.blueprints_index'), 'Blueprints') }}{% endblock %}
+{% block page_title %}{{ b.name }}{% endblock %}
+{# Short on purpose: the header has no wrap guard, so the one-liner lives in
+   the card under it rather than here. #}
+{% block page_subtitle %}Blueprint · {{ stages | length }} stage{{ '' if stages | length == 1 else 's' }}{% endblock %}
+
+{% block content %}
+{% include "pm/components/runbook_style.html" %}
+
+<div class="space-y-4 stagger-in max-w-4xl">
+
+    <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
+        <div class="flex items-start gap-3 min-w-0 flex-1">
+            {% if b.app and b.app.icon_file %}
+            <img src="{{ url_for('apps.icon', id=b.app.id) }}" alt="" aria-hidden="true"
+                 class="w-12 h-12 flex-shrink-0 rounded-xl object-contain">
+            {% endif %}
+            <div class="min-w-0">
+                {% if b.one_liner %}<p class="text-sm text-surface-200 break-words">{{ b.one_liner }}</p>{% endif %}
+                <p class="text-xs text-surface-400 mt-1">Updated {{ b.updated_at|format_date if b.updated_at else 'never' }}</p>
+                {% if b.source_repos %}
+                <p class="text-xs text-surface-500 break-words">{{ b.source_repos }}</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-2 sm:justify-end">
+            {% if b.business %}
+            <a href="{{ url_for('businesses.map_page', id=b.business.id) }}"
+               class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
+                Business map</a>
+            {% endif %}
+            {% if b.app %}
+            <a href="{{ b.app.url }}" {% if b.app.is_external %}target="_blank" rel="noopener"{% endif %}
+               class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
+                Open the app</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% macro section(s) %}
+    {% if s.body.strip() %}
+    <section class="glass-card p-4 sm:p-6 min-w-0" data-section="{{ s.field }}">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-300 mb-4 pb-3 border-b border-white/10 break-words">{{ s.heading }}</h2>
+        <div class="runbook">{{ s.body | tidy_md | markdown }}</div>
+    </section>
+    {% endif %}
+    {% endmacro %}
+
+    {% for s in b.sections if s.field in ('shape_md', 'parts_md', 'connections_md') %}{{ section(s) }}{% endfor %}
+
+    {% if stages %}
+    <section class="glass-card p-4 sm:p-6 min-w-0" data-section="stages">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-300 mb-4 pb-3 border-b border-white/10">The build order</h2>
+        <ol class="space-y-5">
+            {% for st in stages %}
+            <li class="flex gap-3 min-w-0" data-stage>
+                <span class="w-7 h-7 shrink-0 rounded-full bg-brand-500/15 text-brand-300 text-xs font-bold flex items-center justify-center tabular-nums">{{ loop.index }}</span>
+                <div class="min-w-0 flex-1 space-y-2">
+                    <h3 class="text-sm font-semibold text-white break-words pt-1">{{ st.title }}</h3>
+                    {% if st.detail_md %}<div class="runbook text-sm">{{ st.detail_md | tidy_md | markdown }}</div>{% endif %}
+                    {% set pbs = st.playbook_list | select('in', pnames) | list %}
+                    {% set fts = st.feature_list | select('in', fnames) | list %}
+                    {% if pbs or fts %}
+                    <div class="flex flex-wrap gap-2">
+                        {% for slug in pbs %}
+                        {% set p = pnames[slug] %}
+                        <a href="{{ url_for('playbooks.playbook_detail', slug=slug) }}"
+                           class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 text-sm text-emerald-200 hover:bg-emerald-500/10 transition-colors">
+                            {% if p.mark %}<img src="{{ p.mark }}" alt="" class="w-5 h-5 rounded object-contain">{% endif %}
+                            {{ p.name }}</a>
+                        {% endfor %}
+                        {% for slug in fts %}
+                        <a href="{{ url_for('practices.index', q=fnames[slug]) }}"
+                           class="inline-flex items-center min-h-[44px] px-3 rounded-xl border border-sky-500/25 bg-sky-500/5 text-sm text-sky-200 hover:bg-sky-500/10 transition-colors break-words">
+                            {{ fnames[slug] }}</a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ol>
+    </section>
+    {% endif %}
+
+    {% for s in b.sections if s.field in ('tweaks_md', 'traps_md') %}{{ section(s) }}{% endfor %}
+
+</div>
+{% endblock %}

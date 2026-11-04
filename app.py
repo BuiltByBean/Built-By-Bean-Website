@@ -305,6 +305,8 @@ def create_app():
     # ── Vendor Playbooks ────────────────────────────────────
     from pm.playbooks_routes import playbooks_bp
     app.register_blueprint(playbooks_bp)
+    from pm.app_blueprints_routes import app_blueprints_bp
+    app.register_blueprint(app_blueprints_bp)
 
     # ── Tax Estimate ────────────────────────────────────────
     from pm.tax_routes import tax_bp

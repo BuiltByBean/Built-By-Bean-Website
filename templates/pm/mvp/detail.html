@@ -60,6 +60,14 @@
                     Status</label>
                 {{ select_dropdown("status", statuses, package.status) }}
             </div>
+            {# A whole app to start from. Its blueprint opens the build prompt,
+               and the features picked below are the changes to it. #}
+            <div class="w-full sm:w-auto sm:min-w-[240px]">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                    Start from</label>
+                {{ select_dropdown("blueprint_id", blueprint_options, (package.blueprint_id | string) if package.blueprint_id else "",
+                                   "Nothing, build from the features", full_width=true) }}
+            </div>
         </div>
         <div>
             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">

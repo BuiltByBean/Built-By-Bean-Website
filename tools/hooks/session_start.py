@@ -105,7 +105,8 @@ def main():
     print("HOUSE RULES FROM THE PROJECT MANAGER, fetched live at session "
           "start. Follow these over habit. The pm-guidance tools are in this "
           "session: get_feature_guidance before building a feature, "
-          "get_playbook before a vendor, report_lesson or suggest_update the "
+          "get_playbook before a vendor, get_blueprint before a new app "
+          "shaped like one already built, report_lesson or suggest_update the "
           "moment something is learned.")
     print()
     print(text)

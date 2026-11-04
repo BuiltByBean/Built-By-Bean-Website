@@ -37,16 +37,17 @@ and get_playbook answer from the same rows through /api/guidance.
 from flask import Blueprint, render_template, url_for
 from flask_login import login_required
 
-from models import Feature, Playbook
+from models import AppBlueprint, Feature, Playbook
 
 practices_bp = Blueprint("practices", __name__, url_prefix="/admin/practices")
 
 # What each kind of entry is called on its badge, and the badge's colour.
-TYPE_LABEL = {"rule": "Rule", "howto": "Feature", "playbook": "Playbook"}
+TYPE_LABEL = {"rule": "Rule", "howto": "Feature", "playbook": "Playbook", "blueprint": "Blueprint"}
 TYPE_TONE = {
     "rule": "bg-violet-500/15 text-violet-300",
     "howto": "bg-sky-500/15 text-sky-300",
     "playbook": "bg-emerald-500/15 text-emerald-300",
+    "blueprint": "bg-amber-500/15 text-amber-300",
 }
 
 
@@ -57,6 +58,7 @@ def practices_counts():
         "rule": Feature.query.filter_by(is_active=True, kind="rule").count(),
         "howto": Feature.query.filter_by(is_active=True, kind="feature").count(),
         "playbook": Playbook.query.filter_by(is_active=True).count(),
+        "blueprint": AppBlueprint.query.filter_by(is_active=True).count(),
     }
 
 
@@ -102,6 +104,18 @@ def entries():
             "edit": url_for("playbooks.playbook_edit", slug=p.slug),
             "search": _hay(p.display_name, p.slug, p.one_liner, p.category_label,
                            *[s["body"] for s in p.sections]),
+        })
+    # Blueprints first in their own tab; here they are found by any word of
+    # the app they describe, a part, a connection or a trap.
+    for b in AppBlueprint.query.filter_by(is_active=True).order_by(AppBlueprint.sort_order, AppBlueprint.name):
+        stages = b.stages.all()
+        out.append({
+            "key": f"b{b.id}", "type": "blueprint", "name": b.name, "line": b.one_liner or "",
+            "category": None, "steps": len(stages),
+            "sections": [s for s in b.sections if s["body"].strip()],
+            "open": url_for("blueprints.blueprint_detail", slug=b.slug),
+            "search": _hay(b.name, b.slug, b.one_liner, b.source_repos,
+                           *[s["body"] for s in b.sections], *[st.title for st in stages]),
         })
     return out
 
