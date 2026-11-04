@@ -701,7 +701,7 @@ def adopt(line, business_id, exclude_id=None):
     synced = db.session.query(ServiceCostEntry.expense_id).filter(
         ServiceCostEntry.expense_id.isnot(None))
     q = Expense.query.filter(Expense.date >= lo, Expense.date <= hi, Expense.time_entry_id.is_(None),
-                             Expense.bank_line_id.is_(None),
+                             db.or_(Expense.bank_line_id.is_(None), Expense.bank_line_id == line.id),
                              ~Expense.id.in_(taken), ~Expense.id.in_(synced))
     # An owner's own card pays for any of his companies, so the charge may
     # already be in ANY company's books: on 2026-11-03 Sapphire's Google Play

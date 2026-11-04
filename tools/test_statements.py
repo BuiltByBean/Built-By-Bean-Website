@@ -16,8 +16,8 @@ Chase debit, his personal debit and his personal credit card. Proves:
      same shop personal on a company card.
   5. An expense already typed for the same charge is adopted, and marked as
      paid personally, not doubled; a receipt waiting in a mailbox attaches.
-  6. A Railway charge on a personal card is covered by its sync and still
-     counts as the owner's money put in.
+  6. A Railway charge on a personal card is booked by its line, split by
+     Railway's report, and still counts as the owner's money put in.
   7. The Books page carries the section, and an upload lands on the review
      list; the nightly Mercury read never touches a statement account.
 
@@ -113,7 +113,7 @@ with application.app_context():
     db.session.commit()
     ids = {"bbb": bbb.id, "boss": boss.id}
     bank_feed.remember("GITHUB", "expense", vendor="GitHub", category="software")
-    bank_feed.remember("RAILWAY", "covered", vendor="Railway", category="hosting", provider_id=railway.id)
+    bank_feed.remember("RAILWAY", "split", vendor="Railway", category="hosting", provider_id=railway.id)
     bank_feed.remember("CLOUDFLARE", "expense", vendor="Cloudflare", category="domain")
     bank_feed.remember("CHASE", "contribution", vendor="Michael Bean", owner_name="Michael Bean")
     # Typed earlier, for the same GitHub charge.
@@ -149,8 +149,9 @@ with application.app_context():
           lines[("TARGET 00012345", -52.17)].disposition == "review")
     check("a return on a personal card is not income",
           lines[("TARGET 00012345", 10.0)].disposition == "review")
-    check("the Railway charge is covered by its sync",
-          lines[("RAILWAY", -20.0)].disposition == "covered" and lines[("RAILWAY", -20.0)].expense_id is None)
+    check("the Railway charge is booked by its line, and paid by the card's owner",
+          lines[("RAILWAY", -20.0)].disposition == "split" and lines[("RAILWAY", -20.0)].expense is not None
+          and lines[("RAILWAY", -20.0)].expense.paid_by == "Michael Bean")
     moved = statements.import_rows(personal, [
         {"date": date(2026, 10, 20), "description": "CHASE ONLINE TRANSFER FROM BUSINESS", "amount": 300.0,
          "kind": "ACCT_XFER", "ref": "st:moved-in"},
