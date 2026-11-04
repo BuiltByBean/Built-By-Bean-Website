@@ -269,7 +269,7 @@ with application.app_context():
           BankTransaction.query.filter_by(disposition="review").count())
 
 biz = c.get(f"/admin/businesses/{ids['bbb']}").get_data(as_text=True)
-check("the business page carries its bank", 'id="bank"' in biz and "Read now" in biz and "Checking" in biz)
+check("the business page carries its bank", 'id="bank"' in biz and "Read the bank" in biz and "Checking" in biz)
 ehq_page = c.get(f"/admin/businesses/{ids['ehq']}").get_data(as_text=True)
 check("its token is never printed", "secret-token" not in biz and "secret-token" not in ehq_page)
 

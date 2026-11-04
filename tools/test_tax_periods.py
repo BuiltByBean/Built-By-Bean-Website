@@ -115,7 +115,7 @@ with c.session_transaction() as sess:
 page = c.get("/admin/taxes/sales/returns").get_data(as_text=True)
 check("the returns page lists the months", "Oct 2026" in page and "Apr–Jun 2026" in page)
 check("and says plainly when nothing says where to count from",
-      "so no returns are counted" in page)
+      "No first sale, permit date or location on file" in page)
 r = c.get("/admin/taxes/sales/returns/monthly/2026/q110")
 check("a month has a return page", r.status_code == 200 and "Oct 2026" in r.get_data(as_text=True), r.status_code)
 check("a period that does not exist is a 404", c.get("/admin/taxes/sales/returns/monthly/2026/q5").status_code == 404)

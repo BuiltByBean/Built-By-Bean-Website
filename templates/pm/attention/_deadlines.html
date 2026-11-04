@@ -3,6 +3,8 @@
   whose right to transact is not ACTIVE, which cannot be dismissed while it
   lasts; a change in the state's records, seen once; and every deadline ten
   days out or late. `tax` is empty for anyone else.
+
+  Seen and Done swap the page's "attention" region in place, as Dismiss does.
 #}
 {% if tax %}
 {% set pill = 'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider shrink-0' %}
@@ -38,7 +40,7 @@
     <div class="shrink-0 flex items-center gap-2">
         <a href="{{ url_for('businesses.detail', id=f.business_id) }}"
            class="{{ press }} border border-white/10 text-surface-200 hover:border-brand-500/40">Open</a>
-        <form method="POST" action="{{ url_for('taxes_deadlines.flag_seen', id=f.id) }}">
+        <form method="POST" data-live-action action="{{ url_for('taxes_deadlines.flag_seen', id=f.id) }}">
             <input type="hidden" name="next" value="{{ here }}">
             <button type="submit" class="{{ press }} btn-brand">Seen</button>
         </form>
@@ -65,7 +67,7 @@
         <a href="{{ d.url }}" class="{{ press }} {{ 'btn-brand' if d.proof == 'record' else 'border border-white/10 text-surface-200 hover:border-brand-500/40' }}">Open</a>
         {% endif %}
         {% if d.proof == 'press' %}
-        <form method="POST" action="{{ url_for('taxes_deadlines.done') }}">
+        <form method="POST" data-live-action action="{{ url_for('taxes_deadlines.done') }}">
             <input type="hidden" name="key" value="{{ d.key }}">
             <input type="hidden" name="next" value="{{ here }}">
             <button type="submit" class="{{ press }} btn-brand">Done</button>

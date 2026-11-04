@@ -226,5 +226,44 @@ check("the deadlines page draws every group",
 check("the business page draws what the state says",
       "What the state says" in c.get(f"/admin/businesses/{bbb_id}").get_data(as_text=True))
 
+print("\n5. AN ACTION NEVER MOVES THE PAGE")
+import re  # noqa: E402
+
+# Rule "an-action-never-moves-the-page-under-you": every press on these pages
+# posts and swaps its region in place, never a redirect to a fresh document.
+def tax_forms(html):
+    return [f for f in re.findall(r"<form[^>]*>", html)
+            if "taxes_deadlines" in f or "/admin/taxes/deadlines" in f or "/admin/taxes/flags/" in f
+            or "/comptroller" in f]
+
+
+from models import ComptrollerFlag  # noqa: E402
+with application.app_context():
+    db.session.add(ComptrollerFlag(business_id=bbb_id, kind="agent", title="Built by Bean: agent changed",
+                                   old_value="A", new_value="B"))
+    db.session.commit()
+dl.forget()
+deadlines_page = c.get("/admin/taxes/deadlines").get_data(as_text=True)
+attention_page = c.get("/admin/attention/").get_data(as_text=True)
+business_page = c.get(f"/admin/businesses/{bbb_id}").get_data(as_text=True)
+for name, html, region in (("deadlines page", deadlines_page, 'data-live="deadlines"'),
+                           ("Needs attention", attention_page, 'data-live="attention"'),
+                           ("business page", business_page, 'data-live="state-record"')):
+    forms = tax_forms(html)
+    check(f"{name}: every press swaps in place ({len(forms)} forms)",
+          forms and all("data-live-action" in f for f in forms) and region in html,
+          [f for f in forms if "data-live-action" not in f] or region)
+check("the presses that swap actually reach the page they swap",
+      'action="/admin/taxes/flags/' in deadlines_page and 'action="/admin/taxes/deadlines/done"' in deadlines_page)
+check("each Read press says what it reads", "Read the state" in business_page and "Read now" not in business_page)
+with application.app_context():
+    fid = ComptrollerFlag.query.filter_by(seen_at=None).first().id
+r = c.post(f"/admin/taxes/flags/{fid}/seen", headers={"X-Requested-With": "fetch"}, follow_redirects=True)
+html = r.get_data(as_text=True)
+check("Seen answers with the page whose region is swapped in",
+      r.status_code == 200 and 'data-live="deadlines"' in html and "agent changed" not in html)
+check("no explainer copy: the state, not the reasoning",
+      "cannot trade" not in business_page and "so no returns are counted" not in deadlines_page)
+
 print("\n" + ("all passed" if not FAIL else "FAILED: " + ", ".join(FAIL)))
 sys.exit(1 if FAIL else 0)

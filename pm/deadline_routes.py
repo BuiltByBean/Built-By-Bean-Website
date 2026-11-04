@@ -93,7 +93,9 @@ def read_now(id):
     except Exception as err:  # noqa: BLE001 - the state's site being down is a message, not a 500
         db.session.rollback()
         flash(f"The Comptroller did not answer: {str(err)[:160]}", "error")
-        return redirect(url_for("businesses.detail", id=business.id))
+        return redirect(url_for("businesses.detail", id=business.id) + "#state")
     deadlines.forget()
     flash("Read from the Comptroller. " + ("; ".join(said) if said else "Nothing changed."), "success")
-    return redirect(url_for("businesses.detail", id=business.id))
+    # The press swaps the card in place (data-live-action); the anchor is for
+    # the plain submit it falls back to when the fetch fails.
+    return redirect(url_for("businesses.detail", id=business.id) + "#state")

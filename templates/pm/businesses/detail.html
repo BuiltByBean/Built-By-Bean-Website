@@ -141,9 +141,9 @@
             <div class="flex items-center gap-2 shrink-0 ml-auto">
                 <form method="POST" action="{{ url_for('bank.sync', id=c.id) }}">
                     <input type="hidden" name="next" value="{{ url_for('businesses.detail', id=b.id) }}#bank">
-                    <button type="submit"
+                    <button type="submit" aria-label="Read {{ c.label or 'Mercury' }} now"
                             class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                        Read now</button>
+                        Read the bank</button>
                 </form>
                 <a href="{{ url_for('bank.review') }}"
                    class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
@@ -199,9 +199,9 @@
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-auto">
                 <form method="POST" action="{{ url_for('books.stripe_sync', id=b.id) }}">
-                    <button type="submit"
+                    <button type="submit" aria-label="Read {{ b.label }}'s Stripe now"
                             class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                        Read now</button>
+                        Read Stripe</button>
                 </form>
                 <form method="POST" action="{{ url_for('books.stripe_disconnect', id=b.id) }}">
                     {{ delete_icon(question='Disconnect Stripe?', label='Disconnect Stripe') }}
@@ -366,7 +366,7 @@
         {% endif %}
 
         {% if not owed_from %}
-        <p class="text-sm text-amber-300 break-words">No first sale, permit date, filed return or location date on file, so no returns are counted.</p>
+        <p class="text-sm text-amber-300 break-words">No first sale, permit date or location on file.</p>
         {% endif %}
 
         <div class="flex justify-end">
