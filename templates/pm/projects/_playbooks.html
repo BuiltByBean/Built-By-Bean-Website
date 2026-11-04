@@ -324,7 +324,7 @@ function playbookPanel(ids, preferred) {
                             {% if note %}
                             <p x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
                                class="flex items-start gap-1.5 mt-1.5 text-xs text-emerald-500/90">
-                                {{ icon('success', 'w-3.5 h-3.5 mt-px') }}
+                                {{ icon('done', 'w-3.5 h-3.5 mt-px') }}
                                 <span>{{ note }}</span>
                             </p>
                             {% endif %}

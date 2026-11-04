@@ -28,7 +28,7 @@
     icon vocabulary (Handbook, Icons). -#}
 {% set PRODUCT_ICON = {
   "code": "code", "chat": "texting", "receipt": "invoices", "signature": "contracts",
-  "envelope": "mail", "link": "link", "calendar": "calendar", "boxes": "inventory",
+  "envelope": "mail", "link": "link", "calendar": "calendar", "boxes": "package",
   "star": "star", "clock": "time", "users": "clients", "document": "document"
 } %}
 
@@ -177,7 +177,7 @@
                     </button>
                     <button type="submit" aria-label="Save {{ p.name }}" title="Save"
                             class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                        {{ icon('save') }}
+                        {{ icon('done') }}
                     </button>
                 </form>
             </div>

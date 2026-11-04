@@ -15,7 +15,7 @@
 {% macro money(v) %}{{ '-' if v < 0 }}${{ '{:,.2f}'.format(v|abs) }}{% endmacro %}
 {% macro check(ok, text) %}
 <div class="flex items-start gap-3 py-2.5">
-    {{ icon('success' if ok else 'error', 'mt-0.5 w-5 h-5 ' ~ ('text-emerald-300' if ok else 'text-amber-300')) }}
+    {{ icon('done' if ok else 'error', 'mt-0.5 w-5 h-5 ' ~ ('text-emerald-300' if ok else 'text-amber-300')) }}
     <span class="text-sm text-white break-words min-w-0">{{ text }}</span>
 </div>
 {% endmacro %}

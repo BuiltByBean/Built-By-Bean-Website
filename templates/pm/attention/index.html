@@ -109,7 +109,7 @@
 
             {% if not messages and not bills and not night and not live and not books and not (tax and (tax.standing or tax.flags or tax.deadlines)) %}
             <div class="p-8 sm:p-12 text-center">
-                {{ icon('success', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
+                {{ icon('done', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
                 <p class="text-surface-300">Nothing is waiting on you.</p>
             </div>
             {% endif %}
