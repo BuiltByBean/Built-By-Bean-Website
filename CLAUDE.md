@@ -304,7 +304,12 @@ Audit items 7, 9, 10, 18, 19, 20 and 4's store half (`docs/automation_gaps.md`),
   press that asks first (`confirm_button`) and moves the item to the agreed fee
   from the next cycle, no proration. **The badge never waits on Stripe**:
   `snapshot()` answers from the last read and refreshes in a thread; only the page
-  reads synchronously. `tools/test_hosting_billing.py`.
+  reads synchronously. **One reading, two places**: `hosting_rows()` is the page's
+  rows and the badge's count, and the page leaves its count in `_DUE_CACHE`, so a
+  fresh Stripe answer on the page and an older one in the badge cannot disagree.
+  The bill press is a live action inside `data-live` regions, as are the Railway
+  list's presses: the row changes where it stands and the page does not move.
+  `tools/test_hosting_billing.py`.
 - **Sites, certificates, domains** (`live_watch.py`). Every tile URL and map
   surface URL is fetched nightly (`SiteCheck`): under 400, or 401/403, is up.
   `fail_nights` counts nights in a row; two is a row. Domains (`DomainWatch`) come

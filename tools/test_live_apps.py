@@ -218,6 +218,12 @@ with c.session_transaction() as s:
 
 page = c.get("/admin/apps/railway").data.decode("utf-8", "replace")
 check("the list page names them", "ideas" in page and "Twin Build" in page and "Put it on My Apps" in page)
+import re  # noqa: E402
+forms = [f for f in re.findall(r"<form[^>]*>", page) if "/admin/apps/railway/" in f]
+check("every press on it is a live action, so the page never moves",
+      forms and all("data-live-action" in f for f in forms), forms)
+check("its lists and its count are live regions, always drawn",
+      all(f'data-live="{k}"' in page for k in ("railway-list", "railway-ignored", "railway-count")))
 with application.app_context():
     twin = RailwayService.query.filter_by(service_ref="s-twin").one()
     ideas_id = RailwayService.query.filter_by(service_ref="s-ideas").one().id
@@ -236,7 +242,8 @@ with application.app_context():
           and made.railway_url.endswith("/service/s-ideas") and made.github_url.endswith("BuiltByBean/Ideas"),
           made and (made.url, made.railway_url, made.github_url))
     check("and then nothing is left on the list", railway_watch.unlisted() == [])
-check("and opens it to check", r.status_code == 302 and "/edit" in r.headers.get("Location", ""))
+check("and answers the list again, for the live action to swap in place",
+      r.status_code == 302 and r.headers.get("Location", "").endswith("/admin/apps/railway"))
 
 print("\n9. SITES, CERTIFICATES, DOMAINS")
 

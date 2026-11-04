@@ -57,7 +57,11 @@
       covers its own infrastructure; these four ask whether hosting has been
       worth doing at all, which only a running total can answer.
     #}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    {# Live regions: the bill press swaps these in place rather than
+       reloading the page at the top (rule "An action never moves the page
+       under you"). Both are always rendered, so there is always something
+       to swap. #}
+    <div data-live="hosting-tiles" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Collected</p>
             <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-2">{{ lifetime.collected|format_currency }}</p>
@@ -92,6 +96,7 @@
         </div>
     </div>
 
+    <div data-live="hosting-rows">
     {% if rows %}
     <div class="glass-card overflow-hidden">
 
@@ -213,7 +218,7 @@
                     {% else %}Billed {{ r.bill.billed|format_currency }}/mo, agreed {{ r.bill.agreed|format_currency }}/mo{% endif %}
                 </p>
                 {% if r.bill.changeable %}
-                <form method="POST" action="{{ url_for('hosting.billing_change', client_id=r.project.client_id) }}" data-bill-press>
+                <form method="POST" action="{{ url_for('hosting.billing_change', client_id=r.project.client_id) }}" data-bill-press data-live-action>
                     {{ confirm_button('Bill ' ~ (r.bill.agreed|format_currency) ~ '/mo', 'Change the subscription?',
                                       btn_class='inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all',
                                       tone='brand') }}
@@ -246,6 +251,7 @@
         </p>
     </div>
     {% endif %}
+    </div>
 
 </div>
 {% endblock %}

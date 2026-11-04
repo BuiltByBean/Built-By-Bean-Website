@@ -116,51 +116,88 @@ def _billing_snapshot():
     return hosting_billing.snapshot(app)
 
 
-def increases_due():
-    """Every priced project the page counts: under the floor (with the update
-    it is due), not mapped to any vendor's costs, or billed in Stripe other
-    than agreed (one row per client, on its first project)."""
-    now = time.monotonic()
-    if now - _DUE_CACHE["at"] < DUE_TTL_SECONDS:
-        return _DUE_CACHE["rows"]
-    months = _complete_months(1)
-    costs, _ = _costs_by_project(months)
+# The bands the tile and the badge count, besides a client's billing.
+COUNTED = ("loss", "raise", "unmapped")
+
+
+def _priced_projects():
+    return (Project.query.join(Client, Project.client_id == Client.id)
+            .filter(Project.hosting_fee.isnot(None))
+            .order_by(Client.name, Project.name, Project.id).all())
+
+
+def hosting_rows(billing_data, months=None):
+    """THE reading of the Hosting page: one row per priced project, with its
+    band, its billing (said once per client, on its first row) and how many
+    things on it ask to be looked at. The page draws these and the sidebar
+    badge counts them, so the two cannot disagree (rule "Badges that match
+    their page": a reading shown in two places is one function both call).
+
+    `billing_data` is Stripe's answer (hosting_billing): the page passes a
+    fresh read, the badge the last one, and the page leaves its count in the
+    badge's cache so the two agree on the same answer."""
+    months = months or _complete_months(1)
     month = months[-1]
+    costs, annualised = _costs_by_project(months)
     mapped = _mapped_projects()
-    priced = (Project.query.filter(Project.hosting_fee.isnot(None))
-              .order_by(Project.client_id, Project.name, Project.id).all())
-    billing = hosting_billing.by_client(priced, _billing_snapshot())
-    rows = []
+    priced = _priced_projects()
+    billing = hosting_billing.by_client(priced, billing_data)
     billed_once = set()
+    rows = []
     for p in priced:
         cost = costs.get(p.id, {}).get(month, 0.0)
         fee = p.monthly_hosting_fee
         key, label = _status(fee, cost, p.id in mapped)
         bill = billing.get(p.client_id)
-        if bill and bill["state"] != "ok" and p.client_id not in billed_once:
+        if bill is not None and p.client_id in billed_once:
+            bill = None
+        elif bill is not None:
             billed_once.add(p.client_id)
-            rows.append({"project_id": p.id, "project_name": p.name,
-                         "client_name": p.client.name if p.client else "",
-                         "fee": fee or 0.0, "cost": cost, "margin": (fee or 0.0) - cost,
-                         "status": "billing", "label": bill["state"], "args": None})
-        if key == "unmapped":
-            rows.append({"project_id": p.id, "project_name": p.name,
-                         "client_name": p.client.name if p.client else "",
-                         "fee": fee or 0.0, "cost": cost, "margin": (fee or 0.0) - cost,
-                         "status": key, "label": label, "args": None})
-            continue
-        if key not in ("loss", "raise"):
-            continue
-        increase = _increase_for(p, p.hosting_fee, p.hosting_cycle)
+        increase = (_increase_for(p, p.hosting_fee, p.hosting_cycle)
+                    if key in ("loss", "raise") else None)
         rows.append({
-            "project_id": p.id, "project_name": p.name,
-            "client_name": p.client.name if p.client else "",
-            "fee": fee or 0.0, "cost": cost, "margin": (fee or 0.0) - cost,
-            "status": key, "label": label,
-            "new_monthly": increase["new_monthly"], "args": increase["args"],
+            "project": p, "fee": fee, "raw_fee": p.hosting_fee,
+            "cycle": p.hosting_cycle or "monthly", "cost": cost,
+            "annual_share": annualised.get(p.id, {}).get(month, 0.0),
+            "margin": (fee - cost) if fee is not None else None,
+            "status": key, "status_label": label, "bill": bill, "increase": increase,
+            "counted": (1 if key in COUNTED else 0)
+            + (1 if bill and bill["state"] != "ok" else 0),
         })
-    _DUE_CACHE.update(at=now, rows=rows)
-    return rows
+    rows.sort(key=lambda r: (STATUS_ORDER.get(r["status"], 9),
+                             -(r["cost"] or 0), r["project"].name.lower()))
+    return rows, month
+
+
+def _due(rows):
+    """What the badge keeps: one plain dict per thing counted. Plain dicts,
+    not rows: an ORM object cached across requests is detached from every
+    later session."""
+    out = []
+    for r in rows:
+        p = r["project"]
+        base = {"project_id": p.id, "project_name": p.name,
+                "client_name": p.client.name if p.client else "",
+                "fee": r["fee"] or 0.0, "cost": r["cost"], "margin": (r["fee"] or 0.0) - r["cost"]}
+        if r["bill"] and r["bill"]["state"] != "ok":
+            out.append(dict(base, status="billing", label=r["bill"]["state"], args=None))
+        if r["status"] in COUNTED:
+            inc = r["increase"] or {}
+            out.append(dict(base, status=r["status"], label=r["status_label"],
+                            new_monthly=inc.get("new_monthly"), args=inc.get("args")))
+    return out
+
+
+def increases_due():
+    """Everything the badge counts, from hosting_rows on Stripe's last answer
+    (never waiting on Stripe: this runs on every page). Cached ten minutes,
+    and replaced by the page whenever the page is drawn."""
+    now = time.monotonic()
+    if now - _DUE_CACHE["at"] < DUE_TTL_SECONDS:
+        return _DUE_CACHE["rows"]
+    rows, _ = hosting_rows(_billing_snapshot())
+    _DUE_CACHE.update(at=now, rows=_due(rows))
+    return _DUE_CACHE["rows"]
 
 
 def increases_due_count():
@@ -422,12 +459,11 @@ def hosting_index():
     # one-off - and a bar can only draw one number. Annual charges are spread
     # across the months they cover, so the spikes the average existed to
     # absorb are already gone by the time the cost gets here.
-    months = _complete_months(1)
-    month = months[-1]
-    costs, annualised = _costs_by_project(months)
-
-    projects = (Project.query.join(Client, Project.client_id == Client.id)
-                .order_by(Client.name, Project.name).all())
+    # What Stripe bills against what was agreed, read now: this is the page,
+    # so it may wait on Stripe where the badge may not.
+    rows, month = hosting_rows(hosting_billing.current())
+    # The badge reads the same answer the page just drew.
+    _DUE_CACHE.update(at=time.monotonic(), rows=_due(rows))
 
     # Read before the loop, so each row can carry its own running total beside
     # the month's bar.
@@ -435,86 +471,40 @@ def hosting_index():
     hosting = get_hosting_revenue()
     paid_by_customer = hosting["by_customer"]
     railway_lifetime = _railway_lifetime_by_project()
-    mapped = _mapped_projects()
-    # What Stripe bills against what was agreed, per client, read now: this
-    # is the page, so it may wait on Stripe where the badge may not.
-    billing = hosting_billing.by_client(
-        [p for p in projects if p.hosting_fee is not None], hosting_billing.current())
-    billed_once = set()
 
     # Hosting money belongs to a client, not to a project. A client running two
     # builds would otherwise show their whole hosting history against each of
     # them, and the two rows would look like twice the revenue.
     projects_per_client = {}
-    for p in projects:
-        projects_per_client[p.client_id] = projects_per_client.get(p.client_id, 0) + 1
+    for r in rows:
+        cid = r["project"].client_id
+        projects_per_client[cid] = projects_per_client.get(cid, 0) + 1
 
-    rows = []
-    for p in projects:
-        # Priced by a contract, or it does not belong here. A statement of
-        # work and a hosting agreement both write the fee onto the project,
-        # so appearing on this page is what having agreed one looks like.
-        # A project hosted without an agreement is a contract to write, not a
-        # fee to type into this screen, and offering to type it here was an
-        # invitation to have the number in two places and a document for
-        # neither.
-        if p.hosting_fee is None:
-            continue
-        by_month = costs.get(p.id, {})
-        cost = by_month.get(month, 0.0)
-        fee = p.monthly_hosting_fee
-        key, label = _status(fee, cost, p.id in mapped)
-        fill_pct, line_pct = _bar(fee, cost)
-        # The client's billing, said once, on its first priced row.
-        bill = billing.get(p.client_id)
-        if bill is not None and p.client_id in billed_once:
-            bill = None
-        elif bill is not None:
-            billed_once.add(p.client_id)
-
-        paid = paid_by_customer.get(
-            (p.client.stripe_customer_id if p.client else None) or "", {})
+    for r in rows:
+        # Only priced projects reach here: a statement of work and a hosting
+        # agreement both write the fee onto the project, so appearing on this
+        # page is what having agreed one looks like.
+        p = r["project"]
+        r["fill_pct"], r["line_pct"] = _bar(r["fee"], r["cost"])
+        r["map_url"] = (url_for("service_costs.mapping_create", project_id=p.id)
+                        if r["status"] == "unmapped" else None)
+        # Under the floor, so a fee update is due: what it becomes, and the
+        # link that drafts the agreement saying so.
+        if r["increase"]:
+            r["increase"] = dict(r["increase"], url=increase_url(r["increase"]))
+        paid = paid_by_customer.get((p.client.stripe_customer_id if p.client else None) or "", {})
         collected = paid.get("collected", 0.0)
         railway = railway_lifetime.get(p.id, 0.0)
+        # The same question the tiles ask, asked about one client.
+        r["life"] = {
+            "collected": collected,
+            "outstanding": paid.get("outstanding", 0.0),
+            "railway": railway,
+            "margin": collected - railway,
+            "shared": projects_per_client.get(p.client_id, 1) > 1,
+        }
 
-        rows.append({
-            "project": p,
-            "fee": fee,
-            "raw_fee": p.hosting_fee,
-            "cycle": p.hosting_cycle or "monthly",
-            "cost": cost,
-            "annual_share": annualised.get(p.id, {}).get(month, 0.0),
-            "margin": (fee - cost) if fee is not None else None,
-            "fill_pct": fill_pct,
-            "line_pct": line_pct,
-            "status": key,
-            "status_label": label,
-            "bill": bill,
-            "map_url": (url_for("service_costs.mapping_create", project_id=p.id)
-                        if key == "unmapped" else None),
-            # Under the floor, so a fee update is due: what it becomes, and
-            # the link that drafts the agreement saying so.
-            "increase": (dict(inc, url=increase_url(inc))
-                         if key in ("loss", "raise")
-                         and (inc := _increase_for(p, p.hosting_fee, p.hosting_cycle))
-                         else None),
-            # The same question the tiles ask, asked about one client.
-            "life": {
-                "collected": collected,
-                "outstanding": paid.get("outstanding", 0.0),
-                "railway": railway,
-                "margin": collected - railway,
-                "shared": projects_per_client.get(p.client_id, 1) > 1,
-            },
-        })
-
-    rows.sort(key=lambda r: (STATUS_ORDER.get(r["status"], 9),
-                             -(r["cost"] or 0), r["project"].name.lower()))
-
-    totals = {
-        "needs_attention": sum(1 for r in rows if r["status"] in ("loss", "raise", "unmapped"))
-        + sum(1 for r in rows if r["bill"] and r["bill"]["state"] != "ok"),
-    }
+    totals = {"needs_attention": sum(r["counted"] for r in rows)}
 
     # The lifetime question, which is a different one from the month's. The
     # bars ask whether each fee still covers its own infrastructure; this asks

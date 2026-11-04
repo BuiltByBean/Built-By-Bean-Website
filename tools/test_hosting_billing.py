@@ -188,6 +188,33 @@ before = len(MODIFIED)
 c.post(f"/admin/hosting/billing/{made['Unbilled'].client_id}")
 check("a client with no subscription is never sent anything", len(MODIFIED) == before)
 
+print("\n7. ONE READING, TWO PLACES")
+# The badge reads Stripe's last answer and the page a fresh one. When the two
+# differ, the badge must still say what the page just drew: one function
+# (hosting_rows) on one answer. In the fresh answer Kuper is billed the agreed
+# $50, so nothing is counted for it; the last answer still says $40, which
+# would count. The old code counted the badge from the last answer.
+STALE = dict(hosting_billing._CACHE["data"])
+FRESH = dict(STALE, cus_kuper=[dict(STALE["cus_kuper"][0], amount=50.0, monthly=50.0)])
+real_current, real_snapshot = hosting_billing.current, hosting_billing.snapshot
+hosting_billing.current = lambda ttl=300: FRESH
+hosting_billing.snapshot = lambda app=None: STALE
+hosting._DUE_CACHE.update(at=0.0, rows=[])
+page = c.get("/admin/hosting/").data.decode("utf-8", "replace")
+tile = re.search(r"Needs a look.*?>(\d+)<", page, re.S)
+counted = int(tile.group(1)) if tile else -1
+with application.test_request_context():
+    badge = hosting.increases_due_count()
+check("the page drew Kuper as billed what was agreed", "Billed $40.00/mo" not in page)
+check("and the badge says the page's number, not the last answer's", badge == counted, (badge, counted))
+hosting_billing.current, hosting_billing.snapshot = real_current, real_snapshot
+
+print("\n8. THE PRESS ACTS IN PLACE")
+check("the bill press is a live action",
+      re.search(r"<form[^>]*billing/\d+[^>]*data-live-action", page) is not None)
+check("inside a live region that is always drawn, with the tiles beside it",
+      'data-live="hosting-rows"' in page and 'data-live="hosting-tiles"' in page)
+
 print("\n6. THE BADGE NEVER WAITS ON STRIPE")
 asked = []
 hosting_billing._CACHE.update(at=0.0, data=None)

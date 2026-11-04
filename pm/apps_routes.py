@@ -138,7 +138,9 @@ def railway_unlisted():
 @apps_bp.route("/railway/<int:id>/add", methods=["POST"])
 @login_required
 def railway_add(id):
-    """One press: a tile for this service, then its edit page to check it."""
+    """One press: a tile for this service. It answers the list again, so the
+    live action swaps the row out where it stands; the flash names the tile,
+    which is on My Apps to check."""
     import railway_watch
     from models import RailwayService
     s = db.session.get(RailwayService, id) or abort(404)
@@ -159,8 +161,8 @@ def railway_add(id):
     db.session.flush()
     _refresh_icon(link)
     db.session.commit()
-    flash(f"{link.name} is on My Apps. Check its name and link.", "success")
-    return redirect(url_for("apps.edit", id=link.id))
+    flash(f"{link.name} is on My Apps. Check its name and link there.", "success")
+    return redirect(url_for("apps.railway_unlisted"))
 
 
 @apps_bp.route("/railway/<int:id>/ignore", methods=["POST"])
