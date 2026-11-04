@@ -364,9 +364,12 @@ def build_package_prompt(package):
                "to copy, a rule that reads badly, or a product that now "
                "exists. Every change applies at once, and a nightly curator "
                "merges and prunes, so write for any project, not this one.")
-    out.append("  File the work as it happens: upsert_project once, log_time "
-               "and log_expense as they occur, register_hosting_resource "
-               "for anything stood up.")
+    # Time is not on the list: the SessionEnd hook logs a session's hours
+    # from its own transcript, and a log_time on top would bill them twice.
+    out.append("  File the work as it happens: upsert_project once, "
+               "log_expense as it occurs, register_hosting_resource for "
+               "anything stood up. Do not log_time for this session: its "
+               "hours log themselves when it ends.")
     out.append("  Where the guidance above disagrees with what you find, say "
                "so plainly instead of quietly deviating - Best Practices gets "
                "corrected, not ignored.")

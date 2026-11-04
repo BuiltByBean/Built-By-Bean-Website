@@ -1264,6 +1264,13 @@ def log_expense():
 @guidance_bp.route("/time", methods=["POST"])
 def log_time():
     body = request.get_json(silent=True) or {}
+    # The SessionEnd hook: a session's own stretches of work, keyed on its id,
+    # and the board works out the project, the rate and whether it is his own
+    # (session_time.py). A session calling log_time by hand comes the old way.
+    if body.get("session_ref"):
+        import session_time
+        answer, status = session_time.log_session(body)
+        return jsonify(answer), status
     client, err = _find_client(body.get("client"))
     if err:
         return jsonify({"error": err}), 400

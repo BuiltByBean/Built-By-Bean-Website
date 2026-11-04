@@ -1155,6 +1155,10 @@ class TimeEntry(db.Model):
     # adding a second one.
     session_ref = db.Column(db.String(80), nullable=True, unique=True,
                             index=True)
+    # The stretches of that session that were work, as [[start, end], ...] in
+    # UTC ISO. Kept so two sessions running side by side on one project are
+    # billed for the hour once, not twice (session_time.py).
+    spans_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     @property

@@ -4,7 +4,8 @@ signature_requests gains what the document proposes (effects_json), what to
 put back if it is declined or voided (undo_json), and when the proposal was
 applied (effects_applied_at). time_entries gains session_ref, the Claude
 Code session a logged block of time came from, unique so the SessionEnd hook
-re-running corrects its entry rather than adding a second one.
+re-running corrects its entry rather than adding a second one, and
+spans_json, the stretches of that session that were work.
 
 Every add is guarded on the column not existing, because create_all runs on
 boot and a fresh database already has them.
@@ -40,9 +41,12 @@ def upgrade():
         if "effects_applied_at" not in have:
             batch.add_column(sa.Column("effects_applied_at", sa.DateTime(), nullable=True))
 
-    if "session_ref" not in _columns("time_entries"):
-        with op.batch_alter_table("time_entries") as batch:
+    have = _columns("time_entries")
+    with op.batch_alter_table("time_entries") as batch:
+        if "session_ref" not in have:
             batch.add_column(sa.Column("session_ref", sa.String(80), nullable=True))
+        if "spans_json" not in have:
+            batch.add_column(sa.Column("spans_json", sa.Text(), nullable=True))
     if "ix_time_entries_session_ref" not in _indexes("time_entries"):
         op.create_index("ix_time_entries_session_ref", "time_entries",
                         ["session_ref"], unique=True)
@@ -51,9 +55,11 @@ def upgrade():
 def downgrade():
     if "ix_time_entries_session_ref" in _indexes("time_entries"):
         op.drop_index("ix_time_entries_session_ref", table_name="time_entries")
-    if "session_ref" in _columns("time_entries"):
-        with op.batch_alter_table("time_entries") as batch:
-            batch.drop_column("session_ref")
+    have = _columns("time_entries")
+    with op.batch_alter_table("time_entries") as batch:
+        for name in ("spans_json", "session_ref"):
+            if name in have:
+                batch.drop_column(name)
 
     have = _columns("signature_requests")
     with op.batch_alter_table("signature_requests") as batch:

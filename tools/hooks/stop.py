@@ -7,12 +7,15 @@ report_lesson or suggest_update followed, the stop is refused and the
 reason goes back to Claude as feedback. This has been here since the
 beginning and it works.
 
-**Unlogged work.** If commits were made and no log_time or log_expense
-followed, say so once. This is new, and it is here because an audit of
-the Robinson & Co. build - a whole new client, built end to end over two
-days with the board live - found log_time called ZERO times. Nothing was
-watching a commit, so nothing ever asked. The standing order said to log
-time as it happens; prose does not survive four hours of building.
+**Unconsulted work.** If feature modules were written and the catalogue
+was never asked, or a vendor was used and its runbook never read, say so
+once.
+
+It used to ask for log_time too, after an audit of the Robinson & Co.
+build found log_time called ZERO times in two days. Since 2026-11-04 the
+SessionEnd hook logs a session's time itself from the transcript's own
+timestamps (session_end.py), so asking a session to guess its hours as
+well would bill the same hour twice.
 
 Both are refused at most twice, and never when stop_hook_active is set,
 so a session that genuinely has nothing to file is not held hostage. The
@@ -23,7 +26,7 @@ import os
 import sys
 
 from _common import (
-    utf8_streams, GUIDANCE_TOOL, LESSON_TOOLS, PLAYBOOK_TOOL, TIME_TOOLS,
+    utf8_streams, GUIDANCE_TOOL, LESSON_TOOLS, PLAYBOOK_TOOL,
     marker_path, read_stdin_json,
     transcript_lines, work_marker_path,
 )
@@ -87,20 +90,15 @@ def check_work(data, lines):
     if marker is None:
         return 0
     whole = "\n".join(lines)
-    n = int(marker.get("commits") or 0)
     features = list(marker.get("features") or [])
 
-    # All three look at the WHOLE transcript, not at what followed the mark.
+    # Both look at the WHOLE transcript, not at what followed the mark.
     # Guidance and a runbook are owed BEFORE the thing that needs them, so
-    # "after" would be wrong by construction. Time reads the same way for a
-    # duller reason: a session that logs its hours and then keeps working
-    # has engaged with the obligation, and nudging it again teaches it to
-    # ignore the nudge. This is a floor, not an accountant.
-    owes_time = n and not any(tool in whole for tool in TIME_TOOLS)
+    # "after" would be wrong by construction.
     owes_guidance = features and GUIDANCE_TOOL not in whole
     vendors = list(marker.get("vendors") or [])
     owes_playbook = vendors and PLAYBOOK_TOOL not in whole
-    if not (owes_time or owes_guidance or owes_playbook):
+    if not (owes_guidance or owes_playbook):
         os.remove(path)
         return 0
     if not _bump(path, marker):
@@ -109,14 +107,6 @@ def check_work(data, lines):
     # One message, however many parts. Two separate nudges is how a hook
     # gets ignored.
     parts = []
-    if owes_time:
-        parts.append(
-            f"{n} commit{'' if n == 1 else 's'} landed this session and no "
-            "time was logged. If this was work on a client's project, call "
-            "log_time with the client, the project, the hours and what was "
-            "built - and log_expense for anything bought. Measure the hours "
-            "rather than estimating them: the transcript has timestamps, and "
-            "summing the gaps under fifteen minutes is closer than memory.")
     if owes_guidance:
         shown = ", ".join(features[:4]) + ("…" if len(features) > 4 else "")
         parts.append(

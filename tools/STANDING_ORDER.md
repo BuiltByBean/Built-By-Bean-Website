@@ -39,9 +39,12 @@ lesson. That is the harness enforcing this order, not a request.
 - When a lesson costs something (a bug that shipped, a vendor screen that
   moved, a better file to copy), file it through report_lesson or
   suggest_update the moment it is learned, not at the end of the work.
-- Doing real client work: upsert_project for the project, log_time and
-  log_expense as they happen, register_hosting_resource for anything
-  stood up, and register_app the moment a public URL is verified - a
+- Doing real client work: upsert_project for the project, log_expense as
+  it happens, register_hosting_resource for anything stood up, and
+  register_app the moment a public URL is verified. Do not call log_time
+  for the session's own hours: the SessionEnd hook measures them from the
+  transcript and logs them against the repo's project, and a second entry
+  bills the hour twice. log_time is for work done outside a session. A
   build is not stood up until it is on My Apps, and a green
   register_hosting_resource without a url does NOT put it there.
 - If the tools are missing from a session, or answer 401, say so once and

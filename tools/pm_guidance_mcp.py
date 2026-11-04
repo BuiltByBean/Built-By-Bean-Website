@@ -375,8 +375,11 @@ TOOLS = [
     {
         "name": "log_time",
         "description": (
-            "Record hours worked on a client's project. rate_type: "
-            "maintenance (default), new_feature, or mvp_build."),
+            "Record hours worked on a client's project OUTSIDE a Claude "
+            "session (a call, a site visit). Never for this session's own "
+            "hours: the SessionEnd hook measures and logs those, and a "
+            "second entry bills them twice. rate_type: maintenance "
+            "(default), new_feature, or mvp_build."),
         "inputSchema": {
             "type": "object",
             "properties": {

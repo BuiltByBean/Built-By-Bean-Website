@@ -1,4 +1,4 @@
-"""Put the three hooks into ~/.claude/settings.json, merging with whatever
+"""Put the four hooks into ~/.claude/settings.json, merging with whatever
 is there. Run by the bootstrap; safe to run again - it replaces its own
 entries and touches nothing else.
 
@@ -23,6 +23,8 @@ EVENTS = {
     # work is owed to the board, and it arrives as a shell command.
     "PostToolUse": ("Edit|Write|Bash|PowerShell", "post_tool.py", 10),
     "Stop": (None, "stop.py", 10),
+    # The session's time logs itself as it ends (audit item 3, 2026-11-04).
+    "SessionEnd": (None, "session_end.py", 15),
 }
 
 
