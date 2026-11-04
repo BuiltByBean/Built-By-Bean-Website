@@ -1315,7 +1315,9 @@ list's Last contact column is the newest mail (`Client.last_messages`, one
 query for the page). The Stripe "Synced" pill, green on every client, became
 an Invoices link. The page also shows their contracts (hidden ones stay
 hidden, as on Contracts) and their apps from My Apps. Delete client moved to
-the form, the app-hub fields fold away unless filled, Documents is compact,
+the edit page's header, behind the client's name typed in a dialog and checked
+again on the server (it takes every project and invoice with it), the app-hub
+fields fold away unless filled, Documents is compact,
 and on a phone the name sits under the company with no edit pencil so the
 table never scrolls sideways. `tools/test_clients_page.py`.
 

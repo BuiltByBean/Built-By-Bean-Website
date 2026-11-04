@@ -19,8 +19,9 @@ and proves:
   5. A converted lead follows its client's stage, whichever side moves it.
   6. Mail filed to nobody is filed to a client added afterwards.
   7. The pages: no contact log, no channel filters, Last contact from mail,
-     contracts and apps on the client page, delete on the form, the app
-     fields folded, and the old contact routes gone.
+     contracts and apps on the client page, delete in the edit page's header
+     behind the client's name typed (and checked again on the server), the
+     app fields folded, counts with commas, and the old contact routes gone.
 
 Run: python tools/test_clients_page.py
 """
@@ -220,11 +221,43 @@ check("an invoices link took the Stripe pill's place",
 check("email and phone are tappable", "mailto:kkendrick@jdentertain.com" in html)
 check("no delete on the page", "Delete client" not in html)
 html = c.get(f"/admin/clients/{ids['kenali']}/edit").data.decode("utf-8", "replace")
-check("delete lives on the form", "Delete client" in html)
+head = html.split('id="pm-actions"', 1)[1].split("</span>", 1)[0]
+check("delete is in the page header, not under the form", 'aria-label="Delete client"' in head, head[:300])
+check("it asks for the name typed", 'name="confirm_name"' in html and "Type <strong" in html)
+check("the dialog is a real modal", 'role="dialog"' in html and 'aria-modal="true"' in html
+      and '@keydown.tab="trap($event)"' in html)
 check("the app fields are folded", "Their app" in html and "open: false" in html)
 check("old contact routes are gone",
       c.post(f"/admin/clients/{ids['kenali']}/contacts").status_code == 404
       and c.post("/admin/contacts/1/delete").status_code == 404)
+# Type the name to confirm, held on the server: nothing, the wrong name and
+# half the name are refused; the right name in the wrong case deletes.
+with application.app_context():
+    doomed = Client(name="Doomed Client Co", email="d@doomed.example")
+    db.session.add(doomed)
+    db.session.flush()
+    db.session.add(Project(name="Doomed build", client_id=doomed.id, status="active"))
+    db.session.commit()
+    doomed_id = doomed.id
+for label, typed in (("nothing typed", None), ("the wrong name", "Kenali Kendrick"),
+                     ("half the name", "Doomed")):
+    data = {} if typed is None else {"confirm_name": typed}
+    r = c.post(f"/admin/clients/{doomed_id}/delete", data=data)
+    with application.app_context():
+        check(f"delete refused with {label}", db.session.get(Client, doomed_id) is not None
+              and r.status_code == 302 and "/edit" in r.headers.get("Location", ""))
+r = c.post(f"/admin/clients/{doomed_id}/delete", data={"confirm_name": "  doomed   CLIENT co "})
+with application.app_context():
+    check("the right name in the wrong case deletes", db.session.get(Client, doomed_id) is None)
+
+# Numbers wear their commas, the stage counts in the filter included.
+with application.app_context():
+    for i in range(1000):
+        db.session.add(Client(name=f"Bulk {i:04d}", stage="follow_up"))
+    db.session.commit()
+html = c.get("/admin/clients").data.decode("utf-8", "replace")
+check("stage counts wear their commas", "Follow up later (1,000)" in html)
+
 r = c.post(f"/admin/leads/{ids['converted']}/stage", data={"stage": "contracted"})
 with application.app_context():
     check("moving a converted lead's stage moves the client",

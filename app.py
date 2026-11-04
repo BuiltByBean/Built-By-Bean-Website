@@ -1212,6 +1212,14 @@ def create_app():
     def client_delete(id):
         client = db.session.get(Client, id) or abort(404)
         name = client.name
+        # The name typed in the dialog, checked here too: a confirmation that
+        # lives only in the browser is decoration. Case and spacing are
+        # forgiven, because the point is reading which client it is.
+        def _norm(text):
+            return " ".join((text or "").split()).casefold()
+        if not name or _norm(request.form.get("confirm_name")) != _norm(name):
+            flash(f"Type {name} exactly to delete them. Nothing was deleted.", "warning")
+            return redirect(url_for("pm.client_edit", id=client.id))
         db.session.delete(client)
         db.session.commit()
         flash(f"Client '{name}' deleted.", "success")

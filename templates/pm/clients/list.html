@@ -34,7 +34,7 @@
                    class="input-ring flex-1 min-w-[12rem] min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
             {% set stage_opts = [("", "Any")] %}
             {% for key, label in stage_choices %}
-            {% set _ = stage_opts.append((key, label ~ " (" ~ stage_counts.get(key, 0) ~ ")")) %}
+            {% set _ = stage_opts.append((key, label ~ " (" ~ (stage_counts.get(key, 0) | commas) ~ ")")) %}
             {% endfor %}
             <label class="flex items-center gap-2 min-w-0">
                 <span class="text-xs font-medium text-surface-500 uppercase tracking-wider">Stage</span>

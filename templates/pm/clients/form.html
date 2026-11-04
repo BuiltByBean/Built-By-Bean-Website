@@ -1,11 +1,23 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
-{% from "pm/components/confirm_button.html" import confirm_button with context %}
+{% from "pm/components/icon_button.html" import icon_button %}
 
 {% block back %}{%- if editing -%}{{ back_link(url_for('pm.client_detail', id=client.id), client.name) }}{%- else -%}{{ back_link(url_for('pm.clients_list'), 'Clients') }}{%- endif -%}{% endblock %}
 {% block page_title %}{{ 'Edit Client' if editing else 'New Client' }}{% endblock %}
 {% block page_subtitle %}{{ client.name if editing else 'Add a new client' }}{% endblock %}
+
+{# The page's actions live in the header (rule "An action is never at the
+   bottom of a scroll"). Delete is the only one, quiet, and it opens the
+   type-the-name dialog in the content block below: it takes every project
+   and invoice with it, so one tap in place is not enough. A plain onclick,
+   because the header sits outside any Alpine component. #}
+{% block header_actions %}
+{% if editing %}
+{{ icon_button('delete', 'Delete client', tone='danger',
+               attrs="onclick=\"window.dispatchEvent(new CustomEvent('delete-client'))\"") }}
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div>
@@ -100,22 +112,59 @@
         </form>
     </div>
 
-    {# Moved here from the client page, where a bin sat beside the stage picker
-       on every visit. invoices.client_id is NOT NULL, so the invoices go with
-       the client whether or not anybody expected them to; the question says so. #}
+    {# Type the name to confirm (catalogue rule). invoices.client_id is NOT
+       NULL, so the invoices go with the client; the dialog says how many.
+       Fixed to the viewport from the content block rather than the header,
+       whose glass would make it the dialog's containing block. Tab wraps
+       inside the card, reading the enabled controls on every press because
+       Delete is disabled until the name matches; Escape and Cancel give focus
+       back to whatever opened it. The route checks the name again. #}
     {% if editing %}
     {% set n_proj = client.projects.count() %}
     {% set n_inv = client.invoices | length %}
-    <div class="glass-card p-6 mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-sm text-surface-400 min-w-0">
-            Delete {{ client.name }}{% if n_proj or n_inv %}, with their
-            {%- if n_proj %} {{ n_proj }} project{{ '' if n_proj == 1 else 's' }}{% endif %}
-            {%- if n_proj and n_inv %} and{% endif %}
-            {%- if n_inv %} {{ n_inv }} invoice{{ '' if n_inv == 1 else 's' }}{% endif %}{% endif %}
-        </p>
-        <form method="POST" action="{{ url_for('pm.client_delete', id=client.id) }}">
-            {{ confirm_button('Delete client', 'Delete for good?') }}
-        </form>
+    <div x-data='{ isOpen: false, typed: "", back: null, name: {{ client.name|tojson }},
+                   norm(s) { return (s || "").trim().replace(/\s+/g, " ").toLowerCase() },
+                   get matches() { return this.norm(this.typed) === this.norm(this.name) },
+                   open() { this.back = document.activeElement; this.typed = ""; this.isOpen = true;
+                            this.$nextTick(() => this.$refs.input.focus()) },
+                   close() { this.isOpen = false; if (this.back) this.back.focus() },
+                   trap(e) { const els = [...this.$refs.card.querySelectorAll("input, button, a[href]")]
+                                 .filter(x => !x.disabled && x.offsetParent !== null);
+                             if (!els.length) return;
+                             const first = els[0], last = els[els.length - 1];
+                             if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+                             else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() } } }'
+         @delete-client.window="open()" @keydown.escape.window="isOpen && close()">
+        <div x-show="isOpen" x-cloak @click.self="close()"
+             class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
+            <div x-ref="card" role="dialog" aria-modal="true" aria-labelledby="delete-client-title"
+                 @keydown.tab="trap($event)"
+                 class="w-full max-w-md rounded-2xl border border-red-500/30 bg-surface-900 p-6 shadow-2xl">
+                <h2 id="delete-client-title" class="text-lg font-semibold text-white break-words">Delete {{ client.name }}?</h2>
+                {% if n_proj or n_inv %}
+                <p class="mt-2 text-sm text-surface-300">
+                    Their
+                    {%- if n_proj %} {{ n_proj | commas }} project{{ '' if n_proj == 1 else 's' }}{% endif %}
+                    {%- if n_proj and n_inv %} and{% endif %}
+                    {%- if n_inv %} {{ n_inv | commas }} invoice{{ '' if n_inv == 1 else 's' }}{% endif %}
+                    go too.
+                </p>
+                {% endif %}
+                <form method="POST" action="{{ url_for('pm.client_delete', id=client.id) }}" class="mt-4 space-y-4">
+                    <label class="block">
+                        <span class="block text-sm text-surface-300 mb-1.5">Type <strong class="text-white break-words">{{ client.name }}</strong> to confirm</span>
+                        <input x-ref="input" x-model="typed" name="confirm_name" type="text" autocomplete="off"
+                               class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+                    </label>
+                    <div class="flex flex-wrap justify-end gap-2">
+                        <button type="button" @click="close()"
+                                class="min-h-[44px] px-4 rounded-xl border border-white/10 text-sm font-medium text-surface-300 hover:text-white transition-colors">Cancel</button>
+                        <button type="submit" :disabled="!matches"
+                                class="min-h-[44px] px-4 rounded-xl bg-red-500/90 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Delete for good</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
     {% endif %}
 </div>
