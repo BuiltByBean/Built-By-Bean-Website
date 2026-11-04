@@ -553,11 +553,12 @@ night has a failed step or no night has finished in 26 hours; it links to
 `/admin/attention/nights`. A new nightly step goes through `night.step(...)` in
 `sync_costs._sweep`, never a bare try/print. `tools/test_night_log.py`.
 
-**The sidebar is Michael's order** (2026-11-04): Needs attention, then the
-Workspace, then Work: Businesses, Clients, Leads, Client support (Tickets in the
-code), Contracts, MVP Builder, My Apps, Handbook (Best Practices in the code and
-URLs), Time. Notes and Projects left it when the Workspace landed. Products
-folded into the MVP Builder the same day and has no link of its own.
+**The sidebar is Michael's groups** (2026-11-04, second pass), divided by rules
+with no headings: Needs attention and the Workspace; then Businesses, My Apps,
+Client support and Org (Team, renamed, once its session lands); then Clients,
+Contracts and Leads; then the Handbook (Best Practices in the code and URLs),
+the MVP Builder and Time; then Finances. Notes and Projects left when the
+Workspace landed, and Products folded into the MVP Builder.
 
 ## The books stand on the bank
 

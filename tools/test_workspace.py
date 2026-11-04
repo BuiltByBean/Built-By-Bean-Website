@@ -200,8 +200,10 @@ with application.app_context():
     print("3. the sidebar")
     html = c.get("/admin/workspace/tasks").get_data(as_text=True)
     nav = html[html.index("<nav"):html.index("</nav>")]
-    i_att, i_ws, i_work = nav.index("Needs attention"), nav.index("Workspace"), nav.index("Work</p>")
-    check("Workspace sits between Needs attention and Work", i_att < i_ws < i_work)
+    # Michael's groups (2026-11-04) have no Work heading; Businesses opens the
+    # first group under the Workspace.
+    i_att, i_ws, i_work = nav.index("Needs attention"), nav.index("Workspace"), nav.index("Businesses")
+    check("Workspace sits between Needs attention and the first group", i_att < i_ws < i_work)
     check("no Notes link", "/admin/notes" not in nav and ">Notes<" not in nav.replace("\n", "").replace(" ", ""))
     check("no Projects link", "/admin/projects" not in nav and "/admin/workspace/projects\"" not in nav)
     check("Client support not lit on a task page", "sidebar-link active" not in nav[nav.rindex("<a", 0, nav.index("Client support")):nav.index("Client support")])

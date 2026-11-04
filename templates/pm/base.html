@@ -1057,12 +1057,12 @@
             </a>
             <div class="my-2 border-t border-white/10"></div>
 
-            {# The work, in Michael's order (2026-11-04): the businesses first,
-               then the list of things to do, who the work is for, the work
-               itself, client support, the paper behind it, the builder that
-               starts the next one, what has been built, and how to build. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Work</p>
+            {# Michael's groups (2026-11-04, second pass): what he runs (his
+               businesses, what they have built, their support and, once it
+               lands, Org), then the client work (clients, the paper, the
+               pipeline), then how to build (the Handbook and the MVP Builder
+               that starts the next one). Dividers, no headings: he named the
+               groups by what is in them, not by a word over them. #}
             {# The command center: every business owned, above the work of
                any one of them. CEO only, like Users, because it carries the
                numbers that link a tax account to an eSystems login. #}
@@ -1073,16 +1073,10 @@
                 Businesses
             </a>
             {% endif %}
-            <a href="{{ url_for('pm.clients_list') }}"
-               class="sidebar-link {% if request.endpoint and 'client' in request.endpoint %}active{% endif %}">
-                {{ icon('clients') }}
-                Clients
-            </a>
-            <a href="{{ url_for('leads.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('leads.') %}active{% endif %}">
-                {# A megaphone: nothing else in the sidebar is one. #}
-                {{ icon('leads') }}
-                Leads
+            <a href="{{ url_for('apps.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
+                {{ icon('apps') }}
+                My Apps
             </a>
             <a href="{{ url_for('pm.tickets_list') }}"
                class="sidebar-link {% if request.endpoint and ('ticket' in request.endpoint or request.endpoint.startswith('support.')) %}active{% endif %}">
@@ -1096,10 +1090,30 @@
                     {%- endif %}
                 </span>
             </a>
+            <div class="my-2 border-t border-white/10"></div>
+
+            <a href="{{ url_for('pm.clients_list') }}"
+               class="sidebar-link {% if request.endpoint and 'client' in request.endpoint %}active{% endif %}">
+                {{ icon('clients') }}
+                Clients
+            </a>
             <a href="{{ url_for('contracts.contracts_index') }}"
                class="sidebar-link {% if request.endpoint and ('contract' in request.endpoint or request.endpoint in ('pm.engagement_letter_form', 'pm.generate_engagement_letter', 'pm.sow_form', 'pm.generate_sow')) %}active{% endif %}">
                 {{ icon('contracts') }}
                 Contracts
+            </a>
+            <a href="{{ url_for('leads.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('leads.') %}active{% endif %}">
+                {# A megaphone: nothing else in the sidebar is one. #}
+                {{ icon('leads') }}
+                Leads
+            </a>
+            <div class="my-2 border-t border-white/10"></div>
+
+            <a href="{{ url_for('practices.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.split('.')[0] in ('practices', 'features', 'playbooks', 'inbox', 'blueprints') %}active{% endif %}">
+                {{ icon('handbook') }}
+                Handbook
             </a>
             {# The builder closes the work block: a client's build, assembled
                on the call from Best Practices. It sat under Catalogue once,
@@ -1113,21 +1127,6 @@
                    overlapping tools collapse into scribble at this size. #}
                 {{ icon('mvp-builder') }}
                 MVP Builder
-            </a>
-            {# My Apps is what has been built and where it lives. The Handbook
-               (Best Practices in the code) is how to build: rules, features,
-               blueprints, playbooks, gaps and the history of what changed,
-               one tab strip across its pages (pm/practices_routes.py). Both
-               sit in Work since 2026-11-04, Michael's order. #}
-            <a href="{{ url_for('apps.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
-                {{ icon('apps') }}
-                My Apps
-            </a>
-            <a href="{{ url_for('practices.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.split('.')[0] in ('practices', 'features', 'playbooks', 'inbox', 'blueprints') %}active{% endif %}">
-                {{ icon('handbook') }}
-                Handbook
             </a>
             {% if time_tracking %}
             <a href="{{ url_for('pm.time_list') }}"
