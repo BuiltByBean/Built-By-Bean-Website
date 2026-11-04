@@ -144,6 +144,43 @@ product), Kuper Plumbing and Data Dungeon. Sessions write lists straight under
 a line of prose, which the markdown renderer runs into one paragraph, so the
 page puts the blank line in (`tidy_md`). `tools/test_blueprints.py`.
 
+## The icon vocabulary
+
+Michael, 2026-11-04: "give me an icon overhaul. and heck that is another thing
+that should likely go into handbooks is icons that I like to use for concepts."
+One drawing per concept (notifications, clients, delete, sign out), the same in
+every project: the Handbook's Icons tab (`/admin/practices/icons`,
+`pm/practices/icons.html`), each drawn at 20px on the sidebar's own ground,
+plain and lit. Heroicons v2 outline, viewBox 0 0 24 24, stroke 1.5; under 18px
+the same paths draw at stroke 2 so no line is thinner than a pixel, and that is
+the only thing size changes.
+
+- **Defaults in code, edits in the database.** `icon_defaults.py` is the
+  vocabulary as harvested from his repos; `IconConcept` holds a concept once
+  the door has changed it, written from its default on first touch
+  (`icon_vocabulary.row_for`). A concept with no row draws its default. Never
+  call `_target("icon", ...)` from a GET: it writes that row, which is why
+  `target_label` reads icons through `icon_vocabulary.get`.
+- **The board never draws an icon inline.** Every icon is
+  `{{ icon('concept', 'w-4 h-4 ...', label=None, attrs='') }}`, a Jinja global
+  (`pm/practices_routes.py`), cached per worker for 60 seconds and cleared on
+  every apply and revert. `attrs` is markup the call site owns (an Alpine
+  `:class`), dropped in verbatim, so never put data a user typed in it. A script
+  that draws its own (the business map's surface tiles) takes the shapes from
+  `icon_shapes([...])` and sets them with `x-html`. `icon_button`'s names are
+  concepts too. `tools/test_icons.py` fails on any `<svg` in `templates/pm`
+  outside the brand marks and the map's lines layer, and on an `icon()` naming
+  a concept the vocabulary lacks.
+- **The door** is `suggest_update` kind `icon` (fields `icon_vocabulary.FIELDS`;
+  the slug is the concept) and `get_icons` in the bridge (`/api/guidance/icons`,
+  `?concept=` by any word of its name or aliases). A drawing goes through
+  `clean_svg`: shapes and geometry only, re-written from what parsed, another
+  viewBox refused, because this markup is drawn on every page of the board.
+  A drawing another live concept already has is refused: catalogue rule
+  "One icon, one meaning" as a check, not a hope.
+- **Every build prompt carries THE ICONS**, one line per concept
+  (`prompt_lines`), after the rules.
+
 ## The god door
 
 Other Claude sessions reach the catalogue live through
@@ -2063,7 +2100,9 @@ getting missed.
 - **Text alone is never a button.** Anything that acts on press gets a border
   or a fill. Actions sit on the trailing edge.
 - **No explainer copy on pages.** Reasoning goes in code comments, never on
-  the screen. Never reuse one icon for two things.
+  the screen. Never reuse one icon for two things: every icon is
+  `icon('concept')` from the Handbook's vocabulary, and a concept that is not
+  there is added through the door before it is drawn.
 - **Migrations:** name every constraint, guard every create_table on the
   table not existing (create_all runs on boot and wins the race), drop
   children before parents, and run `flask db downgrade <prev>` then
