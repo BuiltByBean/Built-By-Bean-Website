@@ -3401,6 +3401,55 @@ class AppGap(db.Model):
         return f"<AppGap {self.blueprint_id} {self.key}>"
 
 
+class IconConcept(db.Model):
+    """One concept and the one drawing that stands for it, in every project.
+
+    Michael, 2026-11-04: "icons that I like to use for concepts ... you can
+    probably find places where I use similar icons for similar things across
+    my projects." The Handbook's Icons tab is this table, the board's
+    `icon('concept')` macro draws from it, and every build prompt carries it
+    as one line per concept. Written through the door (suggest_update, kind
+    icon) with Revert in History. Defaults live in code (icon_defaults.py),
+    edits here, so a fresh database still draws every icon.
+
+    `svg` is the inner markup only, sanitised to geometry (icon_vocabulary.
+    clean_svg): one viewBox (0 0 24 24) and one stroke style are the
+    vocabulary's, never an entry's.
+    """
+
+    __tablename__ = "icon_concepts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(80), nullable=False, unique=True)
+    name = db.Column(db.String(120), nullable=False)
+    # nav (a place), action (a press), status (a state), thing (an object).
+    group = db.Column(db.String(12), nullable=False, default="thing", server_default="thing")
+    svg = db.Column(db.Text, nullable=False, default="")
+    library = db.Column(db.String(80), default="")
+    icon_name = db.Column(db.String(80), default="")
+    aliases = db.Column(db.String(400), default="")
+    used_in_md = db.Column(db.Text, default="")
+    never_md = db.Column(db.Text, default="")
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    GROUPS = (("nav", "Places"), ("action", "Actions"), ("status", "States"), ("thing", "Things"))
+
+    @property
+    def display_name(self):
+        return self.name
+
+    @property
+    def group_label(self):
+        return dict(self.GROUPS).get(self.group, self.group)
+
+    def __repr__(self):
+        return f"<IconConcept {self.slug}>"
+
+
 class ProjectPlaybook(db.Model):
     """A playbook applied to a project: this vendor, on this build.
 
@@ -4350,7 +4399,7 @@ class CatalogueProposal(db.Model):
 
     KIND_LABELS = {"feature": "Feature", "rule": "Rule",
                    "playbook": "Playbook", "product": "Product",
-                   "blueprint": "Blueprint", "map": "Map"}
+                   "blueprint": "Blueprint", "map": "Map", "icon": "Icon"}
 
     @property
     def is_live(self):

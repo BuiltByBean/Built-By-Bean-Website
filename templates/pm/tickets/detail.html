@@ -165,9 +165,7 @@
     <form method="POST" data-live-action action="{{ url_for('pm.ticket_upload_document', id=ticket.id) }}" enctype="multipart/form-data" class="mb-4">
         <div class="flex items-center gap-3">
             <label class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
-                <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                </svg>
+                {{ icon('upload', 'w-5 h-5 text-surface-400') }}
                 <span class="text-sm text-surface-400">Choose files to upload</span>
                 <input type="file" name="documents" multiple class="hidden" onchange="this.form.requestSubmit()">
             </label>
@@ -179,9 +177,7 @@
         {% for doc in documents %}
         <div class="flex items-center justify-between p-3 rounded-xl bg-surface-800/50">
             <div class="flex items-center gap-3 min-w-0">
-                <svg class="w-5 h-5 text-surface-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-                </svg>
+                {{ icon('document', 'w-5 h-5 text-surface-400') }}
                 <div class="min-w-0">
                     <p class="text-sm font-medium text-white truncate">{{ doc.original_name }}</p>
                     <p class="text-xs text-surface-400">{{ doc.size_display }} &middot; {{ doc.uploaded_at | format_date }}</p>

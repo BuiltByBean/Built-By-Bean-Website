@@ -1,0 +1,109 @@
+{% extends "pm/base.html" %}
+{% from "pm/practices/_tabs.html" import practices_tabs %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+
+{#
+  The icon vocabulary (icon_vocabulary.py): one drawing per concept, the
+  same in every project, and the drawing every icon on this board is.
+
+  Each concept is drawn at 20px, the size the sidebar uses, twice: in the
+  sidebar's ink on its ground, and lit the way the current page's link is.
+  Judged anywhere else, a drawing that reads at 64px on white can still be
+  scribble where it is actually seen.
+
+  Read only, like rules and playbooks: a concept is written through the
+  door (suggest_update, kind icon), and History has a Revert for each.
+  The bar filters in place and keeps the URL in step, as Everything does.
+  contained-scroll (LM-4): the bar stands still and the list scrolls.
+#}
+
+{% block title %}Icons - Handbook{% endblock %}
+{% block page_title %}Handbook{% endblock %}
+{% block page_subtitle %}One drawing per concept{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block content %}
+<div class="flex flex-col flex-1 min-h-0 gap-4 stagger-in"
+     x-data='{
+       q: {{ request.args.get("q", "") | tojson }},
+       shown: {{ total }},
+       clear() { this.q = ""; },
+       filter() {
+         const words = this.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+         let n = 0;
+         for (const group of this.$el.querySelectorAll("[data-group]")) {
+           let k = 0;
+           for (const row of group.querySelectorAll("[data-concept]")) {
+             const hit = words.every(w => row.dataset.search.includes(w));
+             row.hidden = !hit;
+             if (hit) k += 1;
+           }
+           group.hidden = k === 0;
+           n += k;
+         }
+         this.shown = n;
+         const p = new URLSearchParams();
+         if (this.q.trim()) p.set("q", this.q.trim());
+         history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p.toString() : ""));
+       }
+     }'
+     x-effect="filter()">
+
+    {{ practices_tabs('icon') }}
+
+    <form role="search" @submit.prevent class="shrink-0 relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
+        <input type="search" x-model="q" placeholder="Search concepts, names, where used"
+               aria-label="Search the icons"
+               class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
+        {{ clear_filters(click="clear()", show="q.trim() !== ''") }}
+    </form>
+
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="shrink-0 px-4 sm:px-5 py-3 border-b border-white/5">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
+                <span x-text="shown">{{ total }}</span> shown</span>
+        </div>
+        <div class="min-h-0 overflow-y-auto p-4 sm:p-5 space-y-6" id="icon-list">
+        {% for label, rows in groups %}
+        <section data-group aria-label="{{ label }}">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-3">{{ label }}</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+            {% for r in rows %}
+            <article data-concept="{{ r.slug }}"
+                     data-search="{{ [r.slug, r.name, r.icon_name, r.aliases, r.used_in_md, r.never_md] | join(' ') | lower }}"
+                     class="rounded-xl border border-white/10 bg-surface-800/40 p-3 flex flex-col gap-2 min-w-0">
+                <div class="flex items-center gap-3 min-w-0">
+                    <span class="icon-well w-11 h-11 shrink-0 rounded-xl flex items-center justify-center"
+                          title="On the sidebar">{{ icon(r.slug) }}</span>
+                    <span class="icon-well is-lit w-11 h-11 shrink-0 rounded-xl flex items-center justify-center"
+                          title="On the sidebar, the page you are on">{{ icon(r.slug) }}</span>
+                    <span class="min-w-0">
+                        <span class="block text-sm font-semibold text-white break-words">{{ r.name }}</span>
+                        <span class="block text-xs text-surface-400 break-words">
+                            <code class="text-brand-300">{{ r.slug }}</code>{% if r.icon_name %} &middot; {{ r.icon_name }}{% endif %}</span>
+                    </span>
+                </div>
+                {% if r.aliases %}
+                <p class="text-xs text-surface-300 break-words"><span class="text-surface-500">Also</span> {{ r.aliases }}</p>
+                {% endif %}
+                {% if r.used_in_md %}
+                <p class="text-xs text-surface-300 break-words"><span class="text-surface-500">Uses</span> {{ r.used_in_md }}</p>
+                {% endif %}
+                {% if r.never_md %}
+                <p class="text-xs text-surface-300 break-words"><span class="text-surface-500">Never</span> {{ r.never_md }}</p>
+                {% endif %}
+            </article>
+            {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+        <div x-show="shown === 0" x-cloak class="p-8 sm:p-12 text-center">
+            <p class="text-surface-400 mb-3">Nothing matches that.</p>
+            <button type="button" @click="clear()"
+                    class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                Show every icon</button>
+        </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -149,7 +149,7 @@ function playbookPanel(ids, preferred) {
         <button type="submit"
                 class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium
                        text-amber-300 border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            {{ icon('warning', 'w-4 h-4') }}
             Add {{ pb.display_name }}
         </button>
     </form>
@@ -197,10 +197,7 @@ function playbookPanel(ids, preferred) {
                         <p class="text-[11px] tabular-nums text-surface-500"
                            x-text="$store.pb.books['{{ book }}'].done + '/' + $store.pb.books['{{ book }}'].total"></p>
                     </div>
-                    <svg x-show="$store.pb.books['{{ book }}'].complete"
-                         class="w-4 h-4 flex-shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-                    </svg>
+                    {{ icon('check', 'w-4 h-4 text-emerald-400', attrs='x-show="$store.pb.books[\'%s\'].complete"' % book) }}
                 </div>
                 <div class="mt-2 h-1 rounded-full bg-surface-800 overflow-hidden">
                     <div class="h-full rounded-full transition-all duration-300"
@@ -213,7 +210,7 @@ function playbookPanel(ids, preferred) {
             {% if available_playbooks %}
             <button type="button" @click="$dispatch('open-playbook-picker')"
                     class="w-56 lg:w-full flex-shrink-0 flex items-center justify-center gap-1.5 rounded-xl p-2.5 text-sm font-medium text-surface-400 border border-dashed border-white/10 hover:text-brand-300 hover:border-brand-500/40 transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                {{ icon('add', 'w-4 h-4') }}
                 Add playbook
             </button>
             {% endif %}
@@ -264,18 +261,14 @@ function playbookPanel(ids, preferred) {
                     <a href="{{ url_for('playbooks.playbook_detail', slug=pb.slug) }}"
                        title="Read the {{ pb.display_name }} playbook"
                        class="p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                        </svg>
+                        {{ icon('handbook', 'w-4 h-4') }}
                     </a>
                     {# What has been ticked goes with it, so it asks - in
                        place, where the row is. #}
                     <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}">
                         {% call confirm_button(question='Remove it and the ticks?',
                                                btn_class='p-2 rounded-lg text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors') %}
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/>
-                            </svg>
+                            {{ icon('close', 'w-4 h-4') }}
                         {% endcall %}
                     </form>
                 </div>
@@ -310,10 +303,7 @@ function playbookPanel(ids, preferred) {
                                       :class="$store.pb.isDone('{{ book }}', '{{ sid }}')
                                               ? 'bg-emerald-500 border-emerald-500'
                                               : 'border-white/25 group-hover:border-brand-400'">
-                                    <svg x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
-                                         class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-                                    </svg>
+                                    {{ icon('check', 'w-3 h-3 text-white', attrs='x-show="$store.pb.isDone(\'%s\', \'%s\')"' % (book, sid)) }}
                                 </span>
                             </button>
                         </form>
@@ -334,9 +324,7 @@ function playbookPanel(ids, preferred) {
                             {% if note %}
                             <p x-show="$store.pb.isDone('{{ book }}', '{{ sid }}')"
                                class="flex items-start gap-1.5 mt-1.5 text-xs text-emerald-500/90">
-                                <svg class="w-3.5 h-3.5 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
+                                {{ icon('success', 'w-3.5 h-3.5 mt-px') }}
                                 <span>{{ note }}</span>
                             </p>
                             {% endif %}
@@ -344,9 +332,7 @@ function playbookPanel(ids, preferred) {
                             {% if step.waits_on_client %}
                             <button type="button" @click="showMsg = !showMsg"
                                     class="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-brand-400 hover:text-brand-300">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                                </svg>
+                                {{ icon('mail', 'w-3.5 h-3.5') }}
                                 <span x-text="showMsg ? 'Hide the message' : 'Message to send'"></span>
                                 <span class="text-surface-500">&middot; {{ step.client_channel or 'email' }}</span>
                             </button>
@@ -392,7 +378,7 @@ function playbookPanel(ids, preferred) {
     {% if available_playbooks %}
     <button type="button" @click="$dispatch('open-playbook-picker')"
             class="inline-flex items-center gap-1.5 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        {{ icon('add', 'w-4 h-4') }}
         Add playbook
     </button>
     {% endif %}
@@ -419,7 +405,7 @@ function playbookPanel(ids, preferred) {
                 <input type="text" x-model="q" x-ref="q" placeholder="Search playbooks..."
                        class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
                 <button @click="open = false" class="text-surface-400 hover:text-surface-200 p-1">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    {{ icon('close') }}
                 </button>
             </div>
 

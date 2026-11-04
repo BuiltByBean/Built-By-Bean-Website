@@ -31,9 +31,7 @@
    class="inline-flex max-w-full items-center gap-1.5 px-2.5 min-h-[44px] text-xs font-medium
           rounded-lg border border-surface-700 bg-surface-800/60 text-surface-300
           hover:bg-surface-700 hover:text-white transition-colors">
-    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-    </svg>
+    {{ icon('back', 'w-3.5 h-3.5') }}
     <span class="truncate min-w-0">{{ label }}</span>
 </a>
 {% endmacro %}

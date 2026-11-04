@@ -37,18 +37,35 @@ and get_playbook answer from the same rows through /api/guidance.
 from flask import Blueprint, render_template, url_for
 from flask_login import login_required
 
+import icon_vocabulary
 from models import AppBlueprint, AppGap, Feature, Playbook
 
 practices_bp = Blueprint("practices", __name__, url_prefix="/admin/practices")
 
 # What each kind of entry is called on its badge, and the badge's colour.
-TYPE_LABEL = {"rule": "Rule", "howto": "Feature", "playbook": "Playbook", "blueprint": "Blueprint"}
+TYPE_LABEL = {"rule": "Rule", "howto": "Feature", "playbook": "Playbook", "blueprint": "Blueprint",
+              "icon": "Icon"}
 TYPE_TONE = {
     "rule": "bg-violet-500/15 text-violet-300",
     "howto": "bg-sky-500/15 text-sky-300",
     "playbook": "bg-emerald-500/15 text-emerald-300",
     "blueprint": "bg-amber-500/15 text-amber-300",
+    "icon": "bg-rose-500/15 text-rose-300",
 }
+
+
+@practices_bp.app_template_global("icon")
+def icon(concept, cls="w-5 h-5", label=None, attrs="", small=None):
+    """Every icon on the board: {{ icon('clients') }}. The drawing is the
+    Handbook's (icon_vocabulary.py), so one change there is a change on
+    every page; a template never draws an icon inline."""
+    return icon_vocabulary.render(concept, cls, label, attrs, small)
+
+
+@practices_bp.app_template_global("icon_shapes")
+def icon_shapes(concepts):
+    """The shapes of several concepts, for a script that draws them."""
+    return icon_vocabulary.shapes(concepts)
 
 
 @practices_bp.app_template_global("practices_counts")
@@ -59,6 +76,7 @@ def practices_counts():
         "howto": Feature.query.filter_by(is_active=True, kind="feature").count(),
         "playbook": Playbook.query.filter_by(is_active=True).count(),
         "blueprint": AppBlueprint.query.filter_by(is_active=True).count(),
+        "icon": len(icon_vocabulary.concepts()),
         "gaps": (AppGap.query.join(AppBlueprint, AppGap.blueprint_id == AppBlueprint.id)
                  .filter(AppBlueprint.is_active.is_(True), AppGap.status == "open").count()),
     }
@@ -119,7 +137,29 @@ def entries():
             "search": _hay(b.name, b.slug, b.one_liner, b.source_repos,
                            *[s["body"] for s in b.sections], *[st.title for st in stages]),
         })
+    for r in icon_vocabulary.concepts():
+        out.append({
+            "key": f"i-{r['slug']}", "type": "icon", "name": r["name"], "slug": r["slug"],
+            "line": ", ".join(v for v in (r["icon_name"], r["aliases"]) if v),
+            "category": dict(icon_vocabulary.GROUPS).get(r["group"]),
+            "used_in": r["used_in_md"], "never": r["never_md"],
+            "open": url_for("practices.icons", q=r["slug"]),
+            "search": _hay(r["name"], r["slug"], r["icon_name"], r["aliases"], r["used_in_md"],
+                           r["never_md"], "icon"),
+        })
     return out
+
+
+@practices_bp.route("/icons")
+@login_required
+def icons():
+    """The icon vocabulary, every drawing at the size it is used, searchable
+    by concept. Read only, like rules and playbooks: a concept is written
+    through the door (suggest_update, kind icon), with Revert in History."""
+    rows = icon_vocabulary.concepts()
+    groups = [(label, [r for r in rows if r["group"] == key]) for key, label in icon_vocabulary.GROUPS]
+    return render_template("pm/practices/icons.html", groups=[g for g in groups if g[1]],
+                           total=len(rows))
 
 
 @practices_bp.route("/")

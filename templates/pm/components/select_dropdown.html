@@ -92,10 +92,7 @@
                  {% if sm %}text-xs rounded-lg pl-2.5 pr-1.5 py-2{% else %}text-sm rounded-xl pl-4 pr-3 py-2.5 min-h-[44px]{% endif %}"
           :class="{ 'border-brand-500/70 ring-[3px] ring-brand-500/25': open }">
     <span class="truncate" :class="{ 'text-surface-500': !chosen }" x-text="label">{{ placeholder }}</span>
-    <svg class="{% if sm %}w-3.5 h-3.5{% else %}w-4 h-4{% endif %} shrink-0 text-surface-500 transition-transform duration-200"
-         :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-    </svg>
+    {{ icon('expand', ('w-3.5 h-3.5' if sm else 'w-4 h-4') ~ ' text-surface-500 transition-transform duration-200', attrs=':class="{ \'rotate-180\': open }"') }}
   </button>
 
   {#- `w-full`, and nothing else that touches width: the panel is the control
@@ -174,10 +171,7 @@
               x-show: a descendant x-show inside this x-for makes the panel's
               own x-show transition wait on it forever (the cascade), and the
               panel then never opens. See CLAUDE.md LM-4. -#}
-          <svg :class="isPicked(i) ? '' : 'hidden'" class="w-3.5 h-3.5 shrink-0 text-brand-400"
-               fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-          </svg>
+          {{ icon('check', 'w-3.5 h-3.5 text-brand-400', attrs=':class="isPicked(i) ? \'\' : \'hidden\'"') }}
         </button>
       </template>
 

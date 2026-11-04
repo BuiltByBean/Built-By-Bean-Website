@@ -29,6 +29,7 @@ from flask import (Blueprint, Response, render_template, redirect, url_for,
 from flask_login import login_required
 
 import app_blueprints
+import icon_vocabulary
 from models import (db, AppBlueprint, Client, Feature, Product, Playbook,
                     MvpPackage, MvpPackageItem)
 from pm.products_routes import playbook_lines, price_list_context
@@ -321,6 +322,9 @@ def build_package_prompt(package):
                 out.extend(_feature_block(item))
 
     out.extend(_rules_for_build(areas))
+    # The icon vocabulary, one line per concept, so every new project draws
+    # notifications, clients or delete the way the others do.
+    out.extend(icon_vocabulary.prompt_lines())
 
     out.append("HOW TO WORK")
     out.append("  Start with the data model, and get a migration in from the "

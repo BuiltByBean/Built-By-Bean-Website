@@ -20,7 +20,7 @@
                 <span class="text-white truncate" x-text="l.label"></span>
                 <button type="button" @click="dropLink(i)" aria-label="Take this link off"
                         class="w-11 h-11 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-white hover:bg-white/5">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    {{ icon('close', 'w-3.5 h-3.5') }}
                 </button>
             </span>
         </template>
@@ -58,13 +58,13 @@
     <div class="flex items-center gap-2">
         <button type="button" @click="pickOpen = !pickOpen; setTimeout(() => pickOpen && $refs.q.focus(), 50)" :aria-expanded="pickOpen"
                 class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-200 hover:bg-white/5 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+            {{ icon('link', 'w-4 h-4') }}
             Link
         </button>
         <button type="submit" :disabled="sending || (!body.trim() && !links.length)"
                 class="ml-auto inline-flex items-center gap-2 min-h-[44px] px-4 btn-brand text-sm font-medium rounded-xl disabled:opacity-50 transition-all">
             Send
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
+            {{ icon('send', 'w-4 h-4') }}
         </button>
     </div>
 </form>

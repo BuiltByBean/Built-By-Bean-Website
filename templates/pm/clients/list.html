@@ -10,7 +10,7 @@
 {% block header_actions %}
 <a href="{{ url_for('pm.client_create') }}"
    class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    {{ icon('add', 'w-4 h-4') }}
     New Client
 </a>
 {% endblock %}
@@ -113,10 +113,7 @@
                         <a href="{{ url_for('pm.client_edit', id=client.id) }}"
                            aria-label="Edit {{ client.company or client.name }}"
                            class="inline-flex items-center justify-center p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                            </svg>
+                            {{ icon('edit', 'w-4 h-4') }}
                         </a>
                     </td>
                 </tr>
@@ -131,9 +128,7 @@
     </div>
     {% else %}
     <div class="text-center py-12">
-        <svg class="w-12 h-12 mx-auto text-surface-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-        </svg>
+        {{ icon('clients', 'w-12 h-12 mx-auto text-surface-600 mb-4') }}
         {% if filtering %}
         <p class="text-surface-400 mb-4">No clients match those filters</p>
         <a href="{{ url_for('pm.clients_list') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-300 text-sm font-medium rounded-xl transition-colors">
@@ -142,7 +137,7 @@
         {% else %}
         <p class="text-surface-400 mb-4">No clients yet</p>
         <a href="{{ url_for('pm.client_create') }}" class="inline-flex items-center gap-2 px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            {{ icon('add', 'w-4 h-4') }}
             Add Your First Client
         </a>
         {% endif %}

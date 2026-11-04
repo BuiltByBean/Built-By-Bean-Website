@@ -111,9 +111,7 @@
                 <div class="flex flex-wrap gap-3">
                     <a href="{{ url_for('contracts.contract_signed_pdf', id=req.id) }}"
                        class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                        </svg>
+                        {{ icon('download', 'w-4 h-4') }}
                         Download signed PDF
                     </a>
                     {% if req.signed_document_id %}
@@ -145,10 +143,7 @@
                     <div class="flex flex-wrap gap-3 mt-4">
                         <a href="{{ url_for('contracts.revise', id=req.id) }}"
                            class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                            </svg>
+                            {{ icon('edit', 'w-4 h-4') }}
                             Revise and resend
                         </a>
                     </div>
@@ -296,9 +291,7 @@
                 {% if editor_url %}
                 <a href="{{ editor_url }}"
                    class="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-xl btn-brand transition-all">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/>
-                    </svg>
+                    {{ icon('place-fields', 'w-4 h-4') }}
                     Place fields in SignaDoc
                 </a>
                 {% else %}

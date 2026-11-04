@@ -111,11 +111,7 @@
                         {{ e.charged | format_currency }} charged{% endif %}
                     </p>
                 </div>
-                <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform"
-                     :class="openId === {{ c.id }} ? 'rotate-180' : ''"
-                     fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                </svg>
+                {{ icon('expand', 'w-5 h-5 text-surface-400 transition-transform', attrs=':class="openId === %d ? \'rotate-180\' : \'\'"' % c.id) }}
             </button>
 
             <div x-show="openId === {{ c.id }}" x-cloak class="px-4 sm:px-5 pb-5 space-y-5 border-t border-white/5 pt-4">

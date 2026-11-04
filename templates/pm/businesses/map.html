@@ -152,9 +152,7 @@
                     <template x-if="n.kind === 'audience'">
                         <div class="rounded-full bg-[#0b0b14] border-2 border-white/70 flex items-center justify-center"
                              :style="'width:' + px(64) + '; height:' + px(64)">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#f8fafc" stroke-width="1.6" :style="'width:' + px(32) + '; height:' + px(32)">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            </svg>
+                            {{ icon('clients', 'text-slate-50', attrs=':style="\'width:\' + px(32) + \'; height:\' + px(32)"') }}
                         </div>
                     </template>
 
@@ -172,8 +170,9 @@
                             <template x-if="!n.mark && n.kind === 'surface'">
                                 <div class="w-full h-full flex items-center justify-center"
                                      :style="'border-radius:' + px(16) + '; background: linear-gradient(135deg, #8b5cf6, #c026d3); box-shadow: 0 ' + px(6) + ' ' + px(18) + ' rgba(139,92,246,0.35)'">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-                                         :style="'width:' + px(38) + '; height:' + px(38)"><path :d="glyph(n.glyph)"/></svg>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                                         aria-hidden="true" :data-icon="n.glyph" x-html="glyph(n.glyph)"
+                                         :style="'width:' + px(38) + '; height:' + px(38)"></svg>
                                 </div>
                             </template>
                             <template x-if="!n.mark && n.kind === 'service'">
@@ -276,16 +275,8 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
-    const GLYPHS = {
-        globe: 'M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.5-2.5 3.5-5.5 3.5-9S14.5 5.5 12 3m0 18c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3M3 12h18',
-        app: 'M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 4h16M8 4v6',
-        door: 'M5 3h10a1 1 0 011 1v16a1 1 0 01-1 1H5V3zm11 4h4v10h-4M12 12h.01',
-        phone: 'M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zm3 17h2',
-        pulse: 'M3 12h4l2-6 4 12 2-6h6',
-        board: 'M4 5h16v12H4zM9 21h6m-3-4v4M8 13l3-3 2 2 3-4',
-        mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
-        dot: 'M12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0',
-    };
+    // The surface glyphs, drawn from the icon vocabulary (Handbook, Icons).
+    const GLYPHS = {{ icon_shapes(['website', 'web-app', 'portal', 'phone-app', 'status-page', 'admin-board', 'mail']) | tojson }};
     const LABEL = { audience: 'People', surface: 'What they use', service: 'What powers it', outcome: 'What it delivers', hole: 'Every business needs one', center: 'The business' };
     Alpine.data('bizMap', (map) => ({
         map, tx: 0, ty: 0, k: 1, dragging: false, moved: false,
@@ -370,7 +361,7 @@ document.addEventListener('alpine:init', () => {
             this.tx = (w - (x1 - x0) * k) / 2 - x0 * k;
             this.ty = (h - (y1 - y0) * k) / 2 - y0 * k;
         },
-        glyph(name) { return GLYPHS[name] || GLYPHS.dot; },
+        glyph(name) { return GLYPHS[name] || GLYPHS['web-app']; },
         kindLabel(n) { return n.kind === 'service' && n.need ? n.need : LABEL[n.kind] || ''; },
         /* Everything the pinned or hovered node touches: the rest dims. */
         get dim() { return !!(this.pinned || this.hover); },

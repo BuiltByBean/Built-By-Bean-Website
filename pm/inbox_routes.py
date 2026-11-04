@@ -51,6 +51,8 @@ FIELD_LABELS = {
     "shape_md": "what it is", "parts_md": "the parts", "connections_md": "how they talk",
     "tweaks_md": "what changes per project", "source_repos": "repos",
     "stages": "the build order", "map": "the map",
+    "svg": "the drawing", "icon_name": "icon name", "aliases": "also called",
+    "used_in_md": "where he uses it", "never_md": "never confused with", "group": "group",
 }
 
 MODE_VERBS = {"append": "Added to", "replace": "Rewrote", "create": "Created",

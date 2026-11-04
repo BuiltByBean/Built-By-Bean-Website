@@ -17,7 +17,7 @@
     <button type="submit" form="{{ form_id }}" class="min-h-[44px] px-5 btn-brand text-sm font-medium rounded-xl">Save</button>
     <button type="button" @click="close()" aria-label="Close"
             class="w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-400 hover:text-white hover:bg-white/5">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        {{ icon('close') }}
     </button>
 </div>
 <div class="min-h-0 overflow-y-auto p-4 sm:p-5">
@@ -33,7 +33,7 @@
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Messages about it</p>
             <a href="{{ url_for('workspace.message_new', about='task:' ~ task.id) }}"
                class="ml-auto inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-white/10 text-xs text-surface-200 hover:bg-white/5">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>
+                {{ icon('messages', 'w-4 h-4') }}
                 Message about it</a>
         </div>
         {% for row in about %}

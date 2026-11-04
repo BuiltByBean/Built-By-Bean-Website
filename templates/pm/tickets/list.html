@@ -32,24 +32,21 @@
         <input type="hidden" name="next" value="{{ request.full_path }}">
         <button type="submit" aria-label="Ask every app now" title="Ask every app now"
                 class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            {{ icon('refresh', 'w-4 h-4') }}
             <span class="hidden sm:inline">Resync</span>
         </button>
     </form>
     <a href="{{ url_for('pm.ticket_create') }}"
        class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        {{ icon('add', 'w-4 h-4') }}
         New ticket
     </a>
 </div>
 {% endblock %}
 
-{# Four links, four glyphs, none used for anything else on the board. #}
-{% set LINK_GLYPHS = {
-  'support_url': 'M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728M15.536 8.464a5 5 0 010 7.072M8.464 15.536a5 5 0 010-7.072M13 12a1 1 0 11-2 0 1 1 0 012 0z',
-  'admin_url': 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-  'site_url': 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9',
-  'status_url': 'M3 12h4l3-8 4 16 3-8h4'
+{# Four links, four concepts of the icon vocabulary. #}
+{% set LINK_ICONS = {
+  'support_url': 'support', 'admin_url': 'admin', 'site_url': 'website', 'status_url': 'status-page'
 } %}
 {% set TONE = {'good': 'text-emerald-400', 'ok': 'text-amber-400', 'bad': 'text-red-400', '': 'text-surface-300'} %}
 
@@ -92,7 +89,7 @@
     {% if can_answer_desk %}
     <a href="{{ url_for('support.edit', id=a.id) }}" aria-label="{{ a.name }} settings" title="Settings"
        class="inline-flex items-center justify-center w-11 h-11 -mt-1 -mr-1 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 shrink-0">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      {{ icon('settings', 'w-4 h-4') }}
     </a>
     {% endif %}
   </div>
@@ -117,7 +114,7 @@
     {% for key, label, url in a.links %}
     <a href="{{ url }}" target="_blank" rel="noopener" aria-label="{{ a.name }} {{ label | lower }}" title="{{ label }}"
        class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="{{ LINK_GLYPHS[key] }}"/></svg>
+      {{ icon(LINK_ICONS[key]) }}
     </a>
     {% endfor %}
   </div>
@@ -168,10 +165,7 @@
       <span class="text-xs font-semibold text-amber-400 whitespace-nowrap"
             title="Waiting on you">{{ span(now.replace(tzinfo=none) - t.waiting_since.replace(tzinfo=none)) if t.waiting_since else '' }}</span>
       {% endif %}
-      <svg class="w-4 h-4 text-surface-500 transition-transform group-hover:text-surface-300"
-           :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-      </svg>
+      {{ icon('expand', 'w-4 h-4 text-surface-500 transition-transform group-hover:text-surface-300', attrs=':class="open && \'rotate-180\'"') }}
     </span>
   </button>
 

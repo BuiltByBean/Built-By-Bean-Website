@@ -44,9 +44,11 @@ STATUS_COLOR = {
     "live": "#34d399", "building": "#fbbf24", "planned": "#94a3b8",
     "running": "#34d399", "setting_up": "#fbbf24",
 }
+# Each kind of surface is a concept of the icon vocabulary (Handbook, Icons);
+# the map draws it from there.
 SURFACE_GLYPH = {
-    "site": "globe", "app": "app", "portal": "door", "phone": "phone",
-    "status": "pulse", "admin": "board", "inbox": "mail", "other": "dot",
+    "site": "website", "app": "web-app", "portal": "portal", "phone": "phone-app",
+    "status": "status-page", "admin": "admin-board", "inbox": "mail", "other": "web-app",
 }
 
 # Rings, in map units from the centre. A tile is 64 wide with its labels
@@ -125,7 +127,7 @@ def layout(business, nodes, edges, needs=(), need_links=()):
             need=(n.need.name if n.need else ""), need_slug=(n.need.slug if n.need else ""),
             runbook_missing=(n.kind == "service" and n.playbook_id is None
                              and not (n.need is not None and n.need.in_house)),
-            glyph=SURFACE_GLYPH.get(n.surface_kind or "other", "dot") if n.kind == "surface" else "",
+            glyph=SURFACE_GLYPH.get(n.surface_kind or "other", "web-app") if n.kind == "surface" else "",
             color=(STATUS_COLOR.get(n.status or "", KIND_COLOR[n.kind]) if n.kind == "outcome"
                    else KIND_COLOR[n.kind]))
 
@@ -169,7 +171,7 @@ def layout(business, nodes, edges, needs=(), need_links=()):
     for i, s in enumerate(surfaces):
         s["angle"] = -math.pi / 2 + i * 2 * math.pi / max(1, len(surfaces))
     anchor = {s["key"]: s["angle"] for s in surfaces}
-    admin = next((s for s in surfaces if s.get("glyph") == "board"), surfaces[0] if surfaces else None)
+    admin = next((s for s in surfaces if s.get("glyph") == "admin-board"), surfaces[0] if surfaces else None)
     base = admin["angle"] if admin else -math.pi / 2
 
     def settle(kind, radius):

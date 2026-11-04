@@ -86,8 +86,9 @@ print("1. Everything lists what is active")
 with application.test_request_context():
     items = entries()
 names = [e["name"] for e in items]
-check("a rule, a feature and a playbook, and no product", sorted(e["type"] for e in items) ==
-      ["howto", "playbook", "rule"], names)
+check("a rule, a feature and a playbook, and no product",
+      sorted(e["type"] for e in items if e["type"] != "icon") == ["howto", "playbook", "rule"], names)
+check("and the icon vocabulary", any(e["type"] == "icon" and e["slug"] == "clients" for e in items))
 check("a switched-off feature is not listed", "Retired thing" not in names)
 
 print("2. The search reaches the traps")

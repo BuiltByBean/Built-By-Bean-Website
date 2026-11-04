@@ -40,7 +40,9 @@ from models import (db, Feature, Playbook, PlaybookStep, Product,
                     ProviderInvoice)
 from models import AppLink  # the My Apps tile (register_app)
 from models import AppBlueprint  # a whole app end to end (app_blueprints.py)
+from models import IconConcept  # the icon vocabulary (icon_vocabulary.py)
 import app_blueprints
+import icon_vocabulary  # one drawing per concept, in every project
 import tend_service  # the Tend run's brief, map changes and gaps
 import store_versions_service  # the two store pages' live versions for a phone app
 from pm.apps_routes import _normalise as _normalise_url, _refresh_icon as _refresh_app_icon
@@ -312,6 +314,23 @@ def blueprint_detail(slug):
                     "blueprint": "\n".join(app_blueprints.blueprint_lines(row))})
 
 
+@guidance_bp.route("/icons")
+def icons():
+    """The icon vocabulary. ?concept= narrows it to the concepts whose name,
+    slug, icon name or aliases carry every word given; a slug alone answers
+    that one concept."""
+    words = [w for w in re.split(r"[^a-z0-9]+", (request.args.get("concept") or "").lower()) if w]
+    rows = icon_vocabulary.concepts()
+    if words:
+        exact = [r for r in rows if r["slug"] == "-".join(words)]
+        rows = exact or [r for r in rows if all(
+            w in " ".join((r["slug"], r["name"], r["icon_name"], r["aliases"])).lower() for w in words)]
+    keep = ("slug", "name", "group", "library", "icon_name", "aliases", "used_in_md", "never_md", "svg")
+    return jsonify({"viewBox": icon_vocabulary.VIEWBOX, "stroke_width": icon_vocabulary.STROKE,
+                    "icons": [{k: r[k] for k in keep} for r in rows],
+                    "text": "\n\n".join(icon_vocabulary.entry_text(r) for r in rows)})
+
+
 # ── The Tend run (.claude/skills/tend) ─────────────────
 # Best Practices upkeep as a Claude Code session on Michael's plan, in place
 # of the paid nightly curator. tend_service.py says what each of these is.
@@ -558,6 +577,10 @@ TEXT_FIELDS = {
     # field, the build order, carried as a list the way a playbook's steps are.
     "blueprint": ("name", "one_liner", "source_repos", "shape_md", "parts_md",
                   "connections_md", "tweaks_md", "traps_md", "stages"),
+    # One concept of the icon vocabulary (icon_vocabulary.py). `svg` is
+    # checked and re-written from what parsed (clean_svg), and a drawing
+    # already standing for another concept is refused.
+    "icon": icon_vocabulary.FIELDS,
 }
 # No prices through this door, in or out. What something sells for is
 # Michael's, typed on the Products page and the SOW.
@@ -567,7 +590,7 @@ TEXT_FIELDS = {
 APPENDABLE = {"summary", "gold_standard_md", "pitfalls_md", "client_only_md",
               "access_grant_md", "your_steps_md", "traps_md", "verify_md",
               "prompt_intro", "steps", "shape_md", "parts_md", "connections_md",
-              "tweaks_md", "stages"}
+              "tweaks_md", "stages", "used_in_md", "never_md"}
 
 # The most one proposal's text may carry, and past it the door refuses
 # rather than cuts. An append grows a field without limit, so a replace has
@@ -581,7 +604,7 @@ TEXT_MAX = 60000
 # Which prose field a bare lesson lands in when the entry already exists.
 LESSON_FIELD = {"feature": "pitfalls_md", "rule": "pitfalls_md",
                 "playbook": "traps_md", "product": "summary",
-                "blueprint": "traps_md"}
+                "blueprint": "traps_md", "icon": "never_md"}
 
 
 def _fields_for(kind):
@@ -597,12 +620,22 @@ def _target(kind, slug):
         return Product.query.filter_by(slug=slug).first()
     if kind == "blueprint":
         return AppBlueprint.query.filter_by(slug=slug).first()
+    if kind == "icon":
+        # A concept still on its default has no row until the door touches
+        # it; this writes one from the default (flushed, so it commits with
+        # the change or rolls back with it).
+        return icon_vocabulary.row_for(slug)
     return None
 
 
 def target_label(kind, slug):
     if kind == tend_service.MAP_KIND:
         return tend_service.map_label(slug)
+    if kind == "icon":
+        # Read, never written: _target would write a concept's row from its
+        # default, and a History page is a GET.
+        row = icon_vocabulary.get(slug) if slug else None
+        return row["name"] if row else (slug or "(new)")
     row = _target(kind, slug) if slug else None
     if row is None:
         return slug or "(new)"
@@ -855,6 +888,24 @@ def _create_from(kind, payload, project):
             traps_md=_cap(payload.get("traps_md"), TEXT_MAX),
             app_id=app_id, business_id=business_id, sort_order=last + 10,
         )
+    elif kind == "icon":
+        svg, err = icon_vocabulary.clean_svg(payload.get("svg"))
+        if err:
+            return None, err
+        clash = icon_vocabulary.duplicate_of(svg, slug)
+        if clash:
+            return None, f"that drawing already stands for {clash}; one icon, one meaning"
+        group = payload.get("group") if payload.get("group") in dict(icon_vocabulary.GROUPS) else "thing"
+        last = db.session.query(db.func.max(IconConcept.sort_order)).scalar() or 0
+        row = IconConcept(
+            slug=slug, name=name, group=group, svg=svg,
+            library=_cap(payload.get("library") or icon_vocabulary.LIBRARY, 80),
+            icon_name=_cap(payload.get("icon_name"), 80),
+            aliases=_cap(payload.get("aliases"), 400),
+            used_in_md=_cap(payload.get("used_in_md"), 6000),
+            never_md=_cap(payload.get("never_md"), 6000),
+            sort_order=last + 10,
+        )
     else:
         return None, "unknown kind"
     db.session.add(row)
@@ -886,6 +937,7 @@ def apply_proposal(proposal):
             return False, err
         proposal.target_slug = row.slug
         proposal.previous = None
+        icon_vocabulary.invalidate()
         return True, ""
 
     row = _target(proposal.kind, proposal.target_slug)
@@ -896,6 +948,7 @@ def apply_proposal(proposal):
             return False, "already there"
         proposal.previous = "active"
         row.is_active = False
+        icon_vocabulary.invalidate()
         return True, ""
     field = proposal.field
     if field not in _fields_for(proposal.kind):
@@ -917,9 +970,21 @@ def apply_proposal(proposal):
         if field == "category" and new not in Feature.CATEGORY_LABELS:
             return False, ("category must be one of "
                            + ", ".join(Feature.CATEGORY_LABELS))
+        if proposal.kind == "icon" and field == "svg":
+            new, err = icon_vocabulary.clean_svg(new)
+            if err:
+                return False, err
+            clash = icon_vocabulary.duplicate_of(new, row.slug)
+            if clash:
+                return False, f"that drawing already stands for {clash}; one icon, one meaning"
+            proposal.proposed = new
+        if proposal.kind == "icon" and field == "group" and new not in dict(icon_vocabulary.GROUPS):
+            return False, "group must be one of " + ", ".join(dict(icon_vocabulary.GROUPS))
 
     proposal.previous = "" if old is None else str(old)
     setattr(row, field, new)
+    if proposal.kind == "icon":
+        icon_vocabulary.invalidate()
     return True, ""
 
 
@@ -935,12 +1000,14 @@ def revert_proposal(proposal):
         # inside a build prompt somebody generated, and a row that vanishes
         # under a foreign key is a worse outcome than one that goes quiet.
         row.is_active = False
+        icon_vocabulary.invalidate()
         return True, ""
     row = _target(proposal.kind, proposal.target_slug)
     if row is None:
         return False, "no such entry"
     if proposal.mode == "retire":
         row.is_active = True
+        icon_vocabulary.invalidate()
         return True, ""
     field = proposal.field
     if field == STEP_FIELD:
@@ -950,6 +1017,8 @@ def revert_proposal(proposal):
     if field not in _fields_for(proposal.kind):
         return False, f"{field} is no longer a field here"
     setattr(row, field, proposal.previous or "")
+    if proposal.kind == "icon":
+        icon_vocabulary.invalidate()
     return True, ""
 
 
@@ -964,7 +1033,7 @@ def _propose(*, kind, slug, field, mode, text, reason, project, payload=None,
     it, folds it into one, or discards it. Nobody has to press anything.
     """
     if kind not in CatalogueProposal.KIND_LABELS:
-        return {"error": "kind must be feature, rule, playbook, product or blueprint"}, 400
+        return {"error": "kind must be feature, rule, playbook, product, blueprint or icon"}, 400
     if mode not in ("append", "replace", "create", "retire"):
         return {"error": "mode must be append, replace, create or retire"}, 400
     if not project:

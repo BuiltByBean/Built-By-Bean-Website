@@ -172,9 +172,7 @@
         {% endfor %}
         <form method="POST" action="{{ url_for('businesses.filing_upload', id=filing.id) }}" enctype="multipart/form-data">
             <label class="flex items-center justify-center gap-2 min-h-[44px] px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
-                <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                </svg>
+                {{ icon('upload', 'w-5 h-5 text-surface-400') }}
                 <span class="text-sm text-surface-300">Add the confirmation PDF</span>
                 <input type="file" name="confirmation" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden" onchange="this.form.submit()">
             </label>
@@ -291,10 +289,7 @@
         <button type="button" @click="open = !open" :aria-expanded="open"
                 class="w-full min-h-[44px] p-4 sm:p-5 flex items-center justify-between gap-3 text-left">
             <span class="text-sm font-semibold uppercase tracking-wider text-surface-400">The sales behind it</span>
-            <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform" :class="open ? 'rotate-180' : ''"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
+            {{ icon('expand', 'w-5 h-5 text-surface-400 transition-transform', attrs=':class="open ? \'rotate-180\' : \'\'"') }}
         </button>
         <div x-show="open" x-cloak class="px-4 sm:px-5 pb-5 space-y-4">
             {% for line in figures.lines %}
@@ -327,10 +322,7 @@
                 class="w-full min-h-[44px] p-4 sm:p-5 flex items-center justify-between gap-3 text-left">
             <span class="text-sm font-semibold uppercase tracking-wider text-surface-400">
                 {{ 'Type the reference number' if filing and filing.is_draft else ('Correct the record' if filing else 'Record it') }}</span>
-            <svg class="w-5 h-5 shrink-0 text-surface-400 transition-transform" :class="open ? 'rotate-180' : ''"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
+            {{ icon('expand', 'w-5 h-5 text-surface-400 transition-transform', attrs=':class="open ? \'rotate-180\' : \'\'"') }}
         </button>
         <form x-show="open" x-cloak method="POST" enctype="multipart/form-data"
               action="{{ url_for('businesses.return_record', slug=business.slug, year=year, quarter=quarter) }}"
@@ -410,9 +402,7 @@
             {% if not filing %}
             <div x-data="{ names: '' }">
                 <label class="flex items-center justify-center gap-2 min-h-[44px] px-4 py-3 rounded-xl border-2 border-dashed border-surface-600 hover:border-brand-500 cursor-pointer transition-colors">
-                    <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                    </svg>
+                    {{ icon('upload', 'w-5 h-5 text-surface-400') }}
                     <span class="text-sm text-surface-300 break-all" x-text="names || 'Confirmation PDF'">Confirmation PDF</span>
                     <input type="file" name="confirmation" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden"
                            @change="names = Array.from($event.target.files).map(f => f.name).join(', ')">

@@ -195,9 +195,7 @@
                 <a href="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
                    class="inline-flex items-center gap-2 mt-3 px-4 min-h-[44px] text-sm font-medium rounded-xl
                           border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                    </svg>
+                    {{ icon('calendar', 'w-4 h-4') }}
                     Monthly costs
                 </a>
                 {% endif %}

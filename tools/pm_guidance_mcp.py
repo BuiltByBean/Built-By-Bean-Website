@@ -99,6 +99,26 @@ TOOLS = [
         },
     },
     {
+        "name": "get_icons",
+        "description": (
+            "The owner's icon vocabulary: one drawing per concept "
+            "(notifications, clients, delete, sign out ...), the same in "
+            "every project, with the SVG, its library name, other names for "
+            "the concept and what it must never be confused with. Call it "
+            "before drawing any icon, and use one icon macro that draws from "
+            "it. With no concept it gives the whole vocabulary. A concept "
+            "that is missing goes in with suggest_update kind icon (payload: "
+            "name, group nav|action|status|thing, svg, icon_name, aliases, "
+            "used_in_md, never_md) before it is used; a drawing already "
+            "standing for another concept is refused."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"concept": {
+                "type": "string",
+                "description": "A concept or a word for one, e.g. delete or invoices; empty for all"}},
+        },
+    },
+    {
         "name": "tend_brief",
         "description": (
             "For the Tend run only (.claude/skills/tend): everything Best "
@@ -294,7 +314,12 @@ TOOLS = [
             "payload.stages, a list of {title, detail_md, playbooks: [names "
             "or slugs], features: [names or slugs]}; a name that matches "
             "nothing is reported back and left out. When you change how an "
-            "app with a blueprint is put together, append to it. For a "
+            "app with a blueprint is put together, append to it. icon (one "
+            "concept of the icon vocabulary, see get_icons): name, group "
+            "(nav, action, status or thing), svg (Heroicons outline shapes "
+            "in viewBox 0 0 24 24; a drawing another concept already has is "
+            "refused), library, icon_name, aliases, used_in_md, never_md; "
+            "its slug is the concept. For a "
             "create, put the new entry's fields in payload (name plus any of "
             "the above, steps included for a playbook, stages for a "
             "blueprint)."),
@@ -302,7 +327,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "kind": {"type": "string",
-                         "enum": ["feature", "rule", "playbook", "product", "blueprint"]},
+                         "enum": ["feature", "rule", "playbook", "product", "blueprint", "icon"]},
                 "slug": {"type": "string",
                          "description": "The entry's slug (not for create)"},
                 "field": {"type": "string",
@@ -600,6 +625,21 @@ def tool_get_blueprint(args):
     return f"No blueprint called {name!r}. There are: " + (", ".join(b["slug"] for b in rows) or "none yet")
 
 
+def tool_get_icons(args):
+    concept = (args.get("concept") or "").strip()
+    path = "/api/guidance/icons" + (f"?concept={urllib.parse.quote(concept)}" if concept else "")
+    text, err = _http("GET", path)
+    if err:
+        return err
+    data = json.loads(text)
+    if not data.get("icons"):
+        return (f"No icon concept matches {concept!r}. Add it with suggest_update kind icon "
+                "before drawing one.")
+    head = (f"Every drawing: viewBox {data['viewBox']}, fill none, stroke currentColor, "
+            f"stroke-width {data['stroke_width']}, round caps and joins.\n\n")
+    return head + data["text"]
+
+
 def tool_tend_brief(_args):
     text, err = _http("GET", "/api/guidance/tend")
     return err or json.loads(text)["brief"]
@@ -813,6 +853,7 @@ HANDLERS = {
     "get_feature_guidance": tool_get_feature_guidance,
     "get_playbook": tool_get_playbook,
     "get_blueprint": tool_get_blueprint,
+    "get_icons": tool_get_icons,
     "tend_brief": tool_tend_brief,
     "close_note": tool_close_note,
     "get_map": tool_get_map,

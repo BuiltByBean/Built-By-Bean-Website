@@ -34,9 +34,7 @@
          {% if disabled_expr %}:disabled="{{ disabled_expr }}"{% endif %}
          class="bb-check-input sr-only">
   <span class="bb-check{% if align == 'start' %} mt-0.5{% endif %}">
-    <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-    </svg>
+    {{ icon('check', '', small=true) }}
   </span>
   {% if caller %}{{ caller() }}{% elif label %}<span class="text-sm text-surface-300">{{ label }}</span>{% endif %}
 </label>

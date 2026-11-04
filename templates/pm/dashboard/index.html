@@ -108,9 +108,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Total Revenue</span>
             <div class="w-10 h-10 rounded-xl bg-emerald-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+                {{ icon('revenue', 'w-5 h-5 text-emerald-500') }}
             </div>
         </div>
         <p class="text-3xl font-bold text-emerald-400">{{ total_revenue | format_currency }}</p>
@@ -121,9 +119,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Invoiced</span>
             <div class="w-10 h-10 rounded-xl bg-accent-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
-                </svg>
+                {{ icon('invoices', 'w-5 h-5 text-accent-400') }}
             </div>
         </div>
         {# White rather than a status colour: this is the total still to come,
@@ -144,9 +140,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Unbilled Revenue</span>
             <div class="w-10 h-10 rounded-xl bg-amber-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+                {{ icon('time', 'w-5 h-5 text-amber-500') }}
             </div>
         </div>
         <p class="text-3xl font-bold text-amber-400">{{ total_unbilled | format_currency }}</p>
@@ -158,9 +152,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Total Expenses</span>
             <div class="w-10 h-10 rounded-xl bg-red-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/>
-                </svg>
+                {{ icon('trend-down', 'w-5 h-5 text-red-500') }}
             </div>
         </div>
         <p class="text-3xl font-bold text-red-400">{{ total_expenses | format_currency }}</p>
@@ -170,9 +162,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Profit before tax</span>
             <div class="w-10 h-10 rounded-xl bg-brand-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                </svg>
+                {{ icon('trend-up', 'w-5 h-5 text-brand-500') }}
             </div>
         </div>
         <p class="text-3xl font-bold {% if pre_tax_profit >= 0 %}text-brand-400{% else %}text-red-400{% endif %}">{{ pre_tax_profit | format_currency }}</p>
@@ -191,9 +181,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Estimated taxes</span>
             <div class="w-10 h-10 rounded-xl bg-amber-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m-6 4h6m-6 4h4M5 3h14a1 1 0 011 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 011-1z"/>
-                </svg>
+                {{ icon('taxes', 'w-5 h-5 text-amber-400') }}
             </div>
         </div>
         <p class="text-3xl font-bold text-amber-400">{{ estimated_tax | format_currency }}</p>
@@ -219,9 +207,7 @@
         <div class="flex items-center justify-between mb-3">
             <span class="text-sm font-medium text-surface-400">Profit after tax</span>
             <div class="w-10 h-10 rounded-xl bg-emerald-900/20 flex items-center justify-center">
-                <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13l4 4L19 7"/>
-                </svg>
+                {{ icon('check', 'w-5 h-5 text-emerald-400') }}
             </div>
         </div>
         <p class="text-3xl font-bold {% if post_tax_profit >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">{{ post_tax_profit | format_currency }}</p>

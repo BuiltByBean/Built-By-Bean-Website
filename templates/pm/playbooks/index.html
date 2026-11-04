@@ -29,9 +29,7 @@
 <form method="POST" data-live-action action="{{ url_for('playbooks.marks_refresh') }}">
     <button type="submit"
             class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 14.25h.008v.008H18v-.008zM2.25 6.75v10.5a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25h-15A2.25 2.25 0 002.25 6.75z"/>
-        </svg>
+        {{ icon('image', 'w-4 h-4') }}
         Get {{ missing | commas }} missing mark{{ '' if missing == 1 else 's' }}
     </button>
 </form>
@@ -106,9 +104,7 @@
               like, and the only thing on the page that says otherwise is this.
             #}
             <div class="mt-auto pt-3 border-t border-white/10 flex items-center gap-2 text-xs text-surface-400">
-                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+                {{ icon('time', 'w-3.5 h-3.5') }}
                 <span class="truncate">Updated {{ playbook.updated_at|format_date if playbook.updated_at else 'never' }}</span>
             </div>
         </a>
@@ -118,9 +114,7 @@
     {% endfor %}
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center">
-        <svg class="w-12 h-12 mx-auto text-surface-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-        </svg>
+        {{ icon('handbook', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
         <p class="text-surface-400">No playbooks yet</p>
     </div>
     {% endif %}

@@ -130,16 +130,12 @@
         <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <a href="{{ url_for('playbooks.playbook_detail', slug=playbook.slug) if editing else url_for('playbooks.playbooks_index') }}"
                class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700 transition-colors">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
+                {{ icon('close', 'w-4 h-4') }}
                 Cancel
             </a>
             <button type="submit"
                     class="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-                </svg>
+                {{ icon('save', 'w-4 h-4') }}
                 {{ 'Save playbook' if editing else 'Create playbook' }}
             </button>
         </div>
