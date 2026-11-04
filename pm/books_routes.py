@@ -133,9 +133,13 @@ def year_csv(id, year):
     w = csv.writer(out)
     w.writerow(["Kind", "Date", "Description", "Category", "Tax line", "Amount", "Company",
                 "Client", "Project", "Receipt", "Source"])
+    dba_rows = {(w_, a, lbl): name for w_, a, lbl, name in
+                books_service.dba_income_between(business, date(year, 1, 1), date(year + 1, 1, 1))}
     for when, amount, label in s["income"]:
-        w.writerow(["Income", when.isoformat(), label, "", "", f"{amount:.2f}", business.name,
-                    "", "", "", "invoices" if business.sales_source == "board" else "bank"])
+        dba = dba_rows.get((when, amount, label))
+        w.writerow(["Income", when.isoformat(), label, "", "", f"{amount:.2f}",
+                    f"{business.name} d/b/a {dba}" if dba else business.name, "", "", "",
+                    "bank" if dba or business.sales_source != "board" else "invoices"])
     for e in s["expenses"]:
         line, number = books_service.tax_line(e.category)
         w.writerow(["Expense", e.date.isoformat(),

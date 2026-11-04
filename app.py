@@ -882,7 +882,11 @@ def create_app():
             client_customer_ids
         )
 
-        total_revenue = stripe_totals["revenue"]
+        # A DBA's income is the company's (Personal Training's checks), and
+        # the Books count it, so Total Revenue does too.
+        import books_service
+        dba_revenue = books_service.board_dba_income_total()
+        total_revenue = stripe_totals["revenue"] + dba_revenue
         total_awaiting = stripe_totals["open"]
         total_invoiced = (
             stripe_totals["open"] + stripe_totals["draft"] + scheduled_subscriptions

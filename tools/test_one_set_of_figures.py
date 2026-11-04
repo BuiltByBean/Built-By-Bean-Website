@@ -132,6 +132,45 @@ biz = re.sub(r"\s+", " ", c.get("/admin/businesses").get_data(as_text=True))
 check("EntertainHQ's lifetime revenue is its Stripe sales",
       "$250.00" in biz and biz.count("App not reporting") == 0, biz.count("App not reporting"))
 
+print("5. A DBA's checks are the company's income, under the DBA's name")
+dash_before = money(dash, "Total Revenue")
+with application.app_context():
+    from models import BankConnection, BankTransaction
+    pt = Business(name="Personal Training", short_name="Personal Training", slug="pt", parent_id=ids["bbb"])
+    chk = BankConnection(business_id=ids["bbb"], provider="statement", label="Chase business checking")
+    db.session.add_all([pt, chk])
+    db.session.flush()
+    for n, (amt, day) in enumerate(((211.40, 3), (88.60, 9))):
+        db.session.add(BankTransaction(connection_id=chk.id, business_id=pt.id, external_id=f"pt{n}",
+                                       amount=amt, occurred_on=date(YEAR, 3, day), status="sent",
+                                       disposition="income", kind="statement",
+                                       counterparty="REMOTE ONLINE DEPOSIT # 1", description="CHECK_DEPOSIT"))
+    # The company's own money in is its invoices, already counted from
+    # Stripe: a deposit it holds itself must not count a second time.
+    db.session.add(BankTransaction(connection_id=chk.id, business_id=ids["bbb"], external_id="own",
+                                   amount=1000.0, occurred_on=date(YEAR, 3, 4), status="sent",
+                                   disposition="income", kind="statement", counterparty="CLIENT ACH"))
+    db.session.commit()
+    bbb_row = db.session.get(Business, ids["bbb"])
+    year2 = books_service.summarize(bbb_row, date(YEAR, 1, 1), date(YEAR + 1, 1, 1))
+check("Built by Bean earned $1,800: its invoices and Personal Training's checks",
+      year2["income_total"] == 1800.0, year2["income_total"])
+check("shown split by who earned it",
+      year2["income_sources"] == [{"label": "Built by Bean", "total": 1500.0},
+                                  {"label": "Personal Training", "total": 300.0}], year2["income_sources"])
+books = re.sub(r"\s+", " ", c.get(f"/admin/books/?tab={ids['bbb']}").get_data(as_text=True))
+check("the Books page names Personal Training", "Personal Training" in books and "$300.00" in books)
+taxes2 = c.get("/admin/taxes/").get_data(as_text=True)
+check("Taxes moves with it to the cent", money(taxes2, "Business profit") == year2["net"],
+      (money(taxes2, "Business profit"), year2["net"]))
+dash2 = c.get("/admin/finances").get_data(as_text=True)
+check("the dashboard's Total Revenue goes up by the same $300",
+      round(money(dash2, "Total Revenue") - dash_before, 2) == 300.0, (dash_before, money(dash2, "Total Revenue")))
+biz2 = re.sub(r"\s+", " ", c.get("/admin/businesses").get_data(as_text=True))
+check("Personal Training's tile reads its $300", "$300.00" in biz2)
+csv_text = c.get(f"/admin/books/{ids['bbb']}/year/{YEAR}.csv").get_data(as_text=True)
+check("the accountant's export says whose it was", "Built by Bean LLC d/b/a Personal Training" in csv_text)
+
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "all passed")
 sys.exit(1 if FAIL else 0)

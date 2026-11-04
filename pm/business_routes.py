@@ -281,8 +281,15 @@ def lifetime_revenue(business, ask=False):
     # A division is never "board": the board's invoices are its parent's
     # takings, and counting them again here would show one business's money
     # on two tiles. _fill refuses it; this holds for a row written elsewhere.
+    import books_service
     if business.sales_source == "board" and not business.is_division:
-        return round(get_stripe_invoice_totals()["revenue"], 2)
+        return round(get_stripe_invoice_totals()["revenue"] + books_service.board_dba_income_total(), 2)
+    # A DBA of the board company that earned into the bank (Personal
+    # Training's checks): what it earned, which its parent's tile includes.
+    if business.is_division:
+        dba = books_service.dba_income_between(business, date(2000, 1, 1), date.today() + timedelta(days=1))
+        if dba:
+            return round(sum(a for _, a, _, _ in dba), 2)
     # A company with its own Stripe connected earns there, and the Books page
     # already reads it; the tile reads the same rows rather than asking an app.
     if business.stripe_key and not business.is_division:

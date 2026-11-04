@@ -470,6 +470,18 @@ no penalty leaves a $0.00 row, which the expense form will not save
 (`NumberRange(min=0.01)`); there is nothing on one to edit.
 `tools/test_sales_tax_and_refunds.py`.
 
+**A DBA's money in is the company's, under the DBA's name** (Michael,
+2026-11-04, of the check deposits on Built by Bean's Chase checking: "that
+income would count as built by beans income but show it specifically as kind
+of a dba ... under personal training"). Personal Training is a DBA like Data
+Dungeon (migration `e5c3a9b17d42`, which moved the CHECK_DEPOSIT income lines
+onto it). `books_service.dba_income_between` reads bank lines settled as
+income that a DBA of the board company holds, and only those: the company's
+own money in is its invoices, already counted from Stripe, so a deposit it
+holds itself never counts again. Books, Taxes, the dashboard's Total Revenue
+and the Businesses tile all add it, the Books and the year report show
+`income_sources`, and the accountant's CSV names the row "d/b/a".
+
 **Income lives where the sale happens.** For a company with its own Stripe
 (EntertainHQ), `stripe_books.py` reads every line of its Stripe balance
 through a restricted key typed on the company's page (`Business.stripe_key`)

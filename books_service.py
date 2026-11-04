@@ -119,8 +119,70 @@ def _stripe_paid_invoices():
     return rows or None
 
 
+def dba_income_between(business, start, end):
+    """[(date, amount, label, dba)] of what the board company's DBAs earned
+    into its bank: Personal Training's checks (Michael, 2026-11-04: "would
+    count as built by beans income but show it specifically as kind of a dba
+    ... under personal training"). Only lines a DBA holds, never the
+    company's own, because the company's own money in is its invoices,
+    already counted from Stripe."""
+    from models import BankTransaction, Business
+    root = business.parent or business
+    if root.sales_source != "board":
+        return []
+    dbas = {b.id: b for b in Business.query.filter_by(parent_id=root.id).all()}
+    if business.id != root.id:
+        dbas = {business.id: dbas[business.id]} if business.id in dbas else {}
+    if not dbas:
+        return []
+    out = []
+    for line in (BankTransaction.query.filter(BankTransaction.business_id.in_(list(dbas)),
+                                              BankTransaction.disposition == "income",
+                                              BankTransaction.occurred_on >= start,
+                                              BankTransaction.occurred_on < end).all()):
+        dba = dbas[line.business_id]
+        name = dba.short_name or dba.name
+        out.append((line.occurred_on, round(line.amount, 2), f"{name}, deposit", name))
+    return sorted(out)
+
+
+def board_dba_income_total(start=None, end=None):
+    """All the board company's DBA income, for the dashboard and the
+    Businesses tile, which must read what the Books read."""
+    business = board_business()
+    if business is None:
+        return 0.0
+    return round(sum(a for _, a, _, _ in dba_income_between(
+        business, start or date(2000, 1, 1), end or date(2100, 1, 1))), 2)
+
+
 def income_between(business, start, end, sales=None):
     """[(date, amount, description)] of money earned, cash basis."""
+    root = business.parent or business
+    if root.sales_source == "board" and business.id != root.id:
+        # A DBA's own page: what it earned, never its parent's invoices.
+        return [(w, a, label) for w, a, label, _ in dba_income_between(business, start, end)]
+    out = _income_between(business, start, end, sales)
+    if root.sales_source == "board":
+        out = sorted(out + [(w, a, label) for w, a, label, _ in dba_income_between(root, start, end)])
+    return out
+
+
+def income_sources(business, start, end, income):
+    """The income split by who earned it, when a DBA earned any: the
+    company's own invoices, then each DBA by name."""
+    dba = dba_income_between(business, start, end)
+    root = business.parent or business
+    if not dba or business.id != root.id:
+        return []
+    by = OrderedDict()
+    by[root.short_name or root.name] = round(sum(a for _, a, _ in income) - sum(a for _, a, _, _ in dba), 2)
+    for _, amount, _, name in dba:
+        by[name] = round(by.get(name, 0.0) + amount, 2)
+    return [{"label": k, "total": v} for k, v in by.items()]
+
+
+def _income_between(business, start, end, sales=None):
     from models import BankTransaction, Invoice
     root = business.parent or business
     out = []
@@ -333,6 +395,7 @@ def summarize(business, start, end, sales=None):
         "by_month": OrderedDict(sorted((k, {"expenses": round(v["expenses"], 2),
                                             "income": round(v["income"], 2)})
                                        for k, v in by_month.items())),
+        "income_sources": income_sources(business, start, end, income),
         "owner_money": owner_money_between(business, start, end),
         "no_receipt": [e for e in expenses if not e.receipt_filename and e.amount > 0],
         "unsorted": unsorted,

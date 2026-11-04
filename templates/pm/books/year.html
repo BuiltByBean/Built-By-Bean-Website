@@ -49,6 +49,20 @@
         </div>
     </div>
 
+    {% if s.income_sources %}
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-3">Income by source</h2>
+        <div class="divide-y divide-white/5">
+            {% for r in s.income_sources %}
+            <div class="flex items-center justify-between gap-3 py-2.5 min-w-0">
+                <span class="text-sm text-white break-words min-w-0">{{ r.label }}</span>
+                <span class="text-sm font-semibold text-emerald-300 tabular-nums shrink-0">{{ money(r.total) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
     <section class="glass-card p-4 sm:p-6 min-w-0">
         <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-3">Expenses by line</h2>
         {% if s.tax_lines %}

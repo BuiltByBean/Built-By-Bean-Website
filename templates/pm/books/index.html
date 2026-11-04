@@ -66,6 +66,17 @@
             </div>
         </div>
 
+        {% if c.year.income_sources %}
+        <div data-income-sources class="divide-y divide-white/5 rounded-xl border border-white/10 overflow-hidden">
+            {% for r in c.year.income_sources %}
+            <div class="flex items-center justify-between gap-3 px-4 py-2.5 min-w-0">
+                <span class="text-sm text-white break-words min-w-0">{{ r.label }}</span>
+                <span class="text-sm font-semibold text-emerald-300 tabular-nums shrink-0">{{ money(r.total) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% if c.months %}
         <div class="divide-y divide-white/5 rounded-xl border border-white/10 overflow-hidden">
             {% for m in c.months %}
