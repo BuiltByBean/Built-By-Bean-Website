@@ -15,7 +15,7 @@ Every create is guarded on the table or column not existing, because
 create_all runs on boot and wins the race.
 
 Revision ID: f2a7c9d41e63
-Revises: d3b8f6a2c915
+Revises: b8e4d2a6c013
 Create Date: 2026-11-04
 """
 import os
@@ -25,7 +25,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "f2a7c9d41e63"
-down_revision = "d3b8f6a2c915"
+down_revision = "b8e4d2a6c013"
 branch_labels = None
 depends_on = None
 
