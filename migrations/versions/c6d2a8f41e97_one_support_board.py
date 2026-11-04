@@ -12,14 +12,14 @@ not something create_all adds, but they are guarded the same way so a second
 run is a no-op.
 
 Revision ID: c6d2a8f41e97
-Revises: c8f2d5a1e9b3
+Revises: c6d2e8f41a93
 Create Date: 2026-11-04
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "c6d2a8f41e97"
-down_revision = "c8f2d5a1e9b3"
+down_revision = "c6d2e8f41a93"
 branch_labels = None
 depends_on = None
 
