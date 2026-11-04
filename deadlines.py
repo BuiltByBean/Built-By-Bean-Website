@@ -159,9 +159,18 @@ def build(today=None, businesses=None, done_keys=None, payments=None):
                         else pressed(key))
                 if done and due < today - timedelta(days=365):
                     continue
-                out.append(_row(key, "franchise", b, f"{year} franchise tax report and PIR",
-                                due, today, done, proof="record",
-                                url=url_for("businesses.detail", id=b.id)))
+                row = _row(key, "franchise", b, f"{year} franchise tax report and PIR",
+                           due, today, done, proof="record",
+                           url=url_for("businesses.detail", id=b.id))
+                # Done is proved by the state's record, so before the board has
+                # read that record once it knows nothing either way. It said
+                # "late" for every year since formation on 2026-11-04, the day
+                # this shipped, while the Comptroller had Built by Bean's 2026
+                # report on file: a check that never ran read as a failure.
+                if not done and b.texas_taxpayer_number and not b.comptroller_checked_at:
+                    row["status"] = "unchecked"
+                    row["note"] = "Not checked with the state yet"
+                out.append(row)
 
         # A partnership return and a K-1 for each member, March 15.
         owners = list(getattr(b, "owners", []) or [])
@@ -227,7 +236,7 @@ def build(today=None, businesses=None, done_keys=None, payments=None):
             out.append(_row(key, "dba", b, "Renew the assumed name certificate", due, today,
                             pressed(key), url=url_for("businesses.detail", id=b.id)))
 
-    order = {"now": 0, "late": 1, "soon": 2, "upcoming": 3, "no_date": 4, "done": 5}
+    order = {"now": 0, "late": 1, "soon": 2, "upcoming": 3, "unchecked": 3, "no_date": 4, "done": 5}
     out.sort(key=lambda r: (order[r["status"]], r["due"], r["title"]))
     return out
 

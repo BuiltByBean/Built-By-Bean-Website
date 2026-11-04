@@ -70,10 +70,12 @@ with application.app_context():
     bbb = Business(name="Built by Bean LLC", short_name="Built by Bean", slug="built-by-bean",
                    texas_taxpayer_number="32093304155", formed_on=date(2024, 1, 17),
                    sales_tax_first_sale=date(2026, 4, 9), sales_source="manual",
-                   franchise_report_year=2026, franchise_status="ACTIVE")
+                   franchise_report_year=2026, franchise_status="ACTIVE",
+                   comptroller_checked_at=datetime(2026, 11, 4))
     ehq = Business(name="EntertainHQ LLC", short_name="EntertainHQ", slug="entertainhq",
                    texas_taxpayer_number="32108463343", formed_on=date(2026, 10, 5),
-                   sales_tax_first_sale=date(2026, 11, 6), sales_source="manual")
+                   sales_tax_first_sale=date(2026, 11, 6), sales_source="manual",
+                   comptroller_checked_at=datetime(2026, 11, 4))
     db.session.add_all([boss, member, bbb, ehq])
     db.session.flush()
     dd = Business(name="Data Dungeon", slug="data-dungeon", parent_id=bbb.id, sales_source="manual")
@@ -124,6 +126,37 @@ with application.test_request_context():
           renew and renew["due"] == date(2027, 1, 9), renew)
     check("no DBA files a franchise report or a return",
           not any(k.startswith((f"franchise:{dd_id}", f"sales_tax:{dd_id}")) for k in keys))
+
+print("\n2b. NOT CHECKED IS NOT LATE")
+# 2026-11-04: the list said Built by Bean's 2025 and 2026 franchise reports
+# were late before the board had once read the state's record, which had the
+# 2026 report on file. Before the first read a year is "not checked", never late.
+with application.app_context():
+    from models import Business as B
+    fresh = B(name="Fresh LLC", slug="fresh", texas_taxpayer_number="12345678901",
+              formed_on=date(2024, 1, 17), sales_source="manual")
+    db.session.add(fresh)
+    db.session.commit()
+    fresh_id = fresh.id
+with application.test_request_context():
+    keys = {r["key"]: r for r in dl.build(date(2026, 11, 4))}
+    check("a year the board never checked reads as not checked",
+          keys[f"franchise:{fresh_id}:2025"]["status"] == "unchecked"
+          and keys[f"franchise:{fresh_id}:2026"]["status"] == "unchecked")
+    rows = dl.attention_rows(date(2026, 11, 4))["deadlines"]
+    check("and is not on Needs attention", not any(r["key"].startswith(f"franchise:{fresh_id}:") for r in rows))
+with application.app_context():
+    f = db.session.get(B, fresh_id)
+    f.comptroller_checked_at, f.franchise_report_year = datetime(2026, 11, 4), 2026
+    db.session.commit()
+with application.test_request_context():
+    keys = {r["key"]: r for r in dl.build(date(2026, 11, 4))}
+    check("once read, the state's 2026 report proves 2025 and 2026 done",
+          keys[f"franchise:{fresh_id}:2026"]["status"] == "done"
+          and keys.get(f"franchise:{fresh_id}:2025", {"status": "done"})["status"] == "done")
+with application.app_context():
+    db.session.delete(db.session.get(B, fresh_id))
+    db.session.commit()
 
 print("\n3. WHAT PROVES DONE")
 dues = {(2026, 4): date(2027, 1, 15), (2027, 1): date(2027, 4, 15)}

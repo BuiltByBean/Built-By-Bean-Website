@@ -13,6 +13,7 @@
     'late': ('Late', 'bg-red-900/30 text-red-300'),
     'soon': ('Soon', 'bg-amber-500/15 text-amber-300'),
     'upcoming': ('Coming up', 'bg-surface-800 text-surface-300'),
+    'unchecked': ('Not checked', 'bg-surface-800 text-surface-300'),
     'no_date': ('No date', 'bg-surface-800 text-amber-300'),
     'done': ('Done', 'bg-emerald-900/30 text-emerald-400'),
 } %}
@@ -83,7 +84,7 @@
 
     {% set groups = [
         ('Needs you', rows | selectattr('status', 'in', ['now', 'late', 'soon']) | list),
-        ('Coming up', rows | selectattr('status', 'equalto', 'upcoming') | list),
+        ('Coming up', rows | selectattr('status', 'in', ['upcoming', 'unchecked']) | list),
         ('Not on file', rows | selectattr('status', 'equalto', 'no_date') | list),
         ('Done', rows | selectattr('status', 'equalto', 'done') | list),
     ] %}
