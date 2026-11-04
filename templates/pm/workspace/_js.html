@@ -44,6 +44,29 @@
         };
     };
 
+    /* A segmented switch: one mark slides to the option picked. Its state is
+       its own and it sits in no swapped region, so a pick never redraws it;
+       a filter's pick then asks for the rows (liveFilter) and only those move. */
+    window.wsSeg = function (value) {
+        return {
+            value: value,
+            markStyle: 'opacity:0',
+            placed: false,
+            init() {
+                setTimeout(() => this.place(), 0);
+                if (window.ResizeObserver) new ResizeObserver(() => this.place()).observe(this.$el);
+            },
+            place() {
+                const b = this.$el.querySelector('[data-seg="' + this.value + '"]');
+                if (!b) return;
+                const glide = this.placed ? ';transition:transform 300ms ease-out,width 300ms ease-out' : '';
+                this.markStyle = 'width:' + b.offsetWidth + 'px;transform:translateX(' + b.offsetLeft + 'px)' + glide;
+                if (b.offsetWidth) this.placed = true;
+            },
+            pick(v) { this.value = v; this.place(); },
+        };
+    };
+
     /* The sidebar's badge and the tab counts, from a counts answer. */
     window.wsCounts = function (c) {
         if (!c) return;

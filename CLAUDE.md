@@ -394,6 +394,35 @@ a script by `src` loads after it. `tools/test_workspace.py`, which runs every
 request as its own login (`As`): inside one app context Flask-Login's user is
 cached on `g`, and every client would otherwise be whoever asked first.
 
+**A project has a kind** (Michael, the same evening: "EntertainHQ, Ideas, Piped
+those are my products they wouldnt even follow the same phases", "Lets Cook
+doesnt even belong on this page"). `Project.kind` is client, product or
+personal; NULL follows the client (`kind_effective`: his own client row, by
+address or by a CEO's name, means product). Only a client build walks the client
+phases, is moved by dates (`sync_project_phases`, `project_autofill`), bills
+hours or has a free maintenance window. A product walks `PRODUCT_STAGES` (Idea,
+Building, Beta, Live, his pick), set by a press on its page, in `Project.stage`.
+The Projects tab's Work view is Client builds then My products; Personal and
+Archived are views of their own. A card wears its My Apps tile's icon, and a
+project with no tile finds its one unattached tile by repo, name or domain
+(`project_autofill.tile_for`), which the night then attaches without moving the
+tile's half of My Apps. Migration `d3b8f6a2c915` folded Workforce into
+EntertainHQ ("workforce is not its own project its built into entertain hq"):
+the work moved, anything billed, signed or a client's ticket stayed on Workforce
+archived, and `ProjectFold` keeps the row and every id so the downgrade puts it
+back. The deploy log says which.
+
+**A tab press swaps the panel, not the page.** Keeping the tab row was not
+enough: every press still rebuilt the banner and `#pm-main`, whose entry
+animation played again. Pages of one group wrap what changes in
+`data-panel="<group>"`; `bbbNavigate` replaces only the innermost panel both
+pages share (a chat is a panel inside the Messages tab, so another chat leaves
+the list), a banner piece only when it reads differently, and `#pm-main`'s
+classes in place. Every in-page choice is the `seg` kit (`pm/workspace/_tabs.html`,
+`wsSeg`): one sliding mark, its own state, never inside a swapped region.
+`tools/test_workspace_tabs.py` stamps all of it and presses every tab and
+switch at 1600 and 375; it fails on the old swap.
+
 **A project's dates come from its repo and its domain** (audit item 11,
 `project_autofill.py`, the "project dates" step of the night, before the store
 ids). The repo pair (`Project.repo`, the tile's `github_url`) fills whichever is

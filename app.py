@@ -1262,11 +1262,17 @@ def create_app():
         pre_client = request.args.get("client_id", type=int)
         if request.method == "GET" and pre_client:
             form.client_id.data = pre_client
+            # His own client row starts a product, anybody else's a build.
+            from models import client_is_own
+            if client_is_own(db.session.get(Client, pre_client)):
+                form.kind.data = "product"
         if form.validate_on_submit():
             project = Project(
                 client_id=form.client_id.data,
                 name=form.name.data,
                 description=form.description.data or "",
+                kind=form.kind.data,
+                stage=form.stage.data if form.kind.data != "client" else None,
                 phase=form.phase.data,
                 status=form.status.data,
                 budget=form.budget.data,
@@ -1376,6 +1382,7 @@ def create_app():
             phase_note=explain_phase(project),
             open_tickets=open_tickets,
             about=ws.messages_about("project", project.id, current_user.id),
+            product_stages=__import__("models").PRODUCT_STAGES,
             **ws.board(project=project, open_id=request.args.get("open", type=int)),
             **ws.task_options(), **ws._ctx("projects"))
 
@@ -1454,6 +1461,9 @@ def create_app():
         project = db.session.get(Project, id) or abort(404)
         form = ProjectForm(obj=project)
         form.client_id.choices = [(c.id, c.name) for c in Client.query.order_by(Client.name).all()]
+        if request.method == "GET":
+            form.kind.data = project.kind_effective
+            form.stage.data = project.stage_effective
         if form.validate_on_submit():
             # Changing the phase here means the same as changing it on the
             # board: the dates are wrong about this one, hold it.
@@ -1492,6 +1502,20 @@ def create_app():
             db.session.commit()
             flash(f"Phase set to '{dict(PHASE_CHOICES)[new_phase]}' and held there.",
                   "success")
+        return redirect(url_for("pm.project_detail", id=project.id))
+
+    @pm_bp.route("/projects/<int:id>/stage", methods=["POST"])
+    @login_required
+    def project_stage_update(id):
+        """A product's stage, set by a press on its bar. A product has no
+        contract dates, so nothing else ever moves it."""
+        from models import PRODUCT_STAGES
+        project = db.session.get(Project, id) or abort(404)
+        stage = request.form.get("stage")
+        if stage in dict(PRODUCT_STAGES):
+            project.stage = stage
+            db.session.commit()
+            flash(f"Stage set to {dict(PRODUCT_STAGES)[stage]}.", "success")
         return redirect(url_for("pm.project_detail", id=project.id))
 
     @pm_bp.route("/projects/<int:id>/phase/auto", methods=["POST"])

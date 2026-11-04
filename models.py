@@ -286,6 +286,48 @@ class ClientContact(db.Model):
         return f"<ClientContact {self.channel} {self.occurred_on}>"
 
 
+# A product's life (Michael's pick, 2026-11-04). Live is the end state; nothing
+# about contracts or free maintenance, which are a client build's.
+PRODUCT_STAGES = (("idea", "Idea"), ("building", "Building"), ("beta", "Beta"), ("live", "Live"))
+
+
+def client_is_own(client):
+    """Whether a client row is Michael's own: its address is one of his, or
+    its name is a CEO's name. The same two tests session_time uses, without
+    its tile rule (a client build moved to Personal projects on My Apps is
+    still a client build)."""
+    if client is None:
+        return True
+    # Asked once per client per request: a list of cards asks for every one.
+    try:
+        from flask import g, has_request_context
+        memo = g.setdefault("_own_clients", {}) if has_request_context() else {}
+    except Exception:  # noqa: BLE001
+        memo = {}
+    if client.id in memo:
+        return memo[client.id]
+    memo[client.id] = answer = _client_is_own(client)
+    return answer
+
+
+def _client_is_own(client):
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context():
+            from pm.mail_service import own_addresses
+            if (client.email or "").strip().lower() in own_addresses(current_app):
+                return True
+    except Exception:  # noqa: BLE001 - a missing mail setting is not an answer
+        pass
+    flat = re.sub(r"[^a-z0-9]", "", (client.name or "").lower())
+    if not flat:
+        return False
+    for user in User.query.filter(User.role.in_(("ceo", "owner", "admin"))).all():
+        if flat == re.sub(r"[^a-z0-9]", "", f"{user.first_name or ''}{user.last_name or ''}".lower()):
+            return True
+    return False
+
+
 class Project(db.Model):
     __tablename__ = "projects"
 
@@ -322,6 +364,16 @@ class Project(db.Model):
     # say so. Both only ever written into empty fields.
     build_started_on = db.Column(db.Date, nullable=True)
     go_live_source = db.Column(db.String(200), nullable=True)
+    # What kind of project it is (Michael, 2026-11-04: "EntertainHQ, Ideas,
+    # Piped those are my products they wouldnt even follow the same phases").
+    # "client" is a build for a client and walks PHASE_CHOICES; "product" is
+    # one of his own and walks PRODUCT_STAGES; "personal" is his own and off
+    # the Workspace's work list (Lets Cook). NULL follows the client: his own
+    # client row means product, anyone else's means client (`kind_effective`).
+    kind = db.Column(db.String(20), nullable=True)
+    # A product's stage; a client build's is `phase`. Kept apart because the
+    # phase moves itself off contract dates, and a product has none.
+    stage = db.Column(db.String(20), nullable=True)
     status = db.Column(db.String(20), default="active")
     notes = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -343,6 +395,30 @@ class Project(db.Model):
     # hosting page is per month, so the divisor lives here rather than in the
     # page doing the comparing.
     HOSTING_CYCLE_MONTHS = {"monthly": 1, "quarterly": 3, "annually": 12}
+
+    KINDS = (("client", "Client build"), ("product", "My product"),
+              ("personal", "Personal project"))
+
+    @property
+    def kind_effective(self):
+        """The kind as set, or as the client says: Michael's own client row
+        is his own product, anybody else's is a client build."""
+        if self.kind in dict(self.KINDS):
+            return self.kind
+        return "product" if client_is_own(self.client) else "client"
+
+    @property
+    def is_client_build(self):
+        return self.kind_effective == "client"
+
+    @property
+    def stage_effective(self):
+        """A product's stage, or where its dates put it when none was set."""
+        if self.stage in dict(PRODUCT_STAGES):
+            return self.stage
+        if self.go_live_date or self.phase in ("delivered", "free_maintenance", "in_production"):
+            return "live"
+        return "building" if self.phase == "mvp" else "idea"
 
     @property
     def monthly_hosting_fee(self):
@@ -3916,6 +3992,32 @@ class WorkTask(db.Model):
 
     def __repr__(self):
         return f"<WorkTask {self.id} {self.title[:30]!r}>"
+
+
+class ProjectFold(db.Model):
+    """One project folded into another, kept whole so it can be put back.
+
+    Michael, 2026-11-04: "workforce is not its own project its built into
+    entertain hq". What is only work (tasks, playbook checklists, the My Apps
+    tile, messages) moves to the project it belongs to; anything that carries
+    money, a contract or a client's ticket stays where it was billed, on the
+    folded project archived, because moving it moves revenue between clients.
+    `moved_json` is {table: [ids]}, `kept_json` is {table: count}, and
+    `project_json` is the folded project's row as it was, so the downgrade
+    and a person reading this can see exactly what happened.
+    """
+
+    __tablename__ = "project_folds"
+
+    id = db.Column(db.Integer, primary_key=True)
+    from_project_id = db.Column(db.Integer, nullable=False)
+    into_project_id = db.Column(db.Integer, nullable=False)
+    outcome = db.Column(db.String(20), nullable=False)  # "deleted" or "archived"
+    moved_json = db.Column(db.Text, nullable=False, default="{}")
+    kept_json = db.Column(db.Text, nullable=False, default="{}")
+    project_json = db.Column(db.Text, nullable=False, default="{}")
+    reason = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class WorkTaskPerson(db.Model):

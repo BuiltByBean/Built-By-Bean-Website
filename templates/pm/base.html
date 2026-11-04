@@ -1611,34 +1611,78 @@
                     return;
                 }
 
-                /* An element marked data-keep that the next page also has is
-                   carried across the swap rather than rebuilt: a tab row
-                   whose tab changes keeps its buttons and slides its mark
-                   (the Workspace's, 2026-11-04). It is told what the new one
-                   said through the `bbb:kept` event, with the fresh copy. */
-                var kept = {};
-                document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
-                    kept[el.getAttribute('data-keep')] = el;
+                /* Two pages of one panel group (the Workspace's tabs and the
+                   pages under them, 2026-11-04) share everything but the panel:
+                   only the [data-panel] is replaced, and of the banner only
+                   what reads differently. #pm-main itself stays, so its entry
+                   animation does not play again and the tab row above the
+                   panel is never touched (Michael's rule, "Only the thing that
+                   changed re-renders"). Anything else is a different page and
+                   swaps whole. */
+                /* Panels nest (a chat inside the Messages tab), and the one
+                   swapped is the innermost both pages have. */
+                var oldPanel = null, newPanel = null, depth = -1;
+                document.querySelectorAll('#pm-main [data-panel]').forEach(function (el) {
+                    var twin = fresh.querySelector('#pm-main [data-panel="' + el.getAttribute('data-panel') + '"]');
+                    var d = 0;
+                    for (var n = el.parentElement; n; n = n.parentElement) d++;
+                    if (twin && d > depth) { oldPanel = el; newPanel = twin; depth = d; }
                 });
-                SWAP.forEach(function (id) {
-                    var stale = document.getElementById(id);
-                    var next = fresh.getElementById(id);
-                    if (stale && next) stale.replaceWith(document.adoptNode(next));
-                });
-                document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
-                    var old = kept[el.getAttribute('data-keep')];
-                    if (!old) return;
-                    el.replaceWith(old);
-                    old.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: el } }));
-                });
+                var samePanel = !!oldPanel;
+                if (samePanel) {
+                    SWAP.forEach(function (id) {
+                        if (id === 'pm-main') return;
+                        var stale = document.getElementById(id);
+                        var next = fresh.getElementById(id);
+                        if (stale && next && stale.outerHTML !== next.outerHTML) {
+                            stale.replaceWith(document.adoptNode(next));
+                        }
+                    });
+                    var main = document.getElementById('pm-main');
+                    var nextMain = fresh.getElementById('pm-main');
+                    /* The same animation name stays on the class list, so a
+                       changed layout class does not restart it. */
+                    if (nextMain && main.className !== nextMain.className) main.className = nextMain.className;
+                    oldPanel.replaceWith(document.adoptNode(newPanel));
+                    /* What sits outside the panel and is kept tells itself
+                       what the new page said (a tab row moves its mark). */
+                    document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
+                        if (newPanel.contains(el)) return;
+                        var twin = fresh.querySelector('[data-keep="' + el.getAttribute('data-keep') + '"]');
+                        if (twin) el.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: twin } }));
+                    });
+                    runScripts(newPanel);
+                } else {
+                    /* An element marked data-keep that the next page also has
+                       is carried across the swap rather than rebuilt, and told
+                       what the new one said through `bbb:kept`. */
+                    var kept = {};
+                    document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
+                        kept[el.getAttribute('data-keep')] = el;
+                    });
+                    SWAP.forEach(function (id) {
+                        var stale = document.getElementById(id);
+                        var next = fresh.getElementById(id);
+                        if (stale && next) stale.replaceWith(document.adoptNode(next));
+                    });
+                    document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
+                        var old = kept[el.getAttribute('data-keep')];
+                        if (!old) return;
+                        el.replaceWith(old);
+                        old.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: el } }));
+                    });
+                    runScripts(document.getElementById('pm-main'));
+                }
+                /* A count that reads the same is left as it is. */
                 LIVE.forEach(function (key) {
                     var stale = document.querySelector('[data-live="' + key + '"]');
                     var next = fresh.querySelector('[data-live="' + key + '"]');
-                    if (stale && next) stale.replaceWith(document.adoptNode(next));
+                    if (stale && next && stale.outerHTML !== next.outerHTML) {
+                        stale.replaceWith(document.adoptNode(next));
+                    }
                 });
                 document.title = fresh.title || document.title;
                 lightTheRightLink(fresh);
-                runScripts(document.getElementById('pm-main'));
 
                 if (push) history.pushState({ pm: true }, '', answer.url);
 

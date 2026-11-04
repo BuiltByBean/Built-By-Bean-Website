@@ -14,6 +14,9 @@ one turns billable hours into free ones.
   earliest signed contract on the project, else the day the project was put on
   the board, since nothing reaches this board before it is under contract).
   `build_started_on` records the commit's day.
+- **The My Apps tile.** A project with no tile is put on the one unattached
+  tile with its repo, its name or a domain spelled like its name, so its card
+  carries the tile's icon and picks up a new one by itself.
 - **Go-live** is filled in by itself (Michael's pick, 2026-11-04, over a
   suggestion to accept) on the first night the project's real domain answers,
   for a project whose build has started. A platform's temporary address
@@ -156,7 +159,10 @@ def contract_date(project):
 
 
 def movable(project):
-    return not project.phase_locked and (project.status or "") != "archived"
+    """Dates may move this one: a client build nobody held, not archived.
+    His own products and personal projects have no contract and no phases."""
+    return (not project.phase_locked and (project.status or "") != "archived"
+            and project.is_client_build)
 
 
 def fill_repos(project, links, by_host=None):
@@ -175,6 +181,49 @@ def fill_repos(project, links, by_host=None):
             link.github_url = url
             changed.append(f"{link.name} GitHub")
     return changed
+
+
+def _flat(text):
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+
+def tile_matches(project, tile):
+    """Whether an unattached My Apps tile is this project's: the same repo,
+    the same name, or a domain spelled like the name (deedinhand.com)."""
+    if project.repo and repo_of(tile.github_url) and             repo_of(tile.github_url).lower() == project.repo.strip().lower():
+        return True
+    name = _flat(project.name)
+    if not name:
+        return False
+    host = host_of(tile.url).split(".")[0] if is_real_domain(tile.url) else ""
+    return name in (_flat(tile.name), _flat(host))
+
+
+def tile_for(project, unattached):
+    """The one unattached tile that is this project's, or None. Two matches
+    is a guess, and a guess is never written."""
+    hits = [t for t in unattached if tile_matches(project, t)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def attach_tiles(projects, tiles):
+    """Put each project with no tile on the one unattached tile that is its
+    own (Michael, 2026-11-04: "Deed in Hand has a logo now" while its card
+    showed initials). The tile keeps its half of My Apps: an unattached tile
+    sat in Personal projects, and attaching a project must not move it."""
+    loose = [t for t in tiles if not t.project_id]
+    lines = []
+    for p in projects:
+        if any(t.project_id == p.id for t in tiles):
+            continue
+        tile = tile_for(p, loose)
+        if tile:
+            if not tile.board_group:
+                tile.board_group = "mine"
+            tile.project_id = p.id
+            loose.remove(tile)
+            lines.append(f"{p.name}: My Apps tile {tile.name}")
+    return lines
 
 
 def plan(project, links, first_commit=None, live=None, today=None):
@@ -208,6 +257,7 @@ def run(fetch=_github, probe=answers, today=None):
     today = today or texas_today()
     lines = []
     projects = Project.query.order_by(Project.id).all()
+    lines += attach_tiles(projects, AppLink.query.order_by(AppLink.id).all())
     links_by_project = {}
     for link in AppLink.query.filter(AppLink.project_id.isnot(None)).all():
         links_by_project.setdefault(link.project_id, []).append(link)

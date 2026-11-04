@@ -66,18 +66,18 @@ def check(name, cond, detail=""):
         FAIL.append(name)
 
 
-def load_migration():
-    path = ROOT / "migrations" / "versions" / "a5d17c3e92b4_the_workspace.py"
+def load_migration(name="a5d17c3e92b4_the_workspace.py"):
+    path = ROOT / "migrations" / "versions" / name
     spec = importlib.util.spec_from_file_location("ws_migration", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-def migrate(direction):
+def migrate(direction, name="a5d17c3e92b4_the_workspace.py"):
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
-    mod = load_migration()
+    mod = load_migration(name)
     with db.engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
         with Operations.context(ctx):
@@ -391,12 +391,163 @@ with application.app_context():
     p = db.session.get(Project, contracted.id)
     check("a second night changes nothing", (p.phase, p.build_started_on, p.go_live_date) == before)
     check("pure plan: delivered + live fills go-live",
-          pa.plan(Project(phase="delivered", status="active", phase_locked=False), [], None, "https://x.com", today)
+          pa.plan(Project(phase="delivered", status="active", phase_locked=False, kind="client"), [], None, "https://x.com", today)
           == [("go_live_date", today, "the first day the board saw x.com answer")])
     check("pure plan: contracted + live but no commit fills nothing",
-          pa.plan(Project(phase="contracted", status="active", phase_locked=False), [], None, "https://x.com", today) == [])
+          pa.plan(Project(phase="contracted", status="active", phase_locked=False, kind="client"), [], None, "https://x.com", today) == [])
     check("repo_of / url_of round trip", pa.repo_of(pa.url_of("mb/a.b-c")) == "mb/a.b-c" and pa.repo_of("https://github.com/mb/x.git") == "mb/x")
     check("www is the same host", pa.host_of("https://www.Kuper.com/x") == "kuper.com")
+
+
+    # ---------------------------------------------------------------- 8
+    print("8. kinds: client builds, his own products, personal projects")
+    from models import Playbook, ProjectPlaybook, TeamMessageLink, TimeEntry, ProjectFold, PRODUCT_STAGES
+    me = Client(name="Michael Bean", email="michael-own@example.test")
+    db.session.add(me)
+    db.session.flush()
+    ehq = Project(name="EntertainHQ", client_id=me.id, status="active", phase="contracted",
+                  mvp_date=date(2026, 1, 1))
+    piped = Project(name="Piped", client_id=me.id, status="active", phase="mvp")
+    cook = Project(name="Lets Cook", client_id=me.id, status="active", phase="mvp", kind="personal")
+    db.session.add_all([ehq, piped, cook])
+    db.session.commit()
+    EHQ = ehq.id
+    with application.test_request_context():
+        check("his own client row makes a product", ehq.kind_effective == "product" and piped.kind_effective == "product")
+        check("anybody else's makes a client build", db.session.get(Project, SITE).kind_effective == "client")
+        check("a kind set wins", cook.kind_effective == "personal")
+    from project_phases import sync_project_phases
+    with application.test_request_context():
+        moved = sync_project_phases()
+    check("a product is never marched through client phases by a date",
+          db.session.get(Project, EHQ).phase == "contracted" and all(m[0].id != EHQ for m in moved))
+    page = c.get("/admin/workspace/projects").get_data(as_text=True)
+    work = page[page.index('data-live="results"'):]
+    check("Work has a Client builds section and a My products section",
+          "Client builds" in work and "My products" in work and work.index("Client builds") < work.index("My products"))
+    check("a product reads its own stage, not a client phase",
+          "Idea" in work[work.index("My products"):] and "Contracted" not in work[work.index("My products"):])
+    check("Lets Cook is not on the work list", "Lets Cook" not in work)
+    page = c.get("/admin/workspace/projects?view=personal").get_data(as_text=True)
+    check("Lets Cook is on Personal", "Lets Cook" in page[page.index('data-live="results"'):])
+    page = c.get(f"/admin/workspace/projects/{EHQ}").get_data(as_text=True)
+    check("a product's page has the stage bar, not the phase bar",
+          "Building" in page and "Free Maint" not in page and "Follow the dates again" not in page)
+    check("and no time or revenue tiles", "Total hours" not in page and ">Revenue<" not in page)
+    r = c.post(f"/admin/projects/{EHQ}/stage", data={"stage": "live"})
+    db.session.expire_all()
+    check("pressing a stage sets it", db.session.get(Project, EHQ).stage == "live")
+    c.post(f"/admin/projects/{EHQ}/stage", data={"stage": "nonsense"})
+    db.session.expire_all()
+    check("a stage that is not one is refused", db.session.get(Project, EHQ).stage == "live")
+    with application.test_request_context():
+        check("a product is never moved to MVP or given a go-live by the night",
+              pa.plan(db.session.get(Project, EHQ), [], date(2026, 2, 1), "https://ehq.example.com", today) == [])
+
+    # ---------------------------------------------------------------- 9
+    print("9. Workforce folds into EntertainHQ, and the downgrade puts it back")
+    kenali = Client(name="Kenali Kendrick", email="kk@example.test")
+    db.session.add(kenali)
+    db.session.flush()
+    wf = Project(name="Workforce: staff time clock, schedules, time off, pay rates and org chart",
+                 client_id=kenali.id, status="active", phase="mvp", repo="mb/workforce")
+    pb = Playbook(slug="stripe-test", display_name="Stripe test")
+    db.session.add_all([wf, pb])
+    db.session.flush()
+    WF = wf.id
+    wtask = WorkTask(title="Clock-in screen", project_id=WF, created_by_id=BOSS)
+    db.session.add_all([wtask, ProjectPlaybook(project_id=WF, playbook_id=pb.id)])
+    db.session.flush()
+    msg = TeamMessage.query.first()
+    db.session.add(TeamMessageLink(message_id=msg.id, kind="project", record_id=WF))
+    db.session.commit()
+    WTASK, PB, KEN = wtask.id, pb.id, kenali.id
+    ProjectFold.query.delete()
+    db.session.commit()
+    db.session.remove()
+    FOLD = "d3b8f6a2c915_project_kinds_and_workforce_fold.py"
+    migrate("upgrade", FOLD)
+    db.session.remove()
+    fold = ProjectFold.query.one()
+    check("nothing with money on it: Workforce is deleted", db.session.get(Project, WF) is None and fold.outcome == "deleted",
+          fold.outcome)
+    check("its task moved to EntertainHQ", db.session.get(WorkTask, WTASK).project_id == EHQ)
+    check("its playbook checklist moved", ProjectPlaybook.query.filter_by(project_id=EHQ, playbook_id=PB).count() == 1)
+    check("messages about it now link EntertainHQ",
+          TeamMessageLink.query.filter_by(kind="project", record_id=EHQ).count() >= 1
+          and TeamMessageLink.query.filter_by(kind="project", record_id=WF).count() == 0)
+    check("the record keeps the row whole", "Workforce" in fold.project_json and str(KEN) in fold.project_json)
+    db.session.remove()
+    migrate("downgrade", FOLD)
+    db.session.remove()
+    with db.engine.connect() as conn:
+        back = conn.execute(text("SELECT name, client_id, repo, status FROM projects WHERE id = :i"), {"i": WF}).first()
+        task_back = conn.execute(text("SELECT project_id FROM work_tasks WHERE id = :i"), {"i": WTASK}).scalar()
+        pb_back = conn.execute(text("SELECT COUNT(*) FROM project_playbooks WHERE project_id = :i"), {"i": WF}).scalar()
+    check("downgrade: Workforce is back as it was", back is not None and back[1] == KEN
+          and back[2] == "mb/workforce" and back[3] == "active", back)
+    check("downgrade: its task and checklist went back", task_back == WF and pb_back == 1)
+    check("downgrade: the kind columns are gone", "kind" not in {c["name"] for c in inspect(db.engine).get_columns("projects")})
+
+    # Money on it this time: a time entry. Nothing billed may move clients.
+    with db.engine.begin() as conn:
+        conn.execute(text("INSERT INTO time_entries (project_id, client_id, date, hours, description, rate_type) "
+                          "VALUES (:p, :c, '2026-10-01', 2.0, 'clock-in work', 'mvp_build')"),
+                     {"p": WF, "c": KEN})
+    migrate("upgrade", FOLD)
+    db.session.remove()
+    fold = ProjectFold.query.one()
+    with db.engine.connect() as conn:
+        entry_project = conn.execute(text("SELECT project_id FROM time_entries WHERE description = 'clock-in work'")).scalar()
+    check("with time on it, Workforce is archived, not deleted",
+          fold.outcome == "archived" and db.session.get(Project, WF).status == "archived", fold.outcome)
+    check("and the time stays on Workforce, under Kenali", entry_project == WF)
+    check("while the work still moved", db.session.get(WorkTask, WTASK).project_id == EHQ)
+    check("the record says what stayed", "time_entries" in fold.kept_json, fold.kept_json)
+    page = c.get("/admin/workspace/projects").get_data(as_text=True)
+    check("an archived Workforce is off the work list", "Workforce" not in page[page.index('data-live="results"'):])
+    db.session.remove()
+    migrate("downgrade", FOLD)
+    db.session.remove()
+    with db.engine.connect() as conn:
+        st = conn.execute(text("SELECT status FROM projects WHERE id = :i"), {"i": WF}).scalar()
+    check("downgrade: the archived one is active again", st == "active")
+    migrate("upgrade", FOLD)
+    db.session.remove()
+
+    # ---------------------------------------------------------------- 10
+    print("10. a card wears its My Apps tile's icon")
+    lucas = Client(name="Louis Lucas", email="ll@example.test")
+    db.session.add(lucas)
+    db.session.flush()
+    deed = Project(name="Deed in Hand", client_id=lucas.id, status="active", phase="mvp")
+    db.session.add(deed)
+    db.session.flush()
+    tile = AppLink(name="Deed In Hand", url="https://deedinhand.example.com", icon_file="deed.png")
+    db.session.add(tile)
+    db.session.commit()
+    DEED, TILE = deed.id, tile.id
+    page = c.get("/admin/workspace/projects").get_data(as_text=True)
+    with application.test_request_context():
+        from flask import url_for
+        icon_url = url_for("apps.icon", id=TILE)
+    check("before the night: the loose tile's icon is already on the card", icon_url in page)
+    with application.test_request_context():
+        lines = pa.attach_tiles(Project.query.all(), AppLink.query.all())
+    db.session.commit()
+    t = db.session.get(AppLink, TILE)
+    check("the night attaches the tile to its project", t.project_id == DEED, lines)
+    check("and keeps it in its half of My Apps", t.board_group == "mine")
+    twin = AppLink(name="Deed in Hand", url="https://other.example.com")
+    lone = Project(name="Lonely", client_id=lucas.id, status="active")
+    db.session.add_all([twin, lone, AppLink(name="Lonely", url="https://a.example.com"),
+                        AppLink(name="Lonely", url="https://b.example.com")])
+    db.session.commit()
+    with application.test_request_context():
+        pa.attach_tiles(Project.query.all(), AppLink.query.all())
+    db.session.commit()
+    check("two matches is a guess, and a guess is never written",
+          AppLink.query.filter_by(project_id=lone.id).count() == 0)
 
 
 print()

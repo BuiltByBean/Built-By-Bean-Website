@@ -3,7 +3,7 @@
 {% from "pm/components/brand_icons.html" import launch, railway, github %}
 {% from "pm/components/status_badge.html" import badge %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
-{% from "pm/workspace/_tabs.html" import workspace_tabs %}
+{% from "pm/workspace/_tabs.html" import workspace_tabs, seg %}
 {% from "pm/workspace/_board.html" import task_board, task_window with context %}
 
 {#
@@ -13,9 +13,10 @@
   tiles that open their own pages filtered to this project.
 #}
 
+{% block title %}{{ project.name }} - Workspace - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('workspace.projects'), 'Projects') }}{% endblock %}
 {% block page_title %}{{ project.name }}{% endblock %}
-{% block page_subtitle %}{{ project.client.name }}{% endblock %}
+{% block page_subtitle %}{{ project.client.name if project.is_client_build else dict(project.KINDS)[project.kind_effective] }}{% endblock %}
 
 {% block header_actions %}
 <div class="flex items-center gap-2" x-data="{ confirmDelete: false }">
@@ -26,6 +27,15 @@
        label", which names edit and delete: a bordered text button looks
        deliberate rather than unstyled, which is why these two survived so
        long. The bin keeps its margin and stays last. #}
+    <button type="button" @click="$dispatch('ws-new-task')"
+            class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        New task</button>
+    <a href="{{ url_for('workspace.message_new', about='project:' ~ project.id) }}"
+       aria-label="Message about this project" title="Message about this project"
+       class="w-11 h-11 inline-flex items-center justify-center rounded-xl border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>
+    </a>
     {{ icon_button('edit', 'Edit project', href=url_for('pm.project_edit', id=project.id)) }}
     <div x-show="!confirmDelete" class="ml-2">
         {{ icon_button('delete', 'Delete project', tone='danger',
@@ -52,6 +62,31 @@
 {% block content %}
 {% include "pm/workspace/_js.html" %}
 {{ workspace_tabs('projects', ws_counts) }}
+{# The panel: what pressing a tab, or moving between projects, replaces. #}
+<div data-panel="workspace">
+{% if not project.is_client_build %}
+{# His own product or a personal project: its own stages, set by a press,
+   and nothing about contracts, delivery or free maintenance (2026-11-04). #}
+{% set stage_keys = product_stages | map(attribute='0') | list %}
+{% set sidx = stage_keys.index(project.stage_effective) %}
+<div data-live="phase" class="glass-card p-4 sm:p-6 mb-6">
+    <div class="grid grid-cols-4 gap-2">
+        {% for key, label in product_stages %}
+        <form method="POST" data-live-action action="{{ url_for('pm.project_stage_update', id=project.id) }}">
+            <input type="hidden" name="stage" value="{{ key }}">
+            <button type="submit" aria-pressed="{{ 'true' if loop.index0 == sidx else 'false' }}"
+                    class="w-full flex flex-col items-center gap-2 min-h-[44px] py-1 rounded-xl hover:bg-white/5 transition-colors">
+                <span class="w-full h-1.5 rounded-full {{ 'bg-brand-500' if loop.index0 <= sidx else 'bg-surface-700' }}"></span>
+                <span class="text-xs font-medium {{ 'text-brand-300' if loop.index0 <= sidx else 'text-surface-500' }}">{{ label }}</span>
+            </button>
+        </form>
+        {% endfor %}
+    </div>
+    {% if project.description %}
+    <p class="mt-4 text-sm text-surface-300">{{ project.description }}</p>
+    {% endif %}
+</div>
+{% else %}
 <!-- Phase Progress Bar -->
 {# From PHASE_CHOICES, so this page and the project list cannot drift. #}
 {% set phases = phase_choices %}
@@ -164,6 +199,7 @@
     <p class="mt-4 text-sm text-surface-300">{{ project.description }}</p>
     {% endif %}
 </div>
+{% endif %}
 
 <!-- The running app, where this project has one -->
 {% if project.apps %}
@@ -221,21 +257,26 @@
 
 <!-- Tickets, time and money: each opens its own page, filtered to this project -->
 {% set tile = 'glass-card p-4 block hover:border-brand-500/40 transition-colors' %}
-<div class="grid grid-cols-2 {{ 'lg:grid-cols-4' if time_tracking else 'lg:grid-cols-3' }} gap-4 mb-6">
+{% set build = project.is_client_build %}
+<div class="grid grid-cols-2 {{ ('lg:grid-cols-4' if time_tracking else 'lg:grid-cols-3') if build else '' }} gap-4 mb-6">
     <a href="{{ url_for('pm.tickets_list', client_id=project.client_id) }}" class="{{ tile }}">
         <p class="text-xs font-medium text-surface-400 mb-1">Open tickets</p>
         <p class="text-lg font-bold text-white">{{ open_tickets | commas }}</p>
     </a>
-    {% if time_tracking %}
+    {# Time and its revenue are a client build's: his own products are never
+       billed by the hour (catalogue rule, never log time against them). #}
+    {% if build and time_tracking %}
     <a href="{{ url_for('pm.time_list', project_id=project.id) }}" class="{{ tile }}">
         <p class="text-xs font-medium text-surface-400 mb-1">Total hours</p>
         <p class="text-lg font-bold text-white">{{ project.total_hours | format_hours }}</p>
     </a>
     {% endif %}
+    {% if build %}
     <a href="{{ url_for('pm.time_list', project_id=project.id) }}" class="{{ tile }}">
         <p class="text-xs font-medium text-emerald-400 mb-1">Revenue</p>
         <p class="text-lg font-bold text-emerald-300">{{ project.total_revenue | format_currency }}</p>
     </a>
+    {% endif %}
     <a href="{{ url_for('pm.expenses_list', project_id=project.id) }}" class="{{ tile }}">
         <p class="text-xs font-medium text-red-400 mb-1">Expenses</p>
         <p class="text-lg font-bold text-red-300">{{ project.total_expenses | format_currency }}</p>
@@ -248,24 +289,11 @@
    playbooks, which is where a ticked step returns. #}
 {% set open_tasks_n = columns.backlog.rows | length + columns.in_progress.rows | length %}
 <div x-data="{ part: location.hash === '#playbooks' ? 'playbooks' : (location.hash === '#messages' ? 'messages' : 'tasks') }">
-    <div class="flex flex-wrap items-center gap-3 mb-4">
-        <div class="flex w-full sm:w-auto p-1 rounded-2xl border border-white/10 bg-surface-800/60" role="tablist" aria-label="This project">
-            {% for key, label, n in (('tasks', 'Tasks', open_tasks_n), ('playbooks', 'Playbooks', none), ('messages', 'Messages', about | length)) %}
-            <button type="button" role="tab" @click="part = '{{ key }}'; history.replaceState(history.state, '', '#{{ key }}')"
-                    :aria-selected="part === '{{ key }}'"
-                    :class="part === '{{ key }}' ? 'btn-brand text-white' : 'text-surface-300 hover:text-white'"
-                    class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 min-h-[44px] px-2 sm:px-4 rounded-xl text-sm font-medium transition-colors">
-                {{ label }}{% if n %}<span class="text-[11px] tabular-nums opacity-80">{{ n | commas }}</span>{% endif %}
-            </button>
-            {% endfor %}
-        </div>
-        <button type="button" x-show="part === 'tasks'" @click="$dispatch('ws-new-task')"
-                class="ml-auto inline-flex items-center gap-2 min-h-[44px] px-4 btn-brand text-sm font-medium rounded-xl">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            New task</button>
-        <a x-show="part === 'messages'" x-cloak href="{{ url_for('workspace.message_new', about='project:' ~ project.id) }}"
-           class="ml-auto inline-flex items-center gap-2 min-h-[44px] px-4 btn-brand text-sm font-medium rounded-xl">
-            Message about it</a>
+    <div class="mb-4">
+        {{ seg([('tasks', 'Tasks', open_tasks_n), ('playbooks', 'Playbooks'), ('messages', 'Messages', about | length)],
+               'tasks', 'This project', full=true,
+               value_js="location.hash === '#playbooks' ? 'playbooks' : (location.hash === '#messages' ? 'messages' : 'tasks')",
+               on_pick="part = value; history.replaceState(history.state, '', '#' + value)") }}
     </div>
 
     <div x-show="part === 'tasks'">{{ task_board() }}</div>
@@ -286,5 +314,6 @@
     </div>
 </div>
 {{ task_window(project.id) }}
+</div>
 
 {% endblock %}

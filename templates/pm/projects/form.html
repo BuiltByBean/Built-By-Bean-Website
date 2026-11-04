@@ -30,10 +30,21 @@
                     {{ form.description(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="What is this project about?") }}
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {# A client build walks the client phases; his own product walks
+                   its stages; a personal project needs neither (2026-11-04). #}
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-30"
+                     x-data="{ kind: '{{ form.kind.data or 'client' }}' }">
                     <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Kind</label>
+                        {{ select_dropdown(form.kind.name, form.kind.choices, form.kind.data or 'client', "Kind", full_width=true, model='kind') }}
+                    </div>
+                    <div x-show="kind === 'client'">
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Phase</label>
                         {{ select_dropdown(form.phase.name, form.phase.choices, form.phase.data or 'contracted', "Select Phase...", full_width=true) }}
+                    </div>
+                    <div x-show="kind !== 'client'" x-cloak>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Stage</label>
+                        {{ select_dropdown(form.stage.name, form.stage.choices, form.stage.data or 'idea', "Stage", full_width=true) }}
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Status</label>

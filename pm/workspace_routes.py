@@ -759,34 +759,84 @@ def task_delete(id):
 
 # ---------------------------------------------------------------- projects
 
-PROJECT_VIEWS = (("open", "Open"), ("archived", "Archived"), ("all", "All"))
+# Work is client builds and his own products together, in two sections;
+# personal projects have their own view and never mix in with work (Michael,
+# 2026-11-04: "Lets Cook doesnt even belong on this page"); archived is the
+# third, whatever the kind.
+PROJECT_VIEWS = (("work", "Work"), ("personal", "Personal"), ("archived", "Archived"))
+
+
+def project_icons(projects):
+    """{project id: the My Apps tile whose icon its card wears}. Its own
+    tile with an icon first; failing that, the one unattached tile that is
+    plainly its own (project_autofill.tile_for), which the nightly run then
+    attaches, so a logo added on My Apps shows here with nothing typed."""
+    from models import AppLink
+    import project_autofill
+    tiles = AppLink.query.order_by(AppLink.name, AppLink.id).all()
+    loose = [t for t in tiles if not t.project_id]
+    out = {}
+    for p in projects:
+        own = [t for t in tiles if t.project_id == p.id]
+        pick = next((t for t in own if t.icon_file), None)
+        if not pick and not own:
+            match = project_autofill.tile_for(p, loose)
+            pick = match if match and match.icon_file else None
+        if pick:
+            out[p.id] = pick
+    return out
 
 
 @workspace_bp.route("/projects")
 @login_required
 def projects():
-    """Every client project as a card. What the standalone Projects page
-    was, folded in: its search, its phase filter, and New project."""
+    """Every project as a card: what the standalone Projects page was,
+    folded in, with his own products apart from client builds."""
     from project_phases import sync_project_phases
     from forms import PHASE_CHOICES
     sync_project_phases()
     search = (request.args.get("q") or "").strip()
     phase = request.args.get("phase") or ""
-    view = request.args.get("view") or "open"
-    view = view if view in dict(PROJECT_VIEWS) else "open"
+    phase = phase if phase in dict(PHASE_CHOICES) else ""
+    view = request.args.get("view") or "work"
+    view = view if view in dict(PROJECT_VIEWS) else "work"
 
     q = Project.query.join(Client)
     if search:
         q = q.filter(db.or_(Project.name.ilike(f"%{search}%"), Client.name.ilike(f"%{search}%")))
-    if phase in dict(PHASE_CHOICES):
-        q = q.filter(Project.phase == phase)
-    if view == "open":
-        q = q.filter(Project.status != "archived")
-    elif view == "archived":
-        q = q.filter(Project.status == "archived")
-    rows = q.order_by(Project.created_at.desc(), Project.id.desc()).all()
+    every = q.order_by(Project.created_at.desc(), Project.id.desc()).all()
 
-    ids = [p.id for p in rows]
+    def in_view(p, v):
+        if v == "archived":
+            return p.status == "archived"
+        if p.status == "archived":
+            return False
+        return (p.kind_effective == "personal") == (v == "personal")
+
+    view_counts = {v: sum(1 for p in every if in_view(p, v)) for v, _ in PROJECT_VIEWS}
+    shown = [p for p in every if in_view(p, view)]
+    # Faceted: a phase's count is under the other filters, and a phase that
+    # would return nothing is not offered. Phases are a client build's only.
+    builds = [p for p in shown if p.is_client_build]
+    by_phase = {}
+    for p in builds:
+        by_phase[p.phase] = by_phase.get(p.phase, 0) + 1
+    phase_opts = [("", "Any phase")] + [
+        (k, f"{label} ({by_phase.get(k, 0)})") for k, label in PHASE_CHOICES
+        if by_phase.get(k) or k == phase]
+    if phase:
+        shown = [p for p in shown if p.is_client_build and p.phase == phase]
+
+    sections = []
+    if view == "work":
+        for kind, title in (("client", "Client builds"), ("product", "My products")):
+            rows = [p for p in shown if p.kind_effective == kind]
+            if rows:
+                sections.append((title, rows))
+    elif shown:
+        sections.append(("", shown))
+
+    ids = [p.id for p in shown]
     open_tasks = dict(db.session.query(WorkTask.project_id, func.count(WorkTask.id))
                       .filter(WorkTask.project_id.in_(ids), WorkTask.stage != "done")
                       .group_by(WorkTask.project_id).all()) if ids else {}
@@ -797,22 +847,9 @@ def projects():
                             .filter(Ticket.project_id.in_(ids),
                                     Ticket.status.notin_(TICKET_CLOSED_STATUSES))
                             .group_by(Ticket.project_id).all())
-    # Faceted: each phase's count is under the other filters, and a phase
-    # that would return nothing is not offered (catalogue rule "A filter list
-    # is alphabetical, searchable, and only offers what can match").
-    fq = Project.query.join(Client)
-    if search:
-        fq = fq.filter(db.or_(Project.name.ilike(f"%{search}%"), Client.name.ilike(f"%{search}%")))
-    if view == "open":
-        fq = fq.filter(Project.status != "archived")
-    elif view == "archived":
-        fq = fq.filter(Project.status == "archived")
-    by_phase = dict(fq.with_entities(Project.phase, func.count(Project.id))
-                    .group_by(Project.phase).all())
-    phase_opts = [("", "Any phase")] + [
-        (k, f"{label} ({by_phase.get(k, 0)})") for k, label in PHASE_CHOICES
-        if by_phase.get(k) or k == phase]
-    return render_template("pm/workspace/projects.html", projects=rows,
+    from models import PRODUCT_STAGES
+    return render_template("pm/workspace/projects.html", sections=sections, shown=shown,
                            open_tasks=open_tasks, open_tickets=open_tickets,
+                           icons=project_icons(shown), product_stages=PRODUCT_STAGES,
                            search=search, phase=phase, view=view, views=PROJECT_VIEWS,
-                           phase_opts=phase_opts, **_ctx("projects"))
+                           view_counts=view_counts, phase_opts=phase_opts, **_ctx("projects"))

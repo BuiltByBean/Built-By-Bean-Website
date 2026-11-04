@@ -1,5 +1,5 @@
 {% extends "pm/base.html" %}
-{% from "pm/workspace/_tabs.html" import workspace_tabs %}
+{% from "pm/workspace/_tabs.html" import workspace_tabs, seg %}
 {% from "pm/workspace/_board.html" import task_board, task_window with context %}
 
 {#
@@ -24,23 +24,16 @@
 
 {% block content %}
 {% include "pm/workspace/_js.html" %}
-<div class="shrink-0 flex flex-wrap items-start gap-x-4">
-    {{ workspace_tabs('tasks', ws_counts) }}
-    {# Whose tasks. The pick is the apply, and only the board and this
-       switch are swapped (liveFilter). #}
-    <form method="GET" x-data="liveFilter()" @submit.prevent="apply()" class="relative z-30 mb-4 ml-auto">
-        <input type="hidden" name="who" value="{{ who }}">
-        <div data-live="who" class="inline-flex p-1 rounded-2xl border border-white/10 bg-surface-800/60" role="group" aria-label="Whose tasks">
-            {% for value, label in (('mine', 'Mine'), ('all', 'Everyone')) %}
-            <button type="button" aria-pressed="{{ 'true' if who == value else 'false' }}"
-                    @click="$el.closest('form').querySelector('[name=who]').value = '{{ value }}'; apply()"
-                    class="min-h-[44px] px-4 rounded-xl text-sm font-medium transition-colors {{ 'btn-brand text-white' if who == value else 'text-surface-300 hover:text-white' }}">
-                {{ label }}</button>
-            {% endfor %}
-        </div>
-    </form>
-</div>
+{{ workspace_tabs('tasks', ws_counts) }}
 
-{{ task_board(scroll=true) }}
-{{ task_window() }}
+{# The panel: all that a tab press replaces (base.html, data-panel). #}
+<div data-panel="workspace" class="flex-1 min-h-0 flex flex-col">
+    {# Whose tasks. The pick is the apply, and only the board moves. #}
+    <form method="GET" x-data="liveFilter()" @submit.prevent="apply()" class="shrink-0 relative z-30 mb-4">
+        {{ seg([('mine', 'Mine'), ('all', 'Everyone')], who, 'Whose tasks', name='who',
+               on_pick='$nextTick(() => apply())') }}
+    </form>
+    {{ task_board(scroll=true) }}
+    {{ task_window() }}
+</div>
 {% endblock %}

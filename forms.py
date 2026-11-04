@@ -150,6 +150,13 @@ class ProjectForm(FlaskForm):
     client_id = SelectField("Client", coerce=int, validators=[DataRequired()])
     description = TextAreaField("Description", validators=[Optional()])
     phase = SelectField("Phase", choices=PHASE_CHOICES, default="contracted")
+    # Client build, his own product, or a personal project. A product walks
+    # its own stages instead of the client phases.
+    kind = SelectField("Kind", choices=[("client", "Client build"), ("product", "My product"),
+                                        ("personal", "Personal project")], default="client")
+    stage = SelectField("Stage", choices=[("idea", "Idea"), ("building", "Building"),
+                                          ("beta", "Beta"), ("live", "Live")],
+                        default="idea", validators=[Optional()])
     budget = FloatField("Budget ($)", validators=[Optional(), NumberRange(min=0)])
     mvp_date = DateField("MVP Delivery Date", validators=[Optional()])
     go_live_date = DateField("Go-Live Date", validators=[Optional()])

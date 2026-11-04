@@ -30,7 +30,9 @@
 {% set conv_id = conv.id if conv else none %}
 {% set in_chat = conv or composing %}
 
-<div class="flex-1 min-h-0 flex gap-4">
+{# The panel a tab press replaces; the chat inside it is a panel of its own,
+   so picking another chat replaces the chat and leaves the list be. #}
+<div data-panel="workspace" class="flex-1 min-h-0 flex gap-4">
 
     {# The list. #}
     {# Kept across a switch between chats (data-keep): only its rows are
@@ -45,7 +47,7 @@
     </section>
 
     {# The chat. #}
-    <section class="glass-card min-h-0 flex-1 min-w-0 flex-col {{ 'flex' if in_chat else 'hidden lg:flex' }}"
+    <section data-panel="ws-chat" class="glass-card min-h-0 flex-1 min-w-0 flex-col {{ 'flex' if in_chat else 'hidden lg:flex' }}"
              aria-label="Conversation">
     {% if conv %}
         {% set others = conv.others(current_user.id) %}

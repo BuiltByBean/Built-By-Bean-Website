@@ -89,6 +89,10 @@ def pending_moves(projects=None, today=None):
     for project in projects:
         if project.phase_locked or project.status in SKIP_STATUSES:
             continue
+        # Michael's own products and personal projects have no contract and
+        # no phases (2026-11-04); a date must never march one through them.
+        if not project.is_client_build:
+            continue
         due = due_phase(project, today)
         if due and rank(due) > rank(project.phase):
             moves.append((project, project.phase, due))
@@ -153,7 +157,7 @@ def maintenance_ending(within_days=14, grace_days=30, today=None):
     rows = []
     for project in Project.query.filter(Project.status.notin_(SKIP_STATUSES)).all():
         end = project.free_maintenance_end
-        if not end:
+        if not end or not project.is_client_build:
             continue
         days = (end - today).days
         # Ahead of it, or recently behind it. A window that closed in March is
