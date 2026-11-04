@@ -1,24 +1,31 @@
 """Build the MVP while the client is still on the phone.
 
-The products page sells one thing at a time, after the decision. This page is
-for before the decision: the first call, where somebody lists what they want
-and the answer should be a number before the call ends. Features get tapped
-in as the client names them, the products that run underneath go in beside
-them, and the estimate keeps up. A package needs no contract to exist -
-"still deciding" is most of them, and having the list saved is what makes
-the follow-up call cheap.
+Features get tapped in from Best Practices as the client names them, and the
+products that run underneath go in beside them. A package needs no contract to
+exist - "still deciding" is most of them, and having the list saved is what
+makes the follow-up call cheap.
 
-A finished package hands off twice. The statement of work opens prefilled
-with the scope and the price. And the build prompt stitches together
-everything the catalogue knows about what was chosen - how each feature
-should be built, what went wrong last time, which file is worth copying -
-so the session that builds it starts off knowing what every project before
-it had to learn the hard way.
+No money lives here (Michael, 2026-11-04). What a build costs is typed on the
+SOW form, so nothing on this page can drift from what was agreed.
+
+A package hands off three ways: "What they see" for the client, the statement
+of work with the scope written in, and the build prompt, which stitches
+together what Best Practices knows about what was chosen - how each feature
+should be built, what went wrong last time, which file is worth copying - so
+the session that builds it starts off knowing what every project before it had
+to learn the hard way.
+
+**The prompt has to fit.** It printed every rule in full until 2026-11-04, and
+a package with two items on it came out at 1,077,939 characters. Nobody can
+hand that to a session. Now it carries the chosen features whole, the rules for
+the areas this build touches up to FULL_RULES_BUDGET, every other rule as one
+line, and for a vendor what the client must do and the checklist, with the
+whole runbook one get_playbook away. tools/test_mvp_prompt.py holds it to size.
 """
 from datetime import date
 
-from flask import (Blueprint, render_template, redirect, url_for, flash,
-                   request, abort)
+from flask import (Blueprint, Response, render_template, redirect, url_for,
+                   flash, request, abort)
 from flask_login import login_required
 
 from models import (db, Client, Feature, Product, Playbook,
@@ -27,44 +34,78 @@ from pm.products_routes import playbook_lines
 
 mvp_bp = Blueprint("mvp", __name__, url_prefix="/admin/mvp")
 
+# What the rules may take of a prompt. In full for the areas the chosen features
+# touch, one line each for the rest. The nightly curator is taking the list
+# towards 120 rules, at which point every line fits with its summary.
+FULL_RULES_BUDGET = 30000
+RULE_LINES_BUDGET = 30000
 
-def _parse_money(raw):
-    text = (raw or "").strip().replace("$", "").replace(",", "")
-    if not text:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
+# Where each project a feature names as the one worth copying lives on GitHub,
+# first match wins: "Flipping (with Kuper Plumbing...)" is Flipping's.
+REFERENCE_REPOS = (
+    ("flipping", "Flipping"), ("kuper", "KuperPlumbing"),
+    ("talent booker", "Talent-Booker"), ("robinson", "Robinson-Co."),
+    ("gym ecosystem", "gym-ecosystem"), ("built by bean", "Built-By-Bean-Website"),
+    ("bible study", "Built-By-Bean-Website"), ("signadoc", "Signadoc"),
+    ("chopbuilder", "ChopBuilder"), ("4th anniversary", "4thanniversary"),
+    ("vault of ash", "Vault-of-Ash"), ("christ community", "Christ-Community-Church"),
+    ("crucible", "Jakob-s-Crucible"), ("piped", "piped"),
+    ("entertainhq", "EntertainHQ"), ("lets cook", "Lets-Cook"),
+    ("data dungeon", "Data-Dungeon"),
+)
+
+
+def reference_repo(project):
+    """The GitHub repo behind a feature's reference project, or None."""
+    name = (project or "").lower()
+    for key, repo in REFERENCE_REPOS:
+        if key in name:
+            return f"BuiltByBean/{repo}"
+    return None
 
 
 # ── The prompt ──────────────────────────────────────────────
 
 
+def _runbook_brief(playbook):
+    """What a build has to know about a vendor from day one: what waits on the
+    client, the access to ask for, and the checklist. The traps and the rest of
+    a runbook are read when the vendor is reached, and they are long: Twilio's
+    alone is 46,000 characters."""
+    out = [f"  Before touching {playbook.display_name}: get_playbook {playbook.slug}, "
+           "the whole runbook with its traps."]
+    if (playbook.one_liner or "").strip():
+        out.append(f"  {playbook.one_liner.strip()}")
+    for label, body in (("Only the client can do these", playbook.client_only_md),
+                        ("Access you need from them", playbook.access_grant_md)):
+        if (body or "").strip():
+            out.append(f"  {label}:")
+            out.extend("    " + line for line in body.strip().splitlines())
+    steps = playbook.steps.all()
+    if steps:
+        out.append("  The checklist:")
+        for i, step in enumerate(steps, 1):
+            flag = "  [waits on the client]" if step.waits_on_client else ""
+            out.append(f"    {i}. {step.title}{flag}")
+    out.append("")
+    return out
+
+
 def _product_block(item):
-    head = f"== {item.name}"
-    priced = []
-    if item.price:
-        priced.append(f"${item.price:,.0f}")
-    if item.monthly_price:
-        priced.append(f"${item.monthly_price:,.0f}/mo")
-    if priced:
-        head += f" ({' + '.join(priced)})"
-    out = [head]
+    out = [f"== {item.name}"]
 
     product = item.product
     if product is not None and (product.summary or "").strip():
         out.append(f"  {product.summary.strip()}")
     if (item.notes or "").strip():
         out.append(f"  For this client: {item.notes.strip()}")
-    out.append("")
 
     playbook = None
     if product is not None and product.playbook_slug:
         playbook = Playbook.query.filter_by(slug=product.playbook_slug,
                                             is_active=True).first()
     if playbook is not None:
-        out.extend(playbook_lines(playbook))
+        out.extend(_runbook_brief(playbook))
     else:
         out.append("  There is no runbook for this one yet. Work out the "
                    "steps, and tell me what they were so one can be written.")
@@ -74,17 +115,14 @@ def _product_block(item):
 
 def _feature_block(item):
     feature = item.feature
-    head = f"== {item.name}"
-    if item.price:
-        head += f" (${item.price:,.0f})"
-    out = [head]
+    out = [f"== {item.name}"]
 
     if feature is None:
         # The catalogue row is gone; the choice still happened. Say so
         # rather than rendering an empty heading that looks like an error.
         if (item.notes or "").strip():
             out.append(f"  For this client: {item.notes.strip()}")
-        out.append("  No longer in the catalogue. Scope this one fresh.")
+        out.append("  No longer in Best Practices. Scope this one fresh.")
         out.append("")
         return out
 
@@ -93,7 +131,7 @@ def _feature_block(item):
     if feature.status == "idea":
         out.append("  Never built before - this one is new ground. Design it "
                    "properly, and when it works, write what you learned back "
-                   "into the catalogue entry.")
+                   "into its Best Practices entry.")
     if (item.notes or "").strip():
         out.append(f"  For this client: {item.notes.strip()}")
     if (feature.gold_standard_md or "").strip():
@@ -106,6 +144,9 @@ def _feature_block(item):
                    for line in feature.pitfalls_md.strip().splitlines())
     if (feature.reference_project or "").strip():
         ref = f"  The one worth copying: {feature.reference_project}"
+        repo = reference_repo(feature.reference_project)
+        if repo:
+            ref += f" ({repo})"
         if (feature.reference_path or "").strip():
             ref += f" - {feature.reference_path}"
         out.append(ref)
@@ -113,14 +154,29 @@ def _feature_block(item):
     return out
 
 
-def _house_rules():
-    """Every rule in the catalogue, regardless of what was picked. Rules
-    are the layer under the features - ways of building that hold whether
-    or not the feature they were learned on was bought - and a build that
-    did not select "timezones" still has timezones."""
+def _rule_block(feature):
+    out = [f"- {feature.name}  [{feature.slug}]"]
+    if (feature.gold_standard_md or "").strip():
+        out.extend("    " + line
+                   for line in feature.gold_standard_md.strip().splitlines())
+    if (feature.pitfalls_md or "").strip():
+        out.append("    Traps:")
+        out.extend("      " + line
+                   for line in feature.pitfalls_md.strip().splitlines())
+    return out
+
+
+def _rules_with_guidance():
     rows = (Feature.query.filter_by(is_active=True, kind="rule")
             .order_by(Feature.sort_order, Feature.name).all())
-    rows = [r for r in rows if r.has_guidance]
+    return [r for r in rows if r.has_guidance]
+
+
+def _house_rules():
+    """Every rule, in full, regardless of what was picked: `?full=1` on the
+    guidance brief. Far too long to hand a session as a prompt (a megabyte at
+    500 rules), which is what _rules_for_build is for."""
+    rows = _rules_with_guidance()
     if not rows:
         return []
     out = ["THE HOUSE RULES"]
@@ -140,22 +196,57 @@ def _house_rules():
                "edit, and it will tell you the slug it appended to.")
     out.append("")
     for feature in rows:
-        out.append(f"- {feature.name}  [{feature.slug}]")
-        if (feature.gold_standard_md or "").strip():
-            out.extend("    " + line
-                       for line in feature.gold_standard_md.strip().splitlines())
-        if (feature.pitfalls_md or "").strip():
-            out.append("    Traps:")
-            out.extend("      " + line
-                       for line in feature.pitfalls_md.strip().splitlines())
+        out.extend(_rule_block(feature))
     out.append("")
+    return out
+
+
+def _rules_for_build(areas):
+    """The rules a build carries in its prompt.
+
+    Rules are the layer under the features - ways of building that hold
+    whether or not the feature they were learned on was picked - so a build
+    that did not pick "timezones" still has timezones, and every rule is at
+    least named. The ones for the areas this build's features are in come in
+    full, up to FULL_RULES_BUDGET, and the rest are one line each.
+    """
+    from pm.guidance_routes import rules_index
+    rows = _rules_with_guidance()
+    if not rows:
+        return []
+    full, spent, blocks = set(), 0, []
+    for rule in rows:
+        if rule.category not in areas:
+            continue
+        block = _rule_block(rule)
+        size = sum(len(line) + 1 for line in block)
+        if spent + size > FULL_RULES_BUDGET:
+            continue
+        full.add(rule.id)
+        spent += size
+        blocks.extend(block)
+    out = []
+    if blocks:
+        out.append("THE RULES FOR WHAT THIS BUILD DOES")
+        out.append("  In full, because they touch the features above. Each "
+                   "rule's slug is in brackets: suggest_update takes it to "
+                   "change one field, and report_lesson matches on the name "
+                   "when you have a lesson rather than an edit.")
+        out.append("")
+        out.extend(blocks)
+        out.append("")
+    rest = [r for r in rows if r.id not in full]
+    if rest:
+        out.append(rules_index(RULE_LINES_BUDGET, rows=rest,
+                               title="THE OTHER HOUSE RULES"))
+        out.append("")
     return out
 
 
 def build_package_prompt(package):
     """The whole build, written out for a fresh Claude session.
 
-    Assembled from the catalogue at the moment it is asked for, not stored,
+    Assembled from Best Practices at the moment it is asked for, not stored,
     so a feature whose pitfalls were updated yesterday briefs today's build
     with yesterday's lesson in it.
     """
@@ -177,29 +268,16 @@ def build_package_prompt(package):
                    for line in package.summary.strip().splitlines())
         out.append("")
 
-    numbers = []
-    if package.estimate:
-        numbers.append(f"${package.estimate:,.0f} one-time")
-    if package.monthly_estimate:
-        numbers.append(f"${package.monthly_estimate:,.0f} a month ongoing")
-    if numbers:
-        out.append("THE NUMBERS")
-        out.append(f"  Quoted at {', plus '.join(numbers)}.")
-        if package.price_override is not None and package.items_total \
-                and package.price_override != package.items_total:
-            out.append(f"  The parts add to ${package.items_total:,.0f}; "
-                       "the quote is the number that was agreed.")
-        out.append("")
-
     out.append("THE STACK")
     out.append("  Build it the way the reference projects are built, unless "
                "this document says otherwise: Flask, SQLAlchemy with Alembic "
                "migrations, server-rendered Jinja with Tailwind and Alpine, "
                "Postgres on Railway in production and SQLite locally, "
                "uploads on a mounted volume rather than a bucket.")
-    out.append("  The reference projects live side by side in "
-               r"C:\Users\Micha\Documents\Apps. When a feature names one, "
-               "read the named file before building that feature.")
+    out.append("  When a feature names a reference project, read the named "
+               "file before building that feature. They are on GitHub under "
+               "BuiltByBean; gh repo clone the one named if it is not already "
+               "in ~/Code.")
     out.append("")
 
     products = package.product_items
@@ -210,6 +288,7 @@ def build_package_prompt(package):
             out.extend(_product_block(item))
 
     features = package.feature_items
+    areas = {i.feature.category for i in features if i.feature}
     if features:
         out.append("WHAT THEY USE - THE FEATURES")
         out.append("")
@@ -226,7 +305,7 @@ def build_package_prompt(package):
             for item in groups[key]:
                 out.extend(_feature_block(item))
 
-    out.extend(_house_rules())
+    out.extend(_rules_for_build(areas))
 
     out.append("HOW TO WORK")
     out.append("  Start with the data model, and get a migration in from the "
@@ -248,9 +327,9 @@ def build_package_prompt(package):
                "each feature as you reach it, and get_playbook before "
                "touching a vendor. If the pm-guidance tools are not in this "
                "session, stop and say so before anything else - the fix is "
-               "tools/bootstrap_guidance.ps1 in the Built-By-Bean-Website "
-               "repo, then a fresh session. Do not build from the snapshot "
-               "alone.")
+               "tools/bootstrap_guidance.sh (or .ps1 on Windows) in the "
+               "Built-By-Bean-Website repo, then a fresh session. Do not build "
+               "from the snapshot alone.")
     out.append("  What this build teaches goes back the moment it is learned, "
                "not at the end: report_lesson for a bug that cost time, "
                "suggest_update for a runbook step that moved, a better file "
@@ -261,7 +340,7 @@ def build_package_prompt(package):
                "and log_expense as they occur, register_hosting_resource "
                "for anything stood up.")
     out.append("  Where the guidance above disagrees with what you find, say "
-               "so plainly instead of quietly deviating - the catalogue gets "
+               "so plainly instead of quietly deviating - Best Practices gets "
                "corrected, not ignored.")
     return "\n".join(out)
 
@@ -284,9 +363,20 @@ def mvp_index():
 @mvp_bp.route("/new", methods=["POST"])
 @login_required
 def package_create():
-    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    # A new client is usually who this page is open for, so the name can be
+    # typed right here. Finding a row of that name first keeps a second press
+    # from making them twice.
+    new_client = " ".join((request.form.get("new_client") or "").split())[:200]
+    if new_client:
+        client = Client.query.filter(Client.name.ilike(new_client)).first()
+        if client is None:
+            client = Client(name=new_client)
+            db.session.add(client)
+            db.session.flush()
+    else:
+        client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
     if not client:
-        flash("Pick a client first. The package is theirs.", "warning")
+        flash("Pick a client or type a new one. The package is theirs.", "warning")
         return redirect(url_for("mvp.mvp_index"))
     name = (request.form.get("name") or "").strip() or f"{client.name} MVP"
     package = MvpPackage(client_id=client.id, name=name)
@@ -300,26 +390,32 @@ def package_create():
 def package_detail(id):
     package = db.session.get(MvpPackage, id) or abort(404)
 
-    # The picker offers what can be sold. Rules are not on the menu - they
-    # apply to every build regardless, through the prompt's house rules.
+    # The picker offers what a client could ask for. Rules are not on the menu
+    # - they apply to every build regardless, through the prompt. Grouped by
+    # area, and by name inside one, because a client names things in no order
+    # and the eye has to land on the word.
     features = (Feature.query.filter_by(is_active=True, kind="feature")
-                .order_by(Feature.sort_order, Feature.name).all())
+                .order_by(Feature.name).all())
     products = (Product.query.filter_by(is_active=True)
                 .order_by(Product.sort_order, Product.name).all())
 
-    chosen_features = {i.feature_id for i in package.items if i.feature_id}
-    chosen_products = {i.product_id for i in package.items if i.product_id}
+    # What is on it, by what it came from: a tick that a press takes back off
+    # needs to know which item it is.
+    chosen_features = {i.feature_id: i.id for i in package.items if i.feature_id}
+    chosen_products = {i.product_id: i.id for i in package.items if i.product_id}
 
-    counts = {}
+    by_area = {}
     for feature in features:
-        counts[feature.category] = counts.get(feature.category, 0) + 1
+        by_area.setdefault(feature.category, []).append(feature)
+    feature_groups = [(key, label, by_area[key]) for key, label in Feature.CATEGORIES
+                      if by_area.get(key)]
 
     return render_template("pm/mvp/detail.html",
                            package=package,
-                           features=features, products=products,
+                           feature_groups=feature_groups, products=products,
                            chosen_features=chosen_features,
                            chosen_products=chosen_products,
-                           categories=Feature.CATEGORIES, counts=counts,
+                           categories=Feature.CATEGORIES,
                            statuses=MvpPackage.STATUSES)
 
 
@@ -331,7 +427,6 @@ def package_update(id):
     if name:
         package.name = name
     package.summary = (request.form.get("summary") or "").strip()
-    package.price_override = _parse_money(request.form.get("price_override"))
     if request.form.get("status") in MvpPackage.STATUS_LABELS:
         package.status = request.form["status"]
     db.session.commit()
@@ -377,8 +472,7 @@ def item_add(id):
             return back
         db.session.add(MvpPackageItem(
             package_id=package.id, kind="feature", feature_id=feature.id,
-            name=feature.name, price=feature.typical_value,
-            sort_order=last + 10))
+            name=feature.name, sort_order=last + 10))
         db.session.commit()
         return back
 
@@ -391,8 +485,7 @@ def item_add(id):
             return back
         db.session.add(MvpPackageItem(
             package_id=package.id, kind="product", product_id=product.id,
-            name=product.name, price=product.price,
-            monthly_price=product.monthly_price, sort_order=last + 10))
+            name=product.name, sort_order=last + 10))
         db.session.commit()
         return back
 
@@ -408,7 +501,6 @@ def item_add(id):
                 slug=slug, name=new_name,
                 category=(category if category in Feature.CATEGORY_LABELS
                           else "records"),
-                typical_value=_parse_money(request.form.get("new_value")),
                 status="idea", sort_order=last_feature + 10)
             db.session.add(feature)
             db.session.flush()
@@ -417,8 +509,7 @@ def item_add(id):
             return back
         db.session.add(MvpPackageItem(
             package_id=package.id, kind="feature", feature_id=feature.id,
-            name=feature.name, price=feature.typical_value,
-            sort_order=last + 10))
+            name=feature.name, sort_order=last + 10))
         db.session.commit()
         return back
 
@@ -433,9 +524,6 @@ def item_update(id, item_id):
     item = db.session.get(MvpPackageItem, item_id)
     if item is None or item.package_id != package.id:
         abort(404)
-    item.price = _parse_money(request.form.get("price"))
-    if item.kind == "product":
-        item.monthly_price = _parse_money(request.form.get("monthly_price"))
     item.notes = (request.form.get("notes") or "").strip()
     db.session.commit()
     flash(f"{item.name} updated.", "success")
@@ -449,10 +537,10 @@ def item_remove(id, item_id):
     item = db.session.get(MvpPackageItem, item_id)
     if item is None or item.package_id != package.id:
         abort(404)
-    name = item.name
+    # No toast: the tick going is the answer, and on a phone a toast lands on
+    # the search box somebody is about to use.
     db.session.delete(item)
     db.session.commit()
-    flash(f"{name} taken off.", "success")
     return redirect(url_for("mvp.package_detail", id=package.id))
 
 
@@ -464,16 +552,23 @@ def package_prompt(id):
                            prompt=build_package_prompt(package))
 
 
+@mvp_bp.route("/<int:id>/prompt.txt")
+@login_required
+def package_prompt_text(id):
+    """The prompt on its own, for the Copy button on the package."""
+    package = db.session.get(MvpPackage, id) or abort(404)
+    return Response(build_package_prompt(package), mimetype="text/plain")
+
+
 @mvp_bp.route("/<int:id>/summary")
 @login_required
 def package_summary(id):
     """The package as the client reads it.
 
-    The builder is a working surface: catalogue names, what is built and what
-    is only an idea, what each part is worth. A statement of work is the other
-    end, and it is a contract - you do not open a call with one. This is the
-    thing in between, which did not exist: what they would get and what it
-    costs, on one page, in the words a person uses.
+    The builder is a working surface: what is built and what is only an idea.
+    A statement of work is the other end, and it is a contract - you do not
+    open a call with one. This is the thing in between: what they would get,
+    on one page, in the words a person uses. What it costs is on the SOW.
 
     Grouped by what each part is FOR rather than by whether it came from the
     products table or the features table, because that distinction is an
@@ -521,7 +616,8 @@ def package_sow(id):
     """Open the statement of work with this package already written in.
 
     Nothing is generated or sent from here - the SOW form stays the one
-    place a contract comes from, and it opens filled in rather than blank.
+    place a contract comes from, and it opens with the scope filled in. The
+    price is typed there.
     """
     package = db.session.get(MvpPackage, id) or abort(404)
 
@@ -549,6 +645,4 @@ def package_sow(id):
         "project_description": package.summary or "",
         "features": lines,
     }
-    if package.estimate:
-        args["mvp_price"] = f"{package.estimate:,.0f}"
     return redirect(url_for("pm.sow_form", **args))

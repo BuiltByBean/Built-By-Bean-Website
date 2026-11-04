@@ -6,9 +6,10 @@
 
 {#
   The page that is open during the call. Everything above the pickers is the
-  package as it stands; everything below is the catalogue, one tap from being
-  on it. Adding is a full submit and a redirect back to #pick, so the pickers
-  land back in view instead of the top of the page.
+  package as it stands; everything below is Best Practices, one tap from being
+  on it and one more from being off it. Adding is a full submit and a redirect
+  back to #pick, so the pickers land back in view instead of the top of the
+  page. No money on this page: what a build costs is typed on the SOW.
 #}
 
 {% block title %}{{ package.name }} - Built By Bean{% endblock %}
@@ -17,7 +18,30 @@
 {% block page_subtitle %}{{ package.client.name }}{% endblock %}
 
 {% block content %}
-<div class="space-y-5 stagger-in" x-data='{ q: "", cat: "all", adding: false }'>
+<div class="space-y-5 stagger-in"
+     x-data='{
+       q: "", cat: "all", adding: false, copied: false,
+       hits(el) {
+         const words = this.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+         return words.every(w => el.dataset.hay.includes(w));
+       },
+       async copyPrompt() {
+         const text = () => fetch({{ url_for("mvp.package_prompt_text", id=package.id) | tojson }}, { credentials: "same-origin" })
+           .then(r => { if (!r.ok) throw new Error("no prompt"); return r.blob(); })
+           .then(b => new Blob([b], { type: "text/plain" }));
+         try {
+           if (window.ClipboardItem && navigator.clipboard.write) {
+             await navigator.clipboard.write([new ClipboardItem({ "text/plain": text() })]);
+           } else {
+             await navigator.clipboard.writeText(await (await text()).text());
+           }
+           this.copied = true;
+           setTimeout(() => this.copied = false, 1800);
+         } catch (e) {
+           location.href = {{ url_for("mvp.package_prompt", id=package.id) | tojson }};
+         }
+       }
+     }'>
 
     {# ── the package ─────────────────────────────────────── #}
     {# relative z-30 per CLAUDE.md LM-1: the status dropdown opens over the
@@ -36,14 +60,6 @@
                     Status</label>
                 {{ select_dropdown("status", statuses, package.status) }}
             </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                    Price you quoted</label>
-                <input type="text" name="price_override"
-                       value="{{ '%g'|format(package.price_override) if package.price_override is not none else '' }}"
-                       placeholder="adds up"
-                       class="input-ring w-28 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
-            </div>
         </div>
         <div>
             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
@@ -55,19 +71,30 @@
             <button type="submit"
                     class="min-h-[44px] px-4 py-2 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
                 Save</button>
-            {% if package.price_override is not none and package.items_total and package.price_override != package.items_total %}
-            <span class="text-xs text-surface-500">the parts add to {{ package.items_total|format_currency }}</span>
-            {% endif %}
         </div>
     </form>
 
     {# ── where it goes next ──────────────────────────────── #}
     <div class="flex flex-wrap items-center gap-2">
-        {# First of the three, because it is the one you open while they are
-           still on the phone. The SOW is the contract after they say yes and
-           the prompt is for the build after that. #}
+        {# The prompt first: picking features and handing the build to a fresh
+           session is what this page is for. Copy fetches the text on the press
+           rather than carrying it in the page, and falls back to the page that
+           shows it, where a browser that refuses still lets you select it. #}
+        <button type="button" @click="copyPrompt()"
+                class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            <span x-show="!copied">Copy build prompt</span>
+            <span x-show="copied" x-cloak>Copied</span></button>
+        <a href="{{ url_for('mvp.package_prompt', id=package.id) }}"
+           class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            Read the prompt</a>
         <a href="{{ url_for('mvp.package_summary', id=package.id) }}" target="_blank" rel="noopener"
-           class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
+           class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -79,12 +106,6 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
             Draft the SOW</a>
-        <a href="{{ url_for('mvp.package_prompt', id=package.id) }}"
-           class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-            Build prompt</a>
 
         {# Not a live action: this one redirects to the list, which is where
            you want to be afterwards, so it is a real navigation. #}
@@ -95,18 +116,14 @@
     </div>
 
     {# ── what is on it ───────────────────────────────────── #}
-    {# data-live: adding, removing or repricing changes this card and the two
-       catalogue lists below, and nothing else on the page. The search box, the
+    {# data-live: adding or removing changes this card and the two lists
+       below, and nothing else on the page. The search box, the
        category chips and the package form above keep their identity, which is
        what keeps the cursor, the chosen chip and the scroll position. #}
     <div data-live="chosen" class="glass-card overflow-hidden">
-        <div class="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-wrap items-baseline gap-x-3">
+        <div class="px-4 sm:px-5 py-3 border-b border-white/5">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
                 {{ package.items|length }} in the package</span>
-            <span class="ml-auto text-sm tabular-nums text-white">
-                {{ package.estimate|format_currency if package.estimate else '-' }}{% if package.monthly_estimate %}
-                <span class="text-xs text-surface-500">+{{ package.monthly_estimate|format_currency }}/mo</span>{% endif %}
-            </span>
         </div>
 
         {% if package.items %}
@@ -131,7 +148,7 @@
                             {% endif %}
                             {% endif %}
                         </span>
-                        {# The catalogue's own line about what it does, so the
+                        {# Best Practices' own line about what it does, so the
                            package reads as sentences rather than as a list of
                            names. A note typed on the item wins, because it was
                            written for this client. #}
@@ -139,13 +156,6 @@
                                        or (item.product.summary if item.product else None) %}
                         {% if blurb %}
                         <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ blurb }}</span>
-                        {% endif %}
-                    </span>
-                    <span class="shrink-0 text-right">
-                        <span class="block text-sm tabular-nums {{ 'text-surface-200' if item.price else 'text-surface-600' }}">
-                            {{ item.price|format_currency if item.price else '-' }}</span>
-                        {% if item.monthly_price %}
-                        <span class="block text-xs text-surface-500">+{{ item.monthly_price|format_currency }}/mo</span>
                         {% endif %}
                     </span>
                     <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
@@ -161,7 +171,7 @@
                     {% endif %}
                     <p class="text-xs">
                         <a href="{{ url_for('features.features_index', q=item.feature.name) }}"
-                           class="text-brand-400 hover:text-brand-300">Open in the catalogue</a>
+                           class="text-brand-400 hover:text-brand-300">Open in Best Practices</a>
                     </p>
                     {% elif item.product and item.product.summary %}
                     <p class="text-xs text-surface-400 max-w-3xl">{{ item.product.summary }}</p>
@@ -169,23 +179,6 @@
 
                     <form method="POST" data-live-action action="{{ url_for('mvp.item_update', id=package.id, item_id=item.id) }}"
                           class="flex flex-wrap items-end gap-3">
-                        <div>
-                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                                For them $</label>
-                            <input type="text" name="price"
-                                   value="{{ '%g'|format(item.price) if item.price is not none else '' }}"
-                                   placeholder="bundled"
-                                   class="input-ring w-28 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                        </div>
-                        {% if item.kind == 'product' %}
-                        <div>
-                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                                $/month</label>
-                            <input type="text" name="monthly_price"
-                                   value="{{ '%g'|format(item.monthly_price) if item.monthly_price is not none else '' }}"
-                                   class="input-ring w-24 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                        </div>
-                        {% endif %}
                         <div class="flex-1 min-w-[200px]">
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
                                 For this client</label>
@@ -209,19 +202,19 @@
         </div>
         {% else %}
         <div class="p-8 text-center">
-            <p class="text-sm text-surface-400">Nothing on it yet. Add from the catalogue below.</p>
+            <p class="text-sm text-surface-400">Nothing on it yet. Tap what they ask for below.</p>
         </div>
         {% endif %}
     </div>
 
-    {# ── the catalogue, one tap away ─────────────────────── #}
+    {# ── Best Practices, one tap away ────────────────────── #}
     <div id="pick" class="glass-card p-4 sm:p-5 space-y-4">
         {# The search and the chips pin while ninety-odd rows scroll under
            them - mid-call, the box the thumb is headed for must not leave
            (LM-4). The class backs it solid; rows vanish under it. #}
         <div class="sticky-filters rounded-xl p-3 -mx-3 space-y-3">
         <div class="flex gap-2">
-            <input type="text" x-model="q" placeholder="Search the catalogue"
+            <input type="text" x-model="q" placeholder="Search features"
                    class="input-ring flex-1 min-w-0 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             <button type="button" @click="adding = !adding"
                     class="shrink-0 min-h-[44px] px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors"
@@ -233,17 +226,17 @@
                     class="shrink-0 min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                     :class="cat === 'all' ? 'bg-brand-500/20 text-brand-300' : 'bg-surface-800 text-surface-400 hover:text-surface-200'">
                 All</button>
-            {% for key, label in categories %}{% if counts.get(key) %}
+            {% for key, label, rows in feature_groups %}
             <button type="button" @click="cat = '{{ key }}'"
                     class="shrink-0 min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                     :class="cat === '{{ key }}' ? 'bg-brand-500/20 text-brand-300' : 'bg-surface-800 text-surface-400 hover:text-surface-200'">
-                {{ label }} ({{ counts[key] }})</button>
-            {% endif %}{% endfor %}
+                {{ label }} ({{ rows | length }})</button>
+            {% endfor %}
         </div>
 
-        {# The client just named something the catalogue has never heard of.
+        {# The client just named something Best Practices has never heard of.
            Inside the pinned bar, not past a hundred rows: it was 8,800px down
-           this page at real catalogue size, which is not an action anybody
+           this page at the list's real size, which is not an action anybody
            takes while somebody is still talking. Closed until asked for, so
            the bar stays one line the rest of the time. #}
         <form method="POST" data-live-action data-live-reset x-show="adding" x-cloak
@@ -259,92 +252,64 @@
                 <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Area</label>
                 {{ select_dropdown("new_category", categories, "records", full_width=true) }}
             </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
-                <input type="text" name="new_value" placeholder="later"
-                       class="input-ring w-24 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
-            </div>
             <button type="submit" class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
                 Add it</button>
         </form>
         </div>
 
-        <div data-live="pick-products" x-show="cat === 'all'" class="space-y-1.5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Products</p>
-            {% for p in products %}
-            {% if p.id in chosen_products %}
-            <div class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 opacity-50"
-                 data-hay="{{ (p.name ~ ' ' ~ (p.summary or ''))|lower }}"
-                 x-show="!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase())">
-                <span class="min-w-0 flex-1 text-sm text-surface-300">{{ p.name }}</span>
-                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {# A row is a press either way: on the package it shows a tick and takes
+           it back off, off the package it shows a plus and puts it on. On a call
+           the second tap is how a wrong one gets corrected without scrolling up. #}
+        {% macro pick_row(chosen_item, field, value, name, blurb, hay, show) %}
+        <form method="POST" data-live-action
+              action="{{ url_for('mvp.item_remove', id=package.id, item_id=chosen_item) if chosen_item else url_for('mvp.item_add', id=package.id) }}"
+              data-hay="{{ hay | lower }}" x-show="{{ show }}">
+            {% if not chosen_item %}<input type="hidden" name="{{ field }}" value="{{ value }}">{% endif %}
+            <button type="submit" aria-pressed="{{ 'true' if chosen_item else 'false' }}"
+                    class="group flex w-full min-h-[44px] items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-colors
+                           {{ 'border-brand-500/40 bg-brand-500/10' if chosen_item else 'border-white/5 hover:border-brand-500/40' }}">
+                <span class="min-w-0 flex-1">
+                    <span class="block text-sm {{ 'text-brand-200' if chosen_item else 'text-surface-200 group-hover:text-brand-300' }} transition-colors">{{ name }}</span>
+                    {% if blurb %}
+                    <span class="block text-[11px] leading-snug text-surface-500">{{ blurb }}</span>
+                    {% endif %}
+                </span>
+                {% if chosen_item %}
+                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                 </svg>
-            </div>
-            {% else %}
-            <form method="POST" data-live-action action="{{ url_for('mvp.item_add', id=package.id) }}"
-                  data-hay="{{ (p.name ~ ' ' ~ (p.summary or ''))|lower }}"
-                  x-show="!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase())">
-                <input type="hidden" name="product_id" value="{{ p.id }}">
-                <button type="submit"
-                        class="group flex w-full min-h-[44px] items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 hover:border-brand-500/40 text-left transition-colors">
-                    <span class="min-w-0 flex-1">
-                        <span class="block text-sm text-surface-200 group-hover:text-brand-300 transition-colors">{{ p.name }}</span>
-                        {% if p.summary %}
-                        <span class="block text-[11px] leading-snug text-surface-500">{{ p.summary }}</span>
-                        {% endif %}
-                    </span>
-                    <span class="shrink-0 text-xs tabular-nums text-surface-400">{{ p.price_label }}</span>
-                    <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-brand-300 transition-colors"
-                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
-                </button>
-            </form>
-            {% endif %}
+                {% else %}
+                <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-brand-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                {% endif %}
+            </button>
+        </form>
+        {% endmacro %}
+
+        <div data-live="pick-features" class="space-y-5">
+            {% for key, label, rows in feature_groups %}
+            {% set group_hay = rows | map(attribute='name') | join(' ') ~ ' ' ~ rows | map(attribute='summary') | select | join(' ') ~ ' ' ~ label %}
+            <section class="space-y-1.5" data-hay="{{ group_hay | lower }}"
+                     x-show="(cat === 'all' || cat === '{{ key }}') && hits($el)">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">{{ label }}</h3>
+                {% for f in rows %}
+                {{ pick_row(chosen_features.get(f.id), 'feature_id', f.id, f.name, f.summary,
+                            f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ f.category_label, 'hits($el)') }}
+                {% endfor %}
+            </section>
             {% endfor %}
         </div>
 
-        <div data-live="pick-features" class="space-y-1.5">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Features</p>
-            {% for f in features %}
-            {% if f.id in chosen_features %}
-            <div class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 opacity-50"
-                 data-hay="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ f.category_label)|lower }}"
-                 x-show="(cat === 'all' || cat === '{{ f.category }}') && (!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase()))">
-                <span class="min-w-0 flex-1">
-                    <span class="block text-sm text-surface-300">{{ f.name }}</span>
-                    <span class="block text-[11px] text-surface-500">{{ f.category_label }}</span>
-                </span>
-                <svg class="w-4 h-4 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-            </div>
-            {% else %}
-            <form method="POST" data-live-action action="{{ url_for('mvp.item_add', id=package.id) }}"
-                  data-hay="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ f.category_label)|lower }}"
-                  x-show="(cat === 'all' || cat === '{{ f.category }}') && (!q.trim() || $el.dataset.hay.includes(q.trim().toLowerCase()))">
-                <input type="hidden" name="feature_id" value="{{ f.id }}">
-                <button type="submit"
-                        class="group flex w-full min-h-[44px] items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 hover:border-brand-500/40 text-left transition-colors">
-                    <span class="min-w-0 flex-1">
-                        <span class="block text-sm text-surface-200 group-hover:text-brand-300 transition-colors">{{ f.name }}</span>
-                        {% if f.summary %}
-                        <span class="block text-[11px] leading-snug text-surface-500">{{ f.summary }}</span>
-                        {% endif %}
-                        <span class="block text-[11px] text-surface-600">{{ f.category_label }}{% if f.status == 'idea' %} &middot; not built yet{% endif %}</span>
-                    </span>
-                    <span class="shrink-0 text-xs tabular-nums text-surface-400">
-                        {{ f.typical_value|format_currency if f.typical_value else '' }}</span>
-                    <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-brand-300 transition-colors"
-                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
-                </button>
-            </form>
-            {% endif %}
+        {# Products bring a vendor's runbook into the prompt. Named here without
+           what they sell for: that is on the Products page. #}
+        <section data-live="pick-products" class="space-y-1.5" x-show="cat === 'all'">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">Products</h3>
+            {% for p in products %}
+            {{ pick_row(chosen_products.get(p.id), 'product_id', p.id, p.name, p.summary,
+                        p.name ~ ' ' ~ (p.summary or ''), 'hits($el)') }}
             {% endfor %}
-        </div>
+        </section>
 
     </div>
 

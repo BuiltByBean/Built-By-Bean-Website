@@ -28,9 +28,14 @@ EVENTS = {
 
 def _command(script):
     # Forward slashes: Python accepts them on Windows, and they survive
-    # every shell and JSON layer this string passes through.
+    # every shell and JSON layer this string passes through. A Mac has no
+    # `python`, only `python3`, so a hook written with the bare word would
+    # fail on every call; the interpreter running this installer is one that
+    # exists.
     path = os.path.join(HERE, script).replace("\\", "/")
-    return f'python "{path}"'
+    if os.name == "nt":
+        return f'python "{path}"'
+    return f'"{sys.executable or "python3"}" "{path}"'
 
 
 def _ours(entry):

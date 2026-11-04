@@ -126,16 +126,18 @@ def rules():
 INDEX_BUDGET = 9000
 
 
-def rules_index(budget=INDEX_BUDGET):
+def rules_index(budget=INDEX_BUDGET, rows=None, title="THE HOUSE RULES"):
     """Every rule as one line, name, slug and summary, inside `budget`.
 
     The whole rule is one get_feature_guidance away. When the index does not
     fit, the summaries go before any rule does, and only past that are rules
-    left off, with a count saying how many.
+    left off, with a count saying how many. `rows` narrows it, for the MVP
+    prompt, which prints some rules in full and lists the rest.
     """
-    rows = (Feature.query.filter_by(is_active=True, kind="rule")
-            .order_by(Feature.sort_order, Feature.name).all())
-    head = ["THE HOUSE RULES, one line each. Before you build anything a rule "
+    if rows is None:
+        rows = (Feature.query.filter_by(is_active=True, kind="rule")
+                .order_by(Feature.sort_order, Feature.name).all())
+    head = [f"{title}, one line each. Before you build anything a rule "
             "touches, get_feature_guidance with its slug for the whole rule: "
             "how to build it and what went wrong last time.", ""]
     if not rows:
@@ -228,8 +230,7 @@ def products():
             .order_by(Product.sort_order, Product.name).all())
     return jsonify({"products": [
         {"slug": p.slug, "name": p.name, "summary": p.summary or "",
-         "category": p.category, "price": p.price,
-         "monthly_price": p.monthly_price, "playbook": p.playbook_slug or ""}
+         "category": p.category, "playbook": p.playbook_slug or ""}
         for p in rows]})
 
 
@@ -385,9 +386,9 @@ def costs():
 # a playbook is the one structured field: the checklist under the runbook,
 # carried as a list in the payload rather than as text.
 TEXT_FIELDS = {
-    "feature": ("name", "summary", "gold_standard_md", "pitfalls_md",
+    "feature": ("name", "summary", "category", "gold_standard_md", "pitfalls_md",
                 "reference_project", "reference_path"),
-    "rule": ("name", "summary", "gold_standard_md", "pitfalls_md",
+    "rule": ("name", "summary", "category", "gold_standard_md", "pitfalls_md",
              "reference_project", "reference_path",
              # A scanner for the rule: a session that learns a lesson can
              # also say how to catch it mechanically.
@@ -398,12 +399,11 @@ TEXT_FIELDS = {
                  "steps"),
     "product": ("name", "summary", "prompt_intro", "playbook_slug"),
 }
-NUMBER_FIELDS = {
-    "feature": ("typical_value",),
-    "product": ("price", "monthly_price"),
-}
+# No prices through this door, in or out. What something sells for is
+# Michael's, typed on the Products page and the SOW.
+#
 # Only prose takes an append, and the checklist, which grows at the end. A
-# name, a path or a price is replaced whole.
+# name or a path is replaced whole.
 APPENDABLE = {"summary", "gold_standard_md", "pitfalls_md", "client_only_md",
               "access_grant_md", "your_steps_md", "traps_md", "verify_md",
               "prompt_intro", "steps"}
@@ -423,7 +423,7 @@ LESSON_FIELD = {"feature": "pitfalls_md", "rule": "pitfalls_md",
 
 
 def _fields_for(kind):
-    return TEXT_FIELDS.get(kind, ()) + NUMBER_FIELDS.get(kind, ())
+    return TEXT_FIELDS.get(kind, ())
 
 
 def _target(kind, slug):
@@ -589,7 +589,6 @@ def _create_from(kind, payload, project):
             pitfalls_md=_stamp(project, pitfalls) if pitfalls else "",
             reference_project=_cap(payload.get("reference_project") or project, 120),
             reference_path=_cap(payload.get("path") or payload.get("reference_path"), 300),
-            typical_value=_number(payload.get("typical_value")) if kind == "feature" else None,
             status="built", sort_order=last + 10,
         )
     elif kind == "playbook":
@@ -625,8 +624,6 @@ def _create_from(kind, payload, project):
         row = Product(
             slug=slug, name=name, category=category,
             summary=_cap(payload.get("summary"), 2000),
-            price=_number(payload.get("price")),
-            monthly_price=_number(payload.get("monthly_price")),
             playbook_slug=_cap(payload.get("playbook_slug"), 60) or None,
             prompt_intro=_cap(payload.get("prompt_intro"), 4000),
             sort_order=last + 10,
@@ -681,12 +678,11 @@ def apply_proposal(proposal):
             return False, "already there"
         new = ((old_text.rstrip() + "\n\n") if old_text.strip() else "") \
             + _stamp(proposal.project or "a session", proposal.proposed)
-    elif field in NUMBER_FIELDS.get(proposal.kind, ()):
-        new = _number(proposal.proposed)
-        if new is None and proposal.proposed.strip():
-            return False, f"{field} takes a number"
     else:
         new = proposal.proposed
+        if field == "category" and new not in Feature.CATEGORY_LABELS:
+            return False, ("category must be one of "
+                           + ", ".join(Feature.CATEGORY_LABELS))
 
     proposal.previous = "" if old is None else str(old)
     setattr(row, field, new)
@@ -713,10 +709,9 @@ def revert_proposal(proposal):
     field = proposal.field
     if field == STEP_FIELD:
         return _revert_steps(proposal, row)
-    if field in NUMBER_FIELDS.get(proposal.kind, ()):
-        setattr(row, field, _number(proposal.previous))
-    else:
-        setattr(row, field, proposal.previous or "")
+    if field not in _fields_for(proposal.kind):
+        return False, f"{field} is no longer a field here"
+    setattr(row, field, proposal.previous or "")
     return True, ""
 
 

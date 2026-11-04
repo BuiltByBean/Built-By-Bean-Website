@@ -3,7 +3,7 @@
 {% from "pm/components/clear_filters.html" import clear_filters %}
 
 {#
-  Everything: one search across every rule, how-to, playbook and product.
+  Everything: one search across every rule, feature and playbook.
 
   Every entry is on the page and the bar filters them in place, as the
   features page always did: the keystroke is the apply, and the URL keeps
@@ -11,7 +11,7 @@
   rows saying the same thing cost a third of a phone screen. ?type= still
   narrows, so a link to "playbooks about texting" can say so.
   A row opens to what a session would be told: the guidance, the traps, the
-  file worth copying, a playbook's sections, a product's price. Changing one
+  file worth copying, a playbook's sections. Changing one
   happens on its own tab, one press away, because each kind has its own
   editor and its own rules about what may change from the page.
 
@@ -97,10 +97,6 @@
                     <span class="block mt-1 text-xs text-surface-400 max-w-3xl break-words">{{ e.line }}</span>
                     {% endif %}
                 </span>
-                {% if e.type in ('howto', 'product') %}
-                <span class="shrink-0 text-sm tabular-nums {{ 'text-surface-200' if e.price else 'text-surface-600' }}">
-                    {{ e.price | format_currency if e.price else '-' }}</span>
-                {% endif %}
                 <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
                      :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -143,16 +139,6 @@
                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Edit</a>
                         <a href="{{ e.open }}"
                            class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Open the playbook</a>
-                    </div>
-                {% elif e.type == 'product' %}
-                    <dl class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                        <div><dt class="text-xs text-surface-400">Price</dt><dd class="text-white">{{ e.price | format_currency if e.price else 'Not set' }}</dd></div>
-                        <div><dt class="text-xs text-surface-400">Monthly</dt><dd class="text-white">{{ e.monthly | format_currency if e.monthly else 'None' }}</dd></div>
-                        <div><dt class="text-xs text-surface-400">Playbook</dt><dd class="text-white break-words">{{ e.playbook or 'None' }}</dd></div>
-                    </dl>
-                    <div class="flex justify-end">
-                        <a href="{{ e.sell }}"
-                           class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Sell it</a>
                     </div>
                 {% endif %}
             </div>

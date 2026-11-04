@@ -3027,17 +3027,14 @@ class Feature(db.Model):
     Products are things that run: an integration with somebody else's
     platform, or a whole second system. Features are what somebody uses when
     they open the app - a booking screen, an inquiry form, a way to tag
-    things. The two are priced and sold differently, which is why they are
-    two tables and not one with a flag.
+    things.
 
-    Three jobs, in the order they get used:
-
-    Pricing. A number per feature turns a phone call into an estimate while
-    the client is still talking, instead of a quote written that evening from
-    memory.
-
-    Recall. "Here is what I have built before" is hard to answer from a list
-    of repositories, and the answer decides what gets offered.
+    Two jobs. Recall: "here is what I have built before" is hard to answer
+    from a list of repositories, and the answer decides what goes in an MVP.
+    So a feature's name is what a client would call it, and its summary is
+    one sentence in their words; the client reads both on "What they see".
+    Prices do not live here: Michael, 2026-11-03, "no price shit left over".
+    What a build costs is typed on the SOW.
 
     And the one that pays for the rest: not building the same thing wrong
     twice. Talent Booker carries fifty-three landmines and Data Dungeon
@@ -3056,11 +3053,6 @@ class Feature(db.Model):
     category = db.Column(db.String(20), nullable=False, default="records", index=True)
     summary = db.Column(db.Text, default="")
 
-    # What this contributes to an estimate. Nullable, because plenty of these
-    # are a morning's work bundled into the build and pricing them
-    # individually would be pricing a screen.
-    typical_value = db.Column(db.Float, nullable=True)
-
     # How it should be built, and what goes wrong. The second is the reason
     # this table exists; the first is what stops it being relearned.
     gold_standard_md = db.Column(db.Text, default="")
@@ -3073,11 +3065,11 @@ class Feature(db.Model):
 
     # Two kinds share this table because they share everything else - the
     # categories, the guidance fields, the search. A `feature` is a
-    # capability that gets offered and priced. A `rule` is the layer under
-    # that: a way of building that must not be broken, regardless of which
-    # features were bought - the tojson quoting, the sticky bars, the
-    # migration guards. Rules never appear in the MVP picker and never carry
-    # a price; every one of them rides into every build prompt.
+    # capability that gets picked for a client's MVP. A `rule` is the layer
+    # under that: a way of building that must not be broken, regardless of
+    # which features were picked - the tojson quoting, the sticky bars, the
+    # migration guards. Rules never appear in the MVP picker; every build
+    # prompt carries them.
     kind = db.Column(db.String(10), nullable=False, default="feature",
                      index=True)
 
@@ -3548,10 +3540,10 @@ class MvpPackage(db.Model):
     """One client's build, assembled while they are still talking.
 
     The page this backs is open during the first call. Products and features
-    get tapped in as the client names them, the estimate keeps a running
-    answer to "what would that cost", and none of it requires the client to
-    have agreed to anything - a package with no contract behind it is a quote
-    waiting, not an error, which is why it lives here and not on a project.
+    get tapped in as the client names them, and none of it requires the client
+    to have agreed to anything - a package with no contract behind it is the
+    normal case, which is why it lives here and not on a project. It holds no
+    money (Michael, 2026-11-04): what a build costs is typed on the SOW.
 
     From a finished package come the two documents that start a build: the
     statement of work, prefilled with what was chosen, and the build prompt -
@@ -3569,10 +3561,6 @@ class MvpPackage(db.Model):
     # it. This becomes the SOW's project description and the prompt's opening.
     summary = db.Column(db.Text, default="")
     status = db.Column(db.String(20), nullable=False, default="scoping")
-    # A quoted number that is not the sum of the parts. Null means the
-    # estimate is the arithmetic; set, it is what was actually said on the
-    # phone, and the arithmetic becomes a footnote.
-    price_override = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -3586,7 +3574,7 @@ class MvpPackage(db.Model):
 
     STATUSES = (
         ("scoping", "Being scoped"),
-        ("ready", "Ready to quote"),
+        ("ready", "Ready to build"),
         ("contracted", "Contracted"),
         ("parked", "Parked"),
     )
@@ -3595,20 +3583,6 @@ class MvpPackage(db.Model):
     @property
     def status_label(self):
         return self.STATUS_LABELS.get(self.status, self.status)
-
-    @property
-    def items_total(self):
-        return sum(i.price for i in self.items if i.price)
-
-    @property
-    def estimate(self):
-        """What this package costs: the number said out loud, or the sum."""
-        return self.price_override if self.price_override is not None \
-            else self.items_total
-
-    @property
-    def monthly_estimate(self):
-        return sum(i.monthly_price for i in self.items if i.monthly_price)
 
     @property
     def product_items(self):
@@ -3626,12 +3600,11 @@ class MvpPackageItem(db.Model):
     """One chosen thing on a package: a product that will run, or a feature
     that will get used.
 
-    The name and price are copied on at the moment of choosing and then owned
-    by the package - repricing the catalogue must not silently reprice a
-    quote somebody already heard. The catalogue links are SET NULL for the
-    same reason: retiring a row must not erase the record of having offered
-    it, so `kind` is its own column rather than being inferred from which
-    foreign key survived.
+    The name is copied on at the moment of choosing and then owned by the
+    package - renaming a catalogue row must not rewrite what a client was
+    shown. The catalogue links are SET NULL for the same reason: retiring a
+    row must not erase the record of having offered it, so `kind` is its own
+    column rather than being inferred from which foreign key survived.
     """
 
     __tablename__ = "mvp_package_items"
@@ -3648,8 +3621,6 @@ class MvpPackageItem(db.Model):
                            db.ForeignKey("products.id", ondelete="SET NULL"),
                            nullable=True, index=True)
     name = db.Column(db.String(160), nullable=False)
-    price = db.Column(db.Float, nullable=True)
-    monthly_price = db.Column(db.Float, nullable=True)
     # Anything said about this one in particular - "their version of tagging
     # is by crew, not costume". Carried into the prompt beside the feature.
     notes = db.Column(db.Text, default="")

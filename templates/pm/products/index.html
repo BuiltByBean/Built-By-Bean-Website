@@ -1,5 +1,4 @@
 {% extends "pm/base.html" %}
-{% from "pm/practices/_tabs.html" import practices_tabs %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
@@ -12,8 +11,8 @@
   one form so those cannot come apart.
 #}
 
-{% block title %}Products - Best Practices{% endblock %}
-{% block page_title %}Best Practices{% endblock %}
+{% block title %}Products - Built By Bean{% endblock %}
+{% block page_title %}Products{% endblock %}
 {% block page_subtitle %}What I sell, and who has it{% endblock %}
 
 {#
@@ -91,8 +90,6 @@
                setTimeout(() => this.copied = false, 1800); } catch (e) {}
        }
      }'>
-
-    {{ practices_tabs('product') }}
 
     {# One card per category, in the order a sale is discussed, each with
        its count. A category with nothing to sell in it does not appear. #}

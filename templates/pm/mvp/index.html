@@ -10,7 +10,7 @@
 
 {% block title %}MVP Builder - Built By Bean{% endblock %}
 {% block page_title %}MVP Builder{% endblock %}
-{% block page_subtitle %}A build, assembled from the catalogue{% endblock %}
+{% block page_subtitle %}A client's build, picked from Best Practices{% endblock %}
 
 {% set status_badge = {
     "scoping": "bg-brand-500/10 text-brand-300",
@@ -29,6 +29,11 @@
         <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Client</label>
             {{ select_dropdown("client_id", client_options, placeholder="Who is it for", full_width=true) }}
+        </div>
+        <div class="flex-1 min-w-[200px]">
+            <label for="mvp-new-client" class="block text-sm font-medium text-surface-300 mb-1.5">Or a new client</label>
+            <input id="mvp-new-client" type="text" name="new_client" placeholder="Their name"
+                   class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
         </div>
         <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-surface-300 mb-1.5">Working name</label>
@@ -61,13 +66,6 @@
                         </span>
                         <span class="block mt-1 text-xs text-surface-400">
                             {{ p.client.name }} &middot; {{ p.items|length }} item{{ 's' if p.items|length != 1 }}</span>
-                    </span>
-                    <span class="shrink-0 text-right">
-                        <span class="block text-sm tabular-nums {{ 'text-surface-200' if p.estimate else 'text-surface-600' }}">
-                            {{ p.estimate|format_currency if p.estimate else '-' }}</span>
-                        {% if p.monthly_estimate %}
-                        <span class="block text-xs text-surface-500">+{{ p.monthly_estimate|format_currency }}/mo</span>
-                        {% endif %}
                     </span>
                     <svg class="w-4 h-4 shrink-0 text-surface-500 group-hover:text-surface-300 transition-colors"
                          fill="none" stroke="currentColor" viewBox="0 0 24 24">

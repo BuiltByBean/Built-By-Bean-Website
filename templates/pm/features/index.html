@@ -7,11 +7,11 @@
   The catalogue of what has been built before.
 
   A row opens to what stops it being built badly: how it should be done, what
-  went wrong last time, and the file worth copying. Closed, it is a name, a
-  category and a number - which is what a phone call needs.
+  went wrong last time, and the file worth copying. Closed, it is a name and a
+  category, which is what picking for an MVP needs.
 #}
 
-{% block title %}{{ 'Rules' if page_kind == 'rule' else 'How to build' }} - Best Practices{% endblock %}
+{% block title %}{{ 'Rules' if page_kind == 'rule' else 'Features' }} - Best Practices{% endblock %}
 {% block page_title %}Best Practices{% endblock %}
 {% block page_subtitle %}{{ 'What never gets broken' if page_kind == 'rule' else 'What I have built before' }}{% endblock %}
 
@@ -32,21 +32,19 @@
        category: {{ category|tojson }},
        status: {{ status|tojson }},
        shown: {{ features|length | commas }},
-       estimate: 0,
        get active() { return this.q.trim() !== "" || this.category !== "all" || this.status !== "all"; },
        clear() { this.q = ""; this.category = "all"; this.status = "all"; },
        filter() {
          const needle = this.q.trim().toLowerCase();
-         let n = 0, sum = 0;
+         let n = 0;
          for (const row of this.$el.querySelectorAll("[data-row]")) {
            const hit = (this.category === "all" || row.dataset.category === this.category)
                     && (this.status === "all" || row.dataset.status === this.status)
                     && (!needle || row.dataset.search.includes(needle));
            row.hidden = !hit;
-           if (hit) { n += 1; sum += Number(row.dataset.value || 0); }
+           if (hit) n += 1;
          }
          this.shown = n;
-         this.estimate = sum;
          const p = new URLSearchParams();
          if (needle) p.set("q", this.q.trim());
          if (this.category !== "all") p.set("category", this.category);
@@ -107,13 +105,6 @@
             {{ select_dropdown("category", categories, category if category != 'all' else 'records',
                                full_width=true) }}
         </div>
-        {% if page_kind != 'rule' %}
-        <div>
-            <label class="block text-sm font-medium text-surface-300 mb-1.5">Worth $</label>
-            <input type="text" name="typical_value" placeholder="later"
-                   class="input-ring w-24 px-3 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
-        </div>
-        {% endif %}
         <button type="submit" class="px-4 py-2.5 btn-brand text-sm font-medium rounded-xl transition-all">
             Add</button>
     </form>
@@ -128,8 +119,6 @@
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
                 <span x-text="shown">{{ features|length | commas }}</span> shown</span>
             {% if page_kind != 'rule' %}
-            <span class="text-xs text-surface-500" x-show="estimate > 0" x-cloak>
-                these add up to <span x-text="estimate.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span></span>
             {% endif %}
         </div>
 
@@ -144,7 +133,6 @@
         <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }"
              data-live-key="feature-{{ f.id }}"
              data-row data-category="{{ f.category }}" data-status="{{ f.status }}"
-             data-value="{{ f.typical_value or 0 }}"
              data-search="{{ (f.name ~ ' ' ~ (f.summary or '') ~ ' ' ~ (f.gold_standard_md or '') ~ ' ' ~ (f.pitfalls_md or '') ~ ' ' ~ (f.reference_project or ''))|lower }}">
 
             <button type="button" @click="open = !open"
@@ -168,10 +156,6 @@
                     <span class="block mt-1 text-xs text-surface-400 max-w-3xl">{{ f.summary }}</span>
                     {% endif %}
                 </span>
-                {% if page_kind != 'rule' %}
-                <span class="shrink-0 text-sm tabular-nums {{ 'text-surface-200' if f.typical_value else 'text-surface-600' }}">
-                    {{ f.typical_value|format_currency if f.typical_value else '-' }}</span>
-                {% endif %}
                 <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
                      :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -209,15 +193,6 @@
                     </div>
 
                     <div class="flex flex-wrap items-end gap-3">
-                        {% if page_kind != 'rule' %}
-                        <div>
-                            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Worth $</label>
-                            <input type="text" name="typical_value"
-                                   value="{{ '%g'|format(f.typical_value) if f.typical_value is not none else '' }}"
-                                   placeholder="bundled"
-                                   class="input-ring w-28 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
-                        </div>
-                        {% endif %}
                         <div class="w-44">
                             <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Status</label>
                             {{ select_dropdown("status", statuses, f.status, full_width=true) }}

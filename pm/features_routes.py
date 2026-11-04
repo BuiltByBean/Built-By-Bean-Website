@@ -13,8 +13,8 @@ nothing here could see what was written over there. A catalogue that crosses
 projects is the fix.
 
 Then recall - "what have I built before" is a question a list of repositories
-cannot answer, and the answer decides what gets offered on a call. And pricing,
-which is what turns a phone conversation into an estimate before it ends.
+cannot answer, and the answer decides what goes in an MVP. No prices live here
+(Michael, 2026-11-03): what a build costs is typed on the SOW.
 """
 from flask import Blueprint, render_template, redirect, url_for, flash, request, abort
 from flask_login import login_required
@@ -24,20 +24,9 @@ from models import db, Feature
 features_bp = Blueprint("features", __name__, url_prefix="/admin/features")
 
 
-def _parse_money(raw):
-    text = (raw or "").strip().replace("$", "").replace(",", "")
-    if not text:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
-
-
 def _index(kind):
-    """One page, two kinds: the features that get sold, and the rules that
-    never get broken. Same search, same categories, same editor - a rule is
-    a feature whose price is that nothing goes wrong.
+    """One page, two kinds: the features that get picked for a client, and
+    the rules that never get broken. Same search, same categories, same editor.
 
     Every row of the kind is rendered. The filtering happens on the page as
     the search is typed and the moment a dropdown is picked, with the URL
@@ -113,9 +102,6 @@ def feature_create():
         slug=slug, name=name, kind=kind,
         category=category if category in Feature.CATEGORY_LABELS else "records",
         summary=(request.form.get("summary") or "").strip(),
-        # A rule has no price; its worth is nothing going wrong.
-        typical_value=(None if kind == "rule"
-                       else _parse_money(request.form.get("typical_value"))),
         status="idea", sort_order=last + 10,
     ))
     db.session.commit()
@@ -126,12 +112,9 @@ def feature_create():
 @features_bp.route("/<int:id>", methods=["POST"])
 @login_required
 def feature_edit(id):
-    """The parts worth changing from the page: what it is worth, and the
-    guidance. Everything else is a migration, because everything else is the
-    catalogue's shape rather than its contents."""
+    """The parts worth changing from the page: the guidance and whether it has
+    been built. Sessions change the rest through the guidance door."""
     feature = db.session.get(Feature, id) or abort(404)
-    if feature.kind != "rule":
-        feature.typical_value = _parse_money(request.form.get("typical_value"))
     if "gold_standard_md" in request.form:
         feature.gold_standard_md = (request.form.get("gold_standard_md") or "").strip()
     if "pitfalls_md" in request.form:

@@ -63,7 +63,7 @@ with application.app_context():
         Feature(slug="no-em-dash", name="No em dashes", kind="rule", category="ui",
                 summary="Punctuation", pitfalls_md="Shipped in a commit message once."),
         Feature(slug="texting", name="Text messaging", kind="feature", category="comms",
-                summary="SMS to customers", typical_value=1500),
+                summary="SMS to customers"),
         Feature(slug="retired", name="Retired thing", kind="feature", is_active=False),
         Playbook(slug="twilio", display_name="Twilio", one_liner="A2P registration",
                  traps_md="Brand record cannot be edited after approval."),
@@ -86,8 +86,8 @@ print("1. Everything lists what is active")
 with application.test_request_context():
     items = entries()
 names = [e["name"] for e in items]
-check("a rule, a how-to, a playbook and a product", sorted(e["type"] for e in items) ==
-      ["howto", "playbook", "product", "rule"], names)
+check("a rule, a feature and a playbook, and no product", sorted(e["type"] for e in items) ==
+      ["howto", "playbook", "rule"], names)
 check("a switched-off feature is not listed", "Retired thing" not in names)
 
 print("2. The search reaches the traps")
@@ -98,8 +98,8 @@ check("a playbook is found by its traps section", "brand record" in pb["search"]
 
 print("3. One title, one strip, one sidebar link")
 PAGES = {"/admin/practices/": "Everything", "/admin/features/rules": "Rules",
-         "/admin/features/": "How to build", "/admin/playbooks/": "Playbooks",
-         "/admin/products/": "Products", "/admin/features/inbox/": "History"}
+         "/admin/features/": "Features", "/admin/playbooks/": "Playbooks",
+         "/admin/features/inbox/": "History"}
 for url, tab in PAGES.items():
     r = c.get(url)
     body = r.get_data(as_text=True)
@@ -111,7 +111,9 @@ for url, tab in PAGES.items():
     check(f"{url} lights the Best Practices sidebar link",
           re.search(r'sidebar-link active">\s*<svg[^>]*>\s*<path[^>]*/>\s*</svg>\s*Best Practices', body) is not None)
     check(f"{url} has no Rules, Features, Playbooks or Cerebro sidebar link",
-          not re.search(r'</svg>\s*(Rules|Features|Playbooks|Cerebro|Products)\s*</a>', body))
+          not re.search(r'</svg>\s*(Rules|Features|Playbooks|Cerebro)\s*</a>', body))
+    check(f"{url} shows no money", "$" not in re.sub(r"<script.*?</script>|<style.*?</style>|\$(el|dispatch|refs|watch|nextTick|store|root|data|id|event)\b", "", body, flags=re.S)
+          .split('id="pm-main"', 1)[-1], url)
 
 print("4. Nothing waits on a yes")
 body = c.get("/admin/practices/").get_data(as_text=True)
@@ -124,10 +126,13 @@ r = c.get("/admin/cerebro/")
 check("its page redirects here", r.status_code == 302 and r.headers["Location"].endswith("/admin/practices/"),
       (r.status_code, r.headers.get("Location")))
 
-print("6. Sell it reaches the dialog")
-check("the Everything row links to the products page with the id",
-      f'/admin/products/?sell={product_id}' in body)
+print("6. Products have left Best Practices, and the sell flow still works")
+check("no Products tab in the strip", "/admin/products/" not in body.split('aria-label="Best Practices"', 1)[-1].split("</nav>", 1)[0])
+check("a Products link of its own in the sidebar",
+      re.search(r'</svg>\s*Products\s*</a>', body) is not None)
 products = c.get(f"/admin/products/?sell={product_id}").get_data(as_text=True)
+check("the Products page keeps its prices", "5,000" in products)
+check("and is titled Products", re.search(r'id="pm-page-title"[^>]*>\s*Products', products) is not None)
 check("the products page carries that Sell button", f'data-sell="{product_id}"' in products)
 check("and reads the id it was given", f'const want = "{product_id}";' in products)
 

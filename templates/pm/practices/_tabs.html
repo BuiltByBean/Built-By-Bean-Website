@@ -1,6 +1,6 @@
 {#
-  The one strip every Best Practices page wears: Everything, Rules, How to
-  build, Playbooks, Products, History. The pages behind it kept their own
+  The one strip every Best Practices page wears: Everything, Rules, Features,
+  Playbooks, History. The pages behind it kept their own
   URLs because the MVP Builder, project pages, the tax guide and the
   guidance API link into them; this strip is what makes them one place.
 
@@ -13,9 +13,8 @@
 {% set tabs = [
     ('all', 'Everything', url_for('practices.index'), none),
     ('rule', 'Rules', url_for('features.rules_index'), c.rule),
-    ('howto', 'How to build', url_for('features.features_index'), c.howto),
+    ('howto', 'Features', url_for('features.features_index'), c.howto),
     ('playbook', 'Playbooks', url_for('playbooks.playbooks_index'), c.playbook),
-    ('product', 'Products', url_for('products.products_index'), c.product),
     ('history', 'History', url_for('inbox.inbox_index'), none),
 ] %}
 <nav aria-label="Best Practices" class="shrink-0 flex flex-wrap gap-2">

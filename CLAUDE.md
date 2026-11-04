@@ -6,14 +6,20 @@ production, SQLite locally. Pushing to `main` deploys.
 
 **Best Practices** (`/admin/practices`) is the CROSS-REPO lesson store:
 when any project teaches a lesson, it goes there (pitfalls_md) as well as
-here. It is one sidebar link over six tabs (`pm/practices/_tabs.html`):
+here. It is one sidebar link over five tabs (`pm/practices/_tabs.html`):
 Everything (one search across all of it, `pm/practices_routes.py`), Rules
 (`/admin/features/rules`, `kind='rule'`: ways of building that hold no
-matter what was bought), How to build (`/admin/features`, what has been
-built before and its price), Playbooks, Products, and History (every
-change and the curator's nights, each with Revert). Every rule rides into every MVP build prompt as a house
-rule, so writing a lesson there is how every future project gets it. This
-file is for lessons about THIS repo's own code.
+matter what was bought), Features (`/admin/features`, what has been built
+before, which is what the MVP Builder picks from), Playbooks, and History
+(every change and the curator's nights, each with Revert). Every build prompt
+carries the rules, so writing a lesson there is how every future project gets
+it. This file is for lessons about THIS repo's own code.
+
+**No money lives in Best Practices** (Michael, 2026-11-03: "no price shit left
+over"). `Feature.typical_value` is gone, the guidance door takes no price and
+hands none out, and Products, which carries prices and the sell flow, is a
+sidebar link of its own. Vendor costs inside a playbook ("$99 a year") are facts
+about the vendor and stay.
 
 On 2026-11-02 the owner called the old Catalogue, five sidebar links and
 Cerebro, "a good idea on paper, but it's not functional", and asked for one
@@ -46,6 +52,37 @@ had briefed them. `/api/guidance/brief` is now the one-line index
 and the curator's target of about 120 rules is the size at which the index
 carries every summary.
 
+## The MVP Builder
+
+`pm/mvp_routes.py`, `/admin/mvp`. Michael, 2026-11-03: "when i get new client I
+can easily grab features from those best practices in my mvp and spit out that
+prompt". Type a new client's name or pick one, tap what they ask for, press Copy
+build prompt. A second tap takes one back off.
+
+**It holds no money** (2026-11-04). What a build costs is typed on the SOW form;
+the package, its items, the prompt and "What they see" carry none.
+
+**A feature is what a client would call it.** The list reads on a call and on
+"What they see", and its names used to be lessons and poetry ("Close enough,
+decided carefully", "Things that leave and come back"), with five entries for
+e-signature. Now a short plain name and one sentence in the client's words, with
+the lesson in its guidance. The bridge's `suggest_update` and the standing order
+say so, because sessions are who add them. A way of building is a rule.
+
+**The prompt has to fit.** It printed every rule in full until 2026-11-04, and
+two items came out at 1,077,939 characters: nobody can hand that to a session.
+Now it is the chosen features whole, rules in full for the areas they touch up
+to `FULL_RULES_BUDGET`, every other rule as one line (`rules_index`,
+`RULE_LINES_BUDGET`), and for a vendor what waits on the client, the access to
+ask for and the checklist, with the runbook one get_playbook away (Twilio's is
+46,000 characters). `/api/guidance/brief?full=1` is still every rule in full.
+`REFERENCE_REPOS` says which GitHub repo a reference project is, because the
+prompt named a Windows folder that no longer exists. `tools/test_mvp_prompt.py`.
+
+**A catalogue that grows needs a test on what it is assembled into.** Nothing
+failed as the prompt grew from a page to a megabyte: every test read the features
+and none measured the text. The number was only found by asking for it.
+
 ## The god door
 
 Other Claude sessions reach the catalogue live through
@@ -61,7 +98,9 @@ them. The text of that order is `tools/STANDING_ORDER.md`, and
 `tools/bootstrap_guidance.ps1 -Key <key>` puts both the order and the
 registration on a new machine in one command; on 2026-09-04 neither
 turned out to exist on the owner's laptop, so check both before
-assuming any session can file anything. Neither travels with a repo or
+assuming any session can file anything (`tools/bootstrap_guidance.sh` is the
+Mac's, which adds the order between markers rather than overwriting the file; on
+2026-11-03 this Mac had none of it either). Neither travels with a repo or
 an account, so the MVP build prompt now carries the loop itself: it
 tells the session to consult the live board, to stop and say so if the
 tools are missing, and to file what it learns as it goes. The write path appends with attribution and refuses duplicates,

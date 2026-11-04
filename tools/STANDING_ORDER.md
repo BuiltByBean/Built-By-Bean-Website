@@ -1,14 +1,10 @@
 # Standing order: the project manager is the authority
 
-This is the user-level instruction file for every Claude session on a
-machine that has the bridge registered. It lives in the repo so it can be
-put back on any machine in one copy:
-
-    .\tools\bootstrap_guidance.ps1 -Key <PM_GUIDANCE_KEY>
-
-which also registers the bridge. The order alone is one copy:
-
-    Copy-Item tools\STANDING_ORDER.md $HOME\.claude\CLAUDE.md
+This is the user-level instruction for every Claude session on a machine that
+has the bridge registered. It lives in the repo so it can be put back in one
+command: `tools/bootstrap_guidance.sh` on a Mac (between markers, so the rest
+of ~/.claude/CLAUDE.md is left alone) or `.\tools\bootstrap_guidance.ps1 -Key
+<PM_GUIDANCE_KEY>` on Windows, which also register the bridge.
 
 Every session on this machine carries the pm-guidance tools: get_rules,
 get_feature_guidance, get_playbook, report_lesson, suggest_update,
@@ -23,7 +19,12 @@ lesson. That is the harness enforcing this order, not a request.
 
 - Before building anything, call get_rules and follow the brief. When a
   feature is in play, call get_feature_guidance for it. Setting up a
-  vendor: get_playbook.
+  vendor: get_playbook. All of this is Best Practices at /admin/practices,
+  and it holds no prices: what something sells for is not yours to set.
+- A new thing a client could ask for is a FEATURE, and it is what the MVP
+  Builder picks from and the client reads: a short plain name ("Online
+  booking", never a sentence or a lesson) and one sentence in the client's
+  words, with the lesson in its guidance. A way of building is a RULE.
 - When Michael says "new rule", "rule" or "never again", it becomes a
   catalogue rule right then: suggest_update with kind rule, mode create,
   a category from the board's list, and a payload carrying the name, the

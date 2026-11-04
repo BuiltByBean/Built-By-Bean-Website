@@ -81,14 +81,6 @@
         .item { font-weight: 600; font-size: .9375rem; }
         .blurb { color: var(--muted); font-size: .875rem; margin-top: .1rem; }
 
-        .price {
-            background: var(--card); border: 1px solid var(--line);
-            border-radius: .9rem; padding: 1.25rem 1.5rem; margin-top: .5rem;
-        }
-        .price-now { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; }
-        .price-then { color: var(--muted); font-size: .9375rem; margin-top: .2rem; }
-        .price-note { color: var(--muted); font-size: .8125rem; margin-top: .75rem; }
-
         footer {
             margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
             color: var(--muted); font-size: .8125rem;
@@ -103,7 +95,7 @@
             .no-print { display: none !important; }
             .sheet { padding: 0; max-width: none; }
             body { font-size: 11pt; }
-            li, .group, .price { break-inside: avoid; }
+            li, .group { break-inside: avoid; }
             h2 { break-after: avoid; }
         }
     </style>
@@ -147,24 +139,6 @@
         </ul>
     </div>
     {% endfor %}
-    {% endif %}
-
-    {% if package.estimate or package.monthly_estimate %}
-    <h2>What it costs</h2>
-    <div class="price">
-        {% if package.estimate %}
-        <div class="price-now">{{ package.estimate | format_currency }}</div>
-        {% endif %}
-        {% if package.monthly_estimate %}
-        <div class="price-then">
-            then {{ package.monthly_estimate | format_currency }} a month to host it and keep it running
-        </div>
-        {% endif %}
-        <div class="price-note">
-            Everything above is included. Anything not listed is quoted separately
-            before any work on it starts.
-        </div>
-    </div>
     {% endif %}
 
     <footer>
