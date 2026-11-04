@@ -659,8 +659,15 @@ def edit(id):
             db.session.rollback()
             flash(error, "error")
         else:
+            # A DBA has no org of its own: whatever was on this one's moves to
+            # its company's, in the same save (org_service.fold_into_parent).
+            moved = None
+            if business.is_division:
+                import org_service
+                db.session.flush()
+                moved = org_service.fold_into_parent(business)
             db.session.commit()
-            flash("Saved.", "success")
+            flash("Saved." + (f" {moved}" if moved else ""), "success")
             return redirect(url_for("businesses.detail", id=business.id))
     return render_template("pm/businesses/form.html", business=business, editing=True,
                            logo_apps=_logo_apps(), parents=_parent_choices(business))

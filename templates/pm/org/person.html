@@ -88,14 +88,12 @@
                 <span class="block text-xs font-medium text-surface-400 mb-1.5">Reports to</span>
                 {{ select_dropdown('supervisor', supervisors, person.supervisor_id or '', 'Nobody: the top', full_width=true) }}
             </div>
-            {% if not business.is_division %}
             <div class="min-w-0">
                 <label for="p-share" class="block text-xs font-medium text-surface-400 mb-1.5">Share of the company, %</label>
                 <input id="p-share" name="share_percent" type="number" step="0.01" min="0" max="100"
                        value="{{ '%g' % me.share_percent if me.share_percent is not none else '' }}"
                        class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
-            {% endif %}
         </div>
 
         <div class="flex flex-col gap-4 min-w-0">

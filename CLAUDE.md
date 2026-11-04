@@ -1757,11 +1757,24 @@ Michael, 2026-11-04: "Team I want this to be renamed to org and place where I
 can see all my orgs for each business. steal from the entertain hq admin org
 site and ensure that org pages communicate properly between apps."
 `/admin/org` (`pm/org_routes.py`, logic in `org_service.py`, CEO only) is one
-tab per business, DBAs included, then **Logins**, which is the old Users page
+tab per company, then **Logins**, which is the old Users page
 (`users_bp` now under `/admin/org/logins`, endpoint names unchanged;
 `/admin/users` answers 301 for a GET and 307 for its four write shapes). Each
 business has EntertainHQ's four views (People, Org chart, Responsibilities,
-Departments) plus who owns what. The sidebar link sits after Client support;
+Departments) plus who owns what.
+
+**Only companies have an org** (Michael, the same evening: "orgs should only be
+on primary businesses not dba. So built by bean and entertainhq are the only
+ones that have actual orgs"). A DBA's people are its company's: no tab, and
+`org_service.org_businesses` holds for any DBA added later. A DBA's org
+addresses answer 301 to its company's (a save, 307); a DBA's own app's hub
+calls read and save its company's org (`org_home`). A business made a DBA on
+its edit page carries its org onto its company's in the same save
+(`fold_into_parent`: a department by name or a person by email, else name,
+that the company already has is the same one) and the flash says what moved.
+Nothing had been put on either DBA's org when this landed.
+
+The sidebar link sits after Client support;
 the Team section is gone. Icon concept `org` (EntertainHQ's three boxes).
 
 His picks, one per question:

@@ -35,6 +35,7 @@ def _find(word):
 @org_door_bp.route("")
 def read():
     business = _find(request.args.get("business"))
+    business = org_service.org_home(business) if business is not None else None
     if business is None:
         return jsonify({"error": "no such business",
                         "businesses": [b.name for b in org_service.org_businesses()]}), 404
@@ -47,6 +48,7 @@ def import_():
     business = _find(data.get("business"))
     if business is None:
         return jsonify({"error": "no such business"}), 404
+    business = org_service.org_home(business)
     origin = data.get("origin") or business.hub_slug or "app"
     try:
         counts = org_service.import_org(business, data, origin)

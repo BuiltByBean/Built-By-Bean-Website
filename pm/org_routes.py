@@ -36,6 +36,15 @@ def _business(bid):
     return business
 
 
+def _dba_moved(bid):
+    """A DBA has no org: its people are its company's. Its old addresses
+    answer 301 to the company's (Michael, 2026-11-04)."""
+    business = db.session.get(Business, bid)
+    if business is not None and business.is_division and business.parent is not None:
+        return business.parent
+    return None
+
+
 def org_tabs(active):
     """The business row: every business, then the board's own logins."""
     tabs = [(str(b.id), b.label, url_for("org.business", bid=b.id)) for b in org_service.org_businesses()]
@@ -56,6 +65,11 @@ def index():
 @org_bp.route("/admin/org/<int:bid>/<view>")
 @ceo_required
 def business(bid, view="people"):
+    parent = _dba_moved(bid)
+    if parent is not None and view in dict(VIEWS):
+        if view == "people":
+            return redirect(url_for("org.business", bid=parent.id), 301)
+        return redirect(url_for("org.business", bid=parent.id, view=view), 301)
     business = _business(bid)
     if view not in dict(VIEWS):
         abort(404)
@@ -77,6 +91,12 @@ def business(bid, view="people"):
 @org_bp.route("/admin/org/<int:bid>/people/<int:pid>")
 @ceo_required
 def person(bid, pid):
+    parent = _dba_moved(bid)
+    if parent is not None:
+        p = db.session.get(OrgPerson, pid)
+        if p is not None and p.business_id == parent.id:
+            return redirect(url_for("org.person", bid=parent.id, pid=pid), 301)
+        return redirect(url_for("org.business", bid=parent.id), 301)
     business = _business(bid)
     p = db.session.get(OrgPerson, pid)
     if p is None or p.business_id != business.id:
@@ -122,6 +142,10 @@ def _body_from_form(form):
 @org_bp.route("/admin/org/<int:bid>/save", methods=["POST"])
 @ceo_required
 def save(bid):
+    parent = _dba_moved(bid)
+    if parent is not None:
+        # A form left open on a DBA's org posts to its company's, method kept.
+        return redirect(url_for("org.save", bid=parent.id), 307)
     business = _business(bid)
     body = _body_from_form(request.form)
     try:
@@ -143,6 +167,9 @@ def save(bid):
 def _hub():
     from pm.business_routes import _hub_business, _hub_json
     business, refused = _hub_business()
+    if not refused:
+        # A DBA's own app reads and saves its company's org.
+        business = org_service.org_home(business)
     return business, refused, (_hub_json() if not refused else {})
 
 

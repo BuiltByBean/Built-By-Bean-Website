@@ -18,6 +18,10 @@ Boots the board on a throwaway SQLite database and proves:
   6. The god door imports the same way, behind its bearer key.
   7. /admin/users and its write addresses land on the Logins tab, and no
      login row was touched (Mbean survives).
+  8. Only companies have an org (Michael, 2026-11-04: "orgs should only be on
+     primary businesses not dba"): no DBA tab, a DBA's addresses land on its
+     company's org, its app's hub calls read its company's, and a business
+     made a DBA carries its org onto its company's, saying what moved.
 
 Run: python tools/test_org.py
 """
@@ -133,6 +137,7 @@ with application.app_context():
                         BusinessOwner(business_id=ehq.id, name="Ty Lane", share_percent=10)])
     db.session.commit()
     hash_before = boss.password_hash
+    BBB_ID, BOSS_ID, HANNAH_ID = bbb.id, boss.id, hannah.id
     users_before = User.query.count()
 
     print("1. The migration")
@@ -173,8 +178,9 @@ with application.app_context():
         check(f"CEO gets {path}", r.status_code == 200, r.status_code)
     html = ceo.get(f"/admin/org/{ehq.id}/").get_data(as_text=True)
     check("an empty org says so", 'class="empty' in html and "Nobody on EntertainHQ" in html)
-    check("a tab per business, DBAs included, then Logins",
-          all(x in html for x in ("Built by Bean", "Data Dungeon", "EntertainHQ", "Logins")))
+    check("a tab per company, then Logins",
+          all(x in html for x in ("Built by Bean", "EntertainHQ", "Logins")))
+    check("and no DBA tab", "Data Dungeon" not in html)
     check("the sidebar says Org", ">\n                Org\n" in html or "Org\n            </a>" in html)
     check("and Team is gone", "Team</p>" not in html)
     check("no em dash on the page", chr(0x2014) not in html)
@@ -296,15 +302,9 @@ with application.app_context():
     db.session.expire_all()
     check("unassigning", db.session.get(OrgResponsibility, resp.id).owner_id is None)
     dd_id = dd.id
-    p = ceo.post(f"/admin/org/{dd_id}/save", data={"what": "person", "op": "create", "name": "Dungeon Keeper"})
-    keeper = OrgPerson.query.filter_by(business_id=dd_id).one()
-    r = ceo.post(f"/admin/org/{dd_id}/save", data={"what": "person", "op": "update", "id": keeper.id,
-                                                   "version": keeper.version, "share_percent": "50"}, follow_redirects=True)
-    check("a DBA takes no share of its own", BusinessOwner.query.filter_by(business_id=dd_id).count() == 0
-          and "owners are" in r.get_data(as_text=True))
     hp = ceo.get(f"/admin/org/{ehq.id}/people/{hb.id}")
     check("the person page", hp.status_code == 200 and "Chief Marketing Officer" in hp.get_data(as_text=True))
-    other_person = ceo.get(f"/admin/org/{dd_id}/people/{hb.id}")
+    other_person = ceo.get(f"/admin/org/{bbb.id}/people/{hb.id}")
     check("a person is only on their own business's page", other_person.status_code == 404)
     for v in ("", "chart", "responsibilities", "departments"):
         h = ceo.get(f"/admin/org/{ehq.id}/{v}")
@@ -349,6 +349,74 @@ with application.app_context():
     me = User.query.filter_by(username="Mbean").one()
     check("Mbean survives, password and all", me.password_hash == hash_before and me.check_password("x")
           and User.query.count() == users_before)
+
+with application.app_context():
+    print("8. Only companies have an org")
+    bbb = db.session.get(Business, BBB_ID)
+    dd = db.session.get(Business, dd_id)
+    ceo, member = As(db.session.get(User, BOSS_ID)), As(db.session.get(User, HANNAH_ID))
+    for view in ("", "chart", "responsibilities", "departments"):
+        r = ceo.get(f"/admin/org/{dd.id}/{view}")
+        want = f"/admin/org/{bbb.id}/" + view
+        check(f"a DBA's {view or 'people'} lands on its company's", r.status_code == 301
+              and r.headers["Location"].endswith(want), (r.status_code, r.headers.get("Location")))
+    r = member.get(f"/admin/org/{dd.id}/")
+    check("and the redirect is no way round the gate", r.status_code == 302 and "/admin/org" not in r.headers["Location"])
+    r = ceo.post(f"/admin/org/{dd.id}/save", data={"what": "department", "op": "create", "name": "Left open"})
+    check("a form left open on a DBA posts to its company's", r.status_code == 307
+          and r.headers["Location"].endswith(f"/admin/org/{bbb.id}/save"))
+    check("a DBA never gets an org row of its own",
+          OrgPerson.query.filter_by(business_id=dd.id).count() == 0)
+    dd.hub_slug, dd.hub_secret = "datadungeon", "dd-secret"
+    db.session.commit()
+    r = signed(anon, "/api/hub/org", {}, slug="datadungeon", secret="dd-secret")
+    check("a DBA's own app reads its company's org", r.status_code == 200
+          and r.get_json()["business"]["id"] == bbb.id, r.get_data(as_text=True)[:200])
+
+    # A company with an org of its own is made a DBA of Built by Bean.
+    side = Business(name="Side Co", slug="side-co")
+    db.session.add(side)
+    db.session.commit()
+    sid = side.id
+    for body in ({"what": "department", "op": "create", "name": "Engineering"},
+                 {"what": "department", "op": "create", "name": "Field Ops", "tone": "teal"},
+                 {"what": "person", "op": "create", "name": "Ty Lane", "email": "tlane@entertainhq.com"},
+                 {"what": "person", "op": "create", "name": "Ann Other", "title": "Crew lead"}):
+        ceo.post(f"/admin/org/{sid}/save", data=body)
+    eng = OrgDepartment.query.filter_by(business_id=sid, name="Engineering").one()
+    ops = OrgDepartment.query.filter_by(business_id=sid, name="Field Ops").one()
+    ann = OrgPerson.query.filter_by(business_id=sid, name="Ann Other").one()
+    side_ty = OrgPerson.query.filter_by(business_id=sid, name="Ty Lane").one()
+    ceo.post(f"/admin/org/{sid}/save", data={"what": "person", "op": "update", "id": ann.id, "version": ann.version,
+                                             "supervisor": str(side_ty.id), "has_depts": "1", "depts": [str(ops.id)]})
+    ceo.post(f"/admin/org/{sid}/save", data={"what": "responsibility", "op": "create", "title": "Site safety",
+                                             "dept": str(ops.id), "owner": str(side_ty.id)})
+    ceo.post(f"/admin/org/{sid}/save", data={"what": "responsibility", "op": "create", "title": "Build servers",
+                                             "dept": str(eng.id), "owner": str(ann.id)})
+    bbb_ty = OrgPerson.query.filter_by(business_id=bbb.id, name="Ty Lane").one()
+    bbb_eng = OrgDepartment.query.filter_by(business_id=bbb.id, name="Engineering").one()
+    r = ceo.post(f"/admin/businesses/{sid}/edit", data={"name": "Side Co", "parent_id": str(bbb.id), "is_active": "1"},
+                 follow_redirects=True)
+    text = r.get_data(as_text=True)
+    db.session.expire_all()
+    check("made a DBA, it says what moved", "moved from Side Co" in text and "Built by Bean" in text, text[-600:] if "moved" not in text else "")
+    check("nothing is left on the DBA", not any(m.query.filter_by(business_id=sid).count()
+                                               for m in (OrgPerson, OrgDepartment, OrgResponsibility)))
+    ann = db.session.get(OrgPerson, ann.id)
+    check("a new person moves as they are", ann.business_id == bbb.id and ann.title == "Crew lead")
+    check("the same person is folded onto the company's", db.session.get(OrgPerson, side_ty.id) is None
+          and ann.supervisor_id == bbb_ty.id)
+    check("a new department moves", db.session.get(OrgDepartment, ops.id).business_id == bbb.id
+          and [d.name for d in ann.departments] == ["Field Ops"])
+    check("the same department is folded onto the company's", db.session.get(OrgDepartment, eng.id) is None)
+    safety = OrgResponsibility.query.filter_by(title="Site safety").one()
+    servers = OrgResponsibility.query.filter_by(title="Build servers").one()
+    check("responsibilities follow their people and departments",
+          safety.business_id == bbb.id and safety.owner_id == bbb_ty.id
+          and servers.dept_id == bbb_eng.id and servers.owner_id == ann.id)
+    check("Side Co has no tab now", "Side Co" not in ceo.get(f"/admin/org/{bbb.id}/").get_data(as_text=True))
+    import org_service as _os
+    check("folding again moves nothing", _os.fold_into_parent(db.session.get(Business, sid)) is None)
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All org checks passed.")

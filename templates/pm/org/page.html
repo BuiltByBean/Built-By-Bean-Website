@@ -48,7 +48,7 @@
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Owners</p>
             <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">{{ data.owners | length | commas }}</p>
             <p class="text-xs text-surface-400 mt-1 truncate">
-                {% if data.business.dba_of %}{{ data.business.dba_of }}'s{% elif data.owners %}{{ '%g' % share_total }}% recorded{% else %}None recorded{% endif %}</p>
+                {% if data.owners %}{{ '%g' % share_total }}% recorded{% else %}None recorded{% endif %}</p>
         </div>
     </div>
 

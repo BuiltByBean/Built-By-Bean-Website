@@ -98,21 +98,126 @@ def record_logins(business, logins):
 
 
 def org_businesses():
-    """Every business with an org tab: companies, each followed by its DBAs,
-    the order the Businesses page uses."""
-    tops = (Business.query.filter(Business.parent_id.is_(None), Business.is_active.is_(True))
+    """Every business with an org: the companies, never a DBA (Michael,
+    2026-11-04: "orgs should only be on primary businesses not dba. So built
+    by bean and entertainhq are the only ones that have actual orgs"). A
+    DBA's people are its company's, so a DBA added later gets no tab either."""
+    return (Business.query.filter(Business.parent_id.is_(None), Business.is_active.is_(True))
             .order_by(Business.id).all())
-    out = []
-    for b in tops:
-        out.append(b)
-        out.extend(d for d in b.divisions if d.is_active)
-    return out
+
+
+def org_home(business):
+    """Whose org a business's people are on: its own, or its company's."""
+    return business.parent if business.is_division and business.parent else business
 
 
 def owners_of(business):
-    """The owners that speak for this business: a DBA has none of its own,
-    its company's own it."""
-    return list((business.parent or business).owners) if business.is_division else list(business.owners)
+    return list(business.owners)
+
+
+def fold_into_parent(division):
+    """Carry a DBA's org onto its company's, and say what moved.
+
+    Run when a business is made a DBA (pm/business_routes.py edit), because
+    from then on its people are its company's and nothing draws a DBA's org.
+    A department or person the company already has (a department by name, a
+    person by email, else by name) is the same one: what was on the DBA's is
+    moved onto it and the DBA's copy goes. Everything else moves as it is.
+    Returns None when there was nothing to move."""
+    parent = division.parent
+    if parent is None:
+        return None
+    people = OrgPerson.query.filter_by(business_id=division.id).all()
+    depts = OrgDepartment.query.filter_by(business_id=division.id).all()
+    resps = OrgResponsibility.query.filter_by(business_id=division.id).all()
+    if not (people or depts or resps):
+        st = db.session.get(OrgState, division.id)
+        if st is not None:
+            db.session.delete(st)
+        return None
+    taken = {r for (r,) in db.session.query(OrgPerson.app_ref).filter_by(business_id=parent.id)}
+    taken |= {r for (r,) in db.session.query(OrgDepartment.app_ref).filter_by(business_id=parent.id)}
+    taken |= {r for (r,) in db.session.query(OrgResponsibility.app_ref).filter_by(business_id=parent.id)}
+    their_depts = {(d.name or "").strip().lower(): d
+                   for d in OrgDepartment.query.filter_by(business_id=parent.id).all()}
+    last = max([d.sort for d in their_depts.values()] or [0])
+    dept_to = {}
+    for d in depts:
+        same = their_depts.get((d.name or "").strip().lower())
+        if same is not None:
+            dept_to[d.id] = same
+        else:
+            d.business_id = parent.id
+            last += 1
+            d.sort = last
+            if d.app_ref in taken:
+                d.app_ref = None
+            _touch(d)
+    their_people = OrgPerson.query.filter_by(business_id=parent.id).all()
+    by_email = {(p.email or "").lower(): p for p in their_people if p.email}
+    by_name = {(p.name or "").strip().lower(): p for p in their_people}
+    person_to = {}
+    for p in people:
+        same = by_email.get((p.email or "").lower()) if p.email else None
+        same = same or by_name.get((p.name or "").strip().lower())
+        if same is not None:
+            person_to[p.id] = same
+    for p in people:
+        if p.id in person_to:
+            continue
+        p.business_id = parent.id
+        if p.app_ref in taken:
+            p.app_ref = None
+        p.departments = [dept_to.get(d.id, d) for d in p.departments]
+        if p.supervisor_id in person_to:
+            p.supervisor_id = person_to[p.supervisor_id].id
+        _touch(p)
+    for p in people:
+        same = person_to.get(p.id)
+        if same is None:
+            continue
+        for d in p.departments:
+            target = dept_to.get(d.id, d)
+            if target not in same.departments:
+                same.departments.append(target)
+        for kid in OrgPerson.query.filter_by(supervisor_id=p.id).all():
+            kid.supervisor_id = same.id
+        _touch(same)
+    db.session.flush()
+    for r in resps:
+        r.business_id = parent.id
+        if r.app_ref in taken:
+            r.app_ref = None
+        if r.owner_id in person_to:
+            r.owner_id = person_to[r.owner_id].id
+        if r.dept_id in dept_to:
+            r.dept_id = dept_to[r.dept_id].id
+        r.sort = (r.sort or 0) + 100000
+        _touch(r)
+    db.session.flush()
+    for p in people:
+        if p.id in person_to:
+            BusinessOwner.query.filter_by(person_id=p.id).update({"person_id": person_to[p.id].id})
+            db.session.delete(p)
+    for d in depts:
+        if d.id in dept_to:
+            db.session.delete(d)
+    st = db.session.get(OrgState, division.id)
+    if st is not None:
+        db.session.delete(st)
+    state(parent).edited_at = _now()
+    db.session.flush()
+    link_owners(parent)
+
+    def n(count, one, many):
+        return f"{count} {one if count == 1 else many}"
+    parts = [x for x in (n(len(people), "person", "people") if people else "",
+                         n(len(depts), "department", "departments") if depts else "",
+                         n(len(resps), "responsibility", "responsibilities") if resps else "") if x]
+    said = ", ".join(parts[:-1]) + (" and " if len(parts) > 1 else "") + parts[-1]
+    merged = len(person_to) + len(dept_to)
+    return (f"{said} moved from {division.label}'s org to {parent.label}'s"
+            + (f", {merged} of them onto ones it already had." if merged else "."))
 
 
 def _board_logins():
@@ -159,7 +264,7 @@ def payload(business):
 
     return {
         "business": {"id": business.id, "name": business.name, "label": business.label,
-                     "dba_of": business.parent.name if business.is_division else None},
+                     },
         "people": [person(p) for p in people],
         "departments": [{"id": d.id, "name": d.name, "tone": d.tone, "sort": d.sort,
                          "people": in_dept.get(d.id, 0), "responsibilities": resp_in.get(d.id, 0),
@@ -261,10 +366,7 @@ def _set_depts(business, person, ids):
 
 
 def _set_share(business, person, value):
-    """The share is the board's. A DBA's owners are its company's, so a share
-    is never typed on one."""
-    if business.is_division:
-        raise Refused(f"{business.label}'s owners are {business.parent.label}'s.")
+    """The share is the board's, typed here or on Books."""
     owner = BusinessOwner.query.filter_by(business_id=business.id, person_id=person.id).first()
     if owner is None:
         owner = next((o for o in business.owners if not o.person_id
