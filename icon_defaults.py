@@ -31,9 +31,10 @@ DEFAULTS = [{'slug': 'notifications',
          '2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 '
          '18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 '
          '0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z"/>',
-  'aliases': 'messages, tasks and projects in one place',
-  'used_in_md': 'EntertainHQ and Talent Booker Workspace (sidebar and admin portal)',
-  'never_md': 'messages (chat bubbles); apps (grid)'},
+  'aliases': 'tasks, messages and projects in one place, to do, backlog',
+  'used_in_md': 'EntertainHQ and Talent Booker Workspace; his pick 2026-11-04: tasks wear it too, because '
+                'tasks live in the Workspace, here and on the board',
+  'never_md': 'messages (chat bubbles); support (bug)'},
  {'slug': 'messages',
   'name': 'Messages',
   'group': 'nav',
@@ -49,21 +50,6 @@ DEFAULTS = [{'slug': 'notifications',
   'aliases': 'chat, conversations, team chat, DMs',
   'used_in_md': 'BBB Workspace before 2026-11-04; EntertainHQ draws a message line with it',
   'never_md': 'texting (one bubble with dots); notifications (bell); workspace (inbox)'},
- {'slug': 'tasks',
-  'name': 'Tasks',
-  'group': 'nav',
-  'library': 'Heroicons outline',
-  'icon_name': 'clipboard-document-check',
-  'svg': '<path d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 '
-         '2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 '
-         '0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 '
-         '1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 '
-         '18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 '
-         '1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 '
-         '1.125v9.375m-8.25-3 1.5 1.5 3-3.75"/>',
-  'aliases': 'to do, backlog, checklist',
-  'used_in_md': 'no two repos agree; Piped draws a ticked square, Robinson a tick',
-  'never_md': 'contracts (document-check); done (circled tick); steps (numbered list)'},
  {'slug': 'projects',
   'name': 'Projects',
   'group': 'nav',
@@ -118,22 +104,21 @@ DEFAULTS = [{'slug': 'notifications',
   'name': 'Support',
   'group': 'nav',
   'library': 'Heroicons outline',
-  'icon_name': 'lifebuoy',
-  'svg': '<path d="M16.712 4.33a9.027 9.027 0 0 1 1.652 1.306c.51.51.944 1.064 1.306 1.652M16.712 '
-         '4.33l-3.448 4.138m3.448-4.138a9.014 9.014 0 0 0-9.424 0M19.67 7.288l-4.138 3.448m4.138-3.448a9.014 '
-         '9.014 0 0 1 0 9.424m-4.138-5.976a3.736 3.736 0 0 0-.88-1.388 3.737 3.737 0 0 0-1.388-.88m2.268 '
-         '2.268a3.765 3.765 0 0 1 0 2.528m-2.268-4.796a3.765 3.765 0 0 0-2.528 0m4.796 '
-         '4.796c-.181.506-.475.982-.88 1.388a3.736 3.736 0 0 1-1.388.88m2.268-2.268 4.138 3.448m0 0a9.027 '
-         '9.027 0 0 1-1.306 1.652c-.51.51-1.064.944-1.652 1.306m0 0-3.448-4.138m3.448 4.138a9.014 9.014 0 0 '
-         '1-9.424 0m5.976-4.138a3.765 3.765 0 0 1-2.528 0m0 0a3.736 3.736 0 0 1-1.388-.88 3.737 3.737 0 0 '
-         '1-.88-1.388m2.268 2.268L7.288 19.67m0 0a9.024 9.024 0 0 1-1.652-1.306 9.027 9.027 0 0 '
-         '1-1.306-1.652m0 0 4.138-3.448M4.33 16.712a9.014 9.014 0 0 1 0-9.424m4.138 5.976a3.765 3.765 0 0 1 '
-         '0-2.528m0 0c.181-.506.475-.982.88-1.388a3.736 3.736 0 0 1 1.388-.88m-2.268 2.268L4.33 7.288m6.406 '
-         '1.18L7.288 4.33m0 0a9.024 9.024 0 0 0-1.652 1.306A9.025 9.025 0 0 0 4.33 7.288"/>',
-  'aliases': 'client support, tickets, help desk, support desk',
-  'used_in_md': 'no two repos agree: BBB clipboard-check, EntertainHQ bug-ant, an inbox in Data Dungeon, '
-                'Robinson and Piped',
-  'never_md': 'help (question mark, a hint on a page); report a bug (bug-ant); workspace (inbox)'},
+  'icon_name': 'bug-ant',
+  'svg': '<path d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 '
+         '6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0 1 12 12.75Zm0 '
+         '0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 0 1-1.152 6.06M12 12.75c-2.883 0-5.647.508-8.208 '
+         '1.44.125 2.104.52 4.136 1.153 6.06M12 12.75a2.25 2.25 0 0 0 2.248-2.354M12 12.75a2.25 2.25 0 0 '
+         '1-2.248-2.354M12 8.25c.995 0 1.971-.08 2.922-.236.403-.066.74-.358.795-.762a3.778 3.778 0 0 '
+         '0-.399-2.25M12 8.25c-.995 0-1.97-.08-2.922-.236-.402-.066-.74-.358-.795-.762a3.734 3.734 0 0 1 '
+         '.4-2.253M12 8.25a2.25 2.25 0 0 0-2.248 2.146M12 8.25a2.25 2.25 0 0 1 2.248 2.146M8.683 5a6.032 '
+         '6.032 0 0 1-1.155-1.002c.07-.63.27-1.222.574-1.747m.581 2.749A3.75 3.75 0 0 1 15.318 5m0 '
+         '0c.427-.283.815-.62 1.155-.999a4.471 4.471 0 0 0-.575-1.752M4.921 6a24.048 24.048 0 0 0-.392 '
+         '3.314c1.668.546 3.416.914 5.223 1.082M19.08 6c.205 1.08.337 2.187.392 3.314a23.882 23.882 0 0 '
+         '1-5.223 1.082"/>',
+  'aliases': 'client support, tickets, help desk, support desk, report a bug',
+  'used_in_md': 'his pick 2026-11-04, from EntertainHQ Tickets and Report a bug',
+  'never_md': 'help (question mark, a hint on a page); workspace (inbox)'},
  {'slug': 'contracts',
   'name': 'Contracts',
   'group': 'nav',
@@ -162,6 +147,19 @@ DEFAULTS = [{'slug': 'notifications',
   'name': 'Apps',
   'group': 'nav',
   'library': 'Heroicons outline',
+  'icon_name': 'rectangle-stack',
+  'svg': '<path d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 '
+         '0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 '
+         '9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 '
+         '0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 '
+         '18v-6c0-.98.626-1.813 1.5-2.122"/>',
+  'aliases': 'my apps, products, launcher',
+  'used_in_md': 'his pick 2026-11-04: a stack of windows for My Apps, because the grid is the dashboard',
+  'never_md': 'dashboard (grid); workspace (inbox)'},
+ {'slug': 'dashboard',
+  'name': 'Dashboard',
+  'group': 'nav',
+  'library': 'Heroicons outline',
   'icon_name': 'squares-2x2',
   'svg': '<path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 '
          '2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 '
@@ -169,9 +167,10 @@ DEFAULTS = [{'slug': 'notifications',
          '2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 '
          '1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 '
          '1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"/>',
-  'aliases': 'my apps, products, launcher',
-  'used_in_md': 'BBB My Apps; EntertainHQ admin, Robinson and Data Dungeon use the same grid for Dashboard',
-  'never_md': 'dashboard (in other repos the grid is the dashboard); workspace (inbox)'},
+  'aliases': 'home, overview of an app',
+  'used_in_md': 'his pick 2026-11-04; EntertainHQ admin, Robinson and Data Dungeon already draw Dashboard '
+                'this way',
+  'never_md': 'apps (stack of windows); finances (pie)'},
  {'slug': 'handbook',
   'name': 'Handbook',
   'group': 'nav',
@@ -202,8 +201,8 @@ DEFAULTS = [{'slug': 'notifications',
   'svg': '<path d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z"/><path d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 '
          '3v7.5Z"/>',
   'aliases': 'overview, dashboard, money at a glance',
-  'used_in_md': 'BBB Dashboard; EntertainHQ draws Financials as a bar chart, Kuper and Piped a dollar in a '
-                'circle',
+  'used_in_md': "his pick 2026-11-04, the board's Dashboard; EntertainHQ draws Financials as a bar chart, "
+                'Kuper and Piped a dollar in a circle',
   'never_md': 'reports (bar chart)'},
  {'slug': 'books',
   'name': 'Books',
@@ -1170,7 +1169,7 @@ DEFAULTS = [{'slug': 'notifications',
          '1 0 2.25H3.74m0-.002h.375a1.125 1.125 0 0 1 0 2.25H2.99"/>',
   'aliases': 'your steps, checklist in order',
   'used_in_md': '',
-  'never_md': 'tasks'},
+  'never_md': 'workspace and its tasks (inbox)'},
  {'slug': 'theme-light',
   'name': 'Light mode',
   'group': 'thing',

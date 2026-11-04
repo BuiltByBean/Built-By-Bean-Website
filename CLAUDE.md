@@ -180,6 +180,16 @@ the only thing size changes.
   "One icon, one meaning" as a check, not a hope.
 - **Every build prompt carries THE ICONS**, one line per concept
   (`prompt_lines`), after the rules.
+- **Where the picks came from** (the harvest of 2026-11-04, notes in the
+  session's harvest file): his own action sheet in EntertainHQ
+  (`scripts/action_icons.py`, 2026-10-01) wins, so add is a circled plus, back
+  an arrow, send a circled arrow, save and done a circled tick, filter the
+  sliders, remove the circled x, and power is every switch off. Then whatever
+  two repos already agree on (a receipt for expenses, the inbox for Workspace).
+  Where they split he answered on the Icons tab the same day: support is
+  EntertainHQ's bug, tasks wear the Workspace inbox because tasks live in the
+  Workspace (an alias, not a second concept), the finances overview keeps the
+  pie, and the 2x2 grid means Dashboard, so My Apps is a stack of windows.
 
 ## The god door
 
