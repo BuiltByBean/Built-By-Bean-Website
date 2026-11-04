@@ -539,7 +539,8 @@ Added the same day:
   before removing it.
 - **Workspace** replaces Notes and Projects: EntertainHQ's workspace (messages,
   tasks, projects), built into this board. It sits second in the sidebar, right
-  under Needs attention, and the standalone Projects page folds into it.
+  under Needs attention, and the standalone Projects page folds into it. Built
+  2026-11-04 with item 11 (CLAUDE.md, The Workspace).
 
 ## Who builds what
 

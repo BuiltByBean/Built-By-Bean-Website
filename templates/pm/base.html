@@ -1009,6 +1009,23 @@
                     {%- endif %}
                 </span>
             </a>
+            {# Second, under Needs attention (Michael, 2026-11-04): messages,
+               tasks and projects in one place. It replaced Notes and the
+               standalone Projects page. The badge is what is NEW to you,
+               unread messages and tasks given to you and not yet shown. #}
+            <a href="{{ url_for('workspace.index') }}"
+               class="sidebar-link {% if request.endpoint and (request.endpoint.startswith('workspace.') or request.endpoint in ('pm.project_detail', 'pm.project_edit', 'pm.project_create')) %}active{% endif %}">
+                {# Two speech bubbles over a tick: talk and work in one. #}
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"/>
+                </svg>
+                Workspace
+                <span data-live="nav-workspace" class="ml-auto">
+                    {%- if workspace_new %}
+                    <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-brand-500 text-white text-[10px] font-bold">{{ workspace_new | commas }}</span>
+                    {%- endif %}
+                </span>
+            </a>
             <div class="my-2 border-t border-white/10"></div>
 
             {# The work, in Michael's order (2026-11-04): the businesses first,
@@ -1029,25 +1046,6 @@
                 Businesses
             </a>
             {% endif %}
-            {# The to-do list leads: it is the page the day opens on, and
-               everything under it is a place work already lives. #}
-            <a href="{{ url_for('notes.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('notes.') %}active{% endif %}">
-                {# A bulleted list. Nothing else in the sidebar is one, and
-                   the clipboard-with-tick is already Tickets. #}
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M4.5 6.75h.008v.008H4.5V6.75zm0 5.25h.008v.008H4.5V12zm0 5.25h.008v.008H4.5v-.008z"/>
-                </svg>
-                Notes
-                {# Always rendered, and its own region: ticking a note off is
-                   a live action, so a badge that is not swapped sits there
-                   showing the number from the last page load. #}
-                <span data-live="nav-notes" class="ml-auto">
-                    {%- if notes_open %}
-                    <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full {{ 'bg-red-500 text-white' if notes_late else 'bg-white/10 text-surface-300' }} text-[10px] font-bold">{{ notes_open | commas }}</span>
-                    {%- endif %}
-                </span>
-            </a>
             <a href="{{ url_for('pm.clients_list') }}"
                class="sidebar-link {% if request.endpoint and 'client' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1064,15 +1062,8 @@
                 </svg>
                 Leads
             </a>
-            <a href="{{ url_for('pm.projects_list') }}"
-               class="sidebar-link {% if request.endpoint and 'project' in request.endpoint %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                </svg>
-                Projects
-            </a>
             <a href="{{ url_for('pm.tickets_list') }}"
-               class="sidebar-link {% if request.endpoint and 'task' in request.endpoint %}active{% endif %}">
+               class="sidebar-link {% if request.endpoint and 'ticket' in request.endpoint %}active{% endif %}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
@@ -1518,7 +1509,7 @@
     /* Regions outside the content that a new page may still change: the flash
        strip, and the two sidebar counts. Everything else in the sidebar is
        identical on every page and is left alone. */
-    var LIVE = ['flash', 'nav-attention', 'nav-notes'];
+    var LIVE = ['flash', 'nav-attention', 'nav-workspace'];
     var FILES = /\.(pdf|png|jpe?g|gif|svg|ico|csv|zip|xlsx?|docx?|txt)$/i;
 
     function swappable(a, ev) {
@@ -1594,10 +1585,25 @@
                     return;
                 }
 
+                /* An element marked data-keep that the next page also has is
+                   carried across the swap rather than rebuilt: a tab row
+                   whose tab changes keeps its buttons and slides its mark
+                   (the Workspace's, 2026-11-04). It is told what the new one
+                   said through the `bbb:kept` event, with the fresh copy. */
+                var kept = {};
+                document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
+                    kept[el.getAttribute('data-keep')] = el;
+                });
                 SWAP.forEach(function (id) {
                     var stale = document.getElementById(id);
                     var next = fresh.getElementById(id);
                     if (stale && next) stale.replaceWith(document.adoptNode(next));
+                });
+                document.querySelectorAll('#pm-main [data-keep]').forEach(function (el) {
+                    var old = kept[el.getAttribute('data-keep')];
+                    if (!old) return;
+                    el.replaceWith(old);
+                    old.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: el } }));
                 });
                 LIVE.forEach(function (key) {
                     var stale = document.querySelector('[data-live="' + key + '"]');

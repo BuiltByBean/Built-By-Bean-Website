@@ -348,7 +348,10 @@ def create_app():
     from pm.attention_routes import attention_bp
     app.register_blueprint(attention_bp)
 
-    # ── The to-do list for what no other page owns ─────────
+    # ── The Workspace: messages, tasks and projects ────────
+    # Notes became its Tasks on 2026-11-04; the old address redirects.
+    from pm.workspace_routes import workspace_bp
+    app.register_blueprint(workspace_bp)
     from pm.notes_routes import notes_bp
     app.register_blueprint(notes_bp)
 
@@ -663,25 +666,19 @@ def create_app():
                 attention = attention_counts()
             except Exception:
                 db.session.rollback()
-        # The to-do count, and whether any of it has gone by. Two cheap
-        # counts rather than the is_overdue property, which would have to
-        # load every open note to answer the same question.
-        notes_open = notes_late = 0
+        # The Workspace's badge: what is NEW to this person (unread messages,
+        # tasks given to them and not shown yet), never the standing backlog.
+        workspace_new = 0
         if current_user.is_authenticated and not str(current_user.get_id()).startswith("bs_"):
             try:
-                from models import Note
-                notes_open = Note.query.filter(Note.done_at.is_(None)).count()
-                notes_late = Note.query.filter(
-                    Note.done_at.is_(None),
-                    Note.due_on.isnot(None),
-                    Note.due_on < date.today()).count()
+                from pm.workspace_routes import counts as workspace_counts
+                workspace_new = workspace_counts(current_user.id)["total"]
             except Exception:
                 db.session.rollback()
         return {
             "attention_total": attention.get("total", 0),
             "hosting_due": attention.get("hosting", 0),
-            "notes_open": notes_open,
-            "notes_late": notes_late,
+            "workspace_new": workspace_new,
             "now": datetime.now(timezone.utc),
             "asset_version": _asset_version,
             "phase_choices": PHASE_CHOICES,
@@ -1209,33 +1206,34 @@ def create_app():
 
     # ── Projects ─────────────────────────────────────────────
 
+    # The standalone Projects page folded into the Workspace on 2026-11-04
+    # (pm/workspace_routes.py). The project pages kept their endpoints, so
+    # every url_for across the board (My Apps, contracts, invoices, the door)
+    # still lands; their addresses moved under /admin/workspace/projects and
+    # the old ones redirect, so a bookmark or a link in an email still opens.
     @pm_bp.route("/projects")
     @login_required
     def projects_list():
-        # Phases follow their own dates; this is where they catch up.
-        sync_project_phases()
-        page = request.args.get("page", 1, type=int)
-        search = request.args.get("search", "")
-        phase = request.args.get("phase", "")
-        status = request.args.get("status", "")
+        args = {"q": request.args.get("search") or request.args.get("q") or None,
+                "phase": request.args.get("phase") or None}
+        return redirect(url_for("workspace.projects", **{k: v for k, v in args.items() if v}), 301)
 
-        query = Project.query.join(Client)
-        if search:
-            query = query.filter(
-                db.or_(Project.name.ilike(f"%{search}%"), Client.name.ilike(f"%{search}%"))
-            )
-        if phase:
-            query = query.filter(Project.phase == phase)
-        if status:
-            query = query.filter(Project.status == status)
+    @pm_bp.route("/projects/<int:id>")
+    @login_required
+    def project_detail_old(id):
+        return redirect(url_for("pm.project_detail", id=id), 301)
 
-        query = query.order_by(Project.created_at.desc(), Project.id.desc())
-        pagination = query.paginate(page=page, per_page=20, error_out=False)
-        return render_template("pm/projects/list.html",
-            projects=pagination.items, pagination=pagination,
-            search=search, phase=phase, status=status)
+    @pm_bp.route("/projects/<int:id>/edit")
+    @login_required
+    def project_edit_old(id):
+        return redirect(url_for("pm.project_edit", id=id), 301)
 
-    @pm_bp.route("/projects/new", methods=["GET", "POST"])
+    @pm_bp.route("/projects/new")
+    @login_required
+    def project_create_old():
+        return redirect(url_for("pm.project_create", **request.args), 301)
+
+    @pm_bp.route("/workspace/projects/new", methods=["GET", "POST"])
     @login_required
     def project_create():
         form = ProjectForm()
@@ -1309,7 +1307,7 @@ def create_app():
         """
         return contract_effects.apply_default_playbooks(project)
 
-    @pm_bp.route("/projects/<int:id>")
+    @pm_bp.route("/workspace/projects/<int:id>")
     @login_required
     def project_detail(id):
         project = db.session.get(Project, id) or abort(404)
@@ -1342,11 +1340,23 @@ def create_app():
             for a in applied
         }
 
+        # The Workspace's half: the project's own task board, the messages
+        # about it, and the counts its tiles carry. Tickets, time and money
+        # each still live on their own page; a tile opens that page filtered
+        # to this project (Michael, 2026-11-04).
+        from pm import workspace_routes as ws
+        from models import TICKET_CLOSED_STATUSES
+        open_tickets = project.tickets.filter(
+            Ticket.status.notin_(TICKET_CLOSED_STATUSES)).count()
         return render_template("pm/projects/detail.html",
             project=project, applied_playbooks=applied, available_playbooks=available,
             unplaybooked=unplaybooked,
             playbook_state=playbook_state, playbook_categories=Playbook.CATEGORIES,
-            phase_note=explain_phase(project))
+            phase_note=explain_phase(project),
+            open_tickets=open_tickets,
+            about=ws.messages_about("project", project.id, current_user.id),
+            **ws.board(project=project, open_id=request.args.get("open", type=int)),
+            **ws.task_options(), **ws._ctx("projects"))
 
     @pm_bp.route("/projects/<int:id>/playbooks/add", methods=["POST"])
     @login_required
@@ -1417,7 +1427,7 @@ def create_app():
             })
         return redirect(url_for("pm.project_detail", id=applied.project_id) + "#playbooks")
 
-    @pm_bp.route("/projects/<int:id>/edit", methods=["GET", "POST"])
+    @pm_bp.route("/workspace/projects/<int:id>/edit", methods=["GET", "POST"])
     @login_required
     def project_edit(id):
         project = db.session.get(Project, id) or abort(404)

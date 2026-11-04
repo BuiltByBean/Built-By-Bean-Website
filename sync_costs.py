@@ -97,6 +97,10 @@ def _sweep(night):
 
     run("sweep_repos", "repo sweep")
     run("audit_repos", "rule audit")
+    # A project's repo, phase and go-live date from its repo and its domain
+    # (audit item 11). Before the store ids, because it fills the tile's
+    # GitHub address they read from.
+    run("project_autofill", "project dates")
     # A phone app's store ids are written in its repo; a tile missing one never
     # asks that store, so My Apps would say nothing about Play. No model.
     run("store_ids_service", "store ids")

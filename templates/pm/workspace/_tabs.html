@@ -1,0 +1,32 @@
+{#
+  The Workspace's tab row: Messages, Tasks, Projects, each its own address.
+
+  data-keep: moving between the tabs swaps the content under this row and
+  never the row (base.html carries a kept element across the swap and tells
+  it what the new page said through `bbb:kept`). One mark slides to the tab
+  chosen, moved on the press and put back if the page does not come. The
+  counts are what is NEW: unread messages, tasks given to you and not shown.
+#}
+{% macro workspace_tabs(active, counts) %}
+{% set tabs = [('messages', 'Messages', url_for('workspace.messages')),
+               ('tasks', 'Tasks', url_for('workspace.tasks')),
+               ('projects', 'Projects', url_for('workspace.projects'))] %}
+<nav data-keep="workspace-tabs" data-active="{{ active }}" aria-label="Workspace"
+     x-data="wsTabs('{{ active }}')" @bbb:kept="kept($event.detail.fresh)"
+     class="shrink-0 relative inline-flex max-w-full p-1 mb-4 rounded-2xl border border-white/10 bg-surface-800/60 select-none">
+    <span aria-hidden="true" x-ref="mark"
+          class="absolute top-1 bottom-1 left-0 rounded-xl btn-brand pointer-events-none"
+          :style="markStyle" style="opacity:0"></span>
+    {% for key, label, href in tabs %}
+    <a href="{{ href }}" data-tab="{{ key }}" @click="pick('{{ key }}')"
+       :aria-current="active === '{{ key }}' ? 'page' : null"
+       {% if key == active %}aria-current="page"{% endif %}
+       class="relative z-10 inline-flex items-center gap-2 min-h-[44px] px-3 sm:px-4 text-sm font-medium rounded-xl transition-colors"
+       :class="active === '{{ key }}' ? 'text-white' : 'text-surface-300 hover:text-white'">
+        {{ label }}
+        <span data-count="{{ key }}"
+              class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-white/15 text-white {{ '' if counts[key] else 'hidden' }}">{{ counts[key] | commas }}</span>
+    </a>
+    {% endfor %}
+</nav>
+{% endmacro %}

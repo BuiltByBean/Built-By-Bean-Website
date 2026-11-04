@@ -79,8 +79,8 @@ check("the night is partial", status == "partial" and run.finished_at is not Non
 print("2. The night job")
 import sync_costs  # noqa: E402
 import types  # noqa: E402
-for name in ("sweep_repos", "audit_repos", "store_ids_service", "stripe_books", "bank_feed",
-             "receipts_service", "leads_refresh", "comptroller", "curate_practices"):
+for name in ("sweep_repos", "audit_repos", "project_autofill", "store_ids_service", "stripe_books",
+             "bank_feed", "receipts_service", "leads_refresh", "comptroller", "curate_practices"):
     sys.modules[name] = types.SimpleNamespace(main=lambda: 0)
 # The live apps steps reach the network; their own tests are test_live_apps.
 sys.modules["live_night"] = types.SimpleNamespace(steps=lambda night: night.step("live apps", lambda: "stub"))
@@ -92,7 +92,8 @@ with application.app_context():
     names = [s["name"] for s in latest.steps]
 check("every step is recorded, the invoice import included with no vendors",
       names[:2] == ["vendor costs", "Stripe invoices"] and "curator" in names
-      and "Comptroller" in names and len(names) == len(set(names)) >= 11, names)
+      and "Comptroller" in names and "project dates" in names
+      and len(names) == len(set(names)) >= 12, names)
 check("a clean night is ok and exits 0", latest.status == "ok" and code == 0)
 
 c = application.test_client()

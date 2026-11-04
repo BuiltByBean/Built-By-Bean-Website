@@ -1,0 +1,340 @@
+{#
+  The Workspace's behaviour, as plain functions an x-data can call.
+
+  Inline and before the markup that uses it, on purpose: a page arriving by
+  the shell's swap re-runs inline scripts synchronously, before Alpine's
+  observer reaches the new elements, so the functions exist when the
+  components start. A script by src would load after them. Defining them
+  again on each page is harmless; nothing here binds to the document twice.
+#}
+<style>
+    /* A finished task reads as finished wherever it is dropped. */
+    [data-drop-zone="done"] .ws-title { text-decoration: line-through; color: #8b8fa3; }
+</style>
+<script>
+(function () {
+    /* Measured by a timer, never an animation frame: a tab in the
+       background paints nothing and its frames never fire. */
+    window.wsTabs = function (active) {
+        return {
+            active: active,
+            markStyle: 'opacity:0',
+            init() {
+                setTimeout(() => this.place(), 0);
+                if (window.ResizeObserver) new ResizeObserver(() => this.place()).observe(this.$el);
+            },
+            place() {
+                const tab = this.$el.querySelector('[data-tab="' + this.active + '"]');
+                if (!tab) return;
+                // The first placement lands; only a change slides.
+                const glide = this.placed ? ';transition:transform 300ms ease-out,width 300ms ease-out' : '';
+                this.markStyle = 'width:' + tab.offsetWidth + 'px;transform:translateX(' + tab.offsetLeft + 'px)' + glide;
+                if (tab.offsetWidth) this.placed = true;
+            },
+            pick(key) { this.active = key; this.place(); },
+            kept(fresh) {
+                this.active = fresh.getAttribute('data-active') || this.active;
+                this.$el.setAttribute('data-active', this.active);
+                fresh.querySelectorAll('[data-count]').forEach((n) => {
+                    const mine = this.$el.querySelector('[data-count="' + n.getAttribute('data-count') + '"]');
+                    if (mine) { mine.textContent = n.textContent; mine.className = n.className; }
+                });
+                this.place();
+            },
+        };
+    };
+
+    /* The sidebar's badge and the tab counts, from a counts answer. */
+    window.wsCounts = function (c) {
+        if (!c) return;
+        ['messages', 'tasks'].forEach((k) => {
+            document.querySelectorAll('[data-count="' + k + '"]').forEach((n) => {
+                n.textContent = (c[k] || 0).toLocaleString();
+                n.classList.toggle('hidden', !c[k]);
+            });
+        });
+        const badge = document.querySelector('[data-live="nav-workspace"]');
+        if (badge) {
+            badge.innerHTML = c.total
+                ? '<span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-brand-500 text-white text-[10px] font-bold">'
+                  + c.total.toLocaleString() + '</span>'
+                : '';
+        }
+    };
+
+    function post(url, body) {
+        return fetch(url, {
+            method: 'POST', body: body, credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'fetch' },
+        });
+    }
+
+    /* The conversation list: polled, and swapped only when it differs, so
+       a list nobody is changing is never redrawn. */
+    window.wsConvList = function () {
+        return {
+            init() {
+                this.timer = setInterval(() => this.poll(), 15000);
+            },
+            destroy() { clearInterval(this.timer); },
+            kept(fresh) {
+                this.$el.className = fresh.className;
+                this.$el.setAttribute('data-url', fresh.getAttribute('data-url'));
+                const rows = fresh.querySelector('[data-conv-rows]');
+                const mine = this.$refs.rows && this.$refs.rows.querySelector('[data-conv-rows]');
+                if (rows && mine) mine.replaceWith(rows);
+            },
+            poll() {
+                if (!document.body.contains(this.$el)) { clearInterval(this.timer); return; }
+                fetch(this.$el.getAttribute('data-url'), { credentials: 'same-origin' })
+                    .then((r) => (r.ok ? r.text() : null))
+                    .then((html) => {
+                        if (html === null) return;
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = html;
+                        const fresh = tmp.querySelector('[data-conv-rows]');
+                        const mine = this.$refs.rows && this.$refs.rows.querySelector('[data-conv-rows]');
+                        if (fresh && mine && fresh.innerHTML.trim() !== mine.innerHTML.trim()) mine.innerHTML = fresh.innerHTML;
+                        const c = tmp.querySelector('[data-counts]');
+                        if (c) { try { window.wsCounts(JSON.parse(c.getAttribute('data-counts'))); } catch (e) {} }
+                    })
+                    .catch(() => {});
+            },
+        };
+    };
+
+    /* One conversation: the rows, the composer and the poll. A send posts
+       and appends the rows since the last one on screen; nothing else on
+       the page moves. */
+    window.wsThread = function (cfg) {
+        return {
+            sending: false,
+            body: '',
+            links: cfg.links || [],
+            pickOpen: false,
+            q: '',
+            found: [],
+            searched: '',
+            init() {
+                this.bottom();
+                if (cfg.rowsUrl) this.timer = setInterval(() => this.poll(), 6000);
+            },
+            destroy() { clearInterval(this.timer); },
+            lastId() {
+                const rows = this.$refs.rows ? this.$refs.rows.querySelectorAll('[data-mid]') : [];
+                return rows.length ? rows[rows.length - 1].getAttribute('data-mid') : '0';
+            },
+            bottom() {
+                setTimeout(() => { const s = this.$refs.scroll; if (s) s.scrollTop = s.scrollHeight; }, 0);
+            },
+            near() {
+                const s = this.$refs.scroll;
+                return !s || s.scrollHeight - s.scrollTop - s.clientHeight < 120;
+            },
+            append(html) {
+                if (!html || !this.$refs.rows) return;
+                const tmp = document.createElement('div');
+                tmp.innerHTML = html;
+                tmp.querySelectorAll('[data-mid]').forEach((row) => {
+                    const id = row.getAttribute('data-mid');
+                    const have = this.$refs.rows.querySelector('[data-mid="' + id + '"]');
+                    if (have) have.replaceWith(row); else this.$refs.rows.appendChild(row);
+                });
+                const empty = this.$refs.rows.querySelector('[data-empty]');
+                if (empty && this.$refs.rows.querySelector('[data-mid]')) empty.remove();
+            },
+            poll() {
+                if (!document.body.contains(this.$el)) { clearInterval(this.timer); return; }
+                const keep = this.near();
+                fetch(cfg.rowsUrl + '?after=' + this.lastId(), { credentials: 'same-origin' })
+                    .then((r) => (r.status === 200 ? r.text() : null))
+                    .then((html) => { if (html) { this.append(html); if (keep) this.bottom(); } })
+                    .catch(() => {});
+            },
+            key(e) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.send(); }
+            },
+            send() {
+                const form = this.$refs.form;
+                if (this.sending || (!this.body.trim() && !this.links.length)) return;
+                if (!cfg.rowsUrl) { form.submit(); return; }
+                this.sending = true;
+                const data = new FormData(form);
+                data.set('after', this.lastId());
+                post(form.action, data)
+                    .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+                    .then((html) => {
+                        this.append(html);
+                        this.body = '';
+                        this.links = [];
+                        this.bottom();
+                    })
+                    .catch(() => form.submit())
+                    .finally(() => { this.sending = false; });
+            },
+            remove(url, mid) {
+                post(url, new FormData()).then((r) => (r.ok ? r.text() : null)).then((html) => html && this.append(html));
+            },
+            search() {
+                const q = this.q.trim();
+                if (q.length < 2) { this.found = []; this.searched = ''; return; }
+                fetch(cfg.linksUrl + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+                    .then((r) => r.json()).then((rows) => { if (q === this.q.trim()) { this.found = rows; this.searched = q; } })
+                    .catch(() => {});
+            },
+            addLink(row) {
+                if (!this.links.some((l) => l.kind === row.kind && l.id === row.id)) this.links.push(row);
+                this.pickOpen = false; this.q = ''; this.found = []; this.searched = '';
+                // After the picker has gone, or the hidden search box keeps
+                // the focus and the next words typed vanish into it.
+                setTimeout(() => this.$refs.box && this.$refs.box.focus(), 50);
+            },
+            dropLink(i) { this.links.splice(i, 1); },
+        };
+    };
+
+    /* The task board's drag. Pointer events, so a finger works the same as a
+       mouse; only the grip starts one, so a thumb scrolling the list never
+       picks a card up. The card moves at once and the move is posted; a
+       failed post puts it back. */
+    window.wsBoard = function (cfg) {
+        return {
+            drag: null,
+            init() { this.recount(); if (cfg.openId) this.$nextTick(() => window.dispatchEvent(new CustomEvent('ws-open-task', { detail: cfg.openId }))); },
+            recount() {
+                this.$el.querySelectorAll('[data-drop-zone]').forEach((zone) => {
+                    const n = zone.querySelectorAll(':scope > [data-task]').length;
+                    const head = this.$el.querySelector('[data-col-count="' + zone.getAttribute('data-drop-zone') + '"]');
+                    if (head && zone.getAttribute('data-drop-zone') !== 'done') head.textContent = n.toLocaleString();
+                    const empty = zone.querySelector(':scope > [data-col-empty]');
+                    if (empty) empty.classList.toggle('hidden', n > 0);
+                });
+            },
+            start(e) {
+                if (e.button !== undefined && e.button !== 0) return;
+                const card = e.target.closest('[data-task]');
+                if (!card) return;
+                e.preventDefault();
+                const r = card.getBoundingClientRect();
+                this.drag = { card, x0: e.clientX, y0: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top,
+                              home: card.parentNode, next: card.nextSibling, live: false, w: r.width, h: r.height, pid: e.pointerId };
+                e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+                const move = (ev) => this.move(ev);
+                const up = (ev) => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+                                     window.removeEventListener('pointercancel', up); this.end(ev); };
+                window.addEventListener('pointermove', move);
+                window.addEventListener('pointerup', up);
+                window.addEventListener('pointercancel', up);
+            },
+            move(e) {
+                const d = this.drag;
+                if (!d) return;
+                if (!d.live) {
+                    if (Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) < 5) return;
+                    d.live = true;
+                    d.ghost = d.card.cloneNode(true);
+                    d.ghost.removeAttribute('data-task');
+                    Object.assign(d.ghost.style, { position: 'fixed', zIndex: 60, width: d.w + 'px', pointerEvents: 'none',
+                                                    transform: 'rotate(1.5deg)', opacity: '0.95', left: 0, top: 0 });
+                    d.ghost.classList.add('shadow-2xl');
+                    document.body.appendChild(d.ghost);
+                    d.hole = document.createElement('div');
+                    d.hole.className = 'rounded-xl border-2 border-dashed border-brand-500/50';
+                    d.hole.style.height = d.h + 'px';
+                    d.card.parentNode.insertBefore(d.hole, d.card);
+                    d.card.style.display = 'none';
+                    d.scroll = setInterval(() => this.edge(), 30);
+                }
+                d.px = e.clientX; d.py = e.clientY;
+                d.ghost.style.left = (e.clientX - d.dx) + 'px';
+                d.ghost.style.top = (e.clientY - d.dy) + 'px';
+                this.place(e.clientX, e.clientY);
+            },
+            place(x, y) {
+                const d = this.drag;
+                const under = document.elementFromPoint(x, y);
+                const zone = under && under.closest('[data-drop-zone]');
+                if (!zone || !this.$el.contains(zone)) return;
+                const cards = [...zone.querySelectorAll(':scope > [data-task]')].filter((c) => c !== d.card);
+                const before = cards.find((c) => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; });
+                if (before) zone.insertBefore(d.hole, before); else zone.insertBefore(d.hole, zone.querySelector(':scope > [data-col-empty]'));
+                this.$el.querySelectorAll('[data-drop-zone]').forEach((z) => z.classList.toggle('ring-1', z === zone));
+            },
+            /* A finger held still near an edge sends no moves, so the scroll
+               runs on a timer (the same lesson as My Apps' drag edge). */
+            edge() {
+                const d = this.drag;
+                if (!d || d.py === undefined) return;
+                const s = document.getElementById('pm-scroll');
+                const boxes = [this.$el.querySelector('[data-board-scroll]'), s].filter(Boolean);
+                for (const box of boxes) {
+                    const r = box.getBoundingClientRect();
+                    if (box.scrollHeight <= box.clientHeight) continue;
+                    if (d.py < r.top + 48) { box.scrollTop -= 12; this.place(d.px, d.py); break; }
+                    if (d.py > r.bottom - 48) { box.scrollTop += 12; this.place(d.px, d.py); break; }
+                }
+            },
+            end(e) {
+                const d = this.drag;
+                this.drag = null;
+                if (!d) return;
+                if (!d.live) {
+                    // A press on the grip with no movement opens the task.
+                    window.dispatchEvent(new CustomEvent('ws-open-task', { detail: d.card.getAttribute('data-task') }));
+                    return;
+                }
+                clearInterval(d.scroll);
+                d.ghost.remove();
+                this.$el.querySelectorAll('[data-drop-zone]').forEach((z) => z.classList.remove('ring-1'));
+                const zone = d.hole.parentNode;
+                zone.insertBefore(d.card, d.hole);
+                d.hole.remove();
+                d.card.style.display = '';
+                this.recount();
+                const stage = zone.getAttribute('data-drop-zone');
+                const order = [...zone.querySelectorAll(':scope > [data-task]')].map((c) => c.getAttribute('data-task'));
+                const body = new FormData();
+                body.set('stage', stage);
+                body.set('order', order.join(','));
+                post(cfg.moveUrl.replace('/0/', '/' + d.card.getAttribute('data-task') + '/'), body)
+                    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                    .then((j) => { d.card.setAttribute('data-stage', j.stage); window.wsCounts(j.counts); })
+                    .catch(() => { d.home.insertBefore(d.card, d.next); this.recount(); });
+            },
+        };
+    };
+
+    /* The task window: a new task's form, or one task's own form fetched
+       from the board. Saving is a live action that swaps the board under it,
+       and then the window closes. */
+    window.wsTaskWindow = function (cfg) {
+        return {
+            open: false,
+            loading: false,
+            init() {
+                document.addEventListener('bbb:live-action', (ev) => {
+                    if (this.open && this.$refs.body && this.$refs.body.contains(ev.detail.form)) this.close();
+                });
+            },
+            show(id) {
+                this.open = true;
+                const body = this.$refs.body;
+                if (!id) {
+                    body.innerHTML = this.$refs.blank.innerHTML;
+                    this.$nextTick(() => { const t = body.querySelector('[name=title]'); if (t) t.focus(); });
+                    return;
+                }
+                this.loading = true;
+                body.innerHTML = '';
+                fetch(cfg.windowUrl.replace('/0/', '/' + id + '/') + '?next=' + encodeURIComponent(location.pathname + location.search),
+                      { credentials: 'same-origin' })
+                    .then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); })
+                    .then((html) => { body.innerHTML = html; })
+                    .catch(() => { this.open = false; })
+                    .finally(() => { this.loading = false; });
+            },
+            close() { this.open = false; setTimeout(() => { if (!this.open && this.$refs.body) this.$refs.body.innerHTML = ''; }, 200); },
+        };
+    };
+})();
+</script>

@@ -1,0 +1,57 @@
+{#
+  A task's fields, the same on a new task and on a task's window, so the two
+  cannot drift. What it is on the left, who, when and where on the right from
+  lg; one column on a phone.
+
+  People are ticked chips rather than a picker: there are two or three of
+  them, and a list of names to tick is what a dropdown would hide.
+#}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/checkbox.html" import checkbox %}
+{% macro task_fields(task=none, project_id=none, stage='backlog') %}
+{%- set mine = task.person_ids if task else [current_user.id] -%}
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+    <div class="lg:col-span-3 space-y-3 min-w-0">
+        <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">What needs doing</label>
+            <input type="text" name="title" required maxlength="200" value="{{ task.title if task else '' }}"
+                   class="input-ring w-full min-w-0 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Details</label>
+            <textarea name="body" rows="5"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl select-text">{{ task.body if task else '' }}</textarea>
+        </div>
+    </div>
+    <div class="lg:col-span-2 space-y-3 min-w-0">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1">For</p>
+            <input type="hidden" name="people_present" value="1">
+            <div class="flex flex-col">
+                {% for u in ws_people %}
+                {{ checkbox(name='people', value=u.id, label=u.full_name, checked=u.id in mine) }}
+                {% endfor %}
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">By when</label>
+                <input type="date" name="due_on" value="{{ task.due_on.isoformat() if task and task.due_on else '' }}"
+                       class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
+            <div class="relative focus-within:z-50">
+                <p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Column</p>
+                {{ select_dropdown("stage", opt_stages, task.stage if task else stage, "Column", full_width=true) }}
+            </div>
+        </div>
+        {# The block whose picker is open paints on top, over the pinned
+           Save bar too (LM-7: focus-within, no state to keep). #}
+        <div class="relative focus-within:z-50 space-y-3">
+            {{ select_dropdown("project_id", opt_projects, task.project_id if task else project_id, "No project", full_width=true) }}
+            {{ select_dropdown("client_id", opt_clients, task.client_id if task else '', "No client", full_width=true) }}
+            {{ select_dropdown("product_id", opt_products, task.product_id if task else '', "No product", full_width=true) }}
+            {{ select_dropdown("playbook_id", opt_playbooks, task.playbook_id if task else '', "No playbook", full_width=true) }}
+        </div>
+    </div>
+</div>
+{% endmacro %}

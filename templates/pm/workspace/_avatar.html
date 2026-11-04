@@ -1,0 +1,9 @@
+{# A person's circle: their initials, in a colour of their own so two people
+   are told apart at a glance. #}
+{% macro avatar(user, size='w-9 h-9 text-xs') %}
+{%- set hues = ['bg-brand-500/25 text-brand-200', 'bg-emerald-500/20 text-emerald-200',
+                'bg-amber-500/20 text-amber-200', 'bg-sky-500/20 text-sky-200',
+                'bg-rose-500/20 text-rose-200'] -%}
+<span class="{{ size }} shrink-0 inline-flex items-center justify-center rounded-full font-bold {{ hues[(user.id if user else 0) % 5] }}"
+      title="{{ user.full_name if user else 'Somebody no longer here' }}">{{ user | initials }}</span>
+{%- endmacro %}

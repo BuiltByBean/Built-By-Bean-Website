@@ -344,6 +344,64 @@ Audit items 7, 9, 10, 18, 19, 20 and 4's store half (`docs/automation_gaps.md`),
 `tools/test_live_apps.py`, `tools/test_hosting_billing.py`,
 `tools/test_map_and_step_checks.py`.
 
+## The Workspace
+
+Michael, 2026-11-04: "I have a notes section. I want to replace that and
+integrate the workspace feature from Entertain HQ into that, where we have the
+messages, task, and projects. And so then the projects page that we have
+standalone right now will get folded into that workspace thing ... I want that
+to be the second tab under needs attention." `pm/workspace_routes.py`,
+`/admin/workspace`, templates in `pm/workspace/`. EntertainHQ's shape, cut to a
+board with two people on it, his pick on every question:
+
+- **Messages** is team chat between logins (him, Hannah, anyone added), direct
+  or group, and a message links to anything on the board (project, client,
+  task, ticket, contract, lead, business for the CEO). No email, no text; client
+  mail stays on Needs attention. The models are `Team*`, never `Message`, which
+  is the client mail. A pair has ONE conversation by `pair_key` ("3:7", unique);
+  a conversation opens only to its people, a 404 on every door otherwise. A send
+  appends the rows since the last one on screen, the poll answers 204 when
+  nothing is new, and the list polls and swaps only when it differs.
+- **Tasks** replaced Notes. Migration `a5d17c3e92b4` carried every note across
+  with its id, open ones to Backlog and done ones to Done, given to Michael and
+  already seen, and dropped `notes`; its downgrade puts every one back. Backlog,
+  In progress, Done with a pointer drag from the grip only (a thumb scrolling
+  never picks a card up), one JSON post per drop, the card put back if it fails.
+  The board opens on yours; Everyone shows the rest.
+- **Projects** are the client projects, not a new kind. The tab is cards; the
+  project page kept everything and gained its task board and the messages about
+  it under a Tasks / Playbooks / Messages switch, with tiles that open Client
+  support, Time and Expenses filtered to it. `pm.project_detail`, `project_edit`
+  and `project_create` kept their endpoint names and moved under
+  `/admin/workspace/projects`, so every `url_for` across the board still lands;
+  `/admin/projects...` and `/admin/notes` redirect.
+- **The counts are what is NEW**: unread messages and tasks given to you that
+  the board has not shown you, never the standing backlog. The board's render
+  is what marks a task seen. The sidebar badge is their sum (`workspace_new`).
+
+The tab row is `data-keep`: `bbbNavigate` (base.html) carries an element marked
+`data-keep` across a page swap when the next page has one too, and tells it what
+the new one said through `bbb:kept`, so moving between tabs never redraws the
+row and its mark slides. The conversation list is kept the same way between
+chats. The page's scripts are inline functions (`pm/workspace/_js.html`) on
+purpose: a swapped-in inline script runs before Alpine reaches the new markup,
+a script by `src` loads after it. `tools/test_workspace.py`, which runs every
+request as its own login (`As`): inside one app context Flask-Login's user is
+cached on `g`, and every client would otherwise be whoever asked first.
+
+**A project's dates come from its repo and its domain** (audit item 11,
+`project_autofill.py`, the "project dates" step of the night, before the store
+ids). The repo pair (`Project.repo`, the tile's `github_url`) fills whichever is
+empty from the other, then from a repo whose `homepage` is the tile's host.
+Contracted moves to MVP on the first commit after the contract (the earliest
+signed contract on the project, else the day it was put on the board), and
+`build_started_on` is that commit's day: GitHub lists newest first, so with one
+per page the Link header's last page is the oldest. Go-live is FILLED, not
+proposed (his pick), the first night the project's real domain answers, for a
+project in MVP or Delivered; a platform address never counts, and
+`go_live_source` says where the date came from on the project page. Only empty
+fields, never past `phase_locked`, never an archived project.
+
 ## Needs attention
 
 `pm/attention_routes.py` is the mail waiting on a reply, and last month's
@@ -412,11 +470,11 @@ night has a failed step or no night has finished in 26 hours; it links to
 `/admin/attention/nights`. A new nightly step goes through `night.step(...)` in
 `sync_costs._sweep`, never a bare try/print. `tools/test_night_log.py`.
 
-**The sidebar's Work section is Michael's order** (2026-11-04): Businesses,
-Notes, Clients, Leads, Projects, Client support (Tickets in the code), Contracts,
-MVP Builder, My Apps, Handbook (Best Practices in the code and URLs), Time. Notes
-and Projects give way to the Workspace when it lands. Products folded into the
-MVP Builder the same day and has no link of its own.
+**The sidebar is Michael's order** (2026-11-04): Needs attention, then the
+Workspace, then Work: Businesses, Clients, Leads, Client support (Tickets in the
+code), Contracts, MVP Builder, My Apps, Handbook (Best Practices in the code and
+URLs), Time. Notes and Projects left it when the Workspace landed. Products
+folded into the MVP Builder the same day and has no link of its own.
 
 ## The books stand on the bank
 

@@ -1,0 +1,30 @@
+{#
+  The conversation list's rows: the picture, the name and the count. Drawn by
+  the page and by its poll (workspace.message_list), which the list swaps in
+  only when it differs. data-counts carries the tab and sidebar counts, so the
+  poll keeps those right too.
+#}
+{% from "pm/workspace/_avatar.html" import avatar %}
+<div data-conv-rows data-counts='{{ ws_counts | tojson }}'>
+    {% for row in rows %}
+    {% set lit = conv_id == row.conv.id %}
+    <a href="{{ url_for('workspace.messages', id=row.conv.id) }}"
+       class="flex items-center gap-3 mx-1 px-3 py-2.5 min-h-[56px] rounded-xl transition-colors
+              {{ 'bg-brand-500/15' if lit else 'hover:bg-white/5' }}">
+        {% if row.others | length > 1 %}
+        <span class="relative w-9 h-9 shrink-0">
+            <span class="absolute left-0 top-0">{{ avatar(row.others[0], 'w-6 h-6 text-[9px]') }}</span>
+            <span class="absolute right-0 bottom-0 ring-2 ring-surface-900 rounded-full">{{ avatar(row.others[1], 'w-6 h-6 text-[9px]') }}</span>
+        </span>
+        {% else %}
+        {{ avatar(row.others[0] if row.others else none) }}
+        {% endif %}
+        <span class="min-w-0 flex-1 text-sm truncate {{ 'text-white font-semibold' if row.unread else 'text-surface-200' }}">{{ row.name }}</span>
+        {% if row.unread %}
+        <span class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full bg-brand-500 text-white text-[10px] font-bold">{{ row.unread | commas }}</span>
+        {% endif %}
+    </a>
+    {% else %}
+    <p class="px-4 py-8 text-center text-sm text-surface-400">No conversations yet</p>
+    {% endfor %}
+</div>

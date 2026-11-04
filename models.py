@@ -316,6 +316,12 @@ class Project(db.Model):
     # not a fact - a build running late would otherwise be marched to
     # Delivered by its own contract date and marched back every reload.
     phase_locked = db.Column(db.Boolean, default=False, nullable=False)
+    # What the board read for itself (project_autofill, nightly): the day of
+    # the first commit after the contract, which is when it moved Contracted
+    # to MVP, and where a go-live date it filled in came from, so the page can
+    # say so. Both only ever written into empty fields.
+    build_started_on = db.Column(db.Date, nullable=True)
+    go_live_source = db.Column(db.String(200), nullable=True)
     status = db.Column(db.String(20), default="active")
     notes = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -3560,64 +3566,74 @@ class ProviderInvoice(db.Model):
         return f"<ProviderInvoice {self.provider_id} {self.period_month} {self.amount}>"
 
 
-class Note(db.Model):
-    """Something to do that no other page on the board owns.
+# ---------------------------------------------------------------- workspace
+#
+# Michael, 2026-11-04: "I have a notes section. I want to replace that and
+# integrate the workspace feature from Entertain HQ into that, where we have
+# the messages, task, and projects." EntertainHQ's shape (docs/features in that
+# repo), cut to a board with two people on it: everyone sees everything, the
+# Tasks board opens on yours, and a project is the client project this board
+# already had rather than a second kind of project.
 
-    A ticket belongs to whoever raised it and is answerable to them. A time
-    entry belongs to a project. This is the rest of it: the things that have
-    to happen for the business, or about a client, that have nowhere else to
-    live. Nobody is waiting on a reply to one of these, which is exactly why
-    they get forgotten and why they need a list.
+# Where a task has got to. Backlog, In progress, Done: EntertainHQ's three
+# columns, in their order. A done task also carries done_at, so "what was
+# cleared this week" stays a query.
+TASK_STAGES = (("backlog", "Backlog"), ("in_progress", "In progress"), ("done", "Done"))
+TASK_STAGE_KEYS = tuple(k for k, _ in TASK_STAGES)
 
-    Everything it points at is OPTIONAL and none of it is exclusive. A note
-    can be about a client and the project it is for and the playbook being
-    followed on it at the same time, because that is how the thought arrives.
-    A note with nothing attached is the common case and is not lesser.
 
-    Done is a timestamp rather than a flag, so "what did I clear this week"
-    is a query rather than a second column that has to be kept in step with
-    the first.
+class WorkTask(db.Model):
+    """Something to do, for one or more people on the board.
+
+    What Notes were, with people and a column. Every note was carried across
+    by migration a5d17c3e92b4 with its id, its words, its date and its four
+    links, open ones into Backlog for the owner and done ones into Done.
+
+    Everything it points at is OPTIONAL and none of it is exclusive, the rule
+    Notes had: a thought arrives as a client and a project and a date at once.
+    SET NULL on every link, because closing a project does not mean the task
+    about it was done, and a task that loses its link still has its words.
     """
 
-    __tablename__ = "notes"
+    __tablename__ = "work_tasks"
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     body = db.Column(db.Text, default="")
-
+    stage = db.Column(db.String(20), nullable=False, default="backlog", index=True)
+    # Its place in its column, smallest first. Written by the drag; a new task
+    # goes to the top of its column.
+    position = db.Column(db.Integer, nullable=False, default=0)
     done_at = db.Column(db.DateTime, nullable=True, index=True)
-    # A date, not a datetime. Nothing here is due at 3pm, and a time nobody
-    # meant would make every one of these look late by lunchtime.
+    # A date, not a datetime: nothing here is due at 3pm.
     due_on = db.Column(db.Date, nullable=True, index=True)
 
-    # What it is about. SET NULL rather than CASCADE on every one: closing a
-    # project does not mean the note about it was done, and a note that loses
-    # its link still has its words. The same call AppLink.project_id makes.
+    created_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL", name="fk_work_tasks_created_by_id"),
+        nullable=True, index=True)
     client_id = db.Column(
-        db.Integer,
-        db.ForeignKey("clients.id", ondelete="SET NULL", name="fk_notes_client_id"),
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL", name="fk_work_tasks_client_id"),
         nullable=True, index=True)
     project_id = db.Column(
-        db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL", name="fk_notes_project_id"),
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL", name="fk_work_tasks_project_id"),
         nullable=True, index=True)
     product_id = db.Column(
-        db.Integer,
-        db.ForeignKey("products.id", ondelete="SET NULL", name="fk_notes_product_id"),
+        db.Integer, db.ForeignKey("products.id", ondelete="SET NULL", name="fk_work_tasks_product_id"),
         nullable=True, index=True)
     playbook_id = db.Column(
-        db.Integer,
-        db.ForeignKey("playbooks.id", ondelete="SET NULL", name="fk_notes_playbook_id"),
+        db.Integer, db.ForeignKey("playbooks.id", ondelete="SET NULL", name="fk_work_tasks_playbook_id"),
         nullable=True, index=True)
 
-    # The backref is "todos", not "notes": Client, Project and Product each
-    # already carry a free-text notes column, and a relationship of the same
-    # name does not collide quietly, it refuses to map at all and takes every
-    # other model down with it.
-    client = db.relationship("Client", backref=db.backref("todos", lazy="select"))
-    project = db.relationship("Project", backref=db.backref("todos", lazy="select"))
-    product = db.relationship("Product", backref=db.backref("todos", lazy="select"))
-    playbook = db.relationship("Playbook", backref=db.backref("todos", lazy="select"))
+    # The backref is "work_tasks", never "notes" or "tasks": Client, Project
+    # and Product carry a free-text notes column, and a relationship with a
+    # column's name refuses to map and takes every other model down with it.
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    client = db.relationship("Client", backref=db.backref("work_tasks", lazy="select"))
+    project = db.relationship("Project", backref=db.backref("work_tasks", lazy="select"))
+    product = db.relationship("Product", backref=db.backref("work_tasks", lazy="select"))
+    playbook = db.relationship("Playbook", backref=db.backref("work_tasks", lazy="select"))
+    people = db.relationship("WorkTaskPerson", back_populates="task", lazy="select",
+                             cascade="all, delete-orphan", order_by="WorkTaskPerson.id")
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
@@ -3625,32 +3641,29 @@ class Note(db.Model):
 
     @property
     def is_done(self):
-        return self.done_at is not None
+        return self.stage == "done"
 
     @property
     def is_overdue(self):
-        """Past its date and still open. A done note is never late."""
+        """Past its date and still open. A done task is never late."""
         return bool(self.due_on and not self.is_done and self.due_on < date.today())
 
     @property
-    def days_until_due(self):
-        """Negative when it has gone by. None when no date was set."""
-        return None if not self.due_on else (self.due_on - date.today()).days
+    def person_ids(self):
+        return [p.user_id for p in self.people]
+
+    def is_for(self, user_id):
+        return user_id in self.person_ids
 
     @property
     def links(self):
-        """What this is about, as (label, url_endpoint, kwargs) to render.
-
-        One place decides the order, so the row, the filters and any future
-        page cannot disagree about which attachment leads.
-        """
+        """What this is about, as (kind, label, endpoint, kwargs). One place
+        decides the order, so the card and the window cannot disagree."""
         out = []
-        if self.client:
-            out.append(("client", self.client.name,
-                        "pm.client_detail", {"id": self.client_id}))
         if self.project:
-            out.append(("project", self.project.name,
-                        "pm.project_detail", {"id": self.project_id}))
+            out.append(("project", self.project.name, "pm.project_detail", {"id": self.project_id}))
+        if self.client:
+            out.append(("client", self.client.name, "pm.client_detail", {"id": self.client_id}))
         if self.product:
             out.append(("product", self.product.name,
                         "mvp.price_list", {}))
@@ -3660,7 +3673,144 @@ class Note(db.Model):
         return out
 
     def __repr__(self):
-        return f"<Note {self.id} {self.title[:30]!r}>"
+        return f"<WorkTask {self.id} {self.title[:30]!r}>"
+
+
+class WorkTaskPerson(db.Model):
+    """One person a task is for. `seen_at` NULL is "given to them and not
+    shown to them yet", which is what the Workspace's count is: what is NEW,
+    never the standing backlog (EntertainHQ, 2026-10-09)."""
+
+    __tablename__ = "work_task_people"
+    __table_args__ = (db.UniqueConstraint("task_id", "user_id", name="uq_work_task_people"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(
+        db.Integer, db.ForeignKey("work_tasks.id", ondelete="CASCADE", name="fk_work_task_people_task_id"),
+        nullable=False, index=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE", name="fk_work_task_people_user_id"),
+        nullable=False, index=True)
+    seen_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    task = db.relationship("WorkTask", back_populates="people")
+    user = db.relationship("User")
+
+
+class TeamConversation(db.Model):
+    """A chat between people on the board: two of them, or a group.
+
+    Named Team*, never Message: `Message` is the client mail this board reads
+    from Gmail, and a model sharing another class's name is how a whole app's
+    email went dark for fifteen hours elsewhere (catalogue rule "A model named
+    like a library class shadows it").
+
+    A pair has ONE direct conversation by construction: `pair_key` is the two
+    ids sorted ("3:7"), unique among the rows that carry one, so two people
+    starting a chat at the same moment land in the same one. A group has no
+    key and is found again by its member set.
+    """
+
+    __tablename__ = "team_conversations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(120), nullable=True)
+    pair_key = db.Column(db.String(40), nullable=True)
+    created_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL", name="fk_team_conversations_created_by_id"),
+        nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    last_message_at = db.Column(db.DateTime, nullable=True, index=True)
+
+    __table_args__ = (db.UniqueConstraint("pair_key", name="uq_team_conversations_pair_key"),)
+
+    members = db.relationship("TeamConversationMember", back_populates="conversation",
+                              cascade="all, delete-orphan", lazy="select")
+    messages = db.relationship("TeamMessage", back_populates="conversation",
+                               cascade="all, delete-orphan", lazy="dynamic",
+                               order_by="TeamMessage.id")
+
+    @property
+    def member_ids(self):
+        return sorted(m.user_id for m in self.members)
+
+    def others(self, user_id):
+        return [m.user for m in self.members if m.user_id != user_id and m.user]
+
+    def name_for(self, user_id):
+        if self.title:
+            return self.title
+        names = [u.full_name for u in self.others(user_id)]
+        return ", ".join(names) or "Just you"
+
+
+class TeamConversationMember(db.Model):
+    __tablename__ = "team_conversation_members"
+    __table_args__ = (db.UniqueConstraint("conversation_id", "user_id",
+                                          name="uq_team_conversation_members"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey("team_conversations.id", ondelete="CASCADE",
+                                  name="fk_team_conversation_members_conversation_id"),
+        nullable=False, index=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE",
+                                  name="fk_team_conversation_members_user_id"),
+        nullable=False, index=True)
+    # Everything said by somebody else after this is unread for them.
+    last_read_at = db.Column(db.DateTime, nullable=True)
+    joined_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    conversation = db.relationship("TeamConversation", back_populates="members")
+    user = db.relationship("User")
+
+
+class TeamMessage(db.Model):
+    __tablename__ = "team_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey("team_conversations.id", ondelete="CASCADE",
+                                  name="fk_team_messages_conversation_id"),
+        nullable=False, index=True)
+    author_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL", name="fk_team_messages_author_id"),
+        nullable=True, index=True)
+    body = db.Column(db.Text, nullable=False, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    # Marked, not removed, so the line can say it was deleted and nothing
+    # counts it any more.
+    deleted_at = db.Column(db.DateTime, nullable=True)
+
+    conversation = db.relationship("TeamConversation", back_populates="messages")
+    author = db.relationship("User")
+    links = db.relationship("TeamMessageLink", back_populates="message",
+                            cascade="all, delete-orphan", lazy="select",
+                            order_by="TeamMessageLink.id")
+
+
+class TeamMessageLink(db.Model):
+    """What a message is about: anything on the board, by kind and id.
+
+    No foreign key, because the kinds are several tables; the name is read
+    live when the message is drawn, and a record that has gone reads as gone
+    rather than taking the message with it.
+    """
+
+    __tablename__ = "team_message_links"
+    __table_args__ = (db.Index("ix_team_message_links_kind_record", "kind", "record_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(
+        db.Integer, db.ForeignKey("team_messages.id", ondelete="CASCADE",
+                                  name="fk_team_message_links_message_id"),
+        nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    record_id = db.Column(db.Integer, nullable=False)
+
+    message = db.relationship("TeamMessage", back_populates="links")
 
 
 class Message(db.Model):

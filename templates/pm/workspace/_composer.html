@@ -1,0 +1,70 @@
+{#
+  The message box at the foot of a chat. Link and Send share one row under
+  it (EntertainHQ: "the send button and attach button needs to be in line").
+  The button says Link, because what it adds is a part of the board, not a
+  file. Enter sends; Shift and Enter is a new line.
+
+  send_to: the people of a chat not made yet. Its first send makes it, and is
+  the one send that moves the page.
+#}
+<form x-ref="form" method="POST" action="{{ url_for('workspace.message_send') }}"
+      @submit.prevent="send()" class="shrink-0 relative border-t border-white/10 p-3 sm:p-4 space-y-2">
+    {% if conv %}<input type="hidden" name="conversation_id" value="{{ conv.id }}">{% endif %}
+    {% for u in send_to or [] %}<input type="hidden" name="to" value="{{ u.id }}">{% endfor %}
+    <template x-for="l in links" :key="l.kind + l.id"><input type="hidden" name="link" :value="l.kind + ':' + l.id"></template>
+
+    <div x-show="links.length" x-cloak class="flex flex-wrap gap-1.5">
+        <template x-for="(l, i) in links" :key="'chip' + l.kind + l.id">
+            <span class="inline-flex items-center gap-1.5 max-w-full pl-3 pr-1 py-1 rounded-xl border border-white/10 bg-surface-800/60 text-xs">
+                <span class="text-surface-400 shrink-0" x-text="l.type"></span>
+                <span class="text-white truncate" x-text="l.label"></span>
+                <button type="button" @click="dropLink(i)" aria-label="Take this link off"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-surface-400 hover:text-white hover:bg-white/5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </span>
+        </template>
+    </div>
+
+    {# The Link picker opens upward over the chat, inside the composer's
+       own box, so nothing under it can paint over it (LM-1). #}
+    <div x-show="pickOpen" x-cloak @click.outside="pickOpen = false" @keydown.escape="pickOpen = false"
+         class="absolute left-3 right-3 bottom-full mb-2 z-30 glass-card shadow-2xl flex flex-col max-h-80 overflow-hidden"
+         style="background: var(--surface)">
+        <div class="shrink-0 p-2 border-b border-white/10">
+            <input type="text" x-ref="q" x-model="q" @input.debounce.200ms="search()" placeholder="Search projects, clients, tasks, tickets, contracts, leads"
+                   aria-label="Search for something to link"
+                   class="input-ring w-full min-w-0 px-3 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+        </div>
+        <div class="min-h-0 overflow-y-auto p-1">
+            <template x-for="row in found" :key="row.kind + row.id">
+                <button type="button" @click="addLink(row)"
+                        class="w-full flex items-center gap-3 px-3 py-2 min-h-[44px] rounded-lg text-left hover:bg-white/5">
+                    <span class="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-surface-400" x-text="row.type"></span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-white break-words" x-text="row.label"></span>
+                        <span class="block text-xs text-surface-500 truncate" x-text="row.sub"></span>
+                    </span>
+                </button>
+            </template>
+            <p x-show="searched && searched === q.trim() && !found.length" class="px-3 py-4 text-sm text-surface-400">Nothing by that name</p>
+        </div>
+    </div>
+
+    <label for="ws-body-{{ conv.id if conv else 'new' }}" class="sr-only">Message</label>
+    <textarea id="ws-body-{{ conv.id if conv else 'new' }}" x-ref="box" name="body" x-model="body" rows="2" maxlength="8000"
+              @keydown="key($event)" placeholder="Write a message"
+              class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl resize-none select-text"></textarea>
+    <div class="flex items-center gap-2">
+        <button type="button" @click="pickOpen = !pickOpen; setTimeout(() => pickOpen && $refs.q.focus(), 50)" :aria-expanded="pickOpen"
+                class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-200 hover:bg-white/5 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+            Link
+        </button>
+        <button type="submit" :disabled="sending || (!body.trim() && !links.length)"
+                class="ml-auto inline-flex items-center gap-2 min-h-[44px] px-4 btn-brand text-sm font-medium rounded-xl disabled:opacity-50 transition-all">
+            Send
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
+        </button>
+    </div>
+</form>

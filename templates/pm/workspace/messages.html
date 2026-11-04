@@ -1,0 +1,160 @@
+{% extends "pm/base.html" %}
+{% from "pm/workspace/_tabs.html" import workspace_tabs %}
+{% from "pm/workspace/_avatar.html" import avatar %}
+{% from "pm/components/checkbox.html" import checkbox %}
+
+{#
+  Messages: the conversation list beside one conversation (EntertainHQ's
+  shape). On a phone it is one or the other: the list, or the chat with a way
+  back to the list. The chat's rows are the one scroller; the composer stands
+  at its foot, where an action belongs (catalogue rule "An action is never at
+  the bottom of a scroll").
+#}
+
+{% block title %}Workspace - Built By Bean{% endblock %}
+{% block page_title %}Workspace{% endblock %}
+{% block page_subtitle %}Messages, tasks and projects{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('workspace.message_new') }}"
+   class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    New message
+</a>
+{% endblock %}
+
+{% block content %}
+{% include "pm/workspace/_js.html" %}
+{{ workspace_tabs('messages', ws_counts) }}
+{% set conv_id = conv.id if conv else none %}
+{% set in_chat = conv or composing %}
+
+<div class="flex-1 min-h-0 flex gap-4">
+
+    {# The list. #}
+    {# Kept across a switch between chats (data-keep): only its rows are
+       brought up to date, so its scroll and its identity stay. #}
+    <section data-keep="ws-conv-list" data-url="{{ url_for('workspace.message_list', open=conv_id) }}"
+             x-data="wsConvList()" @bbb:kept="kept($event.detail.fresh)"
+             class="glass-card min-h-0 w-full lg:w-80 lg:shrink-0 flex-col py-2 {{ 'hidden lg:flex' if in_chat else 'flex' }}"
+             aria-label="Conversations">
+        <div x-ref="rows" class="min-h-0 overflow-y-auto space-y-0.5">
+            {% include "pm/workspace/_conversations.html" %}
+        </div>
+    </section>
+
+    {# The chat. #}
+    <section class="glass-card min-h-0 flex-1 min-w-0 flex-col {{ 'flex' if in_chat else 'hidden lg:flex' }}"
+             aria-label="Conversation">
+    {% if conv %}
+        {% set others = conv.others(current_user.id) %}
+        <div x-data='wsThread({ rowsUrl: {{ url_for("workspace.message_rows", id=conv.id) | tojson }}, linksUrl: {{ url_for("workspace.link_search") | tojson }}, links: {{ about | tojson }} })'
+             class="flex-1 min-h-0 flex flex-col">
+            <div x-data="{ editing: false }" class="shrink-0 border-b border-white/10">
+                <div class="flex items-center gap-3 px-4 py-3">
+                    <a href="{{ url_for('workspace.messages', all=1) }}" aria-label="All conversations"
+                       class="lg:hidden -ml-2 w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-300 hover:bg-white/5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                    </a>
+                    {{ avatar(others[0] if others else none) }}
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-white truncate">{{ conv.name_for(current_user.id) }}</p>
+                        {% if others | length > 1 or conv.title %}
+                        <p class="text-xs text-surface-400 truncate">{{ others | map(attribute='full_name') | join(', ') }}</p>
+                        {% endif %}
+                    </div>
+                    <button type="button" @click="editing = !editing" :aria-expanded="editing"
+                            aria-label="People in this chat" title="People in this chat"
+                            class="w-11 h-11 inline-flex items-center justify-center rounded-xl border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>
+                    </button>
+                </div>
+                {# A pair stays a pair: adding somebody starts a group, and
+                   the two of you keep your own chat. #}
+                <form x-show="editing" x-cloak method="POST"
+                      action="{{ url_for('workspace.conversation_people', id=conv.id) }}"
+                      class="px-4 pb-4 space-y-3">
+                    <div class="flex flex-wrap gap-x-4">
+                        {% for u in ws_people if u.id != current_user.id %}
+                        {{ checkbox(name='people', value=u.id, label=u.full_name, checked=u.id in conv.member_ids) }}
+                        {% endfor %}
+                    </div>
+                    {% if not conv.pair_key %}
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5" for="conv-title">Group name</label>
+                        <input id="conv-title" type="text" name="title" value="{{ conv.title or '' }}" maxlength="120"
+                               class="input-ring w-full px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+                    </div>
+                    {% endif %}
+                    <div class="flex">
+                        <button type="submit" class="ml-auto min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl">Save people</button>
+                    </div>
+                </form>
+            </div>
+
+            <div x-ref="scroll" class="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-4">
+                <div x-ref="rows" class="space-y-4">
+                    {% if not thread %}<p data-empty class="py-10 text-center text-sm text-surface-400">No messages yet</p>{% endif %}
+                    {% include "pm/workspace/_message_rows.html" %}
+                </div>
+            </div>
+
+            {% set send_to = none %}
+            {% include "pm/workspace/_composer.html" %}
+        </div>
+
+    {% elif composing %}
+        <div x-data='wsThread({ rowsUrl: null, linksUrl: {{ url_for("workspace.link_search") | tojson }}, links: {{ about | tojson }} })'
+             class="flex-1 min-h-0 flex flex-col">
+            <div class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/10">
+                <a href="{{ url_for('workspace.messages', all=1) }}" aria-label="All conversations"
+                   class="lg:hidden -ml-2 w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-300 hover:bg-white/5">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                </a>
+                {% if to_users %}
+                {{ avatar(to_users[0]) }}
+                <p class="min-w-0 flex-1 text-sm font-semibold text-white truncate">{{ to_users | map(attribute='full_name') | join(', ') }}</p>
+                {% else %}
+                <p class="text-sm font-semibold text-white">New message</p>
+                {% endif %}
+            </div>
+
+            {% if not to_users %}
+            {# Who it is to is the one step. Picking the people of a chat
+               that exists opens that chat. #}
+            <form method="GET" action="{{ url_for('workspace.message_new') }}" class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+                {% for a in about %}<input type="hidden" name="about" value="{{ a.kind }}:{{ a.id }}">{% endfor %}
+                <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">To</p>
+                {% if others %}
+                <div class="flex flex-col">
+                    {% for u in others %}
+                    {% call checkbox(name='to', value=u.id) %}
+                    <span class="inline-flex items-center gap-2.5">{{ avatar(u, 'w-8 h-8 text-[10px]') }}<span class="text-sm text-white">{{ u.full_name }}</span><span class="text-xs text-surface-500">{{ u.role_label }}</span></span>
+                    {% endcall %}
+                    {% endfor %}
+                </div>
+                <div class="flex">
+                    <button type="submit" class="min-h-[44px] px-4 py-2.5 btn-brand text-sm font-medium rounded-xl">Open chat</button>
+                </div>
+                {% else %}
+                <p class="text-sm text-surface-400">Nobody else has a login yet</p>
+                {% endif %}
+            </form>
+            {% else %}
+            <div x-ref="scroll" class="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-4">
+                <div x-ref="rows"><p data-empty class="py-10 text-center text-sm text-surface-400">No messages yet</p></div>
+            </div>
+            {% set send_to = to_users %}
+            {% include "pm/workspace/_composer.html" %}
+            {% endif %}
+        </div>
+
+    {% else %}
+        <div class="flex-1 flex items-center justify-center p-8">
+            <p class="text-sm text-surface-400">Pick a conversation, or start a new one</p>
+        </div>
+    {% endif %}
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "pm/base.html" %}
+{% from "pm/workspace/_tabs.html" import workspace_tabs %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+
+{#
+  Projects: every client project as a card, what the standalone Projects page
+  was, folded into the Workspace (Michael, 2026-11-04). A card is the name,
+  the client, where it is in its phases, and what is open on it. The filter
+  bar stands still and the cards scroll under it (contained scroll, LM-4);
+  the pick is the apply.
+#}
+
+{% block title %}Projects - Workspace - Built By Bean{% endblock %}
+{% block page_title %}Workspace{% endblock %}
+{% block page_subtitle %}Messages, tasks and projects{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('pm.project_create') }}"
+   class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    New project
+</a>
+{% endblock %}
+
+{% block content %}
+{% include "pm/workspace/_js.html" %}
+{{ workspace_tabs('projects', ws_counts) }}
+
+<form method="GET" x-data="liveFilter()" @submit.prevent="apply()" data-live-filters
+      class="shrink-0 relative z-30 flex flex-wrap items-center gap-2 mb-4">
+    <input type="hidden" name="view" value="{{ view }}">
+    <label for="project-q" class="sr-only">Search projects</label>
+    <input id="project-q" type="search" name="q" value="{{ search }}" @input="soon()" placeholder="Search projects or clients"
+           class="input-ring flex-1 min-w-0 basis-56 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+    <div class="w-full sm:w-56">
+        {{ select_dropdown("phase", phase_opts, phase, "Any phase", full_width=true, on_change="apply()") }}
+    </div>
+    <div data-live="project-views" class="inline-flex p-1 rounded-2xl border border-white/10 bg-surface-800/60" role="group" aria-label="Which projects">
+        {% for value, label in views %}
+        <button type="button" aria-pressed="{{ 'true' if view == value else 'false' }}"
+                @click="$el.closest('form').querySelector('[name=view]').value = '{{ value }}'; apply()"
+                class="min-h-[36px] px-3 rounded-xl text-xs font-medium transition-colors {{ 'btn-brand text-white' if view == value else 'text-surface-300 hover:text-white' }}">
+            {{ label }}</button>
+        {% endfor %}
+    </div>
+    <span data-live="clear" class="inline-flex items-center">
+        {% if search or phase or view != 'open' %}{{ clear_filters(href=url_for('workspace.projects')) }}{% endif %}
+    </span>
+</form>
+
+{% set phase_keys = phase_choices | map(attribute='0') | list %}
+{% set phase_labels = phase_choices | map(attribute='1') | list %}
+<div data-live="results" class="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 pb-4">
+    {% if projects %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+        {% for p in projects %}
+        {% set cidx = phase_keys.index(p.phase) if p.phase in phase_keys else 0 %}
+        <a href="{{ url_for('pm.project_detail', id=p.id) }}"
+           class="glass-card p-4 flex flex-col gap-3 min-w-0 hover:border-brand-500/40 transition-colors">
+            <div class="flex items-start gap-3 min-w-0">
+                {% set app = p.apps[0] if p.apps else none %}
+                {% if app and app.icon_file %}
+                <img src="{{ url_for('apps.icon', id=app.id) }}" alt="" class="w-10 h-10 shrink-0 rounded-xl object-contain">
+                {% else %}
+                <span class="w-10 h-10 shrink-0 rounded-xl bg-brand-500/15 inline-flex items-center justify-center text-xs font-bold text-brand-300">{{ p.name[:2] | upper }}</span>
+                {% endif %}
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-white break-words">{{ p.name }}</p>
+                    <p class="text-xs text-surface-400 truncate">{{ p.client.name }}</p>
+                </div>
+                {% if p.status == 'archived' %}
+                <span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-white/5 text-surface-400">Archived</span>
+                {% endif %}
+            </div>
+            <div>
+                <div class="flex items-center gap-1" aria-hidden="true">
+                    {% for pk in phase_keys %}
+                    <span class="h-1.5 flex-1 rounded-full {{ 'bg-brand-500' if loop.index0 <= cidx else 'bg-surface-700' }}"></span>
+                    {% endfor %}
+                </div>
+                <p class="mt-1.5 text-xs font-medium text-brand-300">{{ phase_labels[cidx] }}{% if p.phase_locked %} <span class="text-amber-300">held</span>{% endif %}</p>
+            </div>
+            <div class="flex flex-wrap gap-2 text-xs">
+                <span class="px-2 py-1 rounded-lg bg-white/5 text-surface-300">{{ open_tasks.get(p.id, 0) | commas }} open task{{ '' if open_tasks.get(p.id, 0) == 1 else 's' }}</span>
+                <span class="px-2 py-1 rounded-lg bg-white/5 text-surface-300">{{ open_tickets.get(p.id, 0) | commas }} open ticket{{ '' if open_tickets.get(p.id, 0) == 1 else 's' }}</span>
+                {% if p.go_live_date %}<span class="px-2 py-1 rounded-lg bg-white/5 text-surface-300">Live {{ p.go_live_date | format_date }}</span>{% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="glass-card py-12 text-center">
+        <p class="text-surface-400">{{ 'No projects match that' if search or phase or view != 'open' else 'No projects yet' }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

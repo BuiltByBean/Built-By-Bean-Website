@@ -18,9 +18,10 @@ Delivered by its own contract date, and marched straight back every time you
 corrected it. Changing a phase by hand sets phase_locked, and this leaves that
 project alone until you say resume.
 
-Contracted -> MVP is deliberately not automated: nothing in the data says
+Contracted -> MVP is not moved by a date: nothing in the dates says
 "started", and guessing from the first logged hour would move projects on the
-day you did ten minutes of scoping.
+day you did ten minutes of scoping. Since 2026-11-04 the repo says it instead:
+project_autofill moves it on the first commit after the contract, nightly.
 """
 
 from datetime import date
@@ -112,7 +113,9 @@ def explain(project, today=None):
         return "Held where you put it. Dates will not move it."
     if project.phase in MANUAL_ONLY and not due_phase(project, today):
         if project.phase == "contracted":
-            return "Move it to MVP when you start building."
+            if project.repo:
+                return "Moves to MVP on the first commit after the contract."
+            return "Moves to MVP on its first commit once its repo is known."
         if project.mvp_date:
             return f"Moves to Delivered on {project.mvp_date:%b %d, %Y}."
         return "Set a delivery date and it will move itself."

@@ -1,0 +1,40 @@
+{#
+  One task's own window, fetched into the board's overlay. Saving and
+  deleting are live actions that swap the board under it; then it closes.
+#}
+{% from "pm/workspace/_task_fields.html" import task_fields with context %}
+{% from "pm/components/icon_button.html" import delete_icon with context %}
+<form method="POST" data-live-action action="{{ url_for('workspace.task_update', id=task.id) }}" class="space-y-4">
+    <input type="hidden" name="next" value="{{ next }}">
+    {{ task_fields(task) }}
+    {# Pinned to the foot of the window: an action is never at the bottom
+       of a scroll (catalogue rule). #}
+    <div class="sticky bottom-0 z-40 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 border-t border-white/10 flex flex-wrap items-center gap-3" style="background: var(--surface)">
+        <span class="text-xs text-surface-500">
+            Written {{ task.created_at | format_date }}{% if task.created_by %} by {{ task.created_by.full_name }}{% endif %}{% if task.is_done and task.done_at %}, done {{ task.done_at | format_date }}{% endif %}</span>
+        <button type="submit" class="ml-auto min-h-[44px] px-5 py-2.5 btn-brand text-sm font-medium rounded-xl">Save</button>
+    </div>
+</form>
+
+<div class="mt-5 pt-4 border-t border-white/10">
+    <div class="flex items-center gap-3 mb-2">
+        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Messages about it</p>
+        <a href="{{ url_for('workspace.message_new', about='task:' ~ task.id) }}"
+           class="ml-auto inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-white/10 text-xs text-surface-200 hover:bg-white/5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>
+            Message about it</a>
+    </div>
+    {% for row in about %}
+    <a href="{{ url_for('workspace.messages', id=row.conv.id) }}" class="block px-3 py-2 rounded-xl hover:bg-white/5">
+        <span class="block text-xs text-surface-400">{{ row.m.author.full_name if row.m.author else 'Somebody' }} in {{ row.name }} &middot; {{ row.m.created_at | ws_when }}</span>
+        <span class="block text-sm text-surface-100 line-clamp-2 break-words">{{ row.m.body or 'A link' }}</span>
+    </a>
+    {% else %}
+    <p class="text-sm text-surface-500">None yet</p>
+    {% endfor %}
+</div>
+
+<form method="POST" data-live-action action="{{ url_for('workspace.task_delete', id=task.id) }}" class="flex mt-4">
+    <input type="hidden" name="next" value="{{ next }}">
+    <span class="ml-auto">{{ delete_icon('Delete this task?', 'Delete this task') }}</span>
+</form>

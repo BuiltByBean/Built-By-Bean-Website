@@ -83,7 +83,9 @@ for rel in FILES:
         inner = ordering.split("order_by(", 1)[1]
         last = re.split(r",\s*", inner.rsplit(")", 1)[0].rsplit(")", 1)[0])[-1]
         check(f"{where} breaks ties on an id", ".id" in last, last.strip()[:70])
-check("and every paginated query was looked at", found >= 5, found)
+# Four since 2026-11-04: the projects list became the Workspace's cards,
+# which draw every project and page nothing.
+check("and every paginated query was looked at", found >= 4, found)
 
 
 print("\nFORTY FIVE EXPENSES, ALL ON ONE DAY:")
