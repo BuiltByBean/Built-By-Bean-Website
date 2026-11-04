@@ -116,6 +116,15 @@ appends grow a field without limit, and the old 6000 bound truncated a
 replace in silence, so a rewrite of a grown field would have deleted its
 tail while the record said it was in.
 
+`/api/guidance/search` is what a session reaches before it builds, and it takes
+words, not a phrase (`_search_stems`, `_search_rank`). It looked for the whole
+query as one string until 2026-11-04, so "sign a contract" answered "nothing in
+the catalogue" with e-signature right there, and that answer sends a session off
+to build it blind. Most of the words have to be there, a name counts for more
+than a body, and the best matches come whole up to `SEARCH_WHOLE`, because
+"dropdown" handed back 76,917 bytes. The rest come by name, and searching a slug
+brings that one back whole. `tools/test_guidance_search.py`.
+
 The catalogue grows itself through the same door. Everything a session
 sends becomes a `CatalogueProposal` (`pm/guidance_routes.py`, the
 `suggest_update` tool) and applies on arrival: append, create, replace

@@ -400,6 +400,8 @@ def _entry_text(entry):
         lines.extend("    " + l for l in entry["what_went_wrong"].splitlines())
     if entry.get("worth_copying"):
         lines.append(f"  The one worth copying: {entry['worth_copying']}")
+    if entry.get("cut"):
+        lines.append("  Left short to fit. Search for its slug to read it whole.")
     lines.append(f"  slug: {entry['slug']}")
     return "\n".join(lines)
 

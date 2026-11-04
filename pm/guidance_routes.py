@@ -180,21 +180,86 @@ def brief():
     return Response(rules_index(), mimetype="text/plain")
 
 
+# A session asks in its own words. This looked for those words as one phrase
+# until 2026-11-04, so "sign a contract" answered "nothing in the catalogue" with
+# e-signature sitting there, and the session built it blind. It also handed back
+# every match whole, 76,917 bytes for "dropdown", which is more than a tool's
+# answer can carry. Now the words are matched wherever they are, the best
+# matches come whole up to SEARCH_WHOLE and the rest by name.
+SEARCH_SKIP = frozenset(
+    "a about add an and are as at be build building by can do does for from get "
+    "how i in into is it make need of on or our should so that the their them to "
+    "up use using want we what when where which with would you your".split())
+SEARCH_RESULTS = 20
+SEARCH_WHOLE = 30000
+
+
+def _search_stems(phrase):
+    """The words that decide a search, each cut to what its forms share."""
+    words = [w for w in re.findall(r"[a-z0-9]+(?:[-'][a-z0-9]+)*", phrase)
+             if w not in SEARCH_SKIP]
+    stems = []
+    for word in words or [phrase]:
+        stem = re.sub(r"(ing|ed|es|s)$", "", word) if len(word) > 4 else word
+        if stem not in stems:
+            stems.append(stem)
+    return stems
+
+
+def _search_rank(feature, stems, phrase):
+    """(how many of the words it has, how much that says about it)."""
+    name = f"{feature.name or ''} {feature.slug or ''}".lower()
+    summary = (feature.summary or "").lower()
+    body = " ".join((feature.gold_standard_md or "", feature.pitfalls_md or "",
+                     feature.reference_project or "")).lower()
+    matched = score = 0
+    for stem in stems:
+        # From the start of a word and no further: "tax" is not in "syntax".
+        found = re.compile(r"\b" + re.escape(stem)).search
+        weight = 8 if found(name) else 3 if found(summary) else 1 if found(body) else 0
+        matched += bool(weight)
+        score += weight
+    if phrase in ((feature.name or "").lower(), (feature.slug or "").lower()):
+        score += 40
+    elif phrase in name:
+        score += 20
+    elif phrase in summary:
+        score += 6
+    elif phrase in body:
+        score += 2
+    return matched, score
+
+
 @guidance_bp.route("/search")
 def search():
     query = (request.args.get("q") or "").strip()
     if not query:
         return jsonify({"error": "give q"}), 400
-    like = f"%{query}%"
+    phrase = query.lower()
+    stems = _search_stems(phrase)
+    columns = (Feature.name, Feature.slug, Feature.summary, Feature.gold_standard_md,
+               Feature.pitfalls_md, Feature.reference_project)
     rows = (Feature.query.filter_by(is_active=True)
-            .filter(db.or_(Feature.name.ilike(like),
-                           Feature.summary.ilike(like),
-                           Feature.gold_standard_md.ilike(like),
-                           Feature.pitfalls_md.ilike(like),
-                           Feature.reference_project.ilike(like)))
-            .order_by(Feature.kind.desc(), Feature.sort_order)
-            .limit(20).all())
-    return jsonify({"query": query, "matches": [_entry(r) for r in rows]})
+            .filter(db.or_(*[c.ilike(f"%{s}%") for s in stems for c in columns]))
+            .all())
+    enough = (len(stems) + 1) // 2
+    ranked = []
+    for row in rows:
+        matched, score = _search_rank(row, stems, phrase)
+        if matched >= enough:
+            ranked.append((-matched, -score, row.kind != "feature",
+                           row.sort_order or 0, row.id, row))
+    ranked.sort(key=lambda r: r[:5])
+    matches, room = [], SEARCH_WHOLE
+    for *_, row in ranked[:SEARCH_RESULTS]:
+        entry = _entry(row)
+        size = len(entry["how_to_build"]) + len(entry["what_went_wrong"])
+        if matches and size > room:
+            entry.update(how_to_build="", what_went_wrong="", cut=True)
+        else:
+            room -= size
+        matches.append(entry)
+    return jsonify({"query": query, "matches": matches})
 
 
 @guidance_bp.route("/features/<slug>")
