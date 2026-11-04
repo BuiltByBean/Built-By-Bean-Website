@@ -50,6 +50,10 @@ def _set_flags(kind, rows):
     db.session.commit()
 
 
+def _day(d):
+    return f"{d:%b} {d.day}, {d.year}"
+
+
 def _plural(n, word):
     return f"{n:,} {word}{'' if n == 1 else 's'}"
 
@@ -204,7 +208,7 @@ def end_recurring(today=None):
         flags.append({"key": "all", "title": f"{_plural(len(unclaimed), 'recurring expense')} no bank line has claimed",
                       "detail": "Each is a charge counted twice, or paid on a card the board cannot see",
                       "link": link, "count": len(unclaimed),
-                      "items": [{"id": e.id, "date": e.date.isoformat(), "description": e.description or "",
+                      "items": [{"id": e.id, "date": e.date.isoformat(), "when": _day(e.date), "description": e.description or "",
                                  "amount": round(e.amount, 2), "business_id": e.business_id} for e in unclaimed]})
     _set_flags("recurring", flags)
     return (f"{len(ended)} recurring ended ({', '.join(ended[:5])})" if ended else "no recurring to end") + \
@@ -268,7 +272,7 @@ def receipts_without_line(today=None):
                 BankTransaction.occurred_on <= r.received_on + timedelta(days=NO_LINE_DAYS)).all()
             if any(abs(-l.amount - a) < 0.005 for l in near for a in amounts):
                 continue
-            items.append({"id": r.id, "date": r.received_on.isoformat(), "vendor": r.vendor or "",
+            items.append({"id": r.id, "date": r.received_on.isoformat(), "when": _day(r.received_on), "vendor": r.vendor or "",
                           "subject": r.subject or "", "amount": r.amount or max(amounts)})
     flags = []
     if items:

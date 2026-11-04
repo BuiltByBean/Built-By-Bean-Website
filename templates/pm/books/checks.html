@@ -30,7 +30,7 @@
                 <div class="w-full sm:w-auto sm:flex-1 min-w-0">
                     <p class="text-sm font-medium text-white break-words">
                         {% if kind == 'receipts' %}{{ i.vendor }} &middot; {{ i.subject }}{% else %}{{ i.description or 'Recurring expense' }}{% endif %}</p>
-                    <p class="text-xs text-surface-400 break-words">{{ i.date }}{% if kind == 'recurring' %} &middot; {{ business_names.get(i.business_id, '') }}{% endif %}</p>
+                    <p class="text-xs text-surface-400 break-words">{{ i.when or i.date }}{% if kind == 'recurring' %} &middot; {{ business_names.get(i.business_id, '') }}{% endif %}</p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0 ml-auto">
                     <span class="text-sm font-semibold text-white tabular-nums">${{ '{:,.2f}'.format(i.amount or 0) }}</span>
