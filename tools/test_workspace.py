@@ -392,7 +392,7 @@ with application.app_context():
     check("a second night changes nothing", (p.phase, p.build_started_on, p.go_live_date) == before)
     check("pure plan: delivered + live fills go-live",
           pa.plan(Project(phase="delivered", status="active", phase_locked=False, kind="client"), [], None, "https://x.com", today)
-          == [("go_live_date", today, "the first day the board saw x.com answer")])
+          == [("go_live_date", today, "x.com")])
     check("pure plan: contracted + live but no commit fills nothing",
           pa.plan(Project(phase="contracted", status="active", phase_locked=False, kind="client"), [], None, "https://x.com", today) == [])
     check("repo_of / url_of round trip", pa.repo_of(pa.url_of("mb/a.b-c")) == "mb/a.b-c" and pa.repo_of("https://github.com/mb/x.git") == "mb/x")
@@ -445,73 +445,91 @@ with application.app_context():
               pa.plan(db.session.get(Project, EHQ), [], date(2026, 2, 1), "https://ehq.example.com", today) == [])
 
     # ---------------------------------------------------------------- 9
-    print("9. Workforce folds into EntertainHQ, and the downgrade puts it back")
+    print("9. Workforce folds into Talent Booker, everything with it, and the downgrade puts it back")
+    from models import PlaybookStep, ProjectPlaybookStep
     kenali = Client(name="Kenali Kendrick", email="kk@example.test")
     db.session.add(kenali)
     db.session.flush()
+    tb = Project(name="Talent Booker", client_id=kenali.id, status="active", phase="in_production")
     wf = Project(name="Workforce: staff time clock, schedules, time off, pay rates and org chart",
                  client_id=kenali.id, status="active", phase="mvp", repo="mb/workforce")
-    pb = Playbook(slug="stripe-test", display_name="Stripe test")
-    db.session.add_all([wf, pb])
+    shared = Playbook(slug="railway-test", display_name="Railway test")
+    only_wf = Playbook(slug="stripe-test", display_name="Stripe test")
+    db.session.add_all([tb, wf, shared, only_wf])
     db.session.flush()
-    WF = wf.id
+    s1, s2 = PlaybookStep(playbook_id=shared.id, title="One"), PlaybookStep(playbook_id=shared.id, title="Two")
+    db.session.add_all([s1, s2])
+    db.session.flush()
+    TB, WF, KEN = tb.id, wf.id, kenali.id
+    tb_pp = ProjectPlaybook(project_id=TB, playbook_id=shared.id)
+    wf_pp = ProjectPlaybook(project_id=WF, playbook_id=shared.id)
+    wf_only = ProjectPlaybook(project_id=WF, playbook_id=only_wf.id)
+    db.session.add_all([tb_pp, wf_pp, wf_only])
+    db.session.flush()
+    # Talent Booker ticked step one; Workforce ticked steps one and two.
+    db.session.add_all([ProjectPlaybookStep(project_playbook_id=tb_pp.id, playbook_step_id=s1.id, done=True),
+                        ProjectPlaybookStep(project_playbook_id=wf_pp.id, playbook_step_id=s1.id, done=True),
+                        ProjectPlaybookStep(project_playbook_id=wf_pp.id, playbook_step_id=s2.id, done=True)])
     wtask = WorkTask(title="Clock-in screen", project_id=WF, created_by_id=BOSS)
-    db.session.add_all([wtask, ProjectPlaybook(project_id=WF, playbook_id=pb.id)])
+    tb_tile = AppLink(name="Talent Booker", url="https://talentbooker.example.com", project_id=TB)
+    wf_tile = AppLink(name="Workforce", url="https://workforce.example.com", project_id=WF)
+    db.session.add_all([wtask, tb_tile, wf_tile])
     db.session.flush()
-    msg = TeamMessage.query.first()
-    db.session.add(TeamMessageLink(message_id=msg.id, kind="project", record_id=WF))
+    db.session.add(TeamMessageLink(message_id=TeamMessage.query.first().id, kind="project", record_id=WF))
     db.session.commit()
-    WTASK, PB, KEN = wtask.id, pb.id, kenali.id
+    WTASK, TB_PP, WF_PP, WF_ONLY, S1, S2, WF_TILE = wtask.id, tb_pp.id, wf_pp.id, wf_only.id, s1.id, s2.id, wf_tile.id
+    with db.engine.begin() as conn:
+        conn.execute(text("INSERT INTO time_entries (project_id, client_id, date, hours, description, rate_type) "
+                          "VALUES (:p, :c, '2026-10-01', 2.0, 'clock-in work', 'mvp_build')"), {"p": WF, "c": KEN})
     ProjectFold.query.delete()
     db.session.commit()
     db.session.remove()
     FOLD = "d3b8f6a2c915_project_kinds_and_workforce_fold.py"
-    migrate("upgrade", FOLD)
-    db.session.remove()
-    fold = ProjectFold.query.one()
-    check("nothing with money on it: Workforce is deleted", db.session.get(Project, WF) is None and fold.outcome == "deleted",
-          fold.outcome)
-    check("its task moved to EntertainHQ", db.session.get(WorkTask, WTASK).project_id == EHQ)
-    check("its playbook checklist moved", ProjectPlaybook.query.filter_by(project_id=EHQ, playbook_id=PB).count() == 1)
-    check("messages about it now link EntertainHQ",
-          TeamMessageLink.query.filter_by(kind="project", record_id=EHQ).count() >= 1
-          and TeamMessageLink.query.filter_by(kind="project", record_id=WF).count() == 0)
-    check("the record keeps the row whole", "Workforce" in fold.project_json and str(KEN) in fold.project_json)
-    db.session.remove()
-    migrate("downgrade", FOLD)
-    db.session.remove()
-    with db.engine.connect() as conn:
-        back = conn.execute(text("SELECT name, client_id, repo, status FROM projects WHERE id = :i"), {"i": WF}).first()
-        task_back = conn.execute(text("SELECT project_id FROM work_tasks WHERE id = :i"), {"i": WTASK}).scalar()
-        pb_back = conn.execute(text("SELECT COUNT(*) FROM project_playbooks WHERE project_id = :i"), {"i": WF}).scalar()
-    check("downgrade: Workforce is back as it was", back is not None and back[1] == KEN
-          and back[2] == "mb/workforce" and back[3] == "active", back)
-    check("downgrade: its task and checklist went back", task_back == WF and pb_back == 1)
-    check("downgrade: the kind columns are gone", "kind" not in {c["name"] for c in inspect(db.engine).get_columns("projects")})
 
-    # Money on it this time: a time entry. Nothing billed may move clients.
-    with db.engine.begin() as conn:
-        conn.execute(text("INSERT INTO time_entries (project_id, client_id, date, hours, description, rate_type) "
-                          "VALUES (:p, :c, '2026-10-01', 2.0, 'clock-in work', 'mvp_build')"),
-                     {"p": WF, "c": KEN})
+    def state():
+        with db.engine.connect() as conn:
+            q = lambda sql, **kw: conn.execute(text(sql), kw).fetchall()  # noqa: E731
+            return {
+                "wf": q("SELECT id, name, client_id, repo, status FROM projects WHERE id = :i", i=WF),
+                "task": q("SELECT project_id FROM work_tasks WHERE id = :i", i=WTASK)[0][0],
+                "time": q("SELECT project_id, client_id FROM time_entries WHERE description = 'clock-in work'")[0],
+                "only": q("SELECT project_id FROM project_playbooks WHERE id = :i", i=WF_ONLY)[0][0],
+                "wf_pp": q("SELECT project_id FROM project_playbooks WHERE id = :i", i=WF_PP),
+                "tb_ticks": sorted(r[0] for r in q("SELECT playbook_step_id FROM project_playbook_steps "
+                                                   "WHERE project_playbook_id = :i", i=TB_PP)),
+                "wf_ticks": sorted(r[0] for r in q("SELECT playbook_step_id FROM project_playbook_steps "
+                                                   "WHERE project_playbook_id = :i", i=WF_PP)),
+                "tile": q("SELECT project_id, board_group FROM app_links WHERE id = :i", i=WF_TILE)[0],
+                "links_wf": q("SELECT COUNT(*) FROM team_message_links WHERE kind = 'project' AND record_id = :i",
+                              i=WF)[0][0],
+            }
+
+    before = state()
     migrate("upgrade", FOLD)
     db.session.remove()
+    after = state()
     fold = ProjectFold.query.one()
-    with db.engine.connect() as conn:
-        entry_project = conn.execute(text("SELECT project_id FROM time_entries WHERE description = 'clock-in work'")).scalar()
-    check("with time on it, Workforce is archived, not deleted",
-          fold.outcome == "archived" and db.session.get(Project, WF).status == "archived", fold.outcome)
-    check("and the time stays on Workforce, under Kenali", entry_project == WF)
-    check("while the work still moved", db.session.get(WorkTask, WTASK).project_id == EHQ)
-    check("the record says what stayed", "time_entries" in fold.kept_json, fold.kept_json)
+    check("Workforce is gone", after["wf"] == [] and fold.outcome == "deleted", (after["wf"], fold.outcome))
+    check("its task is Talent Booker's", after["task"] == TB)
+    check("its time is Talent Booker's and still Kenali's", tuple(after["time"]) == (TB, KEN), after["time"])
+    check("a checklist only it had moved", after["only"] == TB)
+    check("a checklist both had: Talent Booker took the tick it lacked",
+          after["tb_ticks"] == sorted([S1, S2]) and after["wf_pp"] == [], after)
+    check("a second tile is let go, not doubled, in the half it was in",
+          after["tile"][0] is None and after["tile"][1] == "client", after["tile"])
+    check("messages about it now link Talent Booker", after["links_wf"] == 0)
     page = c.get("/admin/workspace/projects").get_data(as_text=True)
-    check("an archived Workforce is off the work list", "Workforce" not in page[page.index('data-live="results"'):])
+    check("Workforce is off the projects list", "Workforce" not in page[page.index('data-live="results"'):])
     db.session.remove()
     migrate("downgrade", FOLD)
     db.session.remove()
-    with db.engine.connect() as conn:
-        st = conn.execute(text("SELECT status FROM projects WHERE id = :i"), {"i": WF}).scalar()
-    check("downgrade: the archived one is active again", st == "active")
+    back = state()
+    check("downgrade: Workforce is back as it was",
+          back["wf"] and back["wf"][0][2] == KEN and back["wf"][0][3] == "mb/workforce" and back["wf"][0][4] == "active",
+          back["wf"])
+    for key in ("task", "time", "only", "tb_ticks", "wf_ticks", "tile", "links_wf"):
+        check(f"downgrade: {key} is back", back[key] == before[key], (key, before[key], back[key]))
+    check("downgrade: the kind columns are gone", "kind" not in {c["name"] for c in inspect(db.engine).get_columns("projects")})
     migrate("upgrade", FOLD)
     db.session.remove()
 

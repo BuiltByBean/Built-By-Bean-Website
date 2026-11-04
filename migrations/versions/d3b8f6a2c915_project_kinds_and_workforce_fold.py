@@ -7,18 +7,20 @@ is not its own project its built into entertain hq".
 
 - `projects.kind` and `projects.stage`. The kinds he named are written by NAME
   (only where nothing is set), so on any other database nothing is touched.
-- The fold. Matched by name, both exactly once, or nothing happens. What is
-  only work moves to EntertainHQ: tasks, playbook checklists EntertainHQ does
-  not already carry, and messages linked to the project. Everything else that
-  points at Workforce (time, invoices, expenses, tickets, contracts, documents,
-  a tile when EntertainHQ already has one, any table this does not know) stays,
-  because moving it would move a client's money onto another client. If
-  nothing stays, Workforce is deleted; otherwise it is archived. Either way
-  `project_folds` keeps the row whole and every id moved, and the downgrade
-  puts it all back. What happened is printed in the deploy log.
+- The fold. Michael: "workforce was never ever its own project it was a
+  feature added to talent booker". Matched by name (Workforce..., and Talent
+  Booker), both exactly once, or nothing happens. Both are Kenali Kendrick's,
+  so EVERYTHING on Workforce moves to Talent Booker, money included, and no
+  client's figures change: every table that points at projects, read from the
+  database itself, plus messages linked to it. A playbook Talent Booker already
+  carries takes Workforce's ticked steps it lacks. A My Apps tile is detached
+  rather than doubled when Talent Booker has its own (one card per app). Then
+  Workforce is deleted. `project_folds` keeps the row whole and every id and
+  row touched, the downgrade puts all of it back, and the deploy log says what
+  moved.
 
 Revision ID: d3b8f6a2c915
-Revises: c6d2a8f41e97
+Revises: d1e7b4a92c05
 Create Date: 2026-11-04
 """
 import json
@@ -28,7 +30,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "d3b8f6a2c915"
-down_revision = "c6d2a8f41e97"
+down_revision = "d1e7b4a92c05"
 branch_labels = None
 depends_on = None
 
@@ -64,72 +66,92 @@ def _plain(v):
     return v
 
 
+def _ids(bind, sql, **kw):
+    return [r[0] for r in bind.execute(sa.text(sql), kw)]
+
+
+def _in(ids):
+    return ",".join(str(int(i)) for i in ids)
+
+
 def _fold(bind):
-    rows = bind.execute(sa.text("SELECT id, name, status FROM projects")).fetchall()
-    workforce = [r for r in rows if (r.name or "").lower().startswith("workforce")]
-    target = [r for r in rows if (r.name or "").strip().lower() == "entertainhq"]
+    rows = bind.execute(sa.text("SELECT id, name FROM projects")).fetchall()
+    workforce = [r for r in rows if (r.name or "").strip().lower().startswith("workforce")]
+    target = [r for r in rows if (r.name or "").strip().lower() == "talent booker"]
     if len(workforce) != 1 or len(target) != 1 or workforce[0].id == target[0].id:
-        print("project fold: Workforce and EntertainHQ not both found once; nothing folded")
+        print("project fold: Workforce and Talent Booker not both found once; nothing folded")
         return
     wid, tid = workforce[0].id, target[0].id
-    moved, kept = {}, {}
+    moved, merged, detached = {}, [], []
 
-    def take(table, column, ids):
-        if ids:
-            bind.execute(sa.text(f"UPDATE {table} SET {column} = :t WHERE id IN ({','.join(str(i) for i in ids)})"),
-                         {"t": tid})
-            moved[table] = moved.get(table, []) + ids
-
-    work = {("work_tasks", "project_id"), ("project_playbooks", "project_id"), ("app_links", "project_id")}
     for table, column in _fks_to_projects():
-        ids = [r[0] for r in bind.execute(sa.text(f"SELECT id FROM {table} WHERE {column} = :w"), {"w": wid})]
+        ids = _ids(bind, f"SELECT id FROM {table} WHERE {column} = :w", w=wid)
         if not ids:
             continue
-        if (table, column) == ("work_tasks", "project_id"):
-            take(table, column, ids)
-        elif (table, column) == ("project_playbooks", "project_id"):
-            have = {r[0] for r in bind.execute(sa.text(
-                "SELECT playbook_id FROM project_playbooks WHERE project_id = :t"), {"t": tid})}
-            mine = bind.execute(sa.text(
-                f"SELECT id, playbook_id FROM project_playbooks WHERE id IN ({','.join(map(str, ids))})")).fetchall()
-            take(table, column, [r.id for r in mine if r.playbook_id not in have])
-            dup = [r.id for r in mine if r.playbook_id in have]
-            if dup:
-                kept[table] = len(dup)
-        elif (table, column) == ("app_links", "project_id"):
-            # One card per app on My Apps: EntertainHQ's own tile wins, and a
-            # second tile on it would make register_app edit the wrong one.
-            if bind.execute(sa.text("SELECT COUNT(*) FROM app_links WHERE project_id = :t"), {"t": tid}).scalar():
-                kept[table] = len(ids)
-            else:
-                take(table, column, ids)
-        else:
-            kept[table] = len(ids)
-        work.discard((table, column))
+        if table == "project_playbooks":
+            have = dict(bind.execute(sa.text(
+                "SELECT playbook_id, id FROM project_playbooks WHERE project_id = :t"), {"t": tid}).fetchall())
+            for pp in bind.execute(sa.text(
+                    f"SELECT * FROM project_playbooks WHERE id IN ({_in(ids)})")).mappings().fetchall():
+                if pp["playbook_id"] not in have:
+                    bind.execute(sa.text("UPDATE project_playbooks SET project_id = :t WHERE id = :i"),
+                                 {"t": tid, "i": pp["id"]})
+                    moved.setdefault(table, []).append(pp["id"])
+                    continue
+                # Talent Booker carries this playbook already: it takes the
+                # ticks it lacks, and the rest go with the copy.
+                into = have[pp["playbook_id"]]
+                taken = set(_ids(bind, "SELECT playbook_step_id FROM project_playbook_steps "
+                                       "WHERE project_playbook_id = :i", i=into))
+                steps = bind.execute(sa.text("SELECT * FROM project_playbook_steps WHERE project_playbook_id = :i"),
+                                     {"i": pp["id"]}).mappings().fetchall()
+                move = [st["id"] for st in steps if st["playbook_step_id"] not in taken]
+                drop = [{k: _plain(v) for k, v in st.items()} for st in steps if st["playbook_step_id"] in taken]
+                if move:
+                    bind.execute(sa.text(f"UPDATE project_playbook_steps SET project_playbook_id = :i "
+                                         f"WHERE id IN ({_in(move)})"), {"i": into})
+                bind.execute(sa.text("DELETE FROM project_playbook_steps WHERE project_playbook_id = :i"),
+                             {"i": pp["id"]})
+                bind.execute(sa.text("DELETE FROM project_playbooks WHERE id = :i"), {"i": pp["id"]})
+                merged.append({"pp": {k: _plain(v) for k, v in pp.items()}, "moved_steps": move,
+                               "dropped_steps": drop})
+            continue
+        if table == "app_links" and bind.execute(sa.text(
+                "SELECT COUNT(*) FROM app_links WHERE project_id = :t"), {"t": tid}).scalar():
+            # One card per app on My Apps: Talent Booker's own tile stays the
+            # card, and Workforce's is let go in the half it was shown in.
+            for tile_id, group in bind.execute(sa.text(
+                    f"SELECT id, board_group FROM app_links WHERE id IN ({_in(ids)})")).fetchall():
+                bind.execute(sa.text("UPDATE app_links SET project_id = NULL, board_group = :g WHERE id = :i"),
+                             {"g": group or "client", "i": tile_id})
+                detached.append({"id": tile_id, "board_group": group})
+            continue
+        bind.execute(sa.text(f"UPDATE {table} SET {column} = :t WHERE id IN ({_in(ids)})"), {"t": tid})
+        moved[table] = moved.get(table, []) + ids
 
     if "team_message_links" in _tables():
-        ids = [r[0] for r in bind.execute(sa.text(
-            "SELECT id FROM team_message_links WHERE kind = 'project' AND record_id = :w"), {"w": wid})]
+        ids = _ids(bind, "SELECT id FROM team_message_links WHERE kind = 'project' AND record_id = :w", w=wid)
         if ids:
-            bind.execute(sa.text(f"UPDATE team_message_links SET record_id = :t WHERE id IN ({','.join(map(str, ids))})"),
+            bind.execute(sa.text(f"UPDATE team_message_links SET record_id = :t WHERE id IN ({_in(ids)})"),
                          {"t": tid})
             moved["team_message_links"] = ids
 
     project = dict(bind.execute(sa.text("SELECT * FROM projects WHERE id = :w"), {"w": wid}).mappings().first())
-    outcome = "archived" if kept else "deleted"
-    if kept:
-        bind.execute(sa.text("UPDATE projects SET status = 'archived' WHERE id = :w"), {"w": wid})
-    else:
-        bind.execute(sa.text("DELETE FROM projects WHERE id = :w"), {"w": wid})
+    bind.execute(sa.text("DELETE FROM projects WHERE id = :w"), {"w": wid})
+    record = dict(moved)
+    record["_merged_playbooks"] = merged
+    record["_detached_tiles"] = detached
     bind.execute(sa.text(
         "INSERT INTO project_folds (from_project_id, into_project_id, outcome, moved_json, kept_json, "
-        "project_json, reason, created_at) VALUES (:f, :t, :o, :m, :k, :p, :r, :c)"),
-        {"f": wid, "t": tid, "o": outcome, "m": json.dumps(moved), "k": json.dumps(kept),
+        "project_json, reason, created_at) VALUES (:f, :t, 'deleted', :m, '{}', :p, :r, :c)"),
+        {"f": wid, "t": tid, "m": json.dumps(record),
          "p": json.dumps({k: _plain(v) for k, v in project.items()}),
-         "r": "Michael, 2026-11-04: workforce is not its own project its built into entertain hq",
+         "r": "Michael, 2026-11-04: workforce was never ever its own project it was a feature added to "
+              "talent booker which is entertainhq",
          "c": datetime.now(timezone.utc).replace(tzinfo=None)})
-    print(f"project fold: Workforce ({wid}) into EntertainHQ ({tid}): {outcome}; "
-          f"moved {json.dumps({k: len(v) for k, v in moved.items()})}; kept {json.dumps(kept)}")
+    print(f"project fold: Workforce ({wid}) into Talent Booker ({tid}): moved "
+          f"{json.dumps({k: len(v) for k, v in moved.items()})}; playbooks merged {len(merged)}; "
+          f"tiles let go {len(detached)}")
 
 
 def upgrade():
@@ -166,28 +188,41 @@ def upgrade():
         _fold(bind)
 
 
+def _insert(bind, table, row):
+    cols = _columns(table)
+    row = {k: v for k, v in row.items() if k in cols}
+    if row:
+        bind.execute(sa.text(f"INSERT INTO {table} ({', '.join(row)}) VALUES ({', '.join(':' + k for k in row)})"),
+                     row)
+
+
 def downgrade():
     bind = op.get_bind()
     if "project_folds" in _tables():
         for fold in bind.execute(sa.text("SELECT * FROM project_folds ORDER BY id DESC")).mappings().fetchall():
-            row = json.loads(fold["project_json"] or "{}")
             wid = fold["from_project_id"]
-            cols = _columns("projects")
-            row = {k: v for k, v in row.items() if k in cols}
-            if fold["outcome"] == "deleted" and row and not bind.execute(
-                    sa.text("SELECT COUNT(*) FROM projects WHERE id = :w"), {"w": wid}).scalar():
-                names = ", ".join(row)
-                binds = ", ".join(f":{k}" for k in row)
-                bind.execute(sa.text(f"INSERT INTO projects ({names}) VALUES ({binds})"), row)
+            row = json.loads(fold["project_json"] or "{}")
+            if row and not bind.execute(sa.text("SELECT COUNT(*) FROM projects WHERE id = :w"), {"w": wid}).scalar():
+                _insert(bind, "projects", row)
             elif row.get("status"):
-                bind.execute(sa.text("UPDATE projects SET status = :s WHERE id = :w"),
-                             {"s": row["status"], "w": wid})
-            for table, ids in json.loads(fold["moved_json"] or "{}").items():
+                bind.execute(sa.text("UPDATE projects SET status = :s WHERE id = :w"), {"s": row["status"], "w": wid})
+            record = json.loads(fold["moved_json"] or "{}")
+            for item in record.pop("_merged_playbooks", []):
+                _insert(bind, "project_playbooks", item["pp"])
+                if item["moved_steps"]:
+                    bind.execute(sa.text(f"UPDATE project_playbook_steps SET project_playbook_id = :i "
+                                         f"WHERE id IN ({_in(item['moved_steps'])})"), {"i": item["pp"]["id"]})
+                for st in item["dropped_steps"]:
+                    _insert(bind, "project_playbook_steps", st)
+            for tile in record.pop("_detached_tiles", []):
+                bind.execute(sa.text("UPDATE app_links SET project_id = :w, board_group = :g WHERE id = :i"),
+                             {"w": wid, "g": tile["board_group"], "i": tile["id"]})
+            fks = dict(_fks_to_projects())
+            for table, ids in record.items():
                 if not ids or table not in _tables():
                     continue
-                column = "record_id" if table == "team_message_links" else "project_id"
-                bind.execute(sa.text(f"UPDATE {table} SET {column} = :w WHERE id IN ({','.join(map(str, ids))})"),
-                             {"w": wid})
+                column = "record_id" if table == "team_message_links" else fks.get(table, "project_id")
+                bind.execute(sa.text(f"UPDATE {table} SET {column} = :w WHERE id IN ({_in(ids)})"), {"w": wid})
         op.drop_table("project_folds")
     have = _columns("projects")
     with op.batch_alter_table("projects") as batch:

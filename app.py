@@ -1373,8 +1373,13 @@ def create_app():
         # to this project (Michael, 2026-11-04).
         from pm import workspace_routes as ws
         from models import TICKET_CLOSED_STATUSES
-        open_tickets = project.tickets.filter(
-            Ticket.status.notin_(TICKET_CLOSED_STATUSES)).count()
+        # Counts exactly what the tile opens: the support board's Open tab
+        # for this client (catalogue rule, a badge counts only what its page
+        # renders). The board filters by client, not by project.
+        open_tickets = Ticket.query.filter(
+            Ticket.client_id == project.client_id,
+            Ticket.status.notin_(TICKET_CLOSED_STATUSES),
+            Ticket.out_of_scope.is_(False)).count()
         return render_template("pm/projects/detail.html",
             project=project, applied_playbooks=applied, available_playbooks=available,
             unplaybooked=unplaybooked,

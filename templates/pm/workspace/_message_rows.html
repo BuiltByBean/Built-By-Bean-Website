@@ -10,7 +10,7 @@
     {{ avatar(m.author, 'w-8 h-8 text-[10px]') }}
     <div class="min-w-0 max-w-[85%] sm:max-w-[70%] flex flex-col {{ 'items-end' if row.mine else 'items-start' }}">
         <span class="px-1 mb-1 text-[11px] text-surface-500">
-            {%- if not row.mine %}{{ m.author.full_name if m.author else 'Somebody' }} &middot; {% endif %}{{ m.created_at | ws_when }}</span>
+            {%- if not row.mine %}{{ m.author.full_name if m.author else 'Somebody' }}, {% endif %}{{ m.created_at | ws_when }}</span>
         {% if m.deleted_at %}
         <p class="px-4 py-2.5 rounded-2xl border border-white/10 text-sm italic text-surface-500">This message was deleted.</p>
         {% else %}
@@ -20,17 +20,26 @@
                       {{ 'bg-brand-600 text-white rounded-br-md' if row.mine else 'bg-surface-800 text-surface-100 rounded-bl-md' }}">{{ m.body }}</p>
             {% endif %}
             {% if row.mine %}
-            <button type="button" aria-label="Delete this message" title="Delete this message"
+            {# Confirmed in place: the bin arms, and only the armed button
+               deletes. Always on screen, never a hover-only control. #}
+            <span x-data="{ armed: false }" @click.outside="armed = false" @keydown.escape="armed = false"
+                  class="shrink-0 inline-flex items-center gap-1">
+            <button type="button" x-show="armed" x-cloak
                     @click="remove('{{ url_for('workspace.message_delete', id=m.conversation_id, mid=m.id) }}', {{ m.id }})"
-                    class="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-xl text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100">
+                    class="min-h-[44px] px-3 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-medium">Delete</button>
+            <button type="button" x-show="armed" x-cloak @click="armed = false"
+                    class="min-h-[44px] px-3 rounded-xl border border-white/10 text-surface-300 text-xs font-medium hover:bg-white/5">Cancel</button>
+            <button type="button" x-show="!armed" @click="armed = true" aria-label="Delete this message" title="Delete this message"
+                    class="w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
             </button>
+            </span>
             {% endif %}
         </div>
         {% for link in row.links %}
         {% if link.url %}
         <a href="{{ link.url }}"
-           class="mt-1.5 inline-flex items-center gap-2 max-w-full min-h-[36px] px-3 py-1.5 rounded-xl border border-white/10 bg-surface-800/60 text-xs hover:border-brand-500/40 transition-colors">
+           class="mt-1.5 inline-flex items-center gap-2 max-w-full min-h-[44px] px-3 py-1.5 rounded-xl border border-white/10 bg-surface-800/60 text-xs hover:border-brand-500/40 transition-colors">
             <span class="text-surface-400 shrink-0">{{ link.type }}</span>
             <span class="text-white truncate">{{ link.label }}</span>
             <svg class="w-3.5 h-3.5 shrink-0 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>

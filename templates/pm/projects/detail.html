@@ -182,15 +182,23 @@
     </div>
     {% endif %}
 
-    {# What the board read for itself (project_autofill, nightly), said
-       where it happened so a date nobody typed is never a mystery. #}
+    {# What the board read for itself (project_autofill, nightly), as facts in
+       the same shape as the dates above: the first commit after the contract,
+       and the domain whose first answer set the go-live date. #}
     {% if project.build_started_on or project.go_live_source %}
-    <div class="mt-4 pt-4 border-t border-white/10 space-y-1">
+    <div class="mt-4 pt-4 border-t border-white/10 flex flex-wrap items-center gap-4">
         {% if project.build_started_on %}
-        <p class="text-xs text-surface-400">Build started {{ project.build_started_on | format_date }}, the first commit after the contract{% if project.repo %} on {{ project.repo }}{% endif %}.</p>
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-400 uppercase">First commit:</span>
+            <span class="text-sm font-medium text-white">{{ project.build_started_on | format_date }}</span>
+        </div>
         {% endif %}
-        {% if project.go_live_source %}
-        <p class="text-xs text-surface-400">Go-live {{ project.go_live_date | format_date }}: {{ project.go_live_source }}.</p>
+        {% if project.go_live_source and project.go_live_date %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-surface-400 uppercase">Live on:</span>
+            <span class="text-sm font-medium text-white">{{ project.go_live_source }}</span>
+            <span class="text-sm text-surface-400">{{ project.go_live_date | format_date }}</span>
+        </div>
         {% endif %}
     </div>
     {% endif %}
@@ -259,7 +267,7 @@
 {% set tile = 'glass-card p-4 block hover:border-brand-500/40 transition-colors' %}
 {% set build = project.is_client_build %}
 <div class="grid grid-cols-2 {{ ('lg:grid-cols-4' if time_tracking else 'lg:grid-cols-3') if build else '' }} gap-4 mb-6">
-    <a href="{{ url_for('pm.tickets_list', client_id=project.client_id) }}" class="{{ tile }}">
+    <a href="{{ url_for('pm.tickets_list', client_id=project.client_id, status='open') }}" class="{{ tile }}">
         <p class="text-xs font-medium text-surface-400 mb-1">Open tickets</p>
         <p class="text-lg font-bold text-white">{{ open_tickets | commas }}</p>
     </a>
@@ -305,7 +313,7 @@
     <div x-show="part === 'messages'" x-cloak class="glass-card p-2">
         {% for row in about %}
         <a href="{{ url_for('workspace.messages', id=row.conv.id) }}" class="block px-3 py-2.5 rounded-xl hover:bg-white/5">
-            <span class="block text-xs text-surface-400">{{ row.m.author.full_name if row.m.author else 'Somebody' }} in {{ row.name }} &middot; {{ row.m.created_at | ws_when }}</span>
+            <span class="block text-xs text-surface-400">{{ row.m.author.full_name if row.m.author else 'Somebody' }} in {{ row.name }}, {{ row.m.created_at | ws_when }}</span>
             <span class="block text-sm text-surface-100 line-clamp-2 break-words">{{ row.m.body or 'A link' }}</span>
         </a>
         {% else %}

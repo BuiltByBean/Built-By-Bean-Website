@@ -240,7 +240,8 @@ def plan(project, links, first_commit=None, live=None, today=None):
             out.append(("build_started_on", first_commit, "first commit"))
     phase_after = "mvp" if any(f == "phase" for f, _, _ in out) else project.phase
     if not project.go_live_date and phase_after in LIVE_FROM and live:
-        out.append(("go_live_date", today, f"the first day the board saw {host_of(live)} answer"))
+        # The domain whose first answer set the date; the page shows it as a fact.
+        out.append(("go_live_date", today, host_of(live)))
     return out
 
 

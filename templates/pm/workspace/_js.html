@@ -44,6 +44,36 @@
         };
     };
 
+    /* A chat's people, saved without a reload. The same chat answers: its
+       head and the list's rows are brought up to date where they stand. A new
+       chat answers (a pair grown into a group, or leaving one): the shell's
+       own swap opens it, which replaces only the chat. */
+    window.wsPeople = function (form) {
+        fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin',
+                             headers: { 'X-Requested-With': 'fetch' } })
+            .then((r) => { if (!r.ok) throw new Error(r.status); return r.text().then((html) => ({ url: r.url, html })); })
+            .then(({ url, html }) => {
+                const there = new URL(url, location.href);
+                if (there.pathname + there.search !== location.pathname + location.search) {
+                    const a = document.createElement('a');
+                    a.href = there.href;
+                    document.getElementById('pm-main').appendChild(a);
+                    a.click();
+                    a.remove();
+                    return;
+                }
+                const fresh = new DOMParser().parseFromString(html, 'text/html');
+                const chat = document.querySelector('[data-panel="ws-chat"]');
+                const next = fresh.querySelector('[data-panel="ws-chat"]');
+                if (chat && next) chat.replaceWith(document.adoptNode(next));
+                const rows = document.querySelector('[data-conv-rows]');
+                const nextRows = fresh.querySelector('[data-conv-rows]');
+                if (rows && nextRows && rows.innerHTML !== nextRows.innerHTML) rows.innerHTML = nextRows.innerHTML;
+                window.bbbSwapLive(html, ['flash']);
+            })
+            .catch(() => form.submit());
+    };
+
     /* A segmented switch: one mark slides to the option picked. Its state is
        its own and it sits in no swapped region, so a pick never redraws it;
        a filter's pick then asks for the rows (liveFilter) and only those move. */

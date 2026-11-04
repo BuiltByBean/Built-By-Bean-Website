@@ -3997,14 +3997,13 @@ class WorkTask(db.Model):
 class ProjectFold(db.Model):
     """One project folded into another, kept whole so it can be put back.
 
-    Michael, 2026-11-04: "workforce is not its own project its built into
-    entertain hq". What is only work (tasks, playbook checklists, the My Apps
-    tile, messages) moves to the project it belongs to; anything that carries
-    money, a contract or a client's ticket stays where it was billed, on the
-    folded project archived, because moving it moves revenue between clients.
-    `moved_json` is {table: [ids]}, `kept_json` is {table: count}, and
-    `project_json` is the folded project's row as it was, so the downgrade
-    and a person reading this can see exactly what happened.
+    Michael, 2026-11-04: "workforce was never ever its own project it was a
+    feature added to talent booker which is entertainhq". Everything on the
+    folded project moves to the one it belongs to (both Kenali's, so no
+    client's figures change), and the folded one is deleted. `moved_json` is
+    {table: [ids]} plus `_merged_playbooks` (a checklist the target already
+    had: its row and step rows) and `_detached_tiles`; `project_json` is the
+    folded project's row as it was. The downgrade puts every piece back.
     """
 
     __tablename__ = "project_folds"

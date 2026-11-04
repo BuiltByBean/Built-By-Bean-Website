@@ -110,30 +110,37 @@
 <div x-data='wsTaskWindow({ windowUrl: {{ url_for("workspace.task_window", id=0) | tojson }} })'
      @ws-open-task.window="show($event.detail)" @ws-new-task.window="show(null)"
      @keydown.escape.window="open && close()">
+    {# A new task's window: the same header row as a task's own, with Add
+       task beside Close, reaching the form by its id. #}
     <template x-ref="blank">
-        <form method="POST" data-live-action action="{{ url_for('workspace.task_create') }}" class="space-y-4">
-            <input type="hidden" name="next" value="{{ request.full_path }}">
-            {{ task_fields(none, project_id) }}
-            <div class="sticky bottom-0 z-40 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 border-t border-white/10 flex" style="background: var(--surface)">
-                <button type="submit" class="ml-auto min-h-[44px] px-5 py-2.5 btn-brand text-sm font-medium rounded-xl">Add task</button>
-            </div>
-        </form>
+        <div class="shrink-0 flex items-center gap-2 px-4 py-3 border-b border-white/10">
+            <p class="mr-auto text-sm font-semibold text-white">New task</p>
+            <button type="submit" form="ws-task-new" class="min-h-[44px] px-5 btn-brand text-sm font-medium rounded-xl">Add task</button>
+            <button type="button" @click="close()" aria-label="Close"
+                    class="w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-400 hover:text-white hover:bg-white/5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="min-h-0 overflow-y-auto p-4 sm:p-5">
+            <form id="ws-task-new" method="POST" data-live-action action="{{ url_for('workspace.task_create') }}">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                {{ task_fields(none, project_id) }}
+            </form>
+        </div>
     </template>
     <div x-show="open" x-cloak role="dialog" aria-modal="true" aria-label="Task"
          class="fixed inset-0 z-50 flex items-stretch sm:items-start justify-center sm:p-4 sm:pt-16 lg:pl-[260px]">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="close()"></div>
         <div class="relative w-full sm:max-w-3xl flex flex-col max-h-[100dvh] sm:max-h-[85vh] sm:rounded-2xl border border-white/10 shadow-2xl"
              style="background: var(--surface)">
-            <div class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/10">
-                <p class="text-sm font-semibold text-white">Task</p>
+            <div x-show="loading" class="p-6 flex items-center justify-between" aria-label="Loading">
+                <span class="w-6 h-6 rounded-full border-2 border-white/15 border-t-brand-400 animate-spin"></span>
                 <button type="button" @click="close()" aria-label="Close"
-                        class="ml-auto w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-400 hover:text-white hover:bg-white/5">
+                        class="w-11 h-11 inline-flex items-center justify-center rounded-xl text-surface-400 hover:text-white hover:bg-white/5">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
-            <div x-show="loading" class="p-6 flex justify-center" aria-label="Loading">
-                <span class="w-6 h-6 rounded-full border-2 border-white/15 border-t-brand-400 animate-spin"></span></div>
-            <div x-ref="body" class="min-h-0 overflow-y-auto p-4 sm:p-5"></div>
+            <div x-ref="body" class="flex-1 min-h-0 flex flex-col"></div>
         </div>
     </div>
 </div>

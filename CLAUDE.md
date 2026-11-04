@@ -406,11 +406,13 @@ The Projects tab's Work view is Client builds then My products; Personal and
 Archived are views of their own. A card wears its My Apps tile's icon, and a
 project with no tile finds its one unattached tile by repo, name or domain
 (`project_autofill.tile_for`), which the night then attaches without moving the
-tile's half of My Apps. Migration `d3b8f6a2c915` folded Workforce into
-EntertainHQ ("workforce is not its own project its built into entertain hq"):
-the work moved, anything billed, signed or a client's ticket stayed on Workforce
-archived, and `ProjectFold` keeps the row and every id so the downgrade puts it
-back. The deploy log says which.
+tile's half of My Apps. Migration `d3b8f6a2c915` folded Workforce into Talent
+Booker ("workforce was never ever its own project it was a feature added to
+talent booker"): both are Kenali's, so everything on it moved, money included,
+and no client's figures changed. A checklist Talent Booker already had takes the
+ticks it lacked; a second My Apps tile is let go rather than doubled. Workforce
+is deleted, and `ProjectFold` keeps its row and every id and row touched, so the
+downgrade puts it all back. The deploy log says what moved.
 
 **A tab press swaps the panel, not the page.** Keeping the tab row was not
 enough: every press still rebuilt the banner and `#pm-main`, whose entry

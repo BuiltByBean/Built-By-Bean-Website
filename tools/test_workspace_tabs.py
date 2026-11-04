@@ -141,7 +141,8 @@ READ = """() => {
 
 def press_tab(page, key):
     page.evaluate(f"""() => document.querySelector('[data-keep="workspace-tabs"] [data-tab="{key}"]').click()""")
-    page.wait_for_timeout(1200)
+    page.wait_for_function(f"() => location.pathname.startsWith('/admin/workspace/{key}')", timeout=10000)
+    page.wait_for_timeout(500)
 
 
 def run(width, height):
@@ -203,7 +204,9 @@ def run(width, height):
         page.wait_for_timeout(400)
         page.evaluate(STAMP)
         page.evaluate(f"""() => document.querySelector('a[href="/admin/workspace/projects/{PROJECT}"]').click()""")
-        page.wait_for_timeout(1200)
+        # Wait for the address, not a fixed pause: a busy machine is slower.
+        page.wait_for_function(f"() => location.pathname === '/admin/workspace/projects/{PROJECT}'", timeout=10000)
+        page.wait_for_timeout(400)
         now = page.evaluate(READ)
         check("the tab row, the page and the sidebar stay", now["tabs"] == "TABS" and now["main"] == "MAIN"
               and now["sidebar"] == "SIDEBAR" and now["ctx"] == "ALIVE", now)
@@ -235,6 +238,42 @@ def run(width, height):
             check("the list and the tab row are the same elements", after["list"] == "LIST" and after["tabs"] == "TABS", after)
             check("and the other chat is open", after["url"].endswith(f"/messages/{CONVS[1]}")
                   and "Hello in Second chat" in after["text"], after["url"])
+
+            print("  saving a chat's people does not reload the page:")
+            page.evaluate(STAMP)
+            page.evaluate("""() => {
+              document.querySelector('[data-keep="ws-conv-list"]').__witness = 'LIST';
+              document.querySelector('button[aria-label="People in this chat"]').click();
+            }""")
+            page.wait_for_timeout(300)
+            page.evaluate("""() => {
+              const form = document.querySelector('form[action*="/people"]');
+              form.querySelector('input[name=title]').value = 'Renamed chat';
+              form.requestSubmit();
+            }""")
+            page.wait_for_timeout(1500)
+            after = page.evaluate(READ)
+            listed = page.evaluate("() => document.querySelector('[data-conv-rows]').innerText")
+            check("the page, the tab row and the list stayed", after["ctx"] == "ALIVE" and after["main"] == "MAIN"
+                  and after["tabs"] == "TABS" and page.evaluate(
+                      "() => document.querySelector('[data-keep=ws-conv-list]').__witness") == "LIST", after)
+            check("and the new name is in the chat and the list", "Renamed chat" in listed
+                  and "Renamed chat" in page.evaluate("() => document.querySelector('[data-panel=ws-chat]').innerText"),
+                  listed)
+
+            print("  deleting your own message takes two presses:")
+            page.evaluate("""() => document.querySelector('form[x-ref=form] textarea').value = ''""")
+            page.fill("form[x-ref=form] textarea", "Delete me please")
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(1500)
+            row = page.locator("[data-mid]", has_text="Delete me please").last
+            row.locator("button[aria-label='Delete this message']").click()
+            page.wait_for_timeout(500)
+            still = page.locator("[data-mid]", has_text="Delete me please").count()
+            check("one press only arms it", still == 1)
+            row.locator("button", has_text="Delete").first.click()
+            page.wait_for_timeout(1200)
+            check("the armed press deletes it", page.locator("[data-mid]", has_text="This message was deleted.").count() >= 1)
 
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
