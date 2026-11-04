@@ -7,14 +7,14 @@ contracted." He chose a switch per app, on by default, with Robinson & Co.
 switched off; its rows are kept and leave the board with it.
 
 Revision ID: d1e7b4a92c05
-Revises: c6d2a8f41e97
+Revises: c8e1f4a2b759
 Create Date: 2026-11-04
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "d1e7b4a92c05"
-down_revision = "c6d2a8f41e97"
+down_revision = "c8e1f4a2b759"
 branch_labels = None
 depends_on = None
 
