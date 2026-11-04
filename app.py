@@ -82,6 +82,14 @@ def _billable_hours_from_seconds(seconds):
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    # Railway ends TLS at its edge and forwards plain http with
+    # X-Forwarded-Proto. Without trusting that one header, every absolute URL
+    # Flask builds says http://, starting with its own trailing-slash redirect:
+    # /admin/org answered 308 to http://builtbybeans.com/admin/org/, which a
+    # browser tab upgrades and a fetch refuses. Only the scheme is trusted;
+    # the client address is left alone.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1, x_host=0, x_port=0, x_prefix=0)
 
     pm_bp = Blueprint(
         "pm",
