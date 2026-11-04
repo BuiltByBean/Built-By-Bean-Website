@@ -36,6 +36,7 @@
             <label for="a-name" class="{{ lbl }}">Name on the tile</label>
             <input id="a-name" name="name" maxlength="120" value="{{ app.name }}" class="{{ field }}">
         </div>
+        {{ checkbox('supported', checked=app.supported, label='Support this app') }}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {% for key, label, ph in [('support_url', 'Support desk', 'https://example.com/admin/support'),
                                       ('admin_url', 'Admin', 'https://example.com/admin'),

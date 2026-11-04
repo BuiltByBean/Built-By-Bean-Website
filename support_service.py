@@ -72,10 +72,11 @@ DEFAULTS = {
         "desk_acting_for": "mbean@entertainhq.com",
     },
     # Its tickets go to EntertainHQ's desk now.
-    "talent-booker": {"moved_to": "entertainhq"},
+    "talent-booker": {"name": "Talent Booker", "moved_to": "entertainhq"},
     "kuper": {"support_path": "/admin/tickets", "admin_path": "/admin"},
-    "robinson": {"support_path": "/support"},
-    "robinson-co": {"support_path": "/support"},
+    # Wired to the hub during its build and never contracted (2026-11-04).
+    "robinson": {"support_path": "/support", "supported": False},
+    "robinson-co": {"support_path": "/support", "supported": False},
 }
 
 WINDOW_DAYS = 30
@@ -161,10 +162,11 @@ def ensure_apps():
         d = DEFAULTS.get(c.origin_slug, {})
         base = (c.origin_base_url or "").rstrip("/")
         db.session.add(SupportApp(
-            origin=c.origin_slug, name=_hub_app_name(c), kind="hub",
+            origin=c.origin_slug, name=d.get("name") or _hub_app_name(c), kind="hub",
             support_url=(base + d["support_path"]) if base and d.get("support_path") else "",
             admin_url=(base + d["admin_path"]) if base and d.get("admin_path") else "",
             site_url=base, moved_to=d.get("moved_to", ""),
+            supported=d.get("supported", True),
         ))
         have.add(c.origin_slug)
         made = True
@@ -180,6 +182,26 @@ def apps():
 def moved_origins():
     return {a.origin for a in SupportApp.query.filter(SupportApp.moved_to != "",
                                                       SupportApp.moved_to.isnot(None)).all()}
+
+
+def hidden_origins():
+    """Apps whose rows are off the board: moved to another app's desk (their
+    tickets come back through that desk, with its status), or not supported.
+
+    The rows are kept, never deleted. On 2026-11-04 the board showed 31 Talent
+    Booker tickets "waiting 66d": copied here by the Aug 29 backfill, closed in
+    Talent Booker since, and never told, because Talent Booker sent its closes
+    to an address that refused them and then to EntertainHQ's desk. A copy the
+    app no longer feeds is a stale copy, and a stale copy must not ask for
+    anything.
+    """
+    return {a.origin for a in SupportApp.query.all() if not a.on_board}
+
+
+def on_board(query):
+    """Leave out every row of an app that is off the board."""
+    hidden = hidden_origins()
+    return query.filter(~Ticket.origin.in_(hidden)) if hidden else query
 
 
 def app_for(origin):
@@ -229,7 +251,7 @@ def staff_replied(ticket, when=None):
 
 def waiting_count():
     """The sidebar badge: exactly the Waiting on you tab."""
-    return waiting_query(Ticket.query).count()
+    return waiting_query(on_board(Ticket.query)).count()
 
 
 def waiting_query(query):
@@ -594,7 +616,7 @@ def pull_all_desks(force=False, min_gap=timedelta(minutes=8)):
     ensure_apps()
     out = []
     for app in SupportApp.query.filter_by(kind="desk").order_by(SupportApp.sort_order).all():
-        if not app.desk_ready:
+        if not app.desk_ready or not app.supported:
             continue
         if not force and app.pulled_at and utcnow() - naive(app.pulled_at) < min_gap:
             continue

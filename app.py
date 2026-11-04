@@ -1776,7 +1776,10 @@ def create_app():
         }
 
     def _support_scope(query, f, board_business_id):
-        """Business, app, kind and client: everything but the tab."""
+        """Business, app, kind and client: everything but the tab. Rows of an
+        app that is off the board (moved to another desk, or not supported)
+        are in none of it."""
+        query = support_service.on_board(query)
         if f["business"]:
             if f["business"] == board_business_id:
                 # The board company's tickets carry no business: they are its
@@ -1848,6 +1851,14 @@ def create_app():
             tickets = board_q.order_by(Ticket.updated_at.desc(), Ticket.id.desc()).all()
         else:
             tickets = _ticket_board_order(board_q).order_by(Ticket.id.desc()).all()
+        # A row just changed in place stays in the answer even when the change
+        # took it out of this tab, so its card swaps to what is now true rather
+        # than standing there showing what was. The next look drops it.
+        keep = request.args.get("keep", type=int)
+        if keep and all(t.id != keep for t in tickets):
+            kept = scoped.filter(Ticket.id == keep).first()
+            if kept is not None:
+                tickets.append(kept)
 
         # A separate list rather than sorted to the bottom of the main one:
         # they are not work in the queue, and anything that filters the board
@@ -1859,7 +1870,7 @@ def create_app():
                                      joinedload(Ticket.project), joinedload(Ticket.business))
                             .order_by(Ticket.updated_at.desc(), Ticket.id.desc()).all())
 
-        app_rows = [a for a in support_service.apps() if not a.moved_to]
+        app_rows = [a for a in support_service.apps() if a.on_board]
         health = support_service.health(app_rows)
         hub_by_origin = {c.origin_slug: c for c in Client.query.filter(
             Client.origin_slug.isnot(None)).all()}
@@ -1879,6 +1890,7 @@ def create_app():
             counts=_ticket_counts(f, board_id), tabs=SUPPORT_TABS,
             status_filter=tab, f=f, board_id=board_id,
             apps=app_rows, health=health, hub_by_origin=hub_by_origin,
+            off_board=[a for a in support_service.apps() if not a.on_board],
             apps_by_origin=apps_by_origin, businesses=businesses, has_local=has_local,
             span=support_service.span,
             statuses=TICKET_STATUSES, status_labels=TICKET_STATUS_LABELS,
@@ -2089,7 +2101,7 @@ def create_app():
         db.session.commit()
         flash("Filed as out of scope. Nothing changed on their side."
               if ticket.out_of_scope else "Back on the board.", "success")
-        return redirect(request.referrer or url_for("pm.tickets_list"))
+        return redirect(_safe_next(request.referrer or url_for("pm.tickets_list")))
 
     @pm_bp.route("/tickets/<int:id>/reply", methods=["POST"])
     @login_required
@@ -2169,8 +2181,11 @@ def create_app():
         Returns (sent, skipped, failed). Never raises.
         """
         sent = skipped = failed = 0
+        hidden = support_service.hidden_origins()
         stale = (Ticket.query
                  .filter(Ticket.origin != "local",
+                         # Off the board is off the wire: never news to send.
+                         ~Ticket.origin.in_(hidden or {""}),
                          # A desk's ticket is the desk's: never down the hub.
                          Ticket.origin_ref.is_(None),
                          db.or_(Ticket.hub_status_sent.is_(None),
@@ -2178,7 +2193,7 @@ def create_app():
                  .limit(limit).all())
         for ticket in stale:
             client = ticket.client
-            if (client is None or not client.origin_base_url
+            if (client is None or ticket.origin in hidden or not client.origin_base_url
                     or not client.ingest_secret or not ticket.origin_ticket_id):
                 skipped += 1
                 continue
@@ -2213,13 +2228,14 @@ def create_app():
         so in as many words on the ticket.
         """
         sent = skipped = failed = 0
-        moved = support_service.moved_origins()
+        moved = support_service.hidden_origins()
         pending = (TicketNote.query
                    .join(Ticket, TicketNote.ticket_id == Ticket.id)
                    .filter(TicketNote.is_staff_reply.is_(True),
                            TicketNote.delivered_at.is_(None),
                            # A desk's ticket is the desk's: never down the hub.
-                           Ticket.origin_ref.is_(None))
+                           Ticket.origin_ref.is_(None),
+                           ~Ticket.origin.in_(moved or {""}))
                    .order_by(TicketNote.created_at)
                    .limit(limit).all())
         for note in pending:
@@ -2324,7 +2340,7 @@ def create_app():
         (J&D's Talent Booker, through EntertainHQ's since 2026-11-01): asking
         both would show every ticket twice.
         """
-        moved = support_service.moved_origins()
+        moved = support_service.hidden_origins()
         return [c for c in (Client.query
                             .filter(Client.origin_slug.isnot(None),
                                     Client.origin_base_url != "",

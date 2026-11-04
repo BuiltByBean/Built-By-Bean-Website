@@ -753,6 +753,11 @@ class SupportApp(db.Model):
     # Booker sends to EntertainHQ's since 2026-11-01). The board stops asking
     # it directly, so each ticket is shown once.
     moved_to = db.Column(db.String(40), default="")
+    # Whether Michael supports this app at all. An app wired to the hub during
+    # a build that was never contracted (Robinson & Co., 2026-11-04: "there
+    # would also be no tickets even possible on Robinson and Co") is not a
+    # support target: no tile, no count, its rows kept but off the board.
+    supported = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     pulled_at = db.Column(db.DateTime, nullable=True)
     pull_note = db.Column(db.String(300), default="")
     sort_order = db.Column(db.Integer, nullable=False, default=100, server_default="100")
@@ -769,6 +774,11 @@ class SupportApp(db.Model):
     @property
     def is_desk(self):
         return self.kind == "desk"
+
+    @property
+    def on_board(self):
+        """A tile, counts and rows: supported, and not moved to another desk."""
+        return bool(self.supported) and not self.moved_to
 
     @property
     def desk_secret(self):

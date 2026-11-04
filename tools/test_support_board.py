@@ -219,8 +219,20 @@ with application.app_context():
                    ingest_secret=SECRET, origin_base_url="https://kuper.example")
     kenali = Client(name="Kenali Kendrick", origin_slug="talent-booker",
                     ingest_secret="tb-secret", origin_base_url="https://staff.jd.example")
-    db.session.add_all([boss, cmo, bbb, ehq, dd, kuper, kenali])
+    robinson = Client(name="Zachary Robinson", company="Robinson & Co.", origin_slug="robinson",
+                      ingest_secret="rb-secret", origin_base_url="https://robinson.example")
+    db.session.add_all([boss, cmo, bbb, ehq, dd, kuper, kenali, robinson])
     db.session.commit()
+    robinson_id = robinson.id
+    for n, who in ((501, "Kenali Kendrick"), (502, "Molly Herring")):
+        db.session.add(Ticket(client_id=kenali.id, origin="talent-booker", origin_ticket_id=n,
+                              description="Old J&D ticket " + str(n), status="new", reporter_name=who,
+                              waiting_on="you", waiting_since=NOW - timedelta(days=66),
+                              created_at=NOW - timedelta(days=67)))
+    for n in (1, 2):
+        db.session.add(Ticket(client_id=robinson.id, origin="robinson", origin_ticket_id=n,
+                              description="Test ticket from the build " + str(n), status="new",
+                              waiting_on="you", waiting_since=NOW - timedelta(days=54)))
     boss_id, cmo_id, ehq_id, bbb_id = boss.id, cmo.id, ehq.id, bbb.id
     # J&D's ticket 42, as the board held it from Talent Booker before the cutover.
     old = Ticket(client_id=kenali.id, origin="talent-booker", origin_ticket_id=42,
@@ -356,7 +368,7 @@ with application.app_context():
     check("its thread is mirrored", [n.body for n in jd5.notes] == ["Still broken this morning."])
     adopted = Ticket.query.filter_by(origin="entertainhq", origin_ref="hub.talent-booker:42").one()
     check("J&D's ticket is ADOPTED, not shown twice",
-          adopted.id == old_id and Ticket.query.filter_by(origin="talent-booker").count() == 0)
+          adopted.id == old_id and Ticket.query.filter_by(origin="talent-booker", origin_ticket_id=42).count() == 0)
     check("keeping the board's own marks", adopted.followup_flagged and adopted.billing_bucket == "new")
     bodies = [(n.body, n.origin_note_id) for n in adopted.notes]
     check("its old note is matched to the desk's by words, the desk's reply added once",
@@ -463,7 +475,8 @@ check("the CEO sees the settings, and the key is never shown", r.status_code == 
 c.post(f"/admin/tickets/apps/{ehq_app_id}", data={
     "name": "EntertainHQ", "support_url": "javascript:alert(1)", "admin_url": "https://entertainhq.com/admin",
     "site_url": "https://entertainhq.com", "status_url": "https://status.entertainhq.com",
-    "desk_url": DESK_URL, "desk_acting_for": ACTING, "business_id": str(ehq_id), "desk_key": ""})
+    "desk_url": DESK_URL, "desk_acting_for": ACTING, "business_id": str(ehq_id), "desk_key": "",
+    "supported": "1"})
 with application.app_context():
     a = db.session.get(SupportApp, ehq_app_id)
     check("a javascript: link is refused, a blank key keeps the one on file",
@@ -471,8 +484,57 @@ with application.app_context():
     a.support_url = "https://entertainhq.com/admin/support"
     db.session.commit()
 
-# ── 5. The page ─────────────────────────────────────────────────────────
-print("5. The page")
+# ── 5. Off the board ────────────────────────────────────────────────────
+print("5. Off the board")
+with application.app_context():
+    support_service.ensure_apps()
+    rob = SupportApp.query.filter_by(origin="robinson").one()
+    check("an app wired during a build that was never contracted starts off the board",
+          rob.supported is False and not rob.on_board)
+    rob_id = rob.id
+    check("Talent Booker is off the board, its tickets coming through EntertainHQ's desk",
+          not SupportApp.query.filter_by(origin="talent-booker").one().on_board)
+    hidden = support_service.on_board(Ticket.query).filter(Ticket.origin.in_(("talent-booker", "robinson"))).count()
+    check("their rows are on no tab and in no count", hidden == 0)
+    check("but kept", Ticket.query.filter(Ticket.origin.in_(("talent-booker", "robinson"))).count() == 4)
+    asked = [cl.origin_slug for cl, *_ in application.pull_all_tickets()]
+    check("and neither app is asked for tickets", "robinson" not in asked and "talent-booker" not in asked, asked)
+page = c.get("/admin/tickets?status=all").get_data(as_text=True)
+check("no Talent Booker or Robinson rows, no Robinson tile",
+      "Old J&D ticket" not in page and "Test ticket from the build" not in page and ">Robinson & Co.</span>" not in page)
+check("the way back to an off-board app is its settings", f'/admin/tickets/apps/{rob_id}"' in page)
+c.post(f"/admin/tickets/apps/{rob_id}", data={"name": "Robinson & Co.", "supported": "1"})
+page = c.get("/admin/tickets?status=all").get_data(as_text=True)
+check("switching it on brings its tile and rows back", "Test ticket from the build" in page)
+c.post(f"/admin/tickets/apps/{rob_id}", data={"name": "Robinson & Co."})
+with application.app_context():
+    check("and off again", not db.session.get(SupportApp, rob_id).supported)
+
+# ── 6. The row ──────────────────────────────────────────────────────────
+print("6. The row")
+page = c.get("/admin/tickets?status=all").get_data(as_text=True)
+check("no Save button anywhere on the board", ">Save<" not in page)
+check("triage applies on the pick", "requestSubmit()" in page)
+with application.app_context():
+    k13 = Ticket.query.filter_by(origin="kuper", origin_ticket_id=13).first()
+    k13_id = k13.id if k13 else None
+if k13_id is None:
+    signed("/admin/api/hub/tickets", {"ticket_id": 13, "description": "Second open one.", "status": "new"})
+    with application.app_context():
+        k13_id = Ticket.query.filter_by(origin="kuper", origin_ticket_id=13).one().id
+nxt = f"/admin/tickets?status=waiting&keep={k13_id}"
+r = c.post(f"/admin/tickets/{k13_id}/triage", data={"priority": "soon", "next": nxt})
+check("a pick lands back on the page it was made on", r.status_code == 302 and r.headers["Location"].endswith(nxt))
+c.post(f"/admin/tickets/{k13_id}/triage", data={"status": "resolved", "next": nxt})
+page = c.get(nxt).get_data(as_text=True)
+check("a row whose change took it out of the tab is still in that answer, showing what is now true",
+      f'data-live="ticket-{k13_id}"' in page and "Resolved" in page)
+plain = c.get("/admin/tickets?status=waiting").get_data(as_text=True)
+check("and the next look drops it", f'data-live="ticket-{k13_id}"' not in plain)
+c.post(f"/admin/tickets/{k13_id}/triage", data={"status": "new", "next": nxt})
+
+# ── 7. The page ─────────────────────────────────────────────────────────
+print("7. The page")
 signed("/admin/api/hub/tickets", {"ticket_id": 13, "description": "Second open one.", "status": "new"})
 import re  # noqa: E402
 
@@ -491,7 +553,7 @@ check("the sidebar badge is the Waiting on you tab", badge and int(badge.group(1
       == page.count('data-live-key="ticket-'), (badge and badge.group(1), waiting))
 check("it opens on Waiting on you", "Waiting on you" in page)
 check("a tile per app, not Talent Booker on its own", "EntertainHQ" in page and "Kuper Plumbing" in page
-      and "Data Dungeon" in page and ">Talent Booker<" not in page)
+      and "Data Dungeon" in page and 'truncate">Talent Booker</span>' not in page)
 check("the tiles carry the quick links", 'href="https://status.entertainhq.com"' in page
       and 'href="https://kuper.example/admin/tickets"' in page)
 check("a desk not connected says so", "Desk not connected" in page)

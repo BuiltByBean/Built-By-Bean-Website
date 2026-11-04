@@ -660,7 +660,11 @@
                    mechanism exists to prevent. */
                 const scope = form.closest('[data-live]');
                 if (form.hasAttribute('data-live-scope') && scope) {
-                    window.bbbSwapLive(html, [scope.getAttribute('data-live'), 'flash']);
+                    /* data-live-also names the other regions a scoped press
+                       changes (a count, a badge), so they move with it and
+                       nothing else does. */
+                    const also = (form.getAttribute('data-live-also') || '').split(/\s+/).filter(Boolean);
+                    window.bbbSwapLive(html, [scope.getAttribute('data-live'), 'flash'].concat(also));
                 } else {
                     window.bbbSwapLive(html);
                 }
@@ -840,8 +844,23 @@
                 const r = this.$refs.trigger.getBoundingClientRect();
                 const need = Math.min(256, this.options.length * 36 + 10) + 12;
                 const bar = document.querySelector('.sticky-filters');
-                const ceiling = bar ? bar.getBoundingClientRect().bottom : 0;
-                this.dropUp = (window.innerHeight - r.bottom) < need && (r.top - ceiling) > need;
+                let ceiling = bar ? bar.getBoundingClientRect().bottom : 0;
+                let floor = window.innerHeight;
+                /* Inside a contained list the results box clips what passes its
+                   edges, so its edges are the room there is: a picker on the
+                   last row of a contained list opened downward into a box that
+                   cut its options off (Client support, 2026-11-04). */
+                for (let el = this.$el.parentElement; el && el !== document.body; el = el.parentElement) {
+                    const oy = getComputedStyle(el).overflowY;
+                    if (oy === 'auto' || oy === 'scroll' || oy === 'hidden') {
+                        if (el.id === 'pm-scroll') break;
+                        const box = el.getBoundingClientRect();
+                        floor = Math.min(floor, box.bottom);
+                        ceiling = Math.max(ceiling, box.top);
+                        break;
+                    }
+                }
+                this.dropUp = (floor - r.bottom) < need && (r.top - ceiling) > need;
             },
 
             /* Moves through what is SHOWING. With a query on, the rows that

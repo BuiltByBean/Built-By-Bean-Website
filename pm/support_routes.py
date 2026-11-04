@@ -39,6 +39,8 @@ def edit(id):
         app.name = (request.form.get("name") or app.name or app.origin).strip()[:120]
         for field in LINK_FIELDS:
             setattr(app, field, _url(field))
+        # Off is "not a support target": no tile, no counts, rows kept.
+        app.supported = bool(request.form.get("supported"))
         if app.is_desk:
             app.desk_url = _url("desk_url")
             app.desk_acting_for = (request.form.get("desk_acting_for") or "").strip()[:200]

@@ -1323,6 +1323,43 @@ app sends `solved` (none does yet; filed as a gap on each blueprint). A ticket
 that arrived already resolved has no resolved_at, because "now" would make every
 imported fix look instant. A figure with nothing behind it says "None yet".
 
+**A copy the app no longer feeds is off the board** (Michael, the same
+evening, of 31 rows "waiting on you" for 66 days: "I have no tickets pending in
+EntertainHQ. So not sure where the hell these are coming from"). They were
+Talent Booker tickets copied here by the Aug 29 backfill. After creation the
+board owns status, so a close in Talent Booker reaches it only when Talent
+Booker sends one, and it sent them to `/admin/pm` (405) and then to
+EntertainHQ's desk: none ever arrived. They sat in Open unnoticed until the
+waiting-on-you backfill, which reads only this board's own thread, called every
+one of them waiting. `support_service.hidden_origins()` is every app that is
+not `on_board` (moved to another desk, or `supported` off), and
+`support_service.on_board(query)` takes its rows out of every tab, tile, count,
+the badge, the pulls and both drains. They are kept, never deleted, and a moved
+app's ticket comes back only by adoption, with the desk's status. **A derived
+"who must act" over rows copied from another system has to ask whether that
+system still feeds them.**
+
+`SupportApp.supported` is "Support this app" on each app's settings, on by
+default. Robinson & Co. starts off (migration `d1e7b4a92c05`): it was wired to
+the hub while its build tested the link and was never contracted, so its two
+rows were build tests. An off-board app is listed under the tiles, linking to
+its settings, so the switch is never lost.
+
+**The row is two lines** (Michael: "the layout of each row with the massive
+wide expanded dropdowns is just such a waste and looks ugly"): what it is, then
+kind, app, who and status on one truncating line, the wait and a chevron on the
+right. Status is a row of presses inside the opened row (pressed all day, so
+not a picker); priority, kind, billing and minutes apply on the pick or on
+leaving the box, with no Save anywhere. Each card is its own `data-live`
+region and its forms carry `data-live-scope` plus `data-live-also="tabs tiles
+nav-support"` (base.html: a scoped press also swaps the regions it names), so a
+pick re-renders that card and the counts it moves, nothing else. `next` carries
+`keep=<id>`, which holds a card in the answer when its change took it out of
+the tab, so it swaps to what is now true instead of standing stale.
+`select_dropdown`'s `measure()` now takes the nearest scrolling box's edges as
+the room there is: in a contained list the last row's picker opened downward
+into a box that cut its options off.
+
 Data Dungeon has a full desk (`/admin/support`) and no door yet, so its tile
 says "Desk not connected" until it builds EntertainHQ's door (filed as its
 gap). `tools/test_support_board.py` runs both round trips, the desk against a

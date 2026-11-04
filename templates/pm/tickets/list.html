@@ -52,6 +52,12 @@
 } %}
 {% set TONE = {'good': 'text-emerald-400', 'ok': 'text-amber-400', 'bad': 'text-red-400', '': 'text-surface-300'} %}
 
+{#
+  One tile per app, every tile the same shape (catalogue rule "Stat tiles"):
+  its name and where it reads from, one figure (who is waiting on Michael),
+  one line under it, and its quick links. The name is the filter: tapping it
+  shows that app alone, which is the one thing selecting a tile means.
+#}
 {% macro app_tile(a) %}
 {%- set h = health[a.origin] -%}
 {%- set tones = h.tones or {} -%}
@@ -63,12 +69,11 @@
 {%- else -%}
   {%- set read_at, read_note, ok = none, '', false -%}
 {%- endif -%}
-<div class="snap-start shrink-0 w-[85%] sm:w-80 lg:w-auto min-w-0 rounded-2xl border p-3 sm:p-4 flex flex-col gap-2 sm:gap-3
+<div class="snap-start shrink-0 w-[85%] sm:w-80 lg:w-auto min-w-0 rounded-2xl border p-3 sm:p-4 flex flex-col gap-2
             {% if f.app == a.origin %}border-brand-500/60 bg-brand-500/10{% else %}border-surface-700 bg-surface-800/40{% endif %}">
   <div class="flex items-start gap-2 min-w-0">
-    {# The name is the filter: selecting a tile means "show me this app". #}
     <a href="{{ url_for('pm.tickets_list', status=status_filter, app=('' if f.app == a.origin else a.origin), category=f.category) }}"
-       class="min-w-0 flex-1 flex flex-col items-stretch rounded-lg -m-1 p-1 hover:bg-white/5">
+       class="min-w-0 flex-1 flex flex-col items-stretch rounded-xl -m-1 p-1 hover:bg-white/5">
       <span class="block text-sm font-semibold text-white truncate">{{ a.name }}</span>
       <span class="flex items-center gap-1.5 mt-0.5 text-xs text-surface-400 min-w-0">
         <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ 'bg-emerald-400' if ok else 'bg-amber-400' }}" aria-hidden="true"></span>
@@ -81,49 +86,27 @@
       </span>
     </a>
     {% if can_answer_desk %}
-    <a href="{{ url_for('support.edit', id=a.id) }}" aria-label="Edit {{ a.name }}'s links" title="Edit links"
+    <a href="{{ url_for('support.edit', id=a.id) }}" aria-label="{{ a.name }} settings" title="Settings"
        class="inline-flex items-center justify-center w-11 h-11 -mt-1 -mr-1 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 shrink-0">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
     </a>
     {% endif %}
   </div>
 
-  <p class="text-sm {{ TONE[tones.get('oldest', '')] if h.waiting else 'text-surface-300' }}">
-    {%- if h.waiting -%}
-      <span class="text-lg font-semibold">{{ h.waiting | commas }}</span> waiting on you, longest {{ span(h.oldest) }}
-    {%- else -%}
-      Nobody waiting on you{% if h.open %} &middot; {{ h.open | commas }} open{% endif %}
-    {%- endif -%}
+  <p class="flex items-baseline gap-2 min-w-0">
+    <span class="text-2xl font-bold tabular-nums {{ TONE[tones.get('oldest', '')] if h.waiting else 'text-white' }}">{{ h.waiting | commas }}</span>
+    <span class="text-sm text-surface-300 truncate">waiting on you{% if h.waiting %}, longest {{ span(h.oldest) }}{% endif %}</span>
   </p>
 
-  {# One wrapping row of short labels, so a phone tile stays short enough
-     to leave the list room under it. #}
-  <dl class="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
-    <div class="min-w-0">
-      <dt class="text-surface-400">First reply</dt>
-      <dd class="font-semibold {{ TONE[tones.get('first_reply', '')] }}">{{ span(h.first_reply) if h.first_reply is not none else 'None yet' }}</dd>
-    </div>
-    <div class="min-w-0">
-      <dt class="text-surface-400">To fix</dt>
-      <dd class="font-semibold {{ TONE[tones.get('fix', '')] }}">{{ span(h.fix) if h.fix is not none else 'None yet' }}</dd>
-    </div>
-    <div class="min-w-0">
-      <dt class="text-surface-400">Reopened</dt>
-      <dd class="font-semibold {{ TONE[tones.get('reopen', '')] }}">{{ ((h.reopen * 100) | round | int) ~ '%' if h.reopen is not none else 'None yet' }}</dd>
-    </div>
-    {% if h.confirmed %}
-    <div class="min-w-0">
-      <dt class="text-surface-400">Confirmed</dt>
-      <dd class="font-semibold {{ TONE[tones.get('confirmed', '')] }}">{{ h.confirmed[0] }} of {{ h.confirmed[1] }}</dd>
-    </div>
-    {% endif %}
-    {% if h.solved %}
-    <div class="min-w-0">
-      <dt class="text-surface-400">Said solved</dt>
-      <dd class="font-semibold {{ TONE[tones.get('solved', '')] }}">{{ h.solved[0] }} of {{ h.solved[1] }}</dd>
-    </div>
-    {% endif %}
-  </dl>
+  {# One line of context, the same parts on every tile. A part with nothing
+     behind it says so rather than reading as instant. #}
+  <p class="text-xs text-surface-400 leading-5">
+    Replies <span class="font-semibold {{ TONE[tones.get('first_reply', '')] }}">{{ span(h.first_reply) if h.first_reply is not none else 'none yet' }}</span>
+    &middot; fixes <span class="font-semibold {{ TONE[tones.get('fix', '')] }}">{{ span(h.fix) if h.fix is not none else 'none yet' }}</span>
+    &middot; reopened <span class="font-semibold {{ TONE[tones.get('reopen', '')] }}">{{ ((h.reopen * 100) | round | int) ~ '%' if h.reopen is not none else 'none yet' }}</span>
+    {%- if h.confirmed %} &middot; confirmed <span class="font-semibold {{ TONE[tones.get('confirmed', '')] }}">{{ h.confirmed[0] }} of {{ h.confirmed[1] }}</span>{% endif %}
+    {%- if h.solved %} &middot; solved <span class="font-semibold {{ TONE[tones.get('solved', '')] }}">{{ h.solved[0] }} of {{ h.solved[1] }}</span>{% endif %}
+  </p>
 
   {% if a.links %}
   <div class="flex flex-wrap gap-2 mt-auto">
@@ -139,101 +122,72 @@
 {% endmacro %}
 
 {#
-  One card, used by the board and by the out-of-scope section below it, so the
-  two cannot drift into showing different things about the same ticket.
+  One ticket: two lines while it is shut (what it is, then who, which app and
+  how long they have waited), everything else when it is open. Michael,
+  2026-11-04, of the first version: "the layout of each row with the massive
+  wide expanded dropdowns is just such a waste and looks ugly."
+
+  The card is its own live region: a triage pick re-renders this card and the
+  counts it moves (data-live-also), nothing else, and the open card stays open
+  (data-live-key). Every pick applies itself; there is no Save. Status is a
+  row of presses, because it is the control used all day; the rest are
+  pickers. The `keep` on `next` holds a card whose change took it out of this
+  tab, so it swaps to what is now true instead of standing stale.
 #}
 {% macro ticket_card(t) %}
 {%- set a = apps_by_origin.get(t.origin) -%}
-<div data-live-key="ticket-{{ t.id }}"
-     class="rounded-2xl border border-surface-700 bg-surface-800/40 p-4 mb-3" x-data="{ open: false }">
-  <div class="flex flex-wrap items-center gap-2 mb-2">
-    {# Category first, because bugs sort first and the eye should agree with the order. #}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-semibold
-      {% if t.category == 'bug' %}bg-red-500/15 text-red-400
-      {% else %}bg-brand-500/15 text-brand-400{% endif %}">
-      {{ category_labels.get(t.category, t.category) }}</span>
-
-    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-300">
-      {{ status_labels.get(t.status, t.status) }}</span>
-
-    {% if t.waiting_on == 'you' and t.status not in ('resolved', 'dismissed') %}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-400">
-      Waiting on you{% if t.waiting_since %} {{ span(now.replace(tzinfo=none) - t.waiting_since.replace(tzinfo=none)) }}{% endif %}</span>
-    {% elif t.waiting_on == 'them' %}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-400">Waiting on them</span>
-    {% endif %}
-
-    {% if t.priority != 'normal' %}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-medium
-      {% if t.priority == 'urgent' %}bg-amber-500/15 text-amber-400
-      {% else %}bg-surface-700 text-surface-400{% endif %}">
-      {{ priority_labels.get(t.priority, t.priority) }}</span>
-    {% endif %}
-
-    {# Both of these sit ALONGSIDE the status, never instead of it. That is the
-       whole reason they are flags and not statuses. #}
-    {% if t.followup_flagged %}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-fuchsia-500/15 text-fuchsia-400">Circle back</span>
-    {% endif %}
-    {% if t.out_of_scope %}
-    <span class="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-700 text-surface-400">Out of scope</span>
-    {% endif %}
-
-    {# sm:ml-auto, not ml-auto: on a phone this strip wraps, and an auto
-       margin on the last chip lands it alone on a row behind a hole. #}
-    <span class="sm:ml-auto text-xs text-surface-400">{{ t.created_at | format_date }}</span>
-  </div>
-
-  {# Shortened while it is shut, whole when it is open. These tickets arrive
-     with no title, so the name of one IS its first eighty characters - print
-     the cut-off version and the full report underneath it and you have said
-     the same sentence twice, the first time badly. #}
-  <button type="button" @click="open = !open"
-          class="group flex w-full items-start gap-3 text-left"
-          :aria-expanded="open">
-    <span class="min-w-0 flex-1 text-sm font-medium text-white group-hover:text-brand-500">
-      <span x-show="!open" class="block truncate">{{ t.display_title }}</span>
-      <span x-show="open" style="display: none" class="block whitespace-pre-line break-words">{{ t.full_title }}</span>
+{%- set here = url_for('pm.tickets_list', status=status_filter, business=f.business, app=f.app, category=f.category, client_id=f.client_id, keep=t.id) -%}
+{%- set closed = t.status in ('resolved', 'dismissed') -%}
+<div data-live="ticket-{{ t.id }}" data-live-key="ticket-{{ t.id }}"
+     class="rounded-2xl border border-surface-700 bg-surface-800/40 mb-2 relative focus-within:z-30" x-data="{ open: false }">
+  <button type="button" @click="open = !open" :aria-expanded="open"
+          class="group w-full flex items-start gap-3 text-left px-4 py-3 rounded-2xl">
+    <span class="min-w-0 flex-1">
+      <span class="flex items-center gap-2 min-w-0">
+        <span class="shrink-0 w-2 h-2 rounded-full {{ 'bg-red-400' if t.category == 'bug' else 'bg-brand-400' }}" aria-hidden="true"></span>
+        <span x-show="!open" class="block truncate text-sm font-medium text-white group-hover:text-brand-300">{{ t.display_title }}</span>
+        <span x-show="open" style="display: none" class="block whitespace-pre-line break-words text-sm font-medium text-white">{{ t.full_title }}</span>
+      </span>
+      {# One line, cut at the edge rather than wrapped, so a row is always two
+         lines tall on a phone. #}
+      <span class="mt-1 block truncate pl-4 text-xs text-surface-400">
+        {{- category_labels.get(t.category, t.category) }} &middot; {{ a.name if a else ('Raised here' if t.origin == 'local' else t.origin) -}}
+        {%- if t.who and (not a or t.who != a.name) %}, {{ t.who }}{% endif -%}
+        {%- if t.reporter_name and t.reporter_name not in (t.who or '') %}, {{ t.reporter_name }}{% endif %} &middot; {{ status_labels.get(t.status, t.status) -}}
+        {%- if t.priority == 'urgent' %} &middot; <span class="text-amber-400">Urgent</span>{% endif -%}
+        {%- if t.followup_flagged %} &middot; <span class="text-fuchsia-400">Circle back</span>{% endif -%}
+        {%- if t.unread_for_dev() %} &middot; <span class="font-semibold text-brand-300">{{ t.unread_for_dev() }} new</span>{% endif -%}
+      </span>
     </span>
-    <svg class="mt-0.5 w-4 h-4 shrink-0 text-surface-500 transition-transform group-hover:text-surface-300"
-         :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-    </svg>
+    <span class="shrink-0 flex items-center gap-2">
+      {% if t.waiting_on == 'you' and not closed %}
+      <span class="text-xs font-semibold text-amber-400 whitespace-nowrap"
+            title="Waiting on you">{{ span(now.replace(tzinfo=none) - t.waiting_since.replace(tzinfo=none)) if t.waiting_since else '' }}</span>
+      {% endif %}
+      <svg class="w-4 h-4 text-surface-500 transition-transform group-hover:text-surface-300"
+           :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </span>
   </button>
 
-  <p class="mt-1 text-xs text-surface-400 break-words">
-    {{ a.name if a else ('Raised here' if t.origin == 'local' else t.origin) }}
-    {%- if t.who %} &middot; {{ t.who }}{% endif %}
-    {%- if t.project %} &middot; {{ t.project.name }}{% endif %}
-    {%- if t.reporter_name %} &middot; {{ t.reporter_name }}{% endif %}
-    {% if t.unread_for_dev() %}
-    <span class="ml-1 px-1.5 py-0.5 rounded bg-brand-600 text-white font-semibold">{{ t.unread_for_dev() }} new</span>
-    {% endif %}
-  </p>
-
-  <div x-show="open" style="display: none"
-       class="mt-3 pt-3 border-t border-surface-700 space-y-4">
-
+  <div x-show="open" style="display: none" class="px-4 pb-4 space-y-4">
     {% if t.title and t.description %}
-    <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">What they said</h4>
-      <p class="text-sm text-surface-200 whitespace-pre-line break-words">{{ t.description }}</p>
-    </div>
+    <p class="text-sm text-surface-200 whitespace-pre-line break-words">{{ t.description }}</p>
     {% endif %}
 
-    {% if t.source_label or t.source_path or t.origin_url %}
-    <p class="text-xs text-surface-400 break-words">
-      {% if t.source_label or t.source_path %}Reported from {{ t.source_label or t.source_path }}{% endif %}
+    {% if t.source_label or t.source_path or (t.origin_url and t.origin_url.startswith('http')) %}
+    <p class="flex flex-wrap items-center gap-2 text-xs text-surface-400 break-words">
+      {% if t.source_label or t.source_path %}<span>From {{ t.source_label or t.source_path }}</span>{% endif %}
       {% if t.origin_url and t.origin_url.startswith('http') %}
       <a href="{{ t.origin_url }}" target="_blank" rel="noopener"
-         class="inline-flex items-center ml-1 px-2.5 py-1 rounded-lg border border-brand-500/40 text-brand-400 hover:bg-brand-500/10">
+         class="inline-flex items-center min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-xl border border-brand-500/40 text-brand-400 hover:bg-brand-500/10">
         {{ 'Open on its desk' if t.from_desk else 'Open in their app' }}</a>
       {% endif %}
     </p>
     {% endif %}
 
     <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">Conversation</h4>
       {% for note in t.notes %}
       <div class="mb-2 flex {% if note.is_staff_reply %}justify-end{% endif %}">
         <div class="max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2
@@ -249,108 +203,101 @@
       <p class="text-sm text-surface-400 mb-2">Nothing said yet.</p>
       {% endfor %}
 
-      {# Answers from here and comes back here. A desk ticket's reply goes
-         through its desk, which records it as Michael's, so only he sees the
-         box there. #}
+      {# A desk ticket's reply goes through its desk, which records it as
+         Michael's, so only he sees the box there. #}
       {% if not t.from_desk or can_answer_desk %}
-      <form method="POST" data-live-action action="{{ url_for('pm.ticket_reply', id=t.id) }}" class="flex gap-2 mt-2">
-        <input type="hidden" name="next" value="{{ request.full_path }}">
+      <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support" data-live-reset
+            action="{{ url_for('pm.ticket_reply', id=t.id) }}" class="flex gap-2 mt-2">
+        <input type="hidden" name="next" value="{{ here }}">
         <input type="text" name="body" required placeholder="Reply to {{ t.reporter_name or 'them' }}"
                aria-label="Reply to {{ t.reporter_name or 'them' }}"
-               class="input-ring flex-1 min-w-0 px-3.5 py-2 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
-        <button type="submit" class="shrink-0 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
+               class="input-ring flex-1 min-w-0 min-h-[44px] px-3.5 py-2 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+        <button type="submit" class="shrink-0 min-h-[44px] px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl">Send</button>
       </form>
       {% endif %}
     </div>
 
     {% if t.detailed_notes %}
-    <div>
-      <h4 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Detailed notes</h4>
-      <p class="text-sm text-surface-200 whitespace-pre-line break-words">{{ t.detailed_notes }}</p>
-    </div>
+    <p class="text-sm text-surface-300 whitespace-pre-line break-words">{{ t.detailed_notes }}</p>
     {% endif %}
-  </div>
 
-  {%- set o = namespace(status=[], priority=[], category=[], billing=[('', 'Not classified')]) -%}
-  {%- for s in statuses -%}{%- set o.status = o.status + [(s, status_labels[s])] -%}{%- endfor -%}
-  {%- for p in ['urgent','soon','normal','backlog'] -%}{%- set o.priority = o.priority + [(p, priority_labels[p])] -%}{%- endfor -%}
-  {%- for c in categories -%}{%- set o.category = o.category + [(c, category_labels[c])] -%}{%- endfor -%}
-  {%- for b in billing_buckets -%}{%- set o.billing = o.billing + [(b, billing_labels[b])] -%}{%- endfor -%}
+    {%- set o = namespace(priority=[], category=[], billing=[('', 'Not classified')]) -%}
+    {%- for p in ['urgent','soon','normal','backlog'] -%}{%- set o.priority = o.priority + [(p, priority_labels[p])] -%}{%- endfor -%}
+    {%- for c in categories -%}{%- set o.category = o.category + [(c, category_labels[c])] -%}{%- endfor -%}
+    {%- for b in billing_buckets -%}{%- set o.billing = o.billing + [(b, billing_labels[b])] -%}{%- endfor -%}
 
-  {% if t.from_desk %}
-  {# The desk carries out the status and is read back. Resolving one of a
-     company's own tickets asks whether to tell the reporter, because that is
-     the choice the desk's own Resolve asks for. #}
-  {% if can_answer_desk %}
-  <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
-        class="mt-3 flex flex-wrap items-center gap-2 relative focus-within:z-30">
-    <input type="hidden" name="next" value="{{ request.full_path }}">
-    {% if t.status not in ('resolved', 'dismissed') %}
-      {% if t.status != 'in-progress' %}
-      <button type="submit" name="status" value="in-progress"
-              class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">In progress</button>
+    {# Status: presses, applied on the press. A desk ticket's go to its desk
+       and are read back; resolving one of a company's own asks whether to
+       tell the reporter, as the desk's own Resolve does. #}
+    {% if t.from_desk %}
+      {% if can_answer_desk %}
+      <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
+            action="{{ url_for('pm.ticket_triage', id=t.id) }}" class="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="next" value="{{ here }}">
+        {% if not closed %}
+          {% if t.status != 'in-progress' %}
+          <button type="submit" name="status" value="in-progress" class="min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-300 hover:bg-surface-700">In progress</button>
+          {% endif %}
+          {% if not t.desk_external %}
+          <div class="w-48">{{ select_dropdown("notify", [('tell', 'Tell them'), ('verify', 'Ask them to confirm'), ('quiet', 'Quietly')], 'tell', full_width=true) }}</div>
+          {% endif %}
+          <button type="submit" name="status" value="resolved" class="min-h-[44px] px-3 rounded-xl btn-brand text-sm font-medium text-white">Resolve</button>
+          <button type="submit" name="status" value="dismissed" class="min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-300 hover:bg-surface-700">Close</button>
+        {% else %}
+          <button type="submit" name="status" value="in-progress" class="min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-300 hover:bg-surface-700">Reopen</button>
+        {% endif %}
+      </form>
       {% endif %}
-      {% if not t.desk_external %}
-      <div class="w-44">
-        {{ select_dropdown("notify", [('tell', 'Tell them'), ('verify', 'Ask them to confirm'), ('quiet', 'Quietly')], 'tell', size="sm", full_width=true) }}
-      </div>
-      {% endif %}
-      <button type="submit" name="status" value="resolved"
-              class="px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Resolve</button>
-      <button type="submit" name="status" value="dismissed"
-              class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">Close</button>
     {% else %}
-      <button type="submit" name="status" value="in-progress"
-              class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">Reopen</button>
+    <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
+          action="{{ url_for('pm.ticket_triage', id=t.id) }}" class="flex flex-wrap gap-2" role="group" aria-label="Status">
+      <input type="hidden" name="next" value="{{ here }}">
+      {% for s in statuses %}
+      <button type="submit" name="status" value="{{ s }}" {% if t.status == s %}aria-pressed="true"{% endif %}
+              class="min-h-[44px] px-3 rounded-xl text-sm font-medium transition-colors
+                     {% if t.status == s %}bg-brand-600 text-white{% else %}border border-white/10 text-surface-300 hover:bg-surface-700{% endif %}">{{ status_labels[s] }}</button>
+      {% endfor %}
+    </form>
     {% endif %}
-  </form>
-  {% endif %}
-  {# Billing never travels, so it is set here whatever the desk says. #}
-  <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
-        class="mt-2 flex flex-wrap items-center gap-2 relative focus-within:z-30">
-    <input type="hidden" name="next" value="{{ request.full_path }}">
-    <div class="min-w-0 flex-1 basis-40 sm:flex-none sm:w-56">{{ select_dropdown("billing_bucket", o.billing, t.billing_bucket or '', "Not classified", size="sm", full_width=true) }}</div>
-    <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
-           aria-label="Minutes billed"
-           class="input-ring w-24 min-w-0 min-h-[44px] sm:min-h-0 px-2 py-2 text-xs bg-surface-800/50 text-white rounded-lg">
-    <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Save</button>
-  </form>
-  {% else %}
-  {# Triage: status, priority, category and billing are four independent facts,
-     so they are four controls and one Save.
 
-     Blank leads the billing list and is NOT "Free": undecided work must not
-     read as free. #}
-  <form method="POST" data-live-action action="{{ url_for('pm.ticket_triage', id=t.id) }}"
-        class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-2 relative focus-within:z-30">
-    <input type="hidden" name="next" value="{{ request.full_path }}">
-    {{ select_dropdown("status", o.status, t.status, size="sm", full_width=true) }}
-    {{ select_dropdown("priority", o.priority, t.priority, size="sm", full_width=true) }}
-    {{ select_dropdown("category", o.category, t.category, size="sm", full_width=true) }}
-    {{ select_dropdown("billing_bucket", o.billing, t.billing_bucket or '', "Not classified", size="sm", full_width=true) }}
-    <div class="flex gap-2">
-      <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="min"
-             aria-label="Minutes billed"
-             class="input-ring w-full min-w-0 min-h-[44px] sm:min-h-0 px-2 py-2 text-xs bg-surface-800/50 text-white rounded-lg">
-      <button type="submit" class="shrink-0 px-3 py-2 text-xs font-medium rounded-lg bg-brand-600 hover:bg-brand-700 text-white">Save</button>
+    {# The rest apply on the pick or when the minutes box is left. Kind and
+       priority are the desk's on a desk ticket, so there they are not here. #}
+    <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
+          action="{{ url_for('pm.ticket_triage', id=t.id) }}"
+          class="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2">
+      <input type="hidden" name="next" value="{{ here }}">
+      {% if not t.from_desk %}
+      <div class="min-w-0 sm:w-36">{{ select_dropdown("priority", o.priority, t.priority, full_width=true, on_change="$el.closest('form').requestSubmit()") }}</div>
+      <div class="min-w-0 sm:w-36">{{ select_dropdown("category", o.category, t.category, full_width=true, on_change="$el.closest('form').requestSubmit()") }}</div>
+      {% endif %}
+      <div class="min-w-0 sm:w-44">{{ select_dropdown("billing_bucket", o.billing, t.billing_bucket or '', "Not classified", full_width=true, on_change="$el.closest('form').requestSubmit()") }}</div>
+      <label class="min-w-0 flex items-center gap-2 text-xs text-surface-400">
+        <input type="number" name="billed_minutes" min="0" value="{{ t.billed_minutes or '' }}" placeholder="0"
+               @change="$el.form.requestSubmit()"
+               class="input-ring w-20 min-w-0 min-h-[44px] px-3 text-sm bg-surface-800/50 text-white rounded-xl">
+        minutes billed
+      </label>
+    </form>
+
+    <div class="flex flex-wrap gap-2">
+      <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
+            action="{{ url_for('pm.ticket_flag', id=t.id) }}">
+        <input type="hidden" name="next" value="{{ here }}">
+        <button type="submit" {% if t.followup_flagged %}aria-pressed="true"{% endif %}
+                class="min-h-[44px] px-3 rounded-xl text-sm border {{ 'border-fuchsia-500/40 text-fuchsia-300' if t.followup_flagged else 'border-white/10 text-surface-300 hover:bg-surface-700' }}">
+          Circle back</button>
+      </form>
+      <form method="POST" data-live-action data-live-scope data-live-also="tabs tiles nav-support"
+            action="{{ url_for('pm.ticket_scope', id=t.id) }}">
+        <input type="hidden" name="next" value="{{ here }}">
+        <button type="submit" {% if t.out_of_scope %}aria-pressed="true"{% endif %}
+                class="min-h-[44px] px-3 rounded-xl text-sm border {{ 'border-surface-500 text-white' if t.out_of_scope else 'border-white/10 text-surface-300 hover:bg-surface-700' }}">
+          Out of scope</button>
+      </form>
+      <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
+         class="inline-flex items-center min-h-[44px] px-3 rounded-xl text-sm border border-brand-500/40 text-brand-400 hover:bg-brand-500/10">
+        Full page</a>
     </div>
-  </form>
-  {% endif %}
-
-  <div class="mt-2 flex flex-wrap gap-2">
-    <form method="POST" data-live-action action="{{ url_for('pm.ticket_flag', id=t.id) }}">
-      <input type="hidden" name="next" value="{{ request.full_path }}">
-      <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">
-        {{ "Stop circling back" if t.followup_flagged else "Circle back on this" }}</button>
-    </form>
-    <form method="POST" data-live-action action="{{ url_for('pm.ticket_scope', id=t.id) }}">
-      <input type="hidden" name="next" value="{{ request.full_path }}">
-      <button type="submit" class="px-3 py-2 text-xs font-medium rounded-lg border border-surface-600 text-surface-300 hover:bg-surface-700">
-        {{ "Bring back in scope" if t.out_of_scope else "Out of scope" }}</button>
-    </form>
-    <a href="{{ url_for('pm.ticket_detail', id=t.id) }}"
-       class="px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-400 hover:bg-brand-500/10">
-      Open full page</a>
   </div>
 </div>
 {% endmacro %}
@@ -368,6 +315,18 @@
   <p class="text-sm text-surface-400">No app sends tickets here yet.</p>
   {% endfor %}
 </div>
+
+{# The way back to an app taken off the board: its settings, where the
+   switch is. Wide screens only, where there is room for it. #}
+{% if can_answer_desk and off_board %}
+<div class="hidden sm:flex shrink-0 flex-wrap items-center gap-2 -mt-1 mb-4 text-xs text-surface-400">
+  <span>Off the board:</span>
+  {% for a in off_board %}
+  <a href="{{ url_for('support.edit', id=a.id) }}"
+     class="inline-flex items-center px-2.5 py-1 rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300">{{ a.name }}</a>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="glass-card p-4 sm:p-6 flex flex-col flex-1 min-h-0">
   {# Each tab counts EXACTLY what clicking it shows, under the filters beside
@@ -389,7 +348,7 @@
      so the filter panels paint over the ticket cards. The pick is the apply
      (liveFilter in base.html). #}
   <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
-        class="shrink-0 relative z-30 grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-3 mb-4">
+        class="shrink-0 relative z-30 grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-3 mb-4">
     <input type="hidden" name="status" value="{{ status_filter }}">
     {% if f.client_id %}<input type="hidden" name="client_id" value="{{ f.client_id }}">{% endif %}
     {% set ns = namespace(biz=[["", "Business"]], app=[["", "App"]], cat=[["all", "Kind"]]) %}
@@ -397,10 +356,12 @@
     {% for a in apps | sort(attribute='name') %}{% set ns.app = ns.app + [[a.origin, a.name]] %}{% endfor %}
     {% if has_local %}{% set ns.app = ns.app + [["local", "Raised here"]] %}{% endif %}
     {% for c in categories %}{% set ns.cat = ns.cat + [[c, category_labels[c]]] %}{% endfor %}
-    <div class="min-w-0 sm:w-52">{{ select_dropdown("business", ns.biz, f.business or '', on_change="apply()", full_width=true, size="sm") }}</div>
-    <div class="min-w-0 sm:w-52">{{ select_dropdown("app", ns.app, f.app, on_change="apply()", full_width=true, size="sm") }}</div>
-    <div class="min-w-0 sm:w-44">{{ select_dropdown("category", ns.cat, f.category, on_change="apply()", full_width=true, size="sm") }}</div>
-    <span data-live="clear" class="col-span-3 inline-flex items-center sm:ml-auto empty:hidden">
+    {# On a phone the app already says whose business it is, and two
+       pickers fit where three were cut off. #}
+    <div class="hidden sm:block min-w-0 sm:w-52">{{ select_dropdown("business", ns.biz, f.business or '', on_change="apply()", full_width=true) }}</div>
+    <div class="min-w-0 sm:w-52">{{ select_dropdown("app", ns.app, f.app, on_change="apply()", full_width=true) }}</div>
+    <div class="min-w-0 sm:w-44">{{ select_dropdown("category", ns.cat, f.category, on_change="apply()", full_width=true) }}</div>
+    <span data-live="clear" class="col-span-2 inline-flex items-center sm:ml-auto empty:hidden">
       {%- if f.business or f.app or f.category != 'all' or f.client_id -%}{{ clear_filters(href=url_for('pm.tickets_list', status=status_filter)) }}{%- endif -%}
     </span>
   </form>
@@ -412,7 +373,7 @@
     {% for t in tickets %}{{ ticket_card(t) }}{% endfor %}
   {% elif not out_of_scope %}
   <div class="text-center py-12">
-    <p class="text-surface-400 mb-4">
+    <p class="text-surface-300 mb-4">
       {%- if status_filter == 'waiting' -%}Nobody is waiting on you.
       {%- elif status_filter == 'open' -%}Nothing open.
       {%- elif status_filter == 'follow-up' -%}Nothing to circle back on.
@@ -420,6 +381,8 @@
       {%- elif status_filter == 'out-of-scope' -%}Nothing ruled out of scope.
       {%- else -%}No tickets.{%- endif -%}
     </p>
+    <a href="{{ url_for('pm.ticket_create') }}"
+       class="inline-flex items-center gap-2 min-h-[44px] px-4 btn-brand text-sm font-medium rounded-xl">New ticket</a>
   </div>
   {% endif %}
 
