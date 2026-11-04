@@ -165,7 +165,12 @@ check("and not its whole runbook", "TWILIO-TRAP" not in prompt and "get_playbook
 check("a reference names its repo", "(BuiltByBean/Talent-Booker) - routes/booking.py" in prompt)
 check("the first project named decides the repo", reference_repo("Flipping (with Kuper Plumbing and Data Dungeon)") == "BuiltByBean/Flipping")
 check("no Windows path is left in it", "C:\\" not in prompt and "Documents\\Apps" not in prompt)
-check("it says where the fix for missing tools is on this Mac", "bootstrap_guidance.sh" in prompt)
+check("missing tools never stop a build or send anybody to a script",
+      "stop and say so" not in prompt and "bootstrap_guidance" not in prompt)
+check("it says how to reach the door without them",
+      "https://builtbybeans.com/api/guidance" in prompt and "railway variables --kv" in prompt)
+check("and what to do if that fails too", "Lessons to file" in prompt)
+check("and that no command is ever handed over", "never hand me one" in prompt)
 check("it holds no money", not MONEY.search(prompt), MONEY.findall(prompt)[:3])
 check("and no heading for any", "THE NUMBERS" not in prompt and "Quoted at" not in prompt)
 

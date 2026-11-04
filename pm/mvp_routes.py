@@ -317,19 +317,32 @@ def build_package_prompt(package):
                "over, anything waiting on the client.")
     out.append("  Never invent a credential, a phone number or an account "
                "id. Ask.")
+    out.append("  Every command is yours to run, pushes and deploys included. "
+               "I do no terminal work, so never hand me one.")
     # The loop, written into the prompt itself so it travels with the
     # project rather than depending on which machine the session is on.
     # On 2026-09-04 a laptop turned out to have neither the bridge nor the
     # standing order, and nothing in the prompt said so; a session there
     # would have built from this snapshot and filed nothing back.
+    #
+    # Missing tools are the session's to route around. This told it to stop and
+    # name a script until 2026-11-04, which on a Mac without the bridge halted
+    # every build on a terminal command for somebody who does not do terminal
+    # work. The door is plain HTTPS, so the loop holds without the bridge.
     out.append("  This prompt is a snapshot of the board. The board is live: "
                "call get_rules before building, get_feature_guidance for "
                "each feature as you reach it, and get_playbook before "
-               "touching a vendor. If the pm-guidance tools are not in this "
-               "session, stop and say so before anything else - the fix is "
-               "tools/bootstrap_guidance.sh (or .ps1 on Windows) in the "
-               "Built-By-Bean-Website repo, then a fresh session. Do not build "
-               "from the snapshot alone.")
+               "touching a vendor.")
+    out.append("  If the pm-guidance tools are not in this session, do not stop "
+               "and do not ask me to fix it. The same door answers at "
+               "https://builtbybeans.com/api/guidance (GET /brief, /search?q=, "
+               "/playbooks/<slug>; POST /lessons, /proposals), with the header "
+               "Authorization: Bearer <GUIDANCE_API_KEY> and a User-Agent of "
+               "your own, because Python's default is refused. Read the key "
+               "with railway variables --kv in the Built-By-Bean-Website "
+               "checkout, and keep it out of every file and message. If that "
+               "cannot be reached either, build from this snapshot, say so "
+               "once, and end with what you learned under Lessons to file.")
     out.append("  What this build teaches goes back the moment it is learned, "
                "not at the end: report_lesson for a bug that cost time, "
                "suggest_update for a runbook step that moved, a better file "

@@ -108,8 +108,12 @@ assuming any session can file anything (`tools/bootstrap_guidance.sh` is the
 Mac's, which adds the order between markers rather than overwriting the file; on
 2026-11-03 this Mac had none of it either). Neither travels with a repo or
 an account, so the MVP build prompt now carries the loop itself: it
-tells the session to consult the live board, to stop and say so if the
-tools are missing, and to file what it learns as it goes. The write path appends with attribution and refuses duplicates,
+tells the session to consult the live board and file what it learns as it
+goes. If the tools are missing it reaches the same door over HTTPS, and failing
+that builds from the snapshot and lists its lessons at the end. It told the
+session to stop and name a script until 2026-11-04, which on a Mac without the
+bridge halted every build on a terminal command for an owner who does not do
+terminal work. The write path appends with attribution and refuses duplicates,
 because reporting sessions retry like any other API client. A proposal's
 text is kept whole up to `TEXT_MAX` (60,000) and refused past it, never cut:
 appends grow a field without limit, and the old 6000 bound truncated a

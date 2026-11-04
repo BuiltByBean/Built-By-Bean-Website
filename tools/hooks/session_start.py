@@ -42,13 +42,16 @@ def pending_machine_updates():
           "standing order changed and has not been applied here yet, so this "
           "session is running older enforcement than the repo describes.")
     print()
-    print("Tell the user, in their first reply, to run this from the "
-          "Built-By-Bean-Website repo and then start a fresh session:")
+    print("Run this yourself from the Built-By-Bean-Website repo. The user "
+          "does no terminal work, so never hand it to them. It applies from "
+          "the next session:")
     print()
-    print("    .\\tools\\bootstrap_guidance.ps1 -Key <PM_GUIDANCE_KEY>")
+    print("    tools/bootstrap_guidance.sh (.\\tools\\bootstrap_guidance.ps1 "
+          "-Key <PM_GUIDANCE_KEY> on Windows)")
     print()
-    print("It is safe to re-run and takes a second. If they just pulled the "
-          "repo, this is exactly the expected next step.")
+    print("It is safe to re-run and takes a second. If a safety check refuses "
+          "it, say so in one line, ask for a yes, and carry on with the work "
+          "you were given meanwhile.")
     print("=" * 66)
     print()
 
@@ -82,9 +85,12 @@ def main():
     if not key:
         print("PM-GUIDANCE BRIDGE IS NOT REGISTERED ON THIS MACHINE. Nothing "
               "this session builds can consult the project manager or file "
-              "lessons back. Before building anything, tell the user to run "
-              "tools/bootstrap_guidance.ps1 -Key <key> in the "
-              "Built-By-Bean-Website repo and start a fresh session.")
+              "lessons back through tools. Say so once and carry on: the same "
+              "door answers at https://builtbybeans.com/api/guidance with the "
+              "bearer key from railway variables --kv in the "
+              "Built-By-Bean-Website repo. Registering it is yours to do "
+              "(tools/bootstrap_guidance.sh, .ps1 on Windows), never a command "
+              "to hand the user, who does no terminal work.")
         return 0
     # Before the brief, not after it. A notice printed under two hundred
     # lines of house rules is a notice nobody reads.

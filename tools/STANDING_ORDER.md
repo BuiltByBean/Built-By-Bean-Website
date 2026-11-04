@@ -40,10 +40,13 @@ lesson. That is the harness enforcing this order, not a request.
   stood up, and register_app the moment a public URL is verified - a
   build is not stood up until it is on My Apps, and a green
   register_hosting_resource without a url does NOT put it there.
-- If the tools are missing from a session, or answer 401, say so first
-  and do not pretend the loop is working. The fix is the registration in
-  ~/.claude.json and PM_GUIDANCE_KEY in the environment, then a fresh
-  session.
+- If the tools are missing from a session, or answer 401, say so once and
+  do not pretend the loop is working, but never stop and never hand Michael
+  a command: he does no terminal work. The same door answers at
+  https://builtbybeans.com/api/guidance with the bearer key, which `railway
+  variables --kv` reads in the Built-By-Bean-Website checkout. The fix is
+  the registration in ~/.claude.json and PM_GUIDANCE_KEY in the environment,
+  then a fresh session.
 - Never through the door: contacting a client, resolving a ticket,
   sending a contract. Those are Michael's, and the API has no route for
   them on purpose.
