@@ -930,6 +930,20 @@ class Expense(db.Model):
     sales_tax_filing_id = db.Column(db.Integer, db.ForeignKey(
         "sales_tax_filings.id", ondelete="SET NULL", name="fk_expenses_sales_tax_filing_id"),
         nullable=True, index=True)
+    # The bank line this expense is part of. Only the bank makes an expense
+    # (docs/finances_plan.md item 5, 2026-11-04): a line from a vendor whose
+    # report splits its bill across projects (Railway, Cloudflare) books one
+    # row per share, every one carrying the line, and the shares add up to
+    # what left the bank. `cost_entry_id` is the vendor row the share follows.
+    # No relationship on either on purpose: expenses and bank lines already
+    # point at each other through bank_transactions.expense_id, and a second
+    # pair of relationships makes the flush order a cycle.
+    bank_line_id = db.Column(db.Integer, db.ForeignKey(
+        "bank_transactions.id", ondelete="SET NULL", name="fk_expenses_bank_line_id",
+        use_alter=True), nullable=True, index=True)
+    cost_entry_id = db.Column(db.Integer, db.ForeignKey(
+        "service_cost_entries.id", ondelete="SET NULL", name="fk_expenses_cost_entry_id",
+        use_alter=True), nullable=True, index=True)
 
     business = db.relationship("Business", foreign_keys=[business_id])
     sales_tax_filing = db.relationship("SalesTaxFiling", foreign_keys=[sales_tax_filing_id])
@@ -1122,8 +1136,10 @@ class VendorRule(db.Model):
     which can differ from whose card paid it: that difference is money one
     company lent the other, and the reports say so. `disposition`:
       expense   an expense in its business's books
-      covered   a vendor sync already books this money (Railway, Cloudflare,
-                Claude); the bank line is evidence, not a second expense
+      split     an expense split across projects and clients by the
+                vendor's own report (Railway, Cloudflare, Claude). It was
+                "covered" until 2026-11-04, when the vendor sync wrote the
+                expense and the bank line was only evidence
       transfer  money moving between the owner's own accounts
       income    money in
       personal  not a business cost at all
@@ -1159,7 +1175,7 @@ class VendorRule(db.Model):
     project = db.relationship("Project")
     provider = db.relationship("ServiceProvider")
 
-    DISPOSITIONS = (("expense", "Business expense"), ("covered", "Booked by its vendor sync"),
+    DISPOSITIONS = (("expense", "Business expense"), ("split", "Split by the vendor's report"),
                     ("contribution", "Money an owner put in"), ("draw", "Money an owner took out"),
                     ("transfer", "Transfer between the company's accounts"), ("income", "Money in"),
                     ("personal", "Personal, not the business"))
@@ -1225,7 +1241,9 @@ class BankTransaction(db.Model):
         "transactions", lazy="dynamic", cascade="all, delete-orphan"))
     business = db.relationship("Business")
     rule = db.relationship("VendorRule")
-    expense = db.relationship("Expense", backref=db.backref("bank_lines", lazy="dynamic"))
+    expense = db.relationship("Expense", foreign_keys=[expense_id],
+                              backref=db.backref("bank_lines", lazy="dynamic",
+                                                 foreign_keys="BankTransaction.expense_id"))
 
     @property
     def suggestion(self):
@@ -1269,6 +1287,52 @@ class CardAlert(db.Model):
         "bank_transactions.id", ondelete="SET NULL", name="fk_card_alerts_line_id"),
         nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class ExpenseTag(db.Model):
+    """What a session knows about a charge before the bank does.
+
+    `log_expense` on the door wrote an Expense until 2026-11-04; now only the
+    bank line makes one (docs/finances_plan.md item 8), so a session leaves
+    this instead: the amount, the vendor, and the client and project it was
+    for. The bank line for that charge takes it when it arrives (same amount
+    to the cent, within `bank_feed.TAG_DAYS`), and its expense lands on the
+    right project with nothing typed. One no line has taken in ten days is a
+    Needs attention row: the charge went on a card the board cannot see, or
+    never happened.
+    """
+
+    __tablename__ = "expense_tags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(db.Float, nullable=False)
+    occurred_on = db.Column(db.Date, nullable=False, index=True)
+    vendor = db.Column(db.String(200), default="")
+    description = db.Column(db.String(500), default="")
+    category = db.Column(db.String(50), default="misc")
+    business_id = db.Column(db.Integer, db.ForeignKey(
+        "businesses.id", ondelete="SET NULL", name="fk_expense_tags_business_id"),
+        nullable=True, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey(
+        "clients.id", ondelete="SET NULL", name="fk_expense_tags_client_id"), nullable=True, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey(
+        "projects.id", ondelete="SET NULL", name="fk_expense_tags_project_id"), nullable=True, index=True)
+    paid_by = db.Column(db.String(120), nullable=True)
+    source = db.Column(db.String(120), default="")
+    line_id = db.Column(db.Integer, db.ForeignKey(
+        "bank_transactions.id", ondelete="SET NULL", name="fk_expense_tags_line_id"),
+        nullable=True, index=True)
+    taken_at = db.Column(db.DateTime, nullable=True)
+    dismissed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    business = db.relationship("Business")
+    client = db.relationship("Client")
+    project = db.relationship("Project")
+    line = db.relationship("BankTransaction")
+
+    def __repr__(self):
+        return f"<ExpenseTag {self.occurred_on} {self.amount} {self.vendor}>"
 
 
 class BooksFlag(db.Model):
@@ -1821,7 +1885,9 @@ class ServiceCostEntry(db.Model):
 
     provider = db.relationship("ServiceProvider", back_populates="cost_entries")
     mapping = db.relationship("ServiceMapping", backref="cost_entries")
-    expense = db.relationship("Expense", backref=db.backref("service_cost_entry", uselist=False))
+    expense = db.relationship("Expense", foreign_keys=[expense_id],
+                              backref=db.backref("service_cost_entry", uselist=False,
+                                                 foreign_keys="ServiceCostEntry.expense_id"))
 
     def __repr__(self):
         return f"<ServiceCostEntry {self.resource_identifier} ${self.allocated_amount}>"

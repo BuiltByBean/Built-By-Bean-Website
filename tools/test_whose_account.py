@@ -8,16 +8,23 @@ that, so every cost entry wrote an Expense and a client's own texting spend
 landed in Michael's ledger, his Total out, his profit and his tax figures as
 money he had paid. He had paid none of it.
 
+Since 2026-11-04 no vendor sync books an expense at all: only the bank line
+does, and the vendor's report splits it (docs/finances_plan.md item 5). What
+is left of this is the expense an older sync wrote before that day, which is
+still on the ledger and still has to come off when the account turns out to
+be a client's.
+
 What is proved:
 
-  1. An account of ours books an expense, exactly as before.
+  1. An account of ours records the cost and books no expense: the bank line
+     for the charge does.
   2. THE POINT: an account that belongs to a CLIENT books no expense at all,
      while still recording what it cost and who it was for. The cost survives,
      the claim on his wallet does not.
-  3. Saying so AFTER the charges are already in the ledger takes them out, on
-     the press, rather than leaving them there until the nightly sync.
-  4. And saying it back again puts them back, so the switch is not a one way
-     door.
+  3. Saying so AFTER an older sync put the charge in the ledger takes it out,
+     on the press, rather than leaving it there until the nightly sync.
+  4. Saying it back again books nothing: a charge on an account of ours
+     reaches the books through its bank line, never through the sync.
   5. The ledger and its Total out drop by exactly what was taken off it.
 
 Run: python tools/test_whose_account.py
@@ -113,8 +120,12 @@ with application.app_context():
     print("AN ACCOUNT OF MINE:")
     costs._sync_twilio(mine)
     check("records the cost", ServiceCostEntry.query.count() == 1)
-    check("and books it as an expense", Expense.query.count() == 1,
+    check("and books no expense: only the bank line makes one", Expense.query.count() == 0,
           Expense.query.count())
+    # What an older sync left behind: the expense it wrote for this row
+    # before 2026-11-04, still on the ledger.
+    costs._sync_expense(ServiceCostEntry.query.first(), None)
+    db.session.commit()
     check("which is unallocated, because nobody said whose it was",
           "[unallocated]" in (ServiceCostEntry.query.first().description or ""))
     check("and the board learned what the vendor calls the account",
@@ -172,18 +183,16 @@ with application.app_context():
           Expense.query.count())
     check("still one cost entry", ServiceCostEntry.query.count() == 1)
 
-print("\nAND IT IS NOT A ONE WAY DOOR:")
+print("\nSAYING IT IS MINE AGAIN:")
 r = c.post(f"/admin/service-costs/providers/{provider_id}/edit",
            data={"name": "twilio", "twilio_account_sid": "AC0",
                  "twilio_auth_token": "t", "is_active": "on",
                  "account_client_id": ""},
            follow_redirects=True)
 with application.app_context():
-    check("saying it is mine again books it back",
-          Expense.query.count() == 1, Expense.query.count())
-    check("for the same money", round(Expense.query.first().amount, 2) == 59.67,
-          Expense.query.first().amount)
-check("and the total comes back with it", ledger_total() == 59.67, ledger_total())
+    check("books nothing: its bank line is what books the charge",
+          Expense.query.count() == 0, Expense.query.count())
+check("and the total stays where the bank leaves it", ledger_total() == 0.0, ledger_total())
 
 print("\nTHE PAGE SAYS WHOSE IT IS:")
 page = c.get("/admin/service-costs/providers").data.decode("utf-8", "replace")

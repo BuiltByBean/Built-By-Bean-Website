@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Vendor amounts and covered charges follow the bank (automation item 15).
+"""Vendor amounts and split charges follow the bank (automation item 15).
 
   1. A flat provider's amount and day come from its last settled line: a
      plan change moves the month's entry to the real charge, to the cent and
-     on its day, the old guess goes, the line reads as covered, and the
+     on its day, the old guess goes, the line reads as split, and the
      provider takes the new figure. A month with two such charges is left to
      review, because one may be another company's plan on the same card.
   2. A prepaid vendor's top-up is the expense; its usage rows record and
@@ -70,8 +70,8 @@ with application.app_context():
     twilio = ServiceProvider(name="twilio", display_name="Twilio", is_active=True)
     db.session.add_all([conn, claude, twilio])
     db.session.commit()
-    bank_feed.remember("CLAUDE AI", "covered", vendor="Claude", category="ai_services", provider_id=claude.id)
-    bank_feed.remember("TWILIO", "covered", vendor="Twilio", category="software", provider_id=twilio.id)
+    bank_feed.remember("CLAUDE AI", "split", vendor="Claude", category="ai_services", provider_id=claude.id)
+    bank_feed.remember("TWILIO", "split", vendor="Twilio", category="software", provider_id=twilio.id)
     bank_feed.remember("GITHUB", "expense", vendor="GitHub", category="software")
     db.session.commit()
     RES = "flat:subscription"
@@ -90,7 +90,7 @@ with application.app_context():
     check("the old guess and its expense are gone",
           Expense.query.filter(Expense.description.like("Claude%")).count() == 1
           and Expense.query.filter(Expense.description.like("Claude%")).first().amount == 200.0)
-    check("the line now reads as covered", db.session.get(BankTransaction, upgraded.id).disposition == "covered")
+    check("the line now reads as split, and books the charge itself", db.session.get(BankTransaction, upgraded.id).disposition == "split" and db.session.get(BankTransaction, upgraded.id).expense.amount == 200.0)
     claude = db.session.get(ServiceProvider, claude.id)
     check("and the provider takes the new amount and day", (claude.monthly_cost, claude.billing_day) == (200.0, 16),
           (claude.monthly_cost, claude.billing_day, n))

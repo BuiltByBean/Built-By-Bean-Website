@@ -197,9 +197,6 @@ class ExpenseForm(FlaskForm):
     category = SelectField("Category", choices=EXPENSE_CATEGORY_CHOICES, default="misc")
     date = DateField("Date", validators=[DataRequired()])
     receipt = FileField("Receipt", validators=[Optional(), FileAllowed(["pdf", "jpg", "jpeg", "png", "webp"], "Files only!")])
-    is_recurring = BooleanField("Recurring Expense", default=False)
-    frequency = SelectField("Frequency", choices=FREQUENCY_CHOICES, default="", validators=[Optional()])
-    recurring_end_date = DateField("End Date (Optional)", validators=[Optional()])
 
 
 class TimeEntryForm(FlaskForm):

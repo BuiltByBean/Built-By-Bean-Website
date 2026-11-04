@@ -393,9 +393,11 @@ TOOLS = [
     {
         "name": "log_expense",
         "description": (
-            "Record money spent - a domain bought, a service paid for, an "
-            "API credit - optionally against a client and project so the "
-            "hosting page can count it as the cost of running that build."),
+            "Tag money spent - a domain bought, a service paid for, an "
+            "API credit - with the client and project it was for. It makes "
+            "no expense: only the bank line does, and the line for this "
+            "charge takes the tag when it arrives (same amount to the cent, "
+            "within ten days), so the expense lands on that project."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -803,7 +805,11 @@ def tool_log_expense(args):
     data, err = _post("/api/guidance/expenses", args)
     if err:
         return err
-    return f"Logged ${data['amount']:,.2f} on {data['date']} (expense {data['id']})."
+    if data.get("taken"):
+        return (f"Tagged ${data['amount']:,.2f} on {data['date']} (tag {data['id']}): "
+                "its bank line was already in and now carries it.")
+    return (f"Tagged ${data['amount']:,.2f} on {data['date']} (tag {data['id']}). The bank line "
+            "for this charge books the expense when it arrives.")
 
 
 def tool_log_time(args):

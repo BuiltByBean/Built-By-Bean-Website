@@ -184,8 +184,8 @@ with application.app_context():
     db.create_all()
 
     print("5. A charge a sync does not hold is never quietly dropped")
-    claude_rule = bank_feed.remember("ANTHROPIC", "covered", vendor="Claude", business_id=1, category="ai_services", provider_id=4)
-    railway_rule = bank_feed.remember("RAILWAY", "covered", vendor="Railway", business_id=1, category="hosting", provider_id=2)
+    claude_rule = bank_feed.remember("ANTHROPIC", "split", vendor="Claude", business_id=1, category="ai_services", provider_id=4)
+    railway_rule = bank_feed.remember("RAILWAY", "split", vendor="Railway", business_id=1, category="hosting", provider_id=2)
     for i, (resource, amount, start, end) in enumerate([("a", 30.00, date(2027, 1, 1), date(2027, 1, 31)),
                                                         ("b", 10.38, date(2027, 1, 1), date(2027, 1, 31))]):
         db.session.add(ServiceCostEntry(provider_id=2, resource_identifier=resource, period_start=start, period_end=end,
@@ -204,9 +204,9 @@ with application.app_context():
         return line
 
     held = charge("n1", "RAILWAY", -40.38, date(2027, 2, 1))
-    check("a month's rows adding up to the bill count as held", held.disposition == "covered", held.disposition)
+    check("a month's rows adding up to the bill count as held", held.disposition == "split", held.disposition)
     one = charge("n2", "ANTHROPIC* CLAUDE SUB", -213.20, date(2027, 2, 18))
-    check("so does a single row", one.disposition == "covered", one.disposition)
+    check("so does a single row", one.disposition == "split", one.disposition)
     theirs = charge("n3", "RAILWAY", -18.40, date(2027, 2, 16))
     booked = db.session.get(Expense, theirs.expense_id) if theirs.expense_id else None
     check("a charge from a vendor another company has its own account with goes to that company",

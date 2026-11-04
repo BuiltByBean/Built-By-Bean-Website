@@ -16,8 +16,10 @@ the shapes it really answered with, and proves:
      never a period still running, never a bill typed by hand, and corrects
      only rows it wrote itself.
   3. Each month's bill is split across its projects by usage, to the cent,
-     with expenses that add up to the bill; a deleted project keeps a name;
-     a month already broken down by hand is left alone.
+     and the BANK LINE for that bill books one expense per project share,
+     adding up to the charge (only the bank makes an expense since
+     2026-11-04); a deleted project keeps a name; a month already broken down
+     by hand is left alone.
   4. EntertainHQ's account writes cost entries and no expense, and takes the
      mapping its project already had under Built by Bean's account.
   5. A token that cannot read billing says what token to make.
@@ -49,8 +51,9 @@ except Exception:
     pass
 
 from app import create_app  # noqa: E402
-from models import (db, Business, Client, Expense, Project, ProviderInvoice, ServiceCostEntry,  # noqa: E402
-                    ServiceMapping, ServiceProvider, User)
+from models import (db, BankConnection, BankTransaction, Business, Client, Expense, Project,  # noqa: E402
+                    ProviderInvoice, ServiceCostEntry, ServiceMapping, ServiceProvider, User)
+import bank_feed  # noqa: E402
 import service_costs_service as scs  # noqa: E402
 
 application = create_app()
@@ -185,6 +188,28 @@ with application.app_context():
     check("says to make an account token", error and "account token" in error, error)
 
     print("Built by Bean's pull")
+    # The bank has both charges before Railway's report is read: each books
+    # one row until the report splits it.
+    bbb_id = Business.query.filter_by(slug="built-by-bean").first().id
+    bank = BankConnection(business_id=bbb_id, token="t", synced_from=date(2026, 4, 1))
+    db.session.add(bank)
+    db.session.flush()
+    bank_feed.remember("RAILWAY", "split", vendor="Railway", category="hosting", provider_id=ids["rw"],
+                       business_id=bbb_id)
+    charges = {}
+    today = date.today()
+    for month, amount in ((date(2026, 9, 1), 43.71), (date(2026, 10, 1), 52.38)):
+        # Dated inside the last 75 days, the window the night splits again.
+        when = min(scs._month_bounds(month)[1] + timedelta(days=1), today)
+        line = BankTransaction(connection_id=bank.id, business_id=bbb_id, external_id=f"rw-{month:%m}",
+                               status="sent", amount=-amount, occurred_on=when, counterparty="Railway")
+        db.session.add(line)
+        db.session.flush()
+        bank_feed.classify(line)
+        charges[month] = line.id
+    db.session.commit()
+    check("before the report, each charge is one row on the bank's date",
+          all(len(bank_feed._parts(db.session.get(BankTransaction, i))) == 1 for i in charges.values()))
     rw = db.session.get(ServiceProvider, ids["rw"])
     rw.credentials_json = json.dumps({"api_token": "account-token", "workspace_id": BBB_WS})
     db.session.commit()
@@ -198,13 +223,16 @@ with application.app_context():
     for month, want in ((date(2026, 9, 1), 43.71), (date(2026, 10, 1), 52.38)):
         start, end = scs._month_bounds(month)
         entries = ServiceCostEntry.query.filter_by(provider_id=ids["rw"], period_start=start, period_end=end).all()
-        expenses = [e.expense for e in entries if e.expense]
+        expenses = bank_feed._parts(db.session.get(BankTransaction, charges[month]))
         check(f"{month:%B} is split across its projects to the cent",
               round(sum(e.raw_amount for e in entries), 2) == want and len(entries) == 3,
               (round(sum(e.raw_amount for e in entries), 2), len(entries)))
-        check(f"{month:%B}'s expenses add up to the bill",
-              round(sum(x.amount for x in expenses), 2) == want and len(expenses) == 3,
-              round(sum(x.amount for x in expenses), 2))
+        check(f"{month:%B}'s bank charge books a row per project, adding up to the bill",
+              round(sum(x.amount for x in expenses), 2) == want and len(expenses) == 3
+              and {x.cost_entry_id for x in expenses} == {e.id for e in entries},
+              (round(sum(x.amount for x in expenses), 2), len(expenses)))
+        check(f"and no expense in {month:%B} that the bank did not make",
+              all(e.expense is None or e.expense.bank_line_id == charges[month] for e in entries))
     sept = scs._month_bounds(date(2026, 9, 1))
     k = ServiceCostEntry.query.filter_by(provider_id=ids["rw"], resource_identifier=f"railway:{P_KUPER}",
                                          period_start=sept[0]).first()
@@ -235,7 +263,8 @@ with application.app_context():
     check("a project mapped after a pull is counted once, on its client",
           len(site_rows) == 1 and site_rows[0].mapping_id is not None
           and round(sum(e.raw_amount for e in sept_rows), 2) == 43.71
-          and round(sum(e.expense.amount for e in sept_rows if e.expense), 2) == 43.71,
+          and round(sum(x.amount for x in bank_feed._parts(db.session.get(BankTransaction, charges[date(2026, 9, 1)]))), 2) == 43.71
+          and any(x.client_id == ids["me"] for x in bank_feed._parts(db.session.get(BankTransaction, charges[date(2026, 9, 1)]))),
           (len(site_rows), round(sum(e.raw_amount for e in sept_rows), 2)))
 
     print("EntertainHQ's pull, on the account token in the service's variables")

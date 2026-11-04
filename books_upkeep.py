@@ -184,7 +184,7 @@ def end_recurring(today=None):
     from models import db, Expense, ServiceCostEntry, VendorRule
     today = today or date.today()
     rules = [r for r in VendorRule.query.all()
-             if r.disposition in ("expense", "covered") and (r.applies_to or "all") == "all"]
+             if r.disposition in ("expense", "split", "covered") and (r.applies_to or "all") == "all"]
     ended = []
     for parent in Expense.query.filter(Expense.is_recurring.is_(True)).all():
         rule = _rule_matching(parent.description, rules)
@@ -224,7 +224,7 @@ def known_vendor_names():
     import bank_review
     from models import ServiceProvider, VendorRule
     names = set(bank_review.KNOWN_VENDORS)
-    for r in VendorRule.query.filter(VendorRule.disposition.in_(("expense", "covered"))).all():
+    for r in VendorRule.query.filter(VendorRule.disposition.in_(("expense", "split", "covered"))).all():
         if (r.applies_to or "all") != "all":
             continue
         word = next((w for w in re.findall(r"[a-z][a-z0-9]+", (r.vendor or r.pattern or "").lower())
@@ -302,6 +302,20 @@ def receipt_set_aside(receipt_id):
 # ── What Needs attention reads ───────────────────────────
 
 
+TAG_WAIT_DAYS = 10
+
+
+def waiting_tags(today=None):
+    """Charges a session logged (log_expense) that no bank line has taken in
+    TAG_WAIT_DAYS: paid on a card the board cannot see, or never charged.
+    One query, so it is read live rather than left by the night."""
+    from models import ExpenseTag
+    today = today or date.today()
+    return (ExpenseTag.query.filter(ExpenseTag.line_id.is_(None), ExpenseTag.dismissed_at.is_(None),
+                                    ExpenseTag.occurred_on <= today - timedelta(days=TAG_WAIT_DAYS))
+            .order_by(ExpenseTag.occurred_on, ExpenseTag.id).all())
+
+
 def attention_rows():
     """The books' rows for Needs attention: every flag the night left, then
     one row naming the statements that are due. Cheap: a table read and one
@@ -314,6 +328,11 @@ def attention_rows():
             out.append({"title": flag.title, "detail": flag.detail, "link": flag.link,
                         "label": {"month": "Books", "recurring": "Recurring",
                                   "receipts": "Receipts"}.get(flag.kind, "Books")})
+        tags = waiting_tags()
+        if tags:
+            out.append({"title": f"{_plural(len(tags), 'logged charge')} no bank line has taken",
+                        "detail": ", ".join(f"${t.amount:,.2f} {t.vendor or t.description}" for t in tags)[:300],
+                        "link": url_for("books.index", tab="tags"), "label": "Tag"})
         import statements
         due = statements.statements_due()
         if due:

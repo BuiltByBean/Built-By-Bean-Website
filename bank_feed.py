@@ -33,9 +33,14 @@ What a line is:
               bank it is. Mercury's own fees are expenses without a rule.
               Money back from a vendor with an expense rule is a refund: a
               negative expense.
-  - covered   a vendor sync already books this money (Railway, Cloudflare,
-              Claude, for Built by Bean); for any other business it is an
-              expense, because the sync books only Built by Bean's
+  - split     an expense, split across projects and clients by the vendor's
+              own report (Railway, Cloudflare, Claude, for Built by Bean):
+              one row per share, the shares adding up to the charge. Until
+              2026-11-04 this was "covered" and the vendor sync wrote the
+              expense itself; now only a bank line ever makes one
+              (docs/finances_plan.md item 5). For any other business it is a
+              plain expense, because the vendor report reads only Built by
+              Bean's account
   - income    money in (Stripe payouts, client payments); revenue is read
               from Stripe, so this is never an expense and never revenue
   - personal  not the business's money
@@ -212,10 +217,13 @@ def _home_family():
     return {home} | {b.id for b in Business.query.filter_by(parent_id=home).all()}
 
 
+SPLIT = ("split", "covered")  # "covered" is the old word, read until every row says split
+
+
 def provider_books(provider, business_id):
-    """Whether this vendor's own sync already writes the expense for money
-    this business spent: only for a provider that is Built by Bean's, and
-    only for Built by Bean or one of its DBAs."""
+    """Whether this vendor's own report covers money this business spent, and
+    so can split it: only for a provider that is Built by Bean's, and only for
+    Built by Bean or one of its DBAs."""
     return bool(provider and provider.is_active and provider.account_client_id is None
                 and provider.account_business_id is None
                 and business_id in _home_family())
@@ -316,13 +324,14 @@ def classify(line, rules=None):
                 if is_personal(line):
                     line.disposition = "transfer"
                     line.owner_name = ""
-            if rule.disposition == "covered":
+            if rule.disposition in SPLIT:
+                line.disposition = "split"
                 owner = rule.business_id or line.business_id
                 if is_prepaid(rule.provider):
                     # A top-up is the money that left; the vendor's usage rows
                     # are only how it splits across clients and book nothing
                     # (service_costs_service.PREPAID_PROVIDERS). A $20 top-up
-                    # never equals a month of usage, so "covered" could never
+                    # never equals a month of usage, so a split could never
                     # find it and every one fell to review.
                     line.disposition = "expense"
                 elif not provider_books(rule.provider, owner):
@@ -348,17 +357,44 @@ def classify(line, rules=None):
     return line.disposition
 
 
+def _parts(line):
+    from models import Expense
+    if not line.id:
+        return []
+    return Expense.query.filter(Expense.bank_line_id == line.id).order_by(Expense.id).all()
+
+
+def _remove(expense):
+    """Take an expense off the books, unless it is on an invoice already
+    sent, which keeps it and only loses its link to the line."""
+    from models import db, ServiceCostEntry
+    if expense.invoice_line_items:
+        expense.bank_line_id = None
+        return
+    ServiceCostEntry.query.filter_by(expense_id=expense.id).update({"expense_id": None})
+    db.session.delete(expense)
+
+
 def book(line, rule=None, manual=None):
-    """Make, rewrite or remove the one expense this line stands for."""
+    """Make, rewrite or remove the expense this line stands for: one row, or
+    one row per share when the vendor's report splits it."""
     from models import db, Expense
-    wants = line.disposition == "expense" and line.status == "sent"
+    wants = line.disposition in ("expense", "split") and line.status == "sent"
     if not wants:
-        if line.expense_id:
-            gone = db.session.get(Expense, line.expense_id)
-            line.expense_id = None
-            if gone is not None:
-                db.session.delete(gone)
+        parts = _parts(line)
+        if line.expense_id and all(p.id != line.expense_id for p in parts):
+            extra = db.session.get(Expense, line.expense_id)
+            if extra is not None:
+                parts.append(extra)
+        line.expense_id = None
+        for gone in parts:
+            _remove(gone)
         return None
+    if line.disposition == "split" and line.amount < 0:
+        if rule is None and line.rule_id:
+            rule = line.rule
+        if rule is not None and rule.provider is not None:
+            return split(line, rule)
     if rule is not None:
         spec = {"business_id": rule.business_id, "category": rule.category,
                 "client_id": rule.client_id, "project_id": rule.project_id,
@@ -375,6 +411,7 @@ def book(line, rule=None, manual=None):
         expense = adopt(line, (spec or {}).get("business_id") or line.business_id)
         if expense is not None:
             line.expense_id = expense.id
+            expense.bank_line_id = line.id
             if paid_by and not expense.paid_by:
                 expense.paid_by = paid_by
             return expense
@@ -382,6 +419,16 @@ def book(line, rule=None, manual=None):
     if fresh:
         expense = Expense(amount=0, date=line.occurred_on, category="misc")
         db.session.add(expense)
+        # What a session said about this charge before the bank did
+        # (log_expense): its client, project and vendor ride in.
+        tag = take_tag(line)
+        if tag is not None:
+            spec = dict(spec or {})
+            for key in ("client_id", "project_id"):
+                spec[key] = spec.get(key) or getattr(tag, key)
+            if (spec.get("category") or "misc") == "misc" and tag.category:
+                spec["category"] = tag.category
+            spec["vendor"] = tag.vendor or tag.description or spec.get("vendor")
     # The bank states the whole charge; any sales tax in it was settled out of
     # the expense and stays out when the amount is read again.
     expense.amount = round(-line.amount - (expense.sales_tax_remitted or 0.0), 2)
@@ -397,8 +444,232 @@ def book(line, rule=None, manual=None):
     if paid_by:
         expense.paid_by = paid_by
     db.session.flush()
+    expense.bank_line_id = line.id
     line.expense_id = expense.id
     return expense
+
+
+def split_shares(line, provider):
+    """How the vendor's own report splits this charge: [(entry, amount)], the
+    amounts adding up to the charge to the cent, or [] when the report holds
+    nothing for it (then the line is one row, on the rule's client).
+
+    The report holds it as one row for the amount, as one period's rows
+    adding up to it (nearest period first), or as one period paid by several
+    charges, each paying its share of every row: Railway billed March 2026 as
+    two invoices, $9.75 and $5.00, a day apart."""
+    from models import BankTransaction, ServiceCostEntry, VendorRule
+    target = round(-line.amount, 2)
+    when = line.occurred_on
+    window = ServiceCostEntry.query.filter(
+        ServiceCostEntry.provider_id == provider.id,
+        ServiceCostEntry.period_start <= when + timedelta(days=5),
+        ServiceCostEntry.period_end >= when - timedelta(days=45)).order_by(ServiceCostEntry.id).all()
+    if not window:
+        return []
+    periods = {}
+    for e in window:
+        periods.setdefault((e.period_start, e.period_end), []).append(e)
+
+    def amount(e):
+        return round(e.allocated_amount or 0.0, 2)
+
+    def distance(group):
+        return min(abs((e.period_end - when).days) for e in group)
+
+    groups = [[e] for e in window if abs(amount(e) - target) < 0.005]
+    groups += [g for g in periods.values()
+               if len(g) > 1 and abs(round(sum(amount(e) for e in g), 2) - target) < 0.005]
+    share = 1.0
+    if not groups:
+        # One period, several charges: the lines from this vendor near it add
+        # up to the period, so each pays its share of every row.
+        rules = [r.id for r in VendorRule.query.filter(VendorRule.provider_id == provider.id).all()]
+        for key, group in sorted(periods.items(), key=lambda kv: distance(kv[1])):
+            total = round(sum(amount(e) for e in group), 2)
+            if total <= 0 or not rules:
+                continue
+            near = BankTransaction.query.filter(
+                BankTransaction.rule_id.in_(rules), BankTransaction.status == "sent",
+                BankTransaction.amount < 0, BankTransaction.disposition.in_(SPLIT),
+                BankTransaction.occurred_on >= key[0] - timedelta(days=5),
+                BankTransaction.occurred_on <= key[1] + timedelta(days=45)).all()
+            if line not in near:
+                near.append(line)
+            if len(near) > 1 and abs(round(sum(-n.amount for n in near), 2) - total) < 0.005:
+                groups, share = [group], target / total
+                break
+    if not groups:
+        return []
+    group = min(groups, key=lambda g: (distance(g), min(e.id for e in g)))
+    shares = [(e, round(amount(e) * share, 2)) for e in group]
+    gap = round(target - sum(a for _, a in shares), 2)
+    if gap and shares:
+        i = max(range(len(shares)), key=lambda k: shares[k][1])
+        shares[i] = (shares[i][0], round(shares[i][1] + gap, 2))
+    return shares
+
+
+def split(line, rule):
+    """Book a vendor's charge as one row per share of its report. The row for
+    a vendor row is reused across nights, and an expense the old sync wrote
+    for that row is taken over keeping its date, so a month already read
+    does not move. A share that went away goes with its row."""
+    from models import db, Expense
+    owner = rule.business_id or line.business_id
+    shares = split_shares(line, rule.provider)
+    parts = _parts(line)
+    if line.expense_id and all(p.id != line.expense_id for p in parts):
+        first = db.session.get(Expense, line.expense_id)
+        if first is not None:
+            parts.append(first)
+    paid_by = (_connection(line).owner_name or None) if is_personal(line) else None
+    vendor = rule.vendor or line.counterparty or rule.provider.display_name
+    used, rows = [], []
+    if not shares:
+        part = parts[0] if parts else adopt(line, owner)
+        if part is None:
+            part = Expense(amount=0, date=line.occurred_on, category="misc")
+            db.session.add(part)
+        part.client_id, part.project_id = rule.client_id, rule.project_id
+        part.description = vendor + (f" - {line.note}" if line.note else "")
+        rows.append((part, round(-line.amount, 2), None))
+    else:
+        for entry, amount in shares:
+            part = next((p for p in parts if p.cost_entry_id == entry.id and p not in used), None)
+            legacy = entry.expense
+            if part is None and legacy is not None and legacy not in used                     and legacy.bank_line_id in (None, line.id):
+                part = legacy  # written by the old sync: it becomes this line's share
+            if part is None:
+                part = next((p for p in parts if p.cost_entry_id is None and p not in used), None)
+            if part is None:
+                part = Expense(amount=0, date=line.occurred_on, category="misc")
+                db.session.add(part)
+            used.append(part)
+            mapping = entry.mapping
+            part.client_id = (mapping.client_id if mapping else None) or rule.client_id
+            part.project_id = (mapping.project_id if mapping else None) or rule.project_id
+            part.description = (entry.description or vendor).replace(" [unallocated]", "")
+            rows.append((part, amount, entry))
+    keep = []
+    for part, amount, entry in rows:
+        part.amount = amount
+        part.business_id = owner
+        if part.id is None or (part.category or "misc") == "misc":
+            part.category = rule.category or "misc"  # a row already read keeps its tax line
+        if paid_by:
+            part.paid_by = paid_by
+        db.session.flush()
+        part.bank_line_id = line.id
+        part.cost_entry_id = entry.id if entry is not None else None
+        if entry is not None and entry.expense_id in (None, part.id):
+            entry.expense_id = part.id
+        keep.append(part)
+    for gone in parts:
+        if gone not in keep:
+            _remove(gone)
+    db.session.flush()
+    main = max(keep, key=lambda p: (p.amount, -p.id))
+    line.expense_id = main.id
+    return main
+
+
+def resplit(provider_id=None, days=75, today=None):
+    """Split the recent split lines again: a vendor's report for a month
+    often lands after its charge (Railway bills on the 1st and its usage is
+    read that night), and a project mapped later moves the shares. Only the
+    split changes: what a line books always adds up to the charge."""
+    from models import db, BankTransaction, VendorRule
+    today = today or date.today()
+    q = BankTransaction.query.filter(BankTransaction.disposition.in_(SPLIT),
+                                     BankTransaction.status == "sent",
+                                     BankTransaction.amount < 0,
+                                     BankTransaction.occurred_on >= today - timedelta(days=days))
+    if provider_id is not None:
+        rules = [r.id for r in VendorRule.query.filter_by(provider_id=provider_id).all()]
+        if not rules:
+            return 0
+        q = q.filter(BankTransaction.rule_id.in_(rules))
+    done = 0
+    for line in q.order_by(BankTransaction.occurred_on, BankTransaction.id).all():
+        if line.rule is not None and line.rule.provider is not None:
+            split(line, line.rule)
+            done += 1
+    db.session.flush()
+    return done
+
+
+TAG_DAYS = 10
+
+
+def _family_of(business_id):
+    from models import db, Business
+    biz = db.session.get(Business, business_id) if business_id else None
+    if biz is None:
+        return set()
+    root = biz.parent_id or biz.id
+    return {root} | {b.id for b in Business.query.filter_by(parent_id=root).all()}
+
+
+def take_tag(line):
+    """The note a session left for this very charge (log_expense), if one is
+    waiting: the same amount to the cent, dated within TAG_DAYS either side,
+    for this company or one of its DBAs (any company, on an owner's own
+    card). The closest date wins, and the tag is taken for good."""
+    from models import ExpenseTag
+    if line.amount >= 0:
+        return None
+    target = round(-line.amount, 2)
+    rows = ExpenseTag.query.filter(ExpenseTag.line_id.is_(None), ExpenseTag.dismissed_at.is_(None),
+                                   ExpenseTag.occurred_on >= line.occurred_on - timedelta(days=TAG_DAYS),
+                                   ExpenseTag.occurred_on <= line.occurred_on + timedelta(days=TAG_DAYS)).all()
+    rows = [t for t in rows if abs(round(t.amount, 2) - target) < 0.005]
+    if not is_personal(line):
+        family = _family_of(line.business_id)
+        rows = [t for t in rows if t.business_id is None or t.business_id in family]
+    if not rows:
+        return None
+    tag = min(rows, key=lambda t: (abs((t.occurred_on - line.occurred_on).days), t.id))
+    tag.line_id = line.id
+    tag.taken_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    return tag
+
+
+def apply_tag(tag):
+    """A tag logged after its charge was booked: put it on that line's
+    expense now, rather than wait for a line that has come and gone. Only a
+    plain expense line that nobody has given a client or project yet."""
+    from models import db, BankTransaction, Expense, ExpenseTag
+    target = round(tag.amount, 2)
+    taken = {t.line_id for t in ExpenseTag.query.filter(ExpenseTag.line_id.isnot(None)).all()}
+    family = _family_of(tag.business_id) if tag.business_id else None
+    best = None
+    for line in BankTransaction.query.filter(
+            BankTransaction.status == "sent", BankTransaction.disposition == "expense",
+            BankTransaction.expense_id.isnot(None),
+            BankTransaction.occurred_on >= tag.occurred_on - timedelta(days=TAG_DAYS),
+            BankTransaction.occurred_on <= tag.occurred_on + timedelta(days=TAG_DAYS)).all():
+        if line.id in taken or abs(round(-line.amount, 2) - target) >= 0.005:
+            continue
+        if family is not None and not is_personal(line) and line.business_id not in family:
+            continue
+        expense = db.session.get(Expense, line.expense_id)
+        if expense is None or expense.project_id or expense.client_id:
+            continue
+        if best is None or abs((line.occurred_on - tag.occurred_on).days) < abs((best.occurred_on - tag.occurred_on).days):
+            best = line
+    if best is None:
+        return None
+    expense = db.session.get(Expense, best.expense_id)
+    expense.client_id, expense.project_id = tag.client_id, tag.project_id
+    if (expense.category or "misc") == "misc" and tag.category:
+        expense.category = tag.category
+    if tag.vendor or tag.description:
+        expense.description = tag.vendor or tag.description
+    tag.line_id = best.id
+    tag.taken_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.session.flush()
+    return best
 
 
 ADOPT_BEFORE, ADOPT_AFTER = 3, 7
@@ -430,6 +701,7 @@ def adopt(line, business_id, exclude_id=None):
     synced = db.session.query(ServiceCostEntry.expense_id).filter(
         ServiceCostEntry.expense_id.isnot(None))
     q = Expense.query.filter(Expense.date >= lo, Expense.date <= hi, Expense.time_entry_id.is_(None),
+                             Expense.bank_line_id.is_(None),
                              ~Expense.id.in_(taken), ~Expense.id.in_(synced))
     # An owner's own card pays for any of his companies, so the charge may
     # already be in ANY company's books: on 2026-11-03 Sapphire's Google Play
@@ -475,6 +747,7 @@ def fold_duplicates():
         from models import Receipt
         Receipt.query.filter_by(expense_id=mine.id).update({"expense_id": other.id})
         line.expense_id = other.id
+        other.bank_line_id = line.id
         db.session.delete(mine)
         db.session.flush()
         done += 1
@@ -642,6 +915,9 @@ def sync_all(app):
             result = sync_connection(conn)
             name = conn.business.name if conn.business else conn.business_id
             print(f"  bank {name:30} {result.get('error') or conn.last_note}", flush=True)
+        from models import db
+        print(f"  bank: {resplit():,} vendor charges split by their reports", flush=True)
+        db.session.commit()
         print(f"  bank: {fold_duplicates():,} charges booked twice folded into one", flush=True)
 
 

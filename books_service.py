@@ -242,16 +242,10 @@ def owner_money_between(business, start, end):
         # The whole charge: the sales tax on a Comptroller payment is not this
         # company's cost, but it was still the owner's money that paid it.
         out.setdefault(e.paid_by, {"in": 0.0, "out": 0.0})["in"] += e.charged
-    # A vendor sync books some charges itself (Railway, Cloudflare, Claude);
-    # when one of those was paid on an owner's own card, the owner still put
-    # that money in.
-    from models import BankConnection
-    for line in (BankTransaction.query.join(BankConnection, BankTransaction.connection_id == BankConnection.id)
-                 .filter(BankTransaction.business_id.in_(family_ids(business)),
-                         BankTransaction.disposition == "covered", BankConnection.kind == "personal",
-                         BankTransaction.occurred_on >= start, BankTransaction.occurred_on < end).all()):
-        who = line.connection.owner_name or "Owner not named"
-        out.setdefault(who, {"in": 0.0, "out": 0.0})["in"] += abs(line.amount)
+    # A vendor's charge on an owner's own card is booked by its bank line like
+    # any other (bank_feed.split marks every share paid_by the card's owner),
+    # so it is counted just above. It had a loop of its own while the vendor
+    # sync wrote the expense and the line booked nothing.
     for line in (BankTransaction.query.filter(BankTransaction.business_id.in_(family_ids(business)),
                                               BankTransaction.disposition.in_(("contribution", "draw")),
                                               BankTransaction.status == "sent",

@@ -315,6 +315,9 @@ def _costs_by_project(months):
               .filter(Expense.project_id.isnot(None))
               .filter(Expense.date >= window_start)
               .filter(Expense.id.notin_(mirrored))
+              # A bank line's share of a vendor row (bank_feed.split) is that
+              # row's cost, counted above through its mapping.
+              .filter(Expense.cost_entry_id.is_(None))
               .all())
     for project_id, when, amount in direct:
         if when is None:

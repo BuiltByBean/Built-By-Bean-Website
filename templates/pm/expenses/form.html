@@ -51,31 +51,6 @@
                     {{ form.description(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="What was this expense for?") }}
                 </div>
 
-                <!-- Recurring Expense Section -->
-                <div x-data="{ recurring: {{ 'true' if form.is_recurring.data else 'false' }} }" class="p-4 rounded-xl border border-surface-700 bg-surface-800/30">
-                    <div class="flex items-center gap-3 cursor-pointer" @click="recurring = !recurring">
-                        <input type="hidden" name="is_recurring" :value="recurring ? 'y' : ''">
-                        <div class="relative w-9 h-5 rounded-full transition-colors" :class="recurring ? 'bg-brand-500' : 'bg-surface-600'">
-                            <div class="absolute top-[2px] left-[2px] bg-white rounded-full h-4 w-4 transition-transform" :class="recurring ? 'translate-x-full' : ''"></div>
-                        </div>
-                        <div>
-                            <p class="text-sm font-medium text-surface-300">Recurring Expense</p>
-                            <p class="text-xs text-surface-400">Automatically create this expense on a schedule</p>
-                        </div>
-                    </div>
-
-                    <div :class="recurring ? '' : 'hidden'" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-surface-300 mb-1.5">Frequency</label>
-                            {{ select_dropdown(form.frequency.name, frequency_choices, form.frequency.data or '', "Select frequency...", full_width=true) }}
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-surface-300 mb-1.5">End Date (Optional)</label>
-                            {{ form.recurring_end_date(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm", placeholder="Leave blank for no end date") }}
-                        </div>
-                    </div>
-                </div>
-
                 <div x-data="{ fileName: '', placeholder: '{{ 'Replace receipt' if editing and expense.receipt_filename else 'Upload receipt (PDF, JPG, PNG)' }}' }"
                      @change="fileName = ($event.target.files && $event.target.files.length) ? $event.target.files[0].name : ''">
                     <label class="block text-sm font-medium text-surface-300 mb-1.5">Receipt</label>

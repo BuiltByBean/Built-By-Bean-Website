@@ -25,6 +25,13 @@ What is proved:
      happen on the 16th, it accrued over sixteen days, so the row reads
      "Sep 2026 / to date" and not a date it did not land on.
 
+Since 2026-11-04 a vendor sync makes no new expense (only the bank line
+does, docs/finances_plan.md item 5). An expense an older sync already wrote for
+a month that has not had its charge yet is still corrected in place until the
+bank line takes it over, and that is what 1, 5 and 6 now prove: it is seeded
+on the first night as the old sync wrote it. A month that starts afterwards
+gets none from the sync at all.
+
 Run: python tools/test_cost_periods.py
 """
 import json
@@ -116,6 +123,10 @@ with application.app_context():
         costs.requests = type("R", (), {
             "get": staticmethod(lambda *a, _d=day, _p=price, **kw: twilio_on(_d, _p))})
         costs._sync_twilio(twilio)
+        if i == 0:
+            # The expense the old sync wrote on the first night.
+            costs._sync_expense(ServiceCostEntry.query.filter_by(provider_id=twilio_id).first(), None)
+            db.session.commit()
 
     entries = ServiceCostEntry.query.filter_by(provider_id=twilio_id).all()
     check("one entry, not fifteen", len(entries) == 1, len(entries))
@@ -173,9 +184,8 @@ with application.app_context():
     sept_expense = db.session.get(Expense, entries[0].expense_id)
     check("September's expense settled on the last day of September, now it is over",
           sept_expense.date == date(2026, 9, 30), sept_expense.date)
-    oct_expense = db.session.get(Expense, entries[1].expense_id)
-    check("and October, still running, is dated the day it was read",
-          oct_expense.date == date(2026, 10, 4), oct_expense.date)
+    check("and October, a month with no expense from before, gets none from the sync",
+          entries[1].expense_id is None, entries[1].expense_id)
     check("nothing in the ledger is dated ahead of the day it was read",
           all(e.date <= date(2026, 10, 4)
               for e in Expense.query.filter_by(category="service_cost").all()),

@@ -45,11 +45,34 @@ def _existing_entry(provider_id, resource_id, period_start, period_end, mapping_
 PREPAID_PROVIDERS = {"twilio"}
 
 
+# Only the bank line makes an expense (docs/finances_plan.md item 5, Michael,
+# 2026-11-04). A vendor's report splits that line across projects and clients
+# (bank_feed.split) and books nothing of its own. Stripe is the one exception:
+# it takes its fees out of the balance it holds before paying out, so they
+# never cross a bank and the Stripe balance is the account they come from.
+BALANCE_PROVIDERS = {"stripe"}
+
+# An expense a vendor sync wrote before that day keeps being corrected by the
+# sync (a month to date figure grows) until its bank line takes it over.
+# Periods starting on or after this get none.
+SPLIT_FROM = date(2026, 12, 1)
+
+
 def writes_expenses(provider):
-    """Whether this provider's cost entries become Expenses: only an account
-    that is this business's own and is not paid by top-ups. The sync and the
+    """Whether this provider's cost entries become Expenses: only Stripe's
+    fees, on an account that is this business's own. The sync and the
     ownership press on the providers page both ask this, never one half of it."""
-    return provider.is_ours and provider.name not in PREPAID_PROVIDERS
+    return provider.is_ours and provider.name in BALANCE_PROVIDERS
+
+
+def _keeps_old_expense(provider, entry):
+    """An expense the old sync wrote for this row, that no bank line has
+    taken over yet: still corrected in place, so a month to date figure
+    does not freeze before its charge arrives. Never a new one."""
+    expense = entry.expense
+    return (provider.is_ours and provider.name not in PREPAID_PROVIDERS
+            and expense is not None and expense.bank_line_id is None
+            and entry.period_start < SPLIT_FROM)
 
 
 def _month_bounds(when=None):
@@ -71,12 +94,16 @@ def _drop_expense(cost_entry):
 
     Called when the account turns out to belong to a client. The entry stays,
     because what their app costs to run is worth knowing; the expense goes,
-    because this business did not spend it.
+    because this business did not spend it. A share of a bank line stays: the
+    bank says the money left, and the line's next split decides where.
     """
     expense = cost_entry.expense
     cost_entry.expense_id = None
     if expense is not None:
-        db.session.delete(expense)
+        if expense.bank_line_id:
+            expense.cost_entry_id = None
+        else:
+            db.session.delete(expense)
     db.session.flush()
 
 
@@ -88,8 +115,9 @@ def discard_entry(entry):
     gone to a client, which is a worse outcome than an orphan row.
     """
     expense = entry.expense
-    if expense is not None and not expense.invoice_line_items:
+    if expense is not None and not expense.invoice_line_items and not expense.bank_line_id:
         db.session.delete(expense)
+    Expense.query.filter_by(cost_entry_id=entry.id).update({"cost_entry_id": None})
     entry.expense_id = None
     db.session.delete(entry)
 
@@ -196,6 +224,10 @@ def sync_provider(provider_id):
 
     try:
         count = func(provider)
+        # The report is how the bank's charges split: split them again now
+        # it has changed, rather than wait for the night.
+        import bank_feed
+        bank_feed.resplit(provider_id=provider.id)
         provider.last_sync_at = datetime.now(timezone.utc)
         provider.sync_error = None
         db.session.commit()
@@ -397,7 +429,7 @@ def follow_flat_from_bank(today=None):
     the old amount on the old day and the real charge then fell to review as
     a charge the sync did not hold. Now, for each month of the last ten weeks
     with exactly ONE charge from this vendor that is Built by Bean's (its rule
-    is "covered" by this provider, the line was not settled by hand, and no
+    is split by this provider, the line was not settled by hand, and no
     other company's twin account or mailbox claims it), the month's entry is
     that charge, on its day and to the cent, any other entry the provider
     wrote in that month goes, and the provider takes the newest charge's
@@ -416,7 +448,7 @@ def follow_flat_from_bank(today=None):
     for provider in ServiceProvider.query.filter_by(name="flat", is_active=True).all():
         if not provider.is_ours:
             continue
-        mine = {r.id for r in rules if r.provider_id == provider.id and r.disposition == "covered"}
+        mine = {r.id for r in rules if r.provider_id == provider.id and r.disposition in ("split", "covered")}
         if not mine:
             continue
         by_month = {}
@@ -646,14 +678,16 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
         entry.description = description if attributed else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
-        if not writes_expenses(provider):
-            # Their account, their card. The cost is worth recording and worth
-            # seeing against them; it is not money this business spent, so it
-            # never becomes an Expense. Any expense a previous sync wrote for
-            # it goes, or the ledger would keep counting it for ever.
-            _drop_expense(entry)
-        else:
+        if writes_expenses(provider):
             _sync_expense(entry, mapping, default_client_id=default_client_id)
+        elif _keeps_old_expense(provider, entry):
+            _sync_expense(entry, mapping, default_client_id=default_client_id)
+        elif entry.expense is not None and entry.expense.bank_line_id is None:
+            # Their account, their card (or a prepaid vendor's usage): the
+            # cost is worth recording and worth seeing against them, and it
+            # is not an expense. One a previous sync wrote for it goes, or the
+            # ledger would keep counting it for ever.
+            _drop_expense(entry)
 
     return len(_find_mapping(provider.id, resource_id) or [None])
 

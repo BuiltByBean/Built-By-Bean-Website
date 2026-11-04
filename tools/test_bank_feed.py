@@ -13,8 +13,9 @@ come apart:
      expenses, Mercury's own fee is, a pending charge books nothing until it
      settles, a settled one follows the bank's final amount, a cancelled one
      takes its expense away, and a vendor refund is a negative expense.
-  3. A vendor whose sync already books Built by Bean's money is "covered"
-     there and is a plain expense in EntertainHQ's books.
+  3. A vendor whose report splits Built by Bean's money is "split" there
+     (the bank line books it, one row per share), and is a plain expense in
+     EntertainHQ's books.
   4. An expense somebody already typed for the same charge is adopted, not
      doubled.
   5. Settling one line with "remember" settles every line like it, for
@@ -106,7 +107,7 @@ with application.app_context():
     db.session.commit()
 
     print("2. A night's read of a Mercury account")
-    bank_feed.remember("RAILWAY", "covered", vendor="Railway", category="hosting",
+    bank_feed.remember("RAILWAY", "split", vendor="Railway", category="hosting",
                        provider_id=ids["railway"])
     bank_feed.remember("OPENAI", "expense", vendor="OpenAI", category="ai_services")
     bank_feed.remember("MERCURY IO", "transfer", vendor="Card payoff")
@@ -137,8 +138,10 @@ with application.app_context():
                                        accounts={"acct-1": "Checking"})
     lines = {l.external_id: l for l in BankTransaction.query.all()}
     check("all ten lines read", counts.get("read") == 10, counts)
-    check("Railway is covered by its own sync (no expense)",
-          lines["t1"].disposition == "covered" and lines["t1"].expense_id is None)
+    check("Railway's charge is split by its report, and the bank line books it",
+          lines["t1"].disposition == "split" and lines["t1"].expense is not None
+          and lines["t1"].expense.amount == 20.0 and lines["t1"].expense.bank_line_id == lines["t1"].id,
+          (lines["t1"].disposition, lines["t1"].expense_id))
     check("a pending OpenAI charge books nothing yet",
           lines["t2"].disposition == "expense" and lines["t2"].expense_id is None)
     check("an unknown vendor waits for review",
@@ -169,7 +172,7 @@ with application.app_context():
     check("reading the same night again adds no line",
           BankTransaction.query.count() == 10, BankTransaction.query.count())
 
-    print("3. Covered is only for the books the sync writes")
+    print("3. A split is only for the books the vendor report reads")
     ehq_conn = BankConnection(business_id=ids["ehq"], token="secret-token:y")
     db.session.add(ehq_conn)
     db.session.commit()
@@ -295,13 +298,16 @@ check("the expense list filters to one business",
 mine = c.get(f"/admin/expenses?business_id={ids['bbb']}").get_data(as_text=True)
 check("and a company's books include its DBA's", "GitHub" in mine and "Sentry" not in mine)
 
-print("7. The guidance door names the books")
+print("7. The guidance door names the books (a tag since 2026-11-04, item 8)")
 r = c.post("/api/guidance/expenses", headers={"Authorization": "Bearer test-key"},
            json={"amount": 12.5, "description": "entertainhq.com renewal", "business": "EntertainHQ",
                  "date": "2026-10-09", "source": "test"})
 with application.app_context():
-    got = db.session.get(Expense, r.get_json()["id"])
-    check("a logged expense lands in the business named", got.business_id == ids["ehq"], got.business_id)
+    from models import ExpenseTag
+    got = db.session.get(ExpenseTag, r.get_json()["id"])
+    check("a logged charge is a tag for the business named, not an expense",
+          got is not None and got.business_id == ids["ehq"] and r.get_json()["action"] == "tagged",
+          r.get_json())
 r = c.post("/api/guidance/expenses", headers={"Authorization": "Bearer test-key"},
            json={"amount": 1, "description": "x", "business": "Nobody Inc", "source": "test"})
 check("an unknown business is refused", r.status_code == 400)

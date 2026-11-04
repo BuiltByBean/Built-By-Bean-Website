@@ -830,6 +830,9 @@ def _save_monthly_entries(provider, p_start, p_end):
     if provider.name == "railway":
         _delete_entries_for(provider, "railway:account", p_start, p_end)
 
+    # The month's rows are how its bank charge splits across projects.
+    import bank_feed
+    bank_feed.resplit(provider_id=provider.id, days=400)
     db.session.commit()
 
 

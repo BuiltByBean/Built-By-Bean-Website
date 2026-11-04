@@ -1349,21 +1349,37 @@ def log_expense():
             return jsonify({"error": f"no business matches {ref!r}"}), 400
         business_id = biz.id
 
+    # Only the bank line makes an expense (docs/finances_plan.md item 8,
+    # 2026-11-04). What a session knows becomes a tag the bank line for this
+    # charge takes when it arrives, so its expense lands on the right client
+    # and project with nothing typed. A charge already booked takes it now.
+    import bank_feed
+    from models import ExpenseTag
     source = _cap(body.get("source"), 120)
-    if source:
-        description = f"{description} (logged from {source})"
-    expense = Expense(
-        amount=amount, description=description,
-        category=_cap(body.get("category"), 50) or "misc", date=when,
+    amount = round(amount, 2)
+    vendor = _cap(body.get("vendor"), 200) or description
+    same = ExpenseTag.query.filter_by(amount=amount, occurred_on=when, description=description,
+                                      client_id=client.id if client else None,
+                                      project_id=project.id if project else None).first()
+    if same is not None:
+        # A session retries like any API client: the same tag twice is one.
+        return jsonify({"action": "already tagged", "id": same.id, "amount": amount,
+                        "date": when.isoformat(), "taken": same.line_id is not None})
+    tag = ExpenseTag(
+        amount=amount, occurred_on=when, vendor=vendor, description=description,
+        category=_cap(body.get("category"), 50) or "misc",
         client_id=client.id if client else None,
         project_id=project.id if project else None,
-        business_id=business_id,
-        paid_by=_cap(body.get("paid_by"), 120) or None,
-    )
-    db.session.add(expense)
+        business_id=business_id, paid_by=_cap(body.get("paid_by"), 120) or None,
+        source=source or "")
+    db.session.add(tag)
+    db.session.flush()
+    line = bank_feed.apply_tag(tag)
     db.session.commit()
-    return jsonify({"action": "logged", "id": expense.id, "amount": amount,
-                    "date": when.isoformat()})
+    return jsonify({"action": "tagged", "id": tag.id, "amount": amount, "date": when.isoformat(),
+                    "taken": line is not None,
+                    "note": ("Booked on the bank line it matched." if line is not None else
+                             "Waiting for the bank line: it books the expense when the charge arrives.")})
 
 
 @guidance_bp.route("/time", methods=["POST"])

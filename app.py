@@ -502,62 +502,6 @@ def create_app():
             db.session.delete(entry.expense)
         return entry.cost > 0
 
-    # ── Recurring Expense Helpers ─────────────────────────────
-
-    def _advance_date(d, frequency):
-        """Advance a date by one frequency interval."""
-        if frequency == "weekly":
-            return d + timedelta(weeks=1)
-        elif frequency == "biweekly":
-            return d + timedelta(weeks=2)
-        elif frequency == "monthly":
-            return d + relativedelta(months=1)
-        elif frequency == "quarterly":
-            return d + relativedelta(months=3)
-        elif frequency == "yearly":
-            return d + relativedelta(years=1)
-        return d
-
-    def generate_due_recurring_expenses():
-        """Create child expenses for any recurring templates that are past due."""
-        today = date.today()
-        recurring = Expense.query.filter(
-            Expense.is_recurring == True,  # noqa: E712
-            Expense.next_due_date <= today,
-        ).all()
-
-        created = 0
-        for parent in recurring:
-            # Skip if past end date
-            if parent.recurring_end_date and parent.recurring_end_date < today:
-                parent.is_recurring = False
-                continue
-
-            # Generate all missed periods
-            while parent.next_due_date and parent.next_due_date <= today:
-                if parent.recurring_end_date and parent.next_due_date > parent.recurring_end_date:
-                    parent.is_recurring = False
-                    break
-
-                child = Expense(
-                    client_id=parent.client_id,
-                    project_id=parent.project_id,
-                    ticket_id=parent.ticket_id,
-                    amount=parent.amount,
-                    description=parent.description,
-                    category=parent.category,
-                    date=parent.next_due_date,
-                    parent_expense_id=parent.id,
-                )
-                db.session.add(child)
-                created += 1
-
-                parent.next_due_date = _advance_date(parent.next_due_date, parent.frequency)
-
-        if created:
-            db.session.commit()
-        return created
-
     # ── Template Filters ─────────────────────────────────────
 
     @app.template_filter("format_currency")
@@ -3912,7 +3856,6 @@ def create_app():
     @pm_bp.route("/expenses")
     @login_required
     def expenses_list():
-        generate_due_recurring_expenses()
         page = request.args.get("page", 1, type=int)
         category = request.args.get("category", "")
         project_id = request.args.get("project_id", "", type=str)
@@ -4067,7 +4010,6 @@ def create_app():
             if form.receipt.data:
                 stored_name, original_name, size = save_upload(form.receipt.data, "receipts")
 
-            is_rec = request.form.get("is_recurring") == "y" and form.frequency.data
             expense = Expense(
                 client_id=form.client_id.data or None,
                 project_id=form.project_id.data or None,
@@ -4078,10 +4020,6 @@ def create_app():
                 date=form.date.data,
                 receipt_filename=stored_name,
                 receipt_original_name=original_name,
-                is_recurring=bool(is_rec),
-                frequency=form.frequency.data if is_rec else None,
-                recurring_end_date=form.recurring_end_date.data if is_rec else None,
-                next_due_date=_advance_date(form.date.data, form.frequency.data) if is_rec else None,
             )
             db.session.add(expense)
             db.session.commit()
@@ -4107,9 +4045,6 @@ def create_app():
             form.client_id.data = expense.client_id or 0
             form.project_id.data = expense.project_id or 0
             form.ticket_id.data = expense.ticket_id or 0
-            form.is_recurring.data = expense.is_recurring
-            form.frequency.data = expense.frequency or ""
-            form.recurring_end_date.data = expense.recurring_end_date
 
         if form.validate_on_submit():
             expense.client_id = form.client_id.data or None
@@ -4119,13 +4054,6 @@ def create_app():
             expense.description = form.description.data or ""
             expense.category = form.category.data
             expense.date = form.date.data
-
-            is_rec = request.form.get("is_recurring") == "y" and form.frequency.data
-            expense.is_recurring = bool(is_rec)
-            expense.frequency = form.frequency.data if is_rec else None
-            expense.recurring_end_date = form.recurring_end_date.data if is_rec else None
-            if is_rec and not expense.next_due_date:
-                expense.next_due_date = _advance_date(form.date.data, form.frequency.data)
 
             if form.receipt.data:
                 stored_name, original_name, size = save_upload(form.receipt.data, "receipts")
