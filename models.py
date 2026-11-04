@@ -1565,6 +1565,17 @@ class Playbook(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
+    # What this vendor looks like in a codebase: the Product.presence_*
+    # mechanism, reused (audit_repos.compile_signature). A line matching
+    # presence_pattern in a file matching presence_globs means the repo uses
+    # the vendor, and the nightly map check files a gap when a business's
+    # map has no node for it (map_checks.py). presence_fixture is a line the
+    # pattern MUST match, or the signature is skipped as broken.
+    presence_pattern = db.Column(db.Text, nullable=True)
+    presence_globs = db.Column(db.String(300), nullable=True)
+    presence_exclude = db.Column(db.String(300), nullable=True)
+    presence_fixture = db.Column(db.Text, nullable=True)
+
     service_provider = db.relationship("ServiceProvider", backref="playbooks")
 
     # The three shapes a third party comes in, in the order you meet them on a
@@ -2165,7 +2176,7 @@ class BusinessNode(db.Model):
     )
     STATUSES = {
         "audience": (),
-        "surface": (("live", "Live"), ("building", "Building"), ("planned", "Planned")),
+        "surface": (("live", "Live"), ("down", "Unreachable"), ("building", "Building"), ("planned", "Planned")),
         "service": (("running", "Running"), ("setting_up", "Setting up"), ("planned", "Planned")),
         "outcome": (("delivered", "Delivered"), ("in_progress", "In progress"), ("missing", "Missing")),
     }
@@ -2727,6 +2738,15 @@ class AppLink(db.Model):
     play_package = db.Column(db.String(200), nullable=True)
     store_versions = db.Column(db.Text, nullable=True)
     store_checked_at = db.Column(db.DateTime, nullable=True)
+    # Since when the two stores have shown different versions, so a release
+    # caught between reviews for an hour is not a row on Needs attention and
+    # one stuck for a day is (store_versions_service.refresh).
+    store_differ_since = db.Column(db.DateTime, nullable=True)
+    # The version written in the repo, per platform, read nightly beside the
+    # store ids ({"android": "1.4.0", "ios": "1.4.0"}), so the tile can say
+    # "1.4.0 in the repo, stores on 1.3.2": a build waiting on submission or
+    # review is shown, not remembered.
+    repo_versions = db.Column(db.Text, nullable=True)
 
     # The engagement this app belongs to, where there is one. Nullable because
     # half the board is mine - Bible Study, Pluralism, Data Dungeon - and those
@@ -2776,6 +2796,12 @@ class AppLink(db.Model):
         return store_versions_service.summary(self)
 
     @property
+    def repo_line(self):
+        """"1.4.0 in the repo, stores on 1.3.2", or None."""
+        import store_versions_service
+        return store_versions_service.repo_line(self)
+
+    @property
     def host(self):
         """The bit worth showing under the name: the domain, or the path."""
         if not self.is_external:
@@ -2820,6 +2846,17 @@ class PlaybookStep(db.Model):
     client_channel = db.Column(db.String(10), nullable=True)
     client_message_subject = db.Column(db.String(200), default="")
     client_message_md = db.Column(db.Text, default="")
+
+    # What a machine can see of this step being done, run nightly per project
+    # (step_checks.py). A pass ticks the step; nothing ever unticks one,
+    # because a check that cannot see something is not proof it was undone.
+    #   repo:    check_target is file globs, check_pattern a regex a line must match
+    #   railway: check_target is one of step_checks.RAILWAY_FACTS
+    #   http:    check_target is a path on the project's site; optional pattern
+    check_kind = db.Column(db.String(12), nullable=True)
+    check_target = db.Column(db.String(300), nullable=True)
+    check_pattern = db.Column(db.Text, nullable=True)
+    CHECK_KINDS = ("repo", "railway", "http")
 
     playbook = db.relationship("Playbook", backref=db.backref(
         "steps", lazy="dynamic", cascade="all, delete-orphan",
@@ -3919,6 +3956,128 @@ class NightRun(db.Model):
 
     def __repr__(self):
         return f"<NightRun {self.started_at} {self.status}>"
+
+
+class RailwayService(db.Model):
+    """One Railway service in one environment, as the nightly read last saw it
+    (railway_watch.py): its repo, its domains and its latest deploy.
+
+    One account-token query a night per workspace answers what used to be
+    typed or remembered: which Railway project is which build (ServiceMapping,
+    written only on a single unambiguous match and only into an empty field),
+    which tile it serves (AppLink.railway_url), what is live with no tile, and
+    whether the latest deploy worked and is the branch's head.
+    """
+
+    __tablename__ = "railway_services"
+    __table_args__ = (
+        db.UniqueConstraint("service_ref", "environment", name="uq_railway_services_service_env"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider_id = db.Column(db.Integer, db.ForeignKey(
+        "service_providers.id", ondelete="CASCADE", name="fk_railway_services_provider_id"),
+        nullable=True, index=True)
+    project_ref = db.Column(db.String(64), nullable=False, index=True)
+    project_name = db.Column(db.String(200), default="")
+    service_ref = db.Column(db.String(64), nullable=False)
+    service_name = db.Column(db.String(200), default="")
+    environment = db.Column(db.String(60), nullable=False, default="production")
+    repo = db.Column(db.String(200), nullable=True, index=True)
+    image = db.Column(db.String(300), nullable=True)
+    domains_json = db.Column(db.Text, default="[]")
+    custom_domains_json = db.Column(db.Text, default="[]")
+    deploy_status = db.Column(db.String(20), nullable=True)
+    deploy_commit = db.Column(db.String(64), nullable=True)
+    deploy_branch = db.Column(db.String(120), nullable=True)
+    deployed_at = db.Column(db.DateTime, nullable=True)
+    healthcheck_path = db.Column(db.String(200), nullable=True)
+    pre_deploy = db.Column(db.String(300), nullable=True)
+    # The branch's head on GitHub when the deploy was last read.
+    branch_head = db.Column(db.String(64), nullable=True)
+    branch_head_at = db.Column(db.DateTime, nullable=True)
+    seen_at = db.Column(db.DateTime, nullable=True)
+    # "Not an app" pressed on the list of live services with no tile.
+    ignored = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+    provider = db.relationship("ServiceProvider")
+
+    @property
+    def domains(self):
+        """Every address it answers on, Railway's own and custom."""
+        import json
+        try:
+            return json.loads(self.domains_json or "[]")
+        except ValueError:
+            return []
+
+    @property
+    def custom_domains(self):
+        import json
+        try:
+            return json.loads(self.custom_domains_json or "[]")
+        except ValueError:
+            return []
+
+    @property
+    def dashboard_url(self):
+        return f"https://railway.com/project/{self.project_ref}/service/{self.service_ref}"
+
+    @property
+    def is_database(self):
+        """A template database, not something anybody visits."""
+        if self.repo:
+            return False
+        image = (self.image or "").lower()
+        name = (self.service_name or "").lower()
+        return any(w in image or w == name for w in
+                   ("railwayapp-templates", "postgres", "redis", "mysql", "mongo"))
+
+    def __repr__(self):
+        return f"<RailwayService {self.project_name}/{self.service_name} {self.environment}>"
+
+
+class SiteCheck(db.Model):
+    """The last nightly answer from one live address (live_watch.py): status,
+    where it ended up, the certificate's expiry, and since when it has been
+    down. Every tile's URL and every map surface's URL is checked."""
+
+    __tablename__ = "site_checks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(500), nullable=False, unique=True)
+    host = db.Column(db.String(255), nullable=False, default="", index=True)
+    status_code = db.Column(db.Integer, nullable=True)
+    ok = db.Column(db.Boolean, nullable=True)
+    final_url = db.Column(db.String(500), nullable=True)
+    error = db.Column(db.String(300), nullable=True)
+    cert_expires_on = db.Column(db.Date, nullable=True)
+    checked_at = db.Column(db.DateTime, nullable=True)
+    down_since = db.Column(db.DateTime, nullable=True)
+    # Nights in a row it has failed; two is a row on Needs attention.
+    fail_nights = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+    def __repr__(self):
+        return f"<SiteCheck {self.url} ok={self.ok}>"
+
+
+class DomainWatch(db.Model):
+    """When a domain the board's sites live on runs out, and whether it renews
+    itself. Cloudflare's registrar says both; any other registrar is read off
+    public RDAP, which gives the date and never the renewal setting."""
+
+    __tablename__ = "domain_watches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    domain = db.Column(db.String(255), nullable=False, unique=True)
+    expires_on = db.Column(db.Date, nullable=True)
+    auto_renew = db.Column(db.Boolean, nullable=True)
+    registrar = db.Column(db.String(40), nullable=True)
+    checked_at = db.Column(db.DateTime, nullable=True)
+    error = db.Column(db.String(300), nullable=True)
+
+    def __repr__(self):
+        return f"<DomainWatch {self.domain} {self.expires_on}>"
 
 
 class MvpPackage(db.Model):

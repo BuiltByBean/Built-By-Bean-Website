@@ -93,6 +93,16 @@
                 {% endif %}
             </div>
             {% endif %}
+            {# What the repo says against what the stores say, read nightly
+               (store_ids_service.versions_from_files): a build waiting on
+               submission or review, shown rather than remembered. #}
+            {% if app.repo_line %}
+            <p class="mt-1 text-xs text-sky-300 break-words" data-repo-line>{{ app.repo_line }}</p>
+            {% endif %}
+            {# The nightly site check: two nights of no answer is down. #}
+            {% if site_down.get(app.id) %}
+            <p class="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-900/30 text-red-300" data-site-down>Not answering since {{ site_down[app.id] | format_date }}</p>
+            {% endif %}
         </div>
 
         <a href="{{ url_for('apps.edit', id=app.id) }}"

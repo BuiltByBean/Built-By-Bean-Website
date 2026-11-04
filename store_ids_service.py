@@ -30,6 +30,40 @@ def _shortest_main(values):
     return min(keep, key=len) if keep else None
 
 
+_VERSION_NAME = re.compile(r"""\bversionName\s*(?:=\s*)?["']([^"']{1,40})["']""")
+_MARKETING = re.compile(r"MARKETING_VERSION\s*=\s*\"?([0-9][\w.\-]{0,39})\"?\s*;")
+
+
+def versions_from_files(files):
+    """{"android": "1.4.0", "ios": "1.4.0"} written in the repo, each None
+    when not found (audit item 19). Android's versionName in app/build.gradle,
+    iOS's MARKETING_VERSION in the Xcode project (the app's own, which is the
+    one most targets carry: extensions follow it), Expo's expo.version for
+    both when the native projects are not checked in."""
+    from collections import Counter
+    android = ios = None
+    for path, text in files.items():
+        if re.search(r"(^|/)app/build\.gradle(\.kts)?$", path):
+            m = _VERSION_NAME.search(text or "")
+            if m and "$" not in m.group(1):
+                android = android or m.group(1)
+        elif path.endswith("project.pbxproj"):
+            found = [v for v in _MARKETING.findall(text or "") if "$(" not in v]
+            if found:
+                ios = ios or Counter(found).most_common(1)[0][0]
+    for path, text in files.items():
+        if path.endswith("app.json"):
+            try:
+                expo = (json.loads(text or "{}") or {}).get("expo") or {}
+            except ValueError:
+                expo = {}
+            v = expo.get("version")
+            if isinstance(v, str) and v:
+                android = android or v
+                ios = ios or v
+    return {"android": android, "ios": ios}
+
+
 def ids_from_files(files):
     """{"ios": id or None, "android": id or None} from {path: text}."""
     ios = android = None
@@ -89,8 +123,17 @@ def fill(link, get=None):
     full_name = repo_of(link)
     if not full_name:
         return []
-    ids = ids_from_files(read_repo(full_name, get))
+    files = read_repo(full_name, get)
+    ids = ids_from_files(files)
     changed = []
+    # The version in the repo is a fact about tonight's code, not a choice,
+    # so it is always written (a phone app's only; a web repo has none).
+    versions = {k: v for k, v in versions_from_files(files).items() if v}
+    if not (ids["ios"] or ids["android"] or link.app_store_bundle_id or link.play_package):
+        versions = {}
+    stored = json.dumps(versions) if versions else None
+    if hasattr(link, "repo_versions") and stored != link.repo_versions:
+        link.repo_versions = stored  # not a change of id: no store needs asking
     if ids["ios"] and not link.app_store_bundle_id:
         link.app_store_bundle_id = ids["ios"]
         changed.append(f"App Store {ids['ios']}")
@@ -101,22 +144,24 @@ def fill(link, get=None):
 
 
 def main(get=None):
-    """Nightly: every tile with a repo and a missing store id."""
+    """Nightly: every tile with a repo. The ids fill only empty fields; the
+    repo's version is read every night, because it moves with each release."""
     from app import create_app
     from models import db, AppLink
     import store_versions_service
     app = create_app()
     with app.app_context():
         for link in AppLink.query.order_by(AppLink.id).all():
-            if not link.github_url or (link.app_store_bundle_id and link.play_package):
+            if not link.github_url:
                 continue
             try:
                 changed = fill(link, get)
             except Exception as err:  # noqa: BLE001 - one repo never stops the rest
                 print(f"store ids: {link.name}: {str(err)[:160]}", flush=True)
                 continue
-            if changed:
+            if changed and (link.app_store_bundle_id or link.play_package):
                 store_versions_service.refresh(link)
-                db.session.commit()
+            db.session.commit()
+            if changed:
                 print(f"store ids: {link.name}: {', '.join(changed)}", flush=True)
     return 0

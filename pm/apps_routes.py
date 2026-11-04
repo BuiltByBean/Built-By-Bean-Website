@@ -96,10 +96,84 @@ def index():
         db.session.commit()
     return render_template(
         "pm/apps/index.html",
+        site_down=_site_down(apps),
         groups=[{"key": key, "label": label,
                  "apps": [a for a in apps if a.is_client_work == (key == "client")]}
                 for key, label in GROUP_LABELS],
         total=len(apps))
+
+
+def _site_down(apps):
+    """{tile id: down since} for tiles whose site has failed the nightly
+    check two nights running (live_watch). Read only, no network."""
+    from models import SiteCheck
+    import live_watch
+    try:
+        checks = {c.url.rstrip("/").lower(): c for c in
+                  SiteCheck.query.filter(SiteCheck.fail_nights >= live_watch.DOWN_NIGHTS).all()}
+    except Exception:  # noqa: BLE001 - the table may not exist yet
+        db.session.rollback()
+        return {}
+    out = {}
+    for a in apps:
+        c = checks.get((a.url or "").rstrip("/").lower())
+        if c is not None:
+            out[a.id] = c.down_since
+    return out
+
+
+@apps_bp.route("/railway")
+@login_required
+def railway_unlisted():
+    """Live on Railway, not on My Apps: what the nightly Railway read found
+    serving an address with no tile for it (railway_watch.unlisted)."""
+    import railway_watch
+    from models import RailwayService
+    services = railway_watch.unlisted()
+    ignored = (RailwayService.query.filter_by(ignored=True)
+               .order_by(RailwayService.project_name, RailwayService.service_name).all())
+    return render_template("pm/apps/railway.html", services=services, ignored=ignored)
+
+
+@apps_bp.route("/railway/<int:id>/add", methods=["POST"])
+@login_required
+def railway_add(id):
+    """One press: a tile for this service, then its edit page to check it."""
+    import railway_watch
+    from models import RailwayService
+    s = db.session.get(RailwayService, id) or abort(404)
+    if not s.domains:
+        flash("That service has no address to put on a tile.", "warning")
+        return redirect(url_for("apps.railway_unlisted"))
+    domain = (s.custom_domains or s.domains)[0]
+    link = AppLink(name=(s.project_name if s.service_name in ("web", s.project_name)
+                         else f"{s.project_name} {s.service_name}")[:120],
+                   url=f"https://{domain}"[:500], description="",
+                   railway_url=s.dashboard_url[:500],
+                   github_url=f"https://github.com/{s.repo}"[:500] if s.repo else None)
+    projects = railway_watch.project_candidates(
+        s.project_ref, RailwayService.query.all(), Project.query.all(), AppLink.query.all())
+    if len(projects) == 1:
+        link.project_id = next(iter(projects))
+    db.session.add(link)
+    db.session.flush()
+    _refresh_icon(link)
+    db.session.commit()
+    flash(f"{link.name} is on My Apps. Check its name and link.", "success")
+    return redirect(url_for("apps.edit", id=link.id))
+
+
+@apps_bp.route("/railway/<int:id>/ignore", methods=["POST"])
+@login_required
+def railway_ignore(id):
+    """Not an app: never listed again. And back, from the same page."""
+    from models import RailwayService
+    s = db.session.get(RailwayService, id) or abort(404)
+    s.ignored = request.form.get("undo") != "1"
+    db.session.commit()
+    import live_watch
+    live_watch._CACHE["rows"] = None
+    return redirect(url_for("apps.railway_unlisted"))
 
 
 # The halves of the board (Michael, 2026-11-04): "the top section is products

@@ -178,9 +178,14 @@ def attention_counts():
     # Tax deadlines, the state's flags and a company's standing: the CEO's
     # alone, like the returns pages they link to (deadlines.py).
     tax = _deadline_count()
-    return {"messages": messages, "bills": bills, "night": night,
+    # What is live and broken: a site down, a certificate or domain running
+    # out, a deploy that failed or fell behind, stores that disagree, and
+    # services live with no tile (live_watch.attention_rows, database only).
+    import live_watch
+    live = len(live_watch.attention_rows())
+    return {"messages": messages, "bills": bills, "night": night, "live": live,
             "hosting": increases_due_count(), "deadlines": tax,
-            "total": messages + bills + night + tax}
+            "total": messages + bills + night + tax + live}
 
 
 @attention_bp.route("/")
@@ -196,9 +201,11 @@ def index():
     night = _night_problem()
     tax = _deadline_rows()
     tax_total = len(tax["standing"]) + len(tax["flags"]) + len(tax["deadlines"])
+    import live_watch
+    live = live_watch.attention_rows(force=True)
     return render_template("pm/attention/index.html", messages=messages,
-                           bills=bills, night=night, tax=tax,
-                           total=len(messages) + len(bills) + (1 if night else 0) + tax_total,
+                           bills=bills, night=night, tax=tax, live=live,
+                           total=len(messages) + len(bills) + (1 if night else 0) + tax_total + len(live),
                            here=url_for("attention.index"))
 
 

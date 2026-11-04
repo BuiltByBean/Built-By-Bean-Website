@@ -273,6 +273,77 @@ extension target), an Expo `app.json`, or a Capacitor `appId` for a platform
 whose folder the repo has. It fills only an empty field; a typed id is never
 overruled. `tools/test_store_ids.py --repo <clone>` parses a real repo.
 
+## What is live, watched nightly
+
+Audit items 7, 9, 10, 18, 19, 20 and 4's store half (`docs/automation_gaps.md`),
+2026-11-04. All of it runs from `live_night.steps(night)`, one line in
+`sync_costs._sweep` after the receipts, each part its own recorded step.
+
+- **Railway reads itself** (`railway_watch.py`). One GraphQL query per workspace
+  with the account token (`PM_RAILWAY_ACCOUNT_TOKEN`, through `railway_token`):
+  `serviceInstances { source { repo image } domains { serviceDomains customDomains }
+  latestDeployment { status meta } }`. `meta` carries `commitHash`, `branch` and
+  `serviceManifest.deploy` (`healthcheckPath`, `preDeployCommand`); a custom domain
+  can be a wildcard (`*.entertainhq.com`), which is a routing rule and is dropped.
+  `RailwayService` is one row per service per environment. A `ServiceMapping` is
+  written only when a Railway project points at exactly ONE board project (by
+  `Project.repo`, or by a tile it serves), and only where none exists or the one
+  that does names no project; a tile's `railway_url` and `github_url` only into an
+  empty field from exactly one production service. Two candidates is a guess.
+  "Live on Railway, not on My Apps" is `/admin/apps/railway`, one row on Needs
+  attention, with a one-press "Put it on My Apps" and a "Not an app" that sticks
+  (`RailwayService.ignored`). Template databases (no repo, a template image) and
+  crons with no address are never listed.
+- **Hosting** has a **Not mapped** band: a priced project with no cost and no
+  active mapping read "Fine" and sat out of the badge. It counts now and offers the
+  mapping form with the project chosen. `_status(fee, cost, mapped=True)`.
+- **Billed against agreed** (`hosting_billing.py`). Per client, its priced
+  projects' monthly fees against its Stripe hosting items as a month (a product or
+  nickname saying "hosting", `HOSTING_LINE`). Unbilled and different both count in
+  the badge, once per client on its first row. A different single item gets one
+  press that asks first (`confirm_button`) and moves the item to the agreed fee
+  from the next cycle, no proration. **The badge never waits on Stripe**:
+  `snapshot()` answers from the last read and refreshes in a thread; only the page
+  reads synchronously. `tools/test_hosting_billing.py`.
+- **Sites, certificates, domains** (`live_watch.py`). Every tile URL and map
+  surface URL is fetched nightly (`SiteCheck`): under 400, or 401/403, is up.
+  `fail_nights` counts nights in a row; two is a row. Domains (`DomainWatch`) come
+  from Cloudflare's registrar (expiry and auto-renew) or public RDAP (expiry only,
+  so "held outside Cloudflare" counts as not renewing). `attention_rows()` reads
+  the database only, cached five minutes, and its links never need a request
+  (`_url`): a `url_for` outside one raised inside the try and every row vanished.
+- **Store versions** refresh nightly (`refresh_all`), and `store_differ_since`
+  makes a difference older than a day a row. The repo's own version
+  (`versions_from_files`: `versionName`, `MARKETING_VERSION`, `expo.version`) is
+  read every night into `AppLink.repo_versions`, and the tile says "1.4.0 in the
+  repo, stores on 1.3.2".
+- **Tiles** (`tile_upkeep.py`): an empty description fills from the repo, else the
+  site's meta description; a fetched icon is fetched again monthly, an uploaded
+  one (`icon_file` with no `icon_source`) never.
+- **Railway bills from mail** (`railway_mail.py`): a tokenless Railway account's
+  month is recorded from the receipt mailbox of the business that pays for it,
+  noted "From mail"; the month is the receipt's date less a month. A typed or
+  pulled row is never touched.
+- **The map notices** (`map_checks.py`). A playbook carries a presence signature
+  now (`Playbook.presence_*`, the Product mechanism reused, proven on its fixture,
+  seeded for 21 vendors and writable through the door). A vendor in a business's
+  blueprint repos, or on its books in the last year, with no service node, is a
+  gap on its blueprint (`filed_by` "nightly map check"); so is a service quiet for
+  90 days that has charged before. A closed gap stays closed and one whose cause
+  went is closed as done. A production custom domain not on the map becomes a
+  surface once, its memory a closed gap, so a deleted node is not put back. A
+  surface's status follows its site check (`down` reads Unreachable); Building and
+  Planned are left alone.
+- **Steps tick themselves** (`step_checks.py`). `PlaybookStep.check_kind` is repo
+  (globs and a regex, the audit's scanner), railway (one of `RAILWAY_FACTS`, read
+  from the mapped project's services) or http (a path on the project's site). A
+  pass ticks the step with why in an empty note; nothing is ever unticked. The door
+  takes `check_kind`, `check_target`, `check_pattern` on a step and refuses one
+  that cannot run. Five Railway checklist steps carry checks from the migration.
+
+`tools/test_live_apps.py`, `tools/test_hosting_billing.py`,
+`tools/test_map_and_step_checks.py`.
+
 ## Needs attention
 
 `pm/attention_routes.py` is the mail waiting on a reply, and last month's

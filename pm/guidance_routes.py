@@ -530,7 +530,12 @@ TEXT_FIELDS = {
              "check_fixture"),
     "playbook": ("display_name", "one_liner", "vendor_url", "client_only_md",
                  "access_grant_md", "your_steps_md", "traps_md", "verify_md",
-                 "steps"),
+                 "steps",
+                 # What the vendor looks like in a codebase, so the nightly
+                 # map check can file a gap when a repo uses it and the map
+                 # has no node for it (map_checks.py).
+                 "presence_pattern", "presence_globs", "presence_exclude",
+                 "presence_fixture"),
     "product": ("name", "summary", "prompt_intro", "playbook_slug"),
     # A whole app end to end (app_blueprints.py). `stages` is its structured
     # field, the build order, carried as a list the way a playbook's steps are.
@@ -629,12 +634,22 @@ def normalise_steps(raw):
         message = _cap(item.get("client_message_md"), 4000)
         if message and not channel:
             channel = "email"
+        # A check a machine can run nightly (step_checks.py): a pass ticks
+        # the step on every project running it, and nothing unticks one.
+        import step_checks
+        kind = (item.get("check_kind") or "").strip().lower() or None
+        target = _cap(item.get("check_target"), 300) or None
+        pattern = _cap(item.get("check_pattern"), 2000) or None
+        bad = step_checks.validate(kind, target, pattern)
+        if bad:
+            return None, f"step {i}: {bad}"
         out.append({
             "title": title,
             "detail_md": _cap(item.get("detail_md"), 4000),
             "client_channel": channel or None,
             "client_message_subject": _cap(item.get("client_message_subject"), 200),
             "client_message_md": message,
+            "check_kind": kind, "check_target": target, "check_pattern": pattern,
         })
     return out, None
 
@@ -643,7 +658,9 @@ def steps_snapshot(playbook):
     return [{"title": s.title, "detail_md": s.detail_md or "",
              "client_channel": s.client_channel,
              "client_message_subject": s.client_message_subject or "",
-             "client_message_md": s.client_message_md or ""}
+             "client_message_md": s.client_message_md or "",
+             "check_kind": s.check_kind, "check_target": s.check_target,
+             "check_pattern": s.check_pattern}
             for s in playbook.steps.all()]
 
 
@@ -663,7 +680,9 @@ def _write_steps(playbook, steps, start):
             title=s["title"], detail_md=s["detail_md"],
             client_channel=s["client_channel"],
             client_message_subject=s["client_message_subject"],
-            client_message_md=s["client_message_md"]))
+            client_message_md=s["client_message_md"],
+            check_kind=s.get("check_kind"), check_target=s.get("check_target"),
+            check_pattern=s.get("check_pattern")))
 
 
 def _clear_steps(playbook):

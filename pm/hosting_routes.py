@@ -32,8 +32,10 @@ collecting money that has nothing to do with hosting.
 import time
 from datetime import date, timedelta
 
-from flask import Blueprint, render_template, request, url_for
+from flask import Blueprint, render_template, request, url_for, redirect, flash, abort, current_app, has_app_context
 from flask_login import login_required
+
+import hosting_billing
 
 import contract_docs
 from models import (db, Client, Project, ServiceMapping, ServiceCostEntry, ProviderInvoice,
@@ -101,19 +103,52 @@ _DUE_CACHE = {"at": 0.0, "rows": []}
 DUE_TTL_SECONDS = 600
 
 
+def _mapped_projects():
+    """Projects some vendor's costs arrive through: an active ServiceMapping."""
+    return {pid for (pid,) in db.session.query(ServiceMapping.project_id)
+            .filter(ServiceMapping.project_id.isnot(None), ServiceMapping.is_active.is_(True)).all()}
+
+
+def _billing_snapshot():
+    """Stripe's hosting subscriptions as last read, never waiting on Stripe:
+    the badge is built on every page (hosting_billing.snapshot)."""
+    app = current_app._get_current_object() if has_app_context() else None
+    return hosting_billing.snapshot(app)
+
+
 def increases_due():
-    """Every priced project under the floor, with the update it is due."""
+    """Every priced project the page counts: under the floor (with the update
+    it is due), not mapped to any vendor's costs, or billed in Stripe other
+    than agreed (one row per client, on its first project)."""
     now = time.monotonic()
     if now - _DUE_CACHE["at"] < DUE_TTL_SECONDS:
         return _DUE_CACHE["rows"]
     months = _complete_months(1)
     costs, _ = _costs_by_project(months)
     month = months[-1]
+    mapped = _mapped_projects()
+    priced = (Project.query.filter(Project.hosting_fee.isnot(None))
+              .order_by(Project.client_id, Project.name, Project.id).all())
+    billing = hosting_billing.by_client(priced, _billing_snapshot())
     rows = []
-    for p in Project.query.filter(Project.hosting_fee.isnot(None)).all():
+    billed_once = set()
+    for p in priced:
         cost = costs.get(p.id, {}).get(month, 0.0)
         fee = p.monthly_hosting_fee
-        key, label = _status(fee, cost)
+        key, label = _status(fee, cost, p.id in mapped)
+        bill = billing.get(p.client_id)
+        if bill and bill["state"] != "ok" and p.client_id not in billed_once:
+            billed_once.add(p.client_id)
+            rows.append({"project_id": p.id, "project_name": p.name,
+                         "client_name": p.client.name if p.client else "",
+                         "fee": fee or 0.0, "cost": cost, "margin": (fee or 0.0) - cost,
+                         "status": "billing", "label": bill["state"], "args": None})
+        if key == "unmapped":
+            rows.append({"project_id": p.id, "project_name": p.name,
+                         "client_name": p.client.name if p.client else "",
+                         "fee": fee or 0.0, "cost": cost, "margin": (fee or 0.0) - cost,
+                         "status": key, "label": label, "args": None})
+            continue
         if key not in ("loss", "raise"):
             continue
         increase = _increase_for(p, p.hosting_fee, p.hosting_cycle)
@@ -256,7 +291,7 @@ def _costs_by_project(months):
     return out, annual
 
 
-def _status(fee, cost):
+def _status(fee, cost, mapped=True):
     """(key, label) for where this project sits, on last month's cost.
 
     One line, not a set of bands: either the fee clears the floor after the
@@ -280,7 +315,11 @@ def _status(fee, cost):
     if not fee:
         return ("loss", "Free, and it costs") if cost > 0 else ("free", "Hosted free")
     if cost <= 0:
-        return ("fine", "No cost recorded")
+        # Nothing recorded and nothing to record it through. This read "Fine"
+        # until 2026-11-04 (audit item 7), so a priced build with no mapping
+        # sat out of the badge showing a full margin. Not mapped is its own
+        # band, counted, and offers the press that maps it.
+        return ("fine", "No cost recorded") if mapped else ("unmapped", "Not mapped")
     if cost >= fee:
         return ("loss", "Costs more than it earns")
     if fee - cost < MIN_MARGIN:
@@ -372,7 +411,7 @@ def _railway_all_time():
 # Sorted by how much it wants doing about it. Free hosting sits below Fine:
 # a fee that covers its costs is at least earning, and one nobody is being
 # charged is the row least likely to need anybody today.
-STATUS_ORDER = {"loss": 0, "raise": 1, "fine": 2, "free": 3}
+STATUS_ORDER = {"loss": 0, "raise": 1, "unmapped": 2, "fine": 3, "free": 4}
 
 
 @hosting_bp.route("/")
@@ -396,6 +435,12 @@ def hosting_index():
     hosting = get_hosting_revenue()
     paid_by_customer = hosting["by_customer"]
     railway_lifetime = _railway_lifetime_by_project()
+    mapped = _mapped_projects()
+    # What Stripe bills against what was agreed, per client, read now: this
+    # is the page, so it may wait on Stripe where the badge may not.
+    billing = hosting_billing.by_client(
+        [p for p in projects if p.hosting_fee is not None], hosting_billing.current())
+    billed_once = set()
 
     # Hosting money belongs to a client, not to a project. A client running two
     # builds would otherwise show their whole hosting history against each of
@@ -418,8 +463,14 @@ def hosting_index():
         by_month = costs.get(p.id, {})
         cost = by_month.get(month, 0.0)
         fee = p.monthly_hosting_fee
-        key, label = _status(fee, cost)
+        key, label = _status(fee, cost, p.id in mapped)
         fill_pct, line_pct = _bar(fee, cost)
+        # The client's billing, said once, on its first priced row.
+        bill = billing.get(p.client_id)
+        if bill is not None and p.client_id in billed_once:
+            bill = None
+        elif bill is not None:
+            billed_once.add(p.client_id)
 
         paid = paid_by_customer.get(
             (p.client.stripe_customer_id if p.client else None) or "", {})
@@ -438,6 +489,9 @@ def hosting_index():
             "line_pct": line_pct,
             "status": key,
             "status_label": label,
+            "bill": bill,
+            "map_url": (url_for("service_costs.mapping_create", project_id=p.id)
+                        if key == "unmapped" else None),
             # Under the floor, so a fee update is due: what it becomes, and
             # the link that drafts the agreement saying so.
             "increase": (dict(inc, url=increase_url(inc))
@@ -458,7 +512,8 @@ def hosting_index():
                              -(r["cost"] or 0), r["project"].name.lower()))
 
     totals = {
-        "needs_attention": sum(1 for r in rows if r["status"] in ("loss", "raise")),
+        "needs_attention": sum(1 for r in rows if r["status"] in ("loss", "raise", "unmapped"))
+        + sum(1 for r in rows if r["bill"] and r["bill"]["state"] != "ok"),
     }
 
     # The lifetime question, which is a different one from the month's. The
@@ -482,3 +537,25 @@ def hosting_index():
     return render_template("pm/hosting/index.html",
                            rows=rows, month=month, totals=totals,
                            lifetime=lifetime, min_margin=MIN_MARGIN)
+
+
+@hosting_bp.route("/billing/<int:client_id>", methods=["POST"])
+@login_required
+def billing_change(client_id):
+    """Move the client's one hosting subscription item to the agreed fee,
+    from the next cycle. The page asked first; this is the doing."""
+    client = db.session.get(Client, client_id) or abort(404)
+    projects = Project.query.filter(Project.client_id == client.id,
+                                    Project.hosting_fee.isnot(None)).all()
+    bill = hosting_billing.by_client(projects, hosting_billing.current(ttl=0)).get(client.id)
+    if not bill or not bill["changeable"]:
+        flash(f"Nothing to change for {client.name}: Stripe already bills what was agreed, "
+              f"or there is more than one hosting item to choose between.", "warning")
+        return redirect(url_for("hosting.hosting_index"))
+    error = hosting_billing.change(bill["items"][0], bill["agreed"])
+    if error:
+        flash(f"Stripe did not take it: {error}", "danger")
+    else:
+        _DUE_CACHE.update(at=0.0)
+        flash(f"{client.name} is billed ${bill['agreed']:,.2f} a month from the next cycle.", "success")
+    return redirect(url_for("hosting.hosting_index"))

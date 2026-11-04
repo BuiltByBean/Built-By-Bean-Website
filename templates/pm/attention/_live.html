@@ -1,0 +1,25 @@
+{#
+  What is live and broken, one row each (live_watch.attention_rows): a site
+  down two nights, a certificate or a domain running out, a deploy that
+  failed or fell a day behind, stores showing different versions for over a
+  day, and one row for everything live on Railway with no tile. Each press
+  goes where the fix is.
+#}
+{% set live_tone = {'red': 'bg-red-500/15 text-red-300',
+                    'amber': 'bg-amber-500/15 text-amber-300',
+                    'brand': 'bg-brand-500/15 text-brand-300'} %}
+{% for row in live or [] %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3" data-live-row="{{ row.key }}">
+    <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-medium text-white break-words [overflow-wrap:anywhere]">{{ row.title }}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider shrink-0 {{ live_tone[row.tone] }}">{{ row.pill }}</span>
+        </div>
+        <p class="text-sm text-surface-200 break-words [overflow-wrap:anywhere]">{{ row.detail }}</p>
+    </div>
+    <div class="shrink-0 flex items-center gap-2">
+        <a href="{{ row.href }}"{% if row.href.startswith('http') %} target="_blank" rel="noopener"{% endif %}
+           class="min-h-[44px] inline-flex items-center px-4 text-sm font-semibold rounded-xl btn-brand transition-all">{{ row.press }}</a>
+    </div>
+</div>
+{% endfor %}

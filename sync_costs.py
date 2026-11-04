@@ -114,6 +114,10 @@ def _sweep(night):
     # list, the quarterly local rates, and a return drafted from each
     # Comptroller charge. After the bank, so tonight's charges are in.
     run("comptroller", "Comptroller")
+    # What is live: Railway services, sites, certificates, domains, deploys,
+    # store versions, tiles, maps and checklist steps (live_night.py).
+    import live_night
+    live_night.steps(night)
     # Last, because it reads what the sweep filed and what the audit found.
     # Off unless CURATOR_ENABLED (it is the paid step).
     run("curate_practices", "curator")

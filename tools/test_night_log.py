@@ -82,6 +82,8 @@ import types  # noqa: E402
 for name in ("sweep_repos", "audit_repos", "store_ids_service", "stripe_books", "bank_feed",
              "receipts_service", "leads_refresh", "comptroller", "curate_practices"):
     sys.modules[name] = types.SimpleNamespace(main=lambda: 0)
+# The live apps steps reach the network; their own tests are test_live_apps.
+sys.modules["live_night"] = types.SimpleNamespace(steps=lambda night: night.step("live apps", lambda: "stub"))
 sync_costs.sync_all_providers = lambda: []
 sync_costs._invoices = lambda app: "0 new, 0 updated"
 code = sync_costs.main()

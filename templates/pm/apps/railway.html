@@ -1,0 +1,73 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/brand_icons.html" import railway, github %}
+
+{#
+  Live on Railway, not on My Apps: what the nightly Railway read found
+  answering on an address with no tile (railway_watch.unlisted). Each row
+  either becomes a tile in one press, or is marked "Not an app" and never
+  listed again. Marked ones sit at the bottom with the press that undoes it.
+#}
+
+{% block title %}Live on Railway - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('apps.index'), 'My Apps') }}{% endblock %}
+{% block page_title %}Live on Railway{% endblock %}
+{% block page_subtitle %}{% if services %}{{ services|length | commas }} not on My Apps{% else %}Every live service has a tile{% endif %}{% endblock %}
+
+{% macro service_row(s, ignored=False) %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3" data-railway-row>
+    <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-medium text-white break-words">{{ s.project_name }}</span>
+            {% if s.service_name and s.service_name != s.project_name %}
+            <span class="text-sm text-surface-400 break-words">{{ s.service_name }}</span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-surface-400 break-words [overflow-wrap:anywhere]">{{ s.domains | join(', ') }}</p>
+        {% if s.repo %}<p class="text-xs text-surface-500 break-words">{{ s.repo }}</p>{% endif %}
+    </div>
+    {# w-full on a phone: a shrink-0 row of three presses is wider than the
+       card at 375px and ran off its edge. #}
+    <div class="w-full sm:w-auto flex flex-wrap items-center justify-end gap-2">
+        <a href="{{ s.dashboard_url }}" target="_blank" rel="noopener" title="Open on Railway"
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
+            {{ railway("w-4 h-4") }}<span class="sr-only">Railway</span>
+        </a>
+        <form method="POST" action="{{ url_for('apps.railway_ignore', id=s.id) }}">
+            {% if ignored %}<input type="hidden" name="undo" value="1">{% endif %}
+            <button type="submit"
+                    class="min-h-[44px] inline-flex items-center px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                {{ 'List it again' if ignored else 'Not an app' }}</button>
+        </form>
+        {% if not ignored %}
+        <form method="POST" action="{{ url_for('apps.railway_add', id=s.id) }}">
+            <button type="submit"
+                    class="min-h-[44px] inline-flex items-center px-4 text-sm font-semibold rounded-xl btn-brand transition-all">
+                Put it on My Apps</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="space-y-6 stagger-in">
+    <div class="glass-card overflow-hidden divide-y divide-white/5">
+        {% for s in services %}{{ service_row(s) }}{% endfor %}
+        {% if not services %}
+        <div class="p-8 sm:p-12 text-center">
+            <p class="text-surface-300">Everything live on Railway is on My Apps.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if ignored %}
+    <section class="space-y-3">
+        <h2 class="px-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">Not apps</h2>
+        <div class="glass-card overflow-hidden divide-y divide-white/5">
+            {% for s in ignored %}{{ service_row(s, True) }}{% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

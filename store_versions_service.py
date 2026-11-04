@@ -116,7 +116,57 @@ def refresh(link, now=None):
         fresh["play"] = previous.get("play") if got["status"] == "error" and previous.get("play") else got
     link.store_versions = json.dumps(fresh)
     link.store_checked_at = now.replace(tzinfo=None)
+    # Since when they have disagreed, so a release caught between the two
+    # reviews for an hour is not a row on Needs attention and one stuck for
+    # a day is. Cleared the moment they agree again.
+    differ = (summary(link) or {}).get("verdict") == "differ"
+    if not differ:
+        link.store_differ_since = None
+    elif link.store_differ_since is None:
+        link.store_differ_since = now.replace(tzinfo=None)
     return fresh
+
+
+def refresh_all():
+    """Nightly: every tile with a store id, so "Versions differ" does not wait
+    for somebody to open My Apps (audit item 4). Returns a summary."""
+    from models import db, AppLink
+    asked = differ = 0
+    for link in AppLink.query.order_by(AppLink.id).all():
+        if not (link.app_store_bundle_id or link.play_package):
+            continue
+        refresh(link)
+        db.session.commit()
+        asked += 1
+        differ += 1 if link.store_differ_since else 0
+    return f"{asked} apps asked, {differ} differ"
+
+
+def repo_versions(link):
+    """{"android": "1.4.0", "ios": ...} written in the repo, {} when unread."""
+    try:
+        data = json.loads(link.repo_versions or "{}")
+    except ValueError:
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def repo_line(link):
+    """"1.4.0 in the repo, stores on 1.3.2", or None when the repo and the
+    stores agree or either side has nothing to say. The point is a build
+    waiting on submission or review, shown rather than remembered."""
+    in_repo = sorted({v for v in repo_versions(link).values() if v})
+    data = info(link)
+    live = sorted({(data.get(k) or {}).get("version") for k in ("app_store", "play")
+                   if (data.get(k) or {}).get("status") == "live" and (data.get(k) or {}).get("version")})
+    if not in_repo:
+        return None
+    repo_text = " / ".join(in_repo)
+    if not live:
+        return f"{repo_text} in the repo, not live yet" if (link.app_store_bundle_id or link.play_package) else None
+    if set(in_repo) == set(live):
+        return None
+    return f"{repo_text} in the repo, stores on {' / '.join(live)}"
 
 
 def info(link):

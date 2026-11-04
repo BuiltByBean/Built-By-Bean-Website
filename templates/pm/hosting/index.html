@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
   The recurring fee against the recurring cost, per application.
@@ -87,7 +88,7 @@
         <div class="glass-card p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Needs a look</p>
             <p class="text-xl sm:text-2xl font-bold mt-2 {{ 'text-amber-400' if totals.needs_attention else 'text-white' }}">{{ totals.needs_attention }}</p>
-            <p class="text-xs text-surface-400 mt-1">Under {{ min_margin|format_currency }} left over</p>
+            <p class="text-xs text-surface-400 mt-1">To raise, map or bill</p>
         </div>
     </div>
 
@@ -108,10 +109,12 @@
            charged for. #}
         {% set tone = {'loss': 'bg-red-500/10 text-red-300',
                        'raise': 'bg-amber-500/10 text-amber-300',
+                       'unmapped': 'bg-sky-500/10 text-sky-300',
                        'fine': 'bg-emerald-500/10 text-emerald-300',
                        'free': 'bg-surface-800 text-surface-400'}[r.status] %}
         {% set fill = {'loss': 'bg-red-500',
                        'raise': 'bg-amber-500',
+                       'unmapped': 'bg-sky-500',
                        'fine': 'bg-emerald-500',
                        'free': 'bg-surface-600'}[r.status] %}
         <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
@@ -185,6 +188,43 @@
                     {% if r.fee %}Draft the increase to{% else %}Put it on{% endif %}
                     {{ r.increase.new_monthly|format_currency }}/mo
                 </a>
+            </div>
+            {% endif %}
+
+            {# Not mapped: nothing records what it costs, so the bar above is
+               a guess at zero. The press opens the mapping form with this
+               project chosen. #}
+            {% if r.map_url %}
+            <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <a href="{{ r.map_url }}" data-map-press
+                   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">Map its costs</a>
+            </div>
+            {% endif %}
+
+            {# What Stripe bills this client for hosting against what was
+               agreed, said once per client (hosting_billing). Unbilled is
+               agreed money never charged; a difference is offered as the one
+               press that changes the subscription, which asks first because
+               it changes what the client pays from the next cycle. #}
+            {% if r.bill and r.bill.state != 'ok' %}
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-2" data-bill-row>
+                <p class="text-xs {{ 'text-red-300' if r.bill.state == 'unbilled' else 'text-amber-300' }}">
+                    {% if r.bill.state == 'unbilled' %}Agreed {{ r.bill.agreed|format_currency }}/mo, no hosting subscription in Stripe
+                    {% else %}Billed {{ r.bill.billed|format_currency }}/mo, agreed {{ r.bill.agreed|format_currency }}/mo{% endif %}
+                </p>
+                {% if r.bill.changeable %}
+                <form method="POST" action="{{ url_for('hosting.billing_change', client_id=r.project.client_id) }}" data-bill-press>
+                    {{ confirm_button('Bill ' ~ (r.bill.agreed|format_currency) ~ '/mo', 'Change the subscription?',
+                                      btn_class='inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all',
+                                      tone='brand') }}
+                </form>
+                {% elif r.project.client.stripe_customer_id %}
+                <a href="https://dashboard.stripe.com/customers/{{ r.project.client.stripe_customer_id }}" target="_blank" rel="noopener" data-bill-press
+                   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">Open in Stripe</a>
+                {% else %}
+                <a href="{{ url_for('pm.client_detail', id=r.project.client_id) }}" data-bill-press
+                   class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand transition-all">Link to Stripe</a>
+                {% endif %}
             </div>
             {% endif %}
 

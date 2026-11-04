@@ -1,0 +1,187 @@
+"""The hosting fee agreed against the hosting fee Stripe actually bills.
+
+docs/automation_gaps.md item 10. Project.hosting_fee comes from the contract
+and nothing compared it with the subscription: a signed fee update never
+changed what Stripe charged, and a project with an agreed fee and no
+subscription at all was agreed money never billed.
+
+Hosting money belongs to a client, not a project (the page already says so
+of what was collected), so the comparison is per client: the sum of its
+priced projects' monthly fees against the sum of its hosting subscription
+items, both as a month. A subscription item is hosting when its product's
+name (or the price's nickname) says hosting, the same word the invoices are
+read by (stripe_service.HOSTING_LINE).
+
+Reading Stripe is a network call, and the Hosting badge is built on every
+page, so the badge only ever reads `snapshot()`, which never waits: it
+answers from the last read and starts a fresh one in the background when that
+is stale. The Hosting page itself reads synchronously.
+
+`change` is the one press: the subscription's single hosting item moved to
+the agreed fee from the next cycle, no proration. The page asks first, the
+same way "Tax the subscription" does, because it changes what a client pays.
+"""
+import threading
+import time
+
+BILLING_STATUSES = ("active", "trialing", "past_due", "unpaid", "incomplete")
+STALE_SECONDS = 1800
+INTERVAL_MONTHS = {"month": 1, "year": 12, "week": 12 / 52, "day": 12 / 365}
+
+_CACHE = {"at": 0.0, "data": None, "busy": False}
+_PRODUCTS = {}
+
+
+def _stripe():
+    import stripe
+    return stripe if stripe.api_key else None
+
+
+def _product_name(stripe, product):
+    if product is None:
+        return ""
+    if not isinstance(product, str):
+        return getattr(product, "name", "") or ""
+    if product not in _PRODUCTS:
+        try:
+            _PRODUCTS[product] = getattr(stripe.Product.retrieve(product), "name", "") or ""
+        except Exception:  # noqa: BLE001
+            _PRODUCTS[product] = ""
+    return _PRODUCTS[product]
+
+
+def item_rows(stripe, subscriptions):
+    """{customer_id: [hosting item]} from Stripe's subscriptions."""
+    from stripe_service import HOSTING_LINE
+    out = {}
+    for sub in subscriptions:
+        if getattr(sub, "status", None) not in BILLING_STATUSES:
+            continue
+        customer = getattr(sub, "customer", None)
+        customer = customer if isinstance(customer, str) else getattr(customer, "id", None)
+        for item in sub["items"].data:
+            price = getattr(item, "price", None)
+            recurring = getattr(price, "recurring", None)
+            if price is None or recurring is None:
+                continue
+            product = getattr(price, "product", None)
+            name = f"{_product_name(stripe, product)} {getattr(price, 'nickname', '') or ''}"
+            if HOSTING_LINE not in name.lower():
+                continue
+            interval = getattr(recurring, "interval", "month") or "month"
+            count = getattr(recurring, "interval_count", 1) or 1
+            months = INTERVAL_MONTHS.get(interval, 1) * count
+            cents = (getattr(price, "unit_amount", 0) or 0) * (getattr(item, "quantity", 1) or 1)
+            out.setdefault(customer, []).append({
+                "subscription_id": getattr(sub, "id", None), "item_id": getattr(item, "id", None),
+                "status": sub.status, "amount": cents / 100.0, "monthly": round(cents / 100.0 / months, 2),
+                "interval": interval, "interval_count": count,
+                "product": product if isinstance(product, str) else getattr(product, "id", None),
+                "currency": getattr(price, "currency", "usd") or "usd",
+            })
+    return out
+
+
+def read():
+    """{customer_id: [hosting item]} now, or None when Stripe is not set up."""
+    stripe = _stripe()
+    if stripe is None:
+        return None
+    subs = list(stripe.Subscription.list(status="all", limit=100).auto_paging_iter())
+    data = item_rows(stripe, subs)
+    _CACHE.update(at=time.monotonic(), data=data)
+    return data
+
+
+def current(ttl=300):
+    """The page's read: fresh within ttl, else read now. None on failure."""
+    if _CACHE["data"] is not None and time.monotonic() - _CACHE["at"] < ttl:
+        return _CACHE["data"]
+    try:
+        return read()
+    except Exception:  # noqa: BLE001 - Stripe down is a page without the comparison
+        return _CACHE["data"]
+
+
+def snapshot(app=None):
+    """The badge's read: never waits. Starts a background read when stale."""
+    stale = _CACHE["data"] is None or time.monotonic() - _CACHE["at"] > STALE_SECONDS
+    if stale and app is not None and not _CACHE["busy"] and _stripe() is not None:
+        _CACHE["busy"] = True
+
+        def go():
+            try:
+                with app.app_context():
+                    read()
+            except Exception:  # noqa: BLE001
+                pass
+            finally:
+                _CACHE["busy"] = False
+        threading.Thread(target=go, daemon=True).start()
+    return _CACHE["data"]
+
+
+def forget():
+    _CACHE["at"] = 0.0
+
+
+def compare(client, agreed_monthly, items):
+    """{state, billed, agreed, items} for one client. state is "ok",
+    "unbilled" (an agreed fee and no hosting subscription) or "differs"."""
+    billed = round(sum(i["monthly"] for i in items or []), 2)
+    agreed = round(agreed_monthly or 0.0, 2)
+    if agreed <= 0:
+        state = "ok"
+    elif not items:
+        state = "unbilled"
+    elif abs(billed - agreed) >= 0.01:
+        state = "differs"
+    else:
+        state = "ok"
+    return {"state": state, "billed": billed, "agreed": agreed, "items": items or [],
+            "changeable": state == "differs" and len(items or []) == 1}
+
+
+def agreed_by_client(projects):
+    out = {}
+    for p in projects:
+        if p.hosting_fee is None:
+            continue
+        out[p.client_id] = out.get(p.client_id, 0.0) + (p.monthly_hosting_fee or 0.0)
+    return out
+
+
+def by_client(projects, data):
+    """{client_id: compare(...)} for every client with a priced project, or
+    {} when there is no Stripe answer to compare against."""
+    if data is None:
+        return {}
+    clients = {p.client_id: p.client for p in projects if p.hosting_fee is not None}
+    out = {}
+    for client_id, agreed in agreed_by_client(projects).items():
+        client = clients.get(client_id)
+        items = data.get((client.stripe_customer_id if client else None) or "", [])
+        out[client_id] = compare(client, agreed, items)
+    return out
+
+
+def change(item, monthly):
+    """Move one subscription item to `monthly` a month, from the next cycle.
+    Returns an error string or None."""
+    stripe = _stripe()
+    if stripe is None:
+        return "Stripe is not set up."
+    months = INTERVAL_MONTHS.get(item["interval"], 1) * (item["interval_count"] or 1)
+    try:
+        stripe.Subscription.modify(
+            item["subscription_id"],
+            items=[{"id": item["item_id"], "price_data": {
+                "currency": item["currency"], "product": item["product"],
+                "unit_amount": int(round(monthly * months * 100)),
+                "recurring": {"interval": item["interval"],
+                              "interval_count": item["interval_count"] or 1}}}],
+            proration_behavior="none")
+    except Exception as err:  # noqa: BLE001
+        return str(err)[:300]
+    forget()
+    return None

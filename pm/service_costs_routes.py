@@ -506,13 +506,16 @@ def mapping_create():
     prefill = None
     prefill_pid = request.args.get("provider_id", type=int)
     prefill_rid = (request.args.get("resource_identifier") or "").strip()
-    if prefill_pid or prefill_rid:
+    # Hosting's "Map it" on a priced project with no mapping names the
+    # project, so the form opens with it and its client already chosen.
+    prefill_project = db.session.get(Project, request.args.get("project_id", type=int) or 0)
+    if prefill_pid or prefill_rid or prefill_project:
         prefill = SimpleNamespace(
             provider_id=prefill_pid,
             resource_identifier=prefill_rid,
             resource_label=(request.args.get("resource_label") or "").strip(),
-            client_id=None,
-            project_id=None,
+            client_id=prefill_project.client_id if prefill_project else None,
+            project_id=prefill_project.id if prefill_project else None,
             split_percentage=100.0,
             monthly_cost=None,
             is_active=True,
