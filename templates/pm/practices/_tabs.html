@@ -1,6 +1,7 @@
 {#
   The one strip every Best Practices page wears: Everything, Rules, Features,
-  Blueprints (a whole app end to end), Playbooks (one vendor each), History. The pages behind it kept their own
+  Blueprints (a whole app end to end), Playbooks (one vendor each), Gaps (what
+  one app should catch up on from the others), History. The pages behind it kept their own
   URLs because the MVP Builder, project pages, the tax guide and the
   guidance API link into them; this strip is what makes them one place.
 
@@ -16,6 +17,7 @@
     ('howto', 'Features', url_for('features.features_index'), c.howto),
     ('blueprint', 'Blueprints', url_for('blueprints.blueprints_index'), c.blueprint),
     ('playbook', 'Playbooks', url_for('playbooks.playbooks_index'), c.playbook),
+    ('gaps', 'Gaps', url_for('blueprints.gaps_index'), c.gaps),
     ('history', 'History', url_for('inbox.inbox_index'), none),
 ] %}
 <nav aria-label="Best Practices" class="shrink-0 flex flex-wrap gap-2">

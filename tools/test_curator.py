@@ -321,9 +321,16 @@ with application.app_context():
     db.session.commit()
     check("and a curator retire reverts", Feature.query.filter_by(slug="old-vendor").one().is_active)
 
-    print("5. No key is a recorded skip")
+    print("5. Off unless switched on; on with no key is a recorded skip")
+    os.environ.pop("CURATOR_ENABLED", None)
+    before = CuratorRun.query.count()
+    check("off by default: nothing runs and no night is written",
+          curate_practices.curate(application) is None and CuratorRun.query.count() == before)
+    os.environ["CURATOR_ENABLED"] = "1"
+    os.environ.pop("ANTHROPIC_API_KEY", None)
     skipped = curate_practices.curate(application)
     check("status skipped", db.session.get(CuratorRun, skipped).status == "skipped")
+    os.environ.pop("CURATOR_ENABLED", None)
 
     print("6. The brief fits what a session start keeps")
     for i in range(485):
@@ -348,7 +355,7 @@ resp = signed.get("/admin/features/inbox/")
 page = resp.get_data(as_text=True)
 check("it renders with History lit",
       re.search(r'aria-current="page"[^>]*>\s*History', page) is not None)
-check("it lists the curator's nights", "The curator&#39;s nights" in page or "The curator's nights" in page)
+check("it lists the runs", "Tend runs" in page)
 check("it shows the skip honestly", "No key" in page)
 check("it has no Accept", ">\n                Accept<" not in page and "inbox.accept" not in page
       and "/accept" not in page)

@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/blueprints/_gap.html" import gap_row %}
 
 {#
   One blueprint, in the order a new project needs it: what the app is, its
@@ -100,6 +101,18 @@
     {% endif %}
 
     {% for s in b.sections if s.field in ('tweaks_md', 'traps_md') %}{{ section(s) }}{% endfor %}
+
+    {# What this app should catch up on from the others, from the Tend run. #}
+    <div data-live="gaps">
+    {% if gaps %}
+    <section class="glass-card overflow-hidden min-w-0" data-section="gaps">
+        <h2 class="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 text-sm font-semibold uppercase tracking-wider text-surface-300 border-b border-white/10">Gaps to close <span class="ml-1 text-surface-500 normal-case tracking-normal font-normal">{{ gaps | length }}</span></h2>
+        <div class="divide-y divide-white/5">
+            {% for g in gaps %}{{ gap_row(g, request.path) }}{% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    </div>
 
 </div>
 {% endblock %}

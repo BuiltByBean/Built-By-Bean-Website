@@ -7,7 +7,9 @@ data/
 static/uploads/
 instance/
 *.db
-.claude/
+.claude/*
+# The Tend command (Best Practices upkeep on the Max plan) travels with the repo.
+!.claude/skills/
 static/images/*.bak
 
 # Contract previews live on the volume, not in the repo.

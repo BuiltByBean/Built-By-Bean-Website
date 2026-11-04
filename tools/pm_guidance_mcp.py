@@ -99,6 +99,96 @@ TOOLS = [
         },
     },
     {
+        "name": "tend_brief",
+        "description": (
+            "For the Tend run only (.claude/skills/tend): everything Best "
+            "Practices upkeep works from, in one read. The notes waiting, the "
+            "rule list with where each rule is broken, features, playbooks, "
+            "blueprints with their repos and closed gaps, and the repos the "
+            "sweeper watches."),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "close_note",
+        "description": (
+            "For the Tend run: mark one waiting note as decided, after you have "
+            "folded it into an entry, added an entry from it, or set it aside "
+            "as true of one repo only."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "The note's number from tend_brief"},
+                "outcome": {"type": "string", "enum": ["folded", "added", "discarded"]},
+                "reason": {"type": "string", "description": "One sentence: where it went, or why not"},
+            },
+            "required": ["id", "outcome"],
+        },
+    },
+    {
+        "name": "get_map",
+        "description": (
+            "A business's map as text: every person, surface, service and "
+            "outcome on it with its id, and every line between them with why."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"business": {"type": "string", "description": "Business slug or name"}},
+            "required": ["business"],
+        },
+    },
+    {
+        "name": "change_map",
+        "description": (
+            "Change a business's map with a list of operations, applied all or "
+            "nothing and recorded on History with a Revert. Each change is "
+            "{op, ...}: add_node {kind (audience, surface, service, outcome), "
+            "name, role, status, url, surface_kind, playbook}; update_node "
+            "{node (id or name), any of those fields}; remove_node {node}; "
+            "add_edge {from, to, why}; remove_edge {from, to}."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "business": {"type": "string"},
+                "changes": {"type": "array", "items": {"type": "object"}},
+                "reason": {"type": "string", "description": "What in the repo or blueprint says so"},
+                "project": {"type": "string", "description": "Who made the change, e.g. tend"},
+            },
+            "required": ["business", "changes", "project"],
+        },
+    },
+    {
+        "name": "file_gaps",
+        "description": (
+            "File what one app should catch up on, found by comparing it with "
+            "the other apps' blueprints. Each gap is {title, detail_md, kind "
+            "(gap: another app already does it; enhancement: none do yet), "
+            "from (the blueprint that has it)}. A gap Michael closed as done "
+            "or not wanted is never reopened."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "blueprint": {"type": "string", "description": "The app that has the gap"},
+                "gaps": {"type": "array", "items": {"type": "object"}},
+                "project": {"type": "string"},
+            },
+            "required": ["blueprint", "gaps"],
+        },
+    },
+    {
+        "name": "tend_finished",
+        "description": (
+            "For the Tend run: record the run on the History tab, with counts "
+            "of rules added, folded, merged, tightened and retired, notes set "
+            "aside, and a short note of what else changed."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "counts": {"type": "object", "description": "{added, folded, merged, tightened, retired, discarded}"},
+                "note": {"type": "string"},
+            },
+            "required": ["counts"],
+        },
+    },
+    {
         "name": "report_lesson",
         "description": (
             "File a lesson back to the project manager the moment something "
@@ -481,6 +571,44 @@ def tool_get_blueprint(args):
     return f"No blueprint called {name!r}. There are: " + (", ".join(b["slug"] for b in rows) or "none yet")
 
 
+def tool_tend_brief(_args):
+    text, err = _http("GET", "/api/guidance/tend")
+    return err or json.loads(text)["brief"]
+
+
+def tool_close_note(args):
+    note_id = args.get("id")
+    data, err = _post(f"/api/guidance/notes/{int(note_id or 0)}", args)
+    return err or f"Note #{note_id} closed as {args.get('outcome')}."
+
+
+def tool_get_map(args):
+    slug = (args.get("business") or "").strip().lower().replace(" ", "-")
+    text, err = _http("GET", f"/api/guidance/maps/{slug}")
+    return err or json.loads(text)["map"]
+
+
+def tool_change_map(args):
+    slug = (args.get("business") or "").strip().lower().replace(" ", "-")
+    data, err = _post(f"/api/guidance/maps/{slug}", args)
+    if err:
+        return err
+    return "Applied, with a Revert on History: " + "; ".join(data.get("changed") or [])
+
+
+def tool_file_gaps(args):
+    data, err = _post("/api/guidance/gaps", args)
+    if err:
+        return err
+    return (f"{data.get('blueprint')}: {data.get('added', 0)} new, {data.get('updated', 0)} "
+            f"updated, {data.get('left_closed', 0)} left closed as Michael decided.")
+
+
+def tool_tend_finished(args):
+    data, err = _post("/api/guidance/tend/runs", args)
+    return err or "Recorded on the History tab."
+
+
 def tool_report_lesson(args):
     data, err = _post("/api/guidance/lessons", args)
     if err:
@@ -614,6 +742,12 @@ HANDLERS = {
     "get_feature_guidance": tool_get_feature_guidance,
     "get_playbook": tool_get_playbook,
     "get_blueprint": tool_get_blueprint,
+    "tend_brief": tool_tend_brief,
+    "close_note": tool_close_note,
+    "get_map": tool_get_map,
+    "change_map": tool_change_map,
+    "file_gaps": tool_file_gaps,
+    "tend_finished": tool_tend_finished,
     "report_lesson": tool_report_lesson,
     "suggest_update": tool_suggest_update,
     "get_clients": tool_get_clients,

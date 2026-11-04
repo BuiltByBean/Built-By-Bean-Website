@@ -37,7 +37,7 @@ and get_playbook answer from the same rows through /api/guidance.
 from flask import Blueprint, render_template, url_for
 from flask_login import login_required
 
-from models import AppBlueprint, Feature, Playbook
+from models import AppBlueprint, AppGap, Feature, Playbook
 
 practices_bp = Blueprint("practices", __name__, url_prefix="/admin/practices")
 
@@ -59,6 +59,8 @@ def practices_counts():
         "howto": Feature.query.filter_by(is_active=True, kind="feature").count(),
         "playbook": Playbook.query.filter_by(is_active=True).count(),
         "blueprint": AppBlueprint.query.filter_by(is_active=True).count(),
+        "gaps": (AppGap.query.join(AppBlueprint, AppGap.blueprint_id == AppBlueprint.id)
+                 .filter(AppBlueprint.is_active.is_(True), AppGap.status == "open").count()),
     }
 
 

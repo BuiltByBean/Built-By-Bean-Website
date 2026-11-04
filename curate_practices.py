@@ -482,6 +482,17 @@ def curate(app, client=None):
     """One night. Returns the CuratorRun's id (the row itself belongs to a
     session that closes with the app context)."""
     from models import db, CuratorRun
+    # Off unless asked for (Michael, 2026-11-04: "could I just have it where I
+    # manually am able to run this off of my max plan usage? that way it
+    # doesn't cost me any extra and later once im making more money we can
+    # set it up automatic every night"). The tending is the Tend command in
+    # Claude Code (.claude/skills/tend), on his plan; this paid run comes back
+    # with CURATOR_ENABLED=1 on cost-sync. No row is written while it is off,
+    # or History would fill with a skipped night every night.
+    if client is None and os.environ.get("CURATOR_ENABLED", "").strip().lower() not in ("1", "true", "yes", "on"):
+        print("curator off: Best Practices is tended from Claude Code (Tend). "
+              "CURATOR_ENABLED=1 on cost-sync runs it here.", flush=True)
+        return None
     with app.app_context():
         run = CuratorRun(model=MODEL, status="running")
         db.session.add(run)

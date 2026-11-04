@@ -43,6 +43,26 @@ so History shows it with a Revert, and a retire switches a rule off rather
 than deleting it. `CuratorRun` is the night; `tools/test_curator.py` runs
 one against a scripted model.
 
+**The paid curator is off; Tend does the job on Michael's plan** (2026-11-04:
+"could I just have it where I manually am able to run this off of my max plan
+usage? that way it doesn't cost me any extra and later once im making more
+money we can set it up automatic every night"). `curate_practices.curate`
+does nothing and writes no night unless `CURATOR_ENABLED=1` is on cost-sync;
+the free parts of the night (sweep, audit, store ids) still run. The upkeep
+is the Tend command, `.claude/skills/tend/SKILL.md` (`.gitignore` lets
+`.claude/skills/` through so it travels with the repo), run in a Claude Code
+session in this repo: fold the notes into rules and playbooks, prune the
+rules, bring each blueprint up to date with its repos, bring each business
+map in line with its blueprint, and file the Gaps each app has against the
+others. Its half of the board is `tend_service.py` behind the door
+(`/api/guidance/tend`, `/notes/<id>`, `/maps/<slug>`, `/gaps`, `/tend/runs`)
+and six bridge tools. A map change is a `CatalogueProposal` of kind `map`
+holding the whole map before it, so History reverts it exactly. `AppGap` is
+one gap per (blueprint, key): Tend upserts, Michael closes as done or not
+wanted, and a closed gap is never reopened by a run. History lists Tend runs
+beside any paid ones, with the paid ones' approximate cost from their token
+counts (`CuratorRun.estimated_cost`). `tools/test_tend.py`.
+
 Applying a held note writes it as filed, and a replace is the whole field, so
 `_overtaken` sets aside any held replace whose field has changed since it was
 written. On 2026-11-04 twenty-two runbook rewrites from three days earlier were
@@ -230,6 +250,16 @@ nothing and would have stayed "not live". A listing with per-device builds
 has no single version and reads "varies by device", which never counts as a
 difference. `tools/test_store_versions.py`, and `--live` reads Firefox's real
 page.
+
+**The ids come out of the repo** (Michael, 2026-11-04: EntertainHQ's tile
+said App Store live and nothing about Play, which he had submitted to, "I
+need every ... thing automated"). A tile only asks a store whose id it holds,
+and the Play id had never been typed. `store_ids_service.py` reads them
+nightly, with no model, off GitHub for every tile with a `github_url`: the
+Android `applicationId`, the Xcode bundle id (the shortest, so not a test or
+extension target), an Expo `app.json`, or a Capacitor `appId` for a platform
+whose folder the repo has. It fills only an empty field; a typed id is never
+overruled. `tools/test_store_ids.py --repo <clone>` parses a real repo.
 
 ## Needs attention
 

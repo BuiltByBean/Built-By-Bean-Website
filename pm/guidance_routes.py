@@ -41,6 +41,7 @@ from models import (db, Feature, Playbook, PlaybookStep, Product,
 from models import AppLink  # the My Apps tile (register_app)
 from models import AppBlueprint  # a whole app end to end (app_blueprints.py)
 import app_blueprints
+import tend_service  # the Tend run's brief, map changes and gaps
 import store_versions_service  # the two store pages' live versions for a phone app
 from pm.apps_routes import _normalise as _normalise_url, _refresh_icon as _refresh_app_icon
 
@@ -308,6 +309,58 @@ def blueprint_detail(slug):
                     "blueprint": "\n".join(app_blueprints.blueprint_lines(row))})
 
 
+# ── The Tend run (.claude/skills/tend) ─────────────────
+# Best Practices upkeep as a Claude Code session on Michael's plan, in place
+# of the paid nightly curator. tend_service.py says what each of these is.
+
+
+@guidance_bp.route("/tend")
+def tend_brief():
+    return jsonify({"brief": tend_service.brief()})
+
+
+@guidance_bp.route("/tend/runs", methods=["POST"])
+def tend_run():
+    body = request.get_json(silent=True) or {}
+    counts = body.get("counts") if isinstance(body.get("counts"), dict) else {}
+    run_id = tend_service.record_run(counts, _cap(body.get("note"), 20000))
+    return jsonify({"action": "recorded", "id": run_id})
+
+
+@guidance_bp.route("/notes/<int:note_id>", methods=["POST"])
+def close_note(note_id):
+    body = request.get_json(silent=True) or {}
+    ok, message = tend_service.close_note(note_id, _cap(body.get("outcome"), 12).lower(),
+                                          _cap(body.get("reason"), 1000))
+    if not ok:
+        return jsonify({"error": message}), 400
+    return jsonify({"action": "closed", "id": note_id})
+
+
+@guidance_bp.route("/maps/<slug>")
+def map_read(slug):
+    business = tend_service.business_by_slug(slug)
+    if business is None:
+        return jsonify({"error": f"no business called {slug!r}"}), 404
+    return jsonify({"slug": business.slug, "map": tend_service.map_text(business)})
+
+
+@guidance_bp.route("/maps/<slug>", methods=["POST"])
+def map_change(slug):
+    body = request.get_json(silent=True) or {}
+    result, status = tend_service.change_map(slug, body.get("changes"), _cap(body.get("project"), 120),
+                                             _cap(body.get("reason"), 1000))
+    return jsonify(result), status
+
+
+@guidance_bp.route("/gaps", methods=["POST"])
+def gaps_file():
+    body = request.get_json(silent=True) or {}
+    result, status = tend_service.file_gaps(_cap(body.get("blueprint"), 120), body.get("gaps"),
+                                            _cap(body.get("project"), 120) or "tend")
+    return jsonify(result), status
+
+
 @guidance_bp.route("/products")
 def products():
     rows = (Product.query.filter_by(is_active=True)
@@ -529,6 +582,8 @@ def _target(kind, slug):
 
 
 def target_label(kind, slug):
+    if kind == tend_service.MAP_KIND:
+        return tend_service.map_label(slug)
     row = _target(kind, slug) if slug else None
     if row is None:
         return slug or "(new)"
@@ -837,6 +892,8 @@ def apply_proposal(proposal):
 
 def revert_proposal(proposal):
     """Put back what apply_proposal changed. Returns (ok, message)."""
+    if proposal.kind == tend_service.MAP_KIND:
+        return tend_service.revert_map(proposal)
     if proposal.mode == "create":
         row = _target(proposal.kind, proposal.target_slug)
         if row is None:

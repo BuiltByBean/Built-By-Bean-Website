@@ -96,6 +96,14 @@ def _sweep():
         audit_repos.main()
     except Exception as err:  # noqa: BLE001
         print(f"repo sweep failed: {str(err)[:200]}", flush=True)
+    # A phone app's store ids are written in its repo; a tile missing one never
+    # asks that store, so My Apps would say nothing about Play. No model.
+    try:
+        import store_ids_service
+        print("reading store ids from app repos", flush=True)
+        store_ids_service.main()
+    except Exception as err:  # noqa: BLE001
+        print(f"store ids failed: {str(err)[:200]}", flush=True)
     # Each company's own Stripe: its sales and its fees.
     try:
         import stripe_books

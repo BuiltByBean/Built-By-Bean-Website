@@ -99,7 +99,9 @@
             <p class="text-xl sm:text-2xl font-bold text-emerald-400 mt-1">{{ this_week | commas }}</p>
         </div>
         <div class="glass-card p-4">
-            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Tonight</p>
+            {# Waiting, not Tonight: since 2026-11-04 nothing tends these on its
+               own; the Tend command in Claude Code does, when Michael runs it. #}
+            <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Waiting</p>
             <p class="text-xl sm:text-2xl font-bold text-white mt-1">{{ queued | commas }}</p>
         </div>
     </div>
@@ -109,12 +111,13 @@
 
             {% if runs %}
             <div class="px-4 sm:px-5 py-3 border-b border-white/5">
-                <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">The curator's nights</span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Tend runs</span>
             </div>
             <div class="divide-y divide-white/5 border-b border-white/5">
                 {% for r in runs %}
                 <div class="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                    <span class="text-sm text-white">{{ when(r.started_at) }}</span>
+                    <span class="text-sm text-white">{{ when(r.started_at) }}
+                        <span class="ml-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium {{ 'bg-emerald-500/10 text-emerald-300' if r.is_tend else 'bg-surface-800 text-surface-400' }}">{{ 'Tend, Max plan' if r.is_tend else 'Server' }}{% if r.estimated_cost is not none %}, about ${{ '%.2f' | format(r.estimated_cost) }}{% endif %}</span></span>
                     <span class="text-sm text-surface-300 min-w-0 break-words">
                         {% if r.status == 'skipped' %}Skipped, no API key
                         {% elif r.status == 'failed' %}Failed

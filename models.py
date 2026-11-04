@@ -2830,6 +2830,57 @@ class AppBlueprintStage(db.Model):
         return f"<AppBlueprintStage {self.position} {self.title[:30]}>"
 
 
+class AppGap(db.Model):
+    """Something one app should catch up on, found by comparing it with the
+    others (Michael, 2026-11-04: "if we have really done good work and updates
+    to another app and another app is falling behind it should have
+    recommendations of gaps to close or enhancements").
+
+    Written by the Tend run through the door, one row per (blueprint, key).
+    Michael closes a row as done or not wanted, and a closed row is never
+    reopened by a later run, so "not wanted" stays said: the run reads the
+    closed titles before it suggests anything.
+    """
+
+    __tablename__ = "app_gaps"
+    __table_args__ = (db.UniqueConstraint("blueprint_id", "key", name="uq_app_gaps_blueprint_key"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    blueprint_id = db.Column(db.Integer, db.ForeignKey(
+        "app_blueprints.id", ondelete="CASCADE", name="fk_app_gaps_blueprint_id"),
+        nullable=False, index=True)
+    key = db.Column(db.String(120), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    detail_md = db.Column(db.Text, default="")
+    # "gap": something a sibling app does that this one should; "enhancement":
+    # a step beyond what any of them do yet.
+    kind = db.Column(db.String(12), nullable=False, default="gap", server_default="gap")
+    # The app that already does it, when there is one.
+    source_blueprint_id = db.Column(db.Integer, db.ForeignKey(
+        "app_blueprints.id", ondelete="SET NULL", name="fk_app_gaps_source_blueprint_id"),
+        nullable=True, index=True)
+    status = db.Column(db.String(12), nullable=False, default="open", server_default="open", index=True)
+    filed_by = db.Column(db.String(120), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+    decided_at = db.Column(db.DateTime, nullable=True)
+
+    blueprint = db.relationship("AppBlueprint", foreign_keys=[blueprint_id], backref=db.backref(
+        "gaps", lazy="dynamic", cascade="all, delete-orphan"))
+    source = db.relationship("AppBlueprint", foreign_keys=[source_blueprint_id])
+
+    KINDS = (("gap", "Gap"), ("enhancement", "Enhancement"))
+    STATUSES = (("open", "Open"), ("done", "Done"), ("dismissed", "Not wanted"))
+
+    @property
+    def kind_label(self):
+        return dict(self.KINDS).get(self.kind, self.kind)
+
+    def __repr__(self):
+        return f"<AppGap {self.blueprint_id} {self.key}>"
+
+
 class ProjectPlaybook(db.Model):
     """A playbook applied to a project: this vendor, on this build.
 
@@ -3610,7 +3661,7 @@ class CatalogueProposal(db.Model):
 
     KIND_LABELS = {"feature": "Feature", "rule": "Rule",
                    "playbook": "Playbook", "product": "Product",
-                   "blueprint": "Blueprint"}
+                   "blueprint": "Blueprint", "map": "Map"}
 
     @property
     def is_live(self):
@@ -3653,6 +3704,24 @@ class CuratorRun(db.Model):
     def changed(self):
         return (self.added + self.folded + self.merged + self.tightened
                 + self.retired)
+
+    # Per million tokens, read and written, at list price. Cache reads are
+    # counted in input_tokens at full price, so this is a ceiling, said as
+    # "about". A Tend run is on the Max plan and has no API cost.
+    PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0),
+              "claude-opus-5": (5.0, 25.0)}
+    TEND = "tend"
+
+    @property
+    def is_tend(self):
+        return (self.model or "") == self.TEND
+
+    @property
+    def estimated_cost(self):
+        price = self.PRICES.get(self.model or "")
+        if price is None or not (self.input_tokens or self.output_tokens):
+            return None
+        return round((self.input_tokens or 0) / 1e6 * price[0] + (self.output_tokens or 0) / 1e6 * price[1], 2)
 
     def __repr__(self):
         return f"<CuratorRun {self.started_at} {self.status}>"

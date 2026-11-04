@@ -50,7 +50,7 @@ FIELD_LABELS = {
     "check_unless": "scanner exceptions", "check_fixture": "scanner fixture",
     "shape_md": "what it is", "parts_md": "the parts", "connections_md": "how they talk",
     "tweaks_md": "what changes per project", "source_repos": "repos",
-    "stages": "the build order",
+    "stages": "the build order", "map": "the map",
 }
 
 MODE_VERBS = {"append": "Added to", "replace": "Rewrote", "create": "Created",
@@ -73,6 +73,8 @@ def _decorate(rows):
                 p.payload = {}
         p.payload.pop("previous_steps", None)
         p.payload.pop("previous_stages", None)
+        p.payload.pop("previous_map", None)
+        p.payload.pop("changes", None)
         if isinstance(p.payload.get("steps"), list):
             p.payload["steps"] = steps_text(p.payload["steps"])
         if isinstance(p.payload.get("stages"), list):
