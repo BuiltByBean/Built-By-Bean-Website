@@ -8,11 +8,13 @@ payouts (sales tax in, Stripe's fee taken off twice) less every company's
 expenses, and the Books read the local invoice rows while the dashboard read
 Stripe live. Proves:
 
-  1. The dashboard's Total Expenses is Built by Bean's family alone (its DBA
-     in, EntertainHQ out), and a client's expense column the same.
+  1. The Overview's Expenses is Built by Bean's family alone (its DBA in,
+     EntertainHQ out), and its Income and Net are the Books' to the cent.
+     (The Dashboard became the Overview on 2026-11-04, docs/finances_plan.md.)
   2. The Taxes page's profit is the Books page's net for the year, to the
      cent, with sales tax out and Stripe's fee counted once.
-  3. Built by Bean's books plus EntertainHQ's are the Expenses page's total.
+  3. Each company's Expenses tab in Books is that company's books, and the
+     two add up to every expense on the board.
   4. EntertainHQ's tile on Businesses reads its Stripe income, not "App not
      reporting".
 
@@ -103,12 +105,17 @@ with c.session_transaction() as s:
     s["_user_id"] = str(ids["boss"])
     s["_fresh"] = True
 
-print("1. The finance dashboard is Built by Bean's")
-dash = c.get("/admin/finances").get_data(as_text=True)
-check("Total Expenses is Built by Bean and its DBA, not EntertainHQ",
-      money(dash, "Total Expenses") == 140.0, money(dash, "Total Expenses"))
-check("the client's expense column leaves EntertainHQ's spending out",
-      "$619.78" not in dash and "$719.78" not in dash)
+print("1. The Overview is Built by Bean's, in Built by Bean's figures")
+dash = c.get(f"/admin/finances?year={YEAR}").get_data(as_text=True)
+check("Expenses is Built by Bean and its DBA, not EntertainHQ",
+      money(dash, "Expenses") == 140.0, money(dash, "Expenses"))
+check("its Income and Net are the Books' to the cent",
+      money(dash, "Income") == bbb_year["income_total"] and money(dash, "Net") == bbb_year["net"],
+      (money(dash, "Income"), money(dash, "Net")))
+check("EntertainHQ's spending is not on it", "$619.78" not in dash and "$719.78" not in dash)
+clients = c.get("/admin/clients").get_data(as_text=True)
+check("the client's Spent on column leaves EntertainHQ's spending out",
+      "$619.78" not in clients and "$719.78" not in clients and "$100.00" in clients)
 
 print("2. The Taxes page's profit is the Books page's net")
 taxes = c.get("/admin/taxes/").get_data(as_text=True)
@@ -122,10 +129,15 @@ print("3. The companies add up to the Expenses page")
 with application.app_context():
     ehq_row = Business.query.filter_by(slug="ehq").one()
     ehq_year = books_service.summarize(ehq_row, date(YEAR, 1, 1), date(YEAR + 1, 1, 1))
-exp = c.get("/admin/expenses").get_data(as_text=True)
-check("Built by Bean plus EntertainHQ is the Expenses total",
-      round(bbb_year["expense_total"] + ehq_year["expense_total"], 2) == money(exp, "Total out"),
-      (bbb_year["expense_total"], ehq_year["expense_total"], money(exp, "Total out")))
+exp_b = c.get(f"/admin/books/{ids['bbb']}/expenses?year={YEAR}").get_data(as_text=True)
+exp_e = c.get(f"/admin/books/{ehq_row.id}/expenses?year={YEAR}").get_data(as_text=True)
+check("each company's Expenses tab is its books",
+      money(exp_b, "Total out") == bbb_year["expense_total"] and money(exp_e, "Total out") == ehq_year["expense_total"],
+      (money(exp_b, "Total out"), money(exp_e, "Total out")))
+with application.app_context():
+    every = round(sum(e.amount for e in Expense.query.filter(Expense.time_entry_id.is_(None)).all()), 2)
+check("and the two add up to every expense on the board",
+      round(bbb_year["expense_total"] + ehq_year["expense_total"], 2) == every, every)
 
 print("4. EntertainHQ's tile reads its Stripe")
 biz = re.sub(r"\s+", " ", c.get("/admin/businesses").get_data(as_text=True))
@@ -133,7 +145,7 @@ check("EntertainHQ's lifetime revenue is its Stripe sales",
       "$250.00" in biz and biz.count("App not reporting") == 0, biz.count("App not reporting"))
 
 print("5. A DBA's checks are the company's income, under the DBA's name")
-dash_before = money(dash, "Total Revenue")
+dash_before = money(dash, "Income")
 with application.app_context():
     from models import BankConnection, BankTransaction
     pt = Business(name="Personal Training", short_name="Personal Training", slug="pt", parent_id=ids["bbb"])
@@ -158,14 +170,14 @@ check("Built by Bean earned $1,800: its invoices and Personal Training's checks"
 check("shown split by who earned it",
       year2["income_sources"] == [{"label": "Built by Bean", "total": 1500.0},
                                   {"label": "Personal Training", "total": 300.0}], year2["income_sources"])
-books = re.sub(r"\s+", " ", c.get(f"/admin/books/?tab={ids['bbb']}").get_data(as_text=True))
+books = re.sub(r"\s+", " ", c.get(f"/admin/books/?tab={ids['bbb']}", follow_redirects=True).get_data(as_text=True))
 check("the Books page names Personal Training", "Personal Training" in books and "$300.00" in books)
 taxes2 = c.get("/admin/taxes/").get_data(as_text=True)
 check("Taxes moves with it to the cent", money(taxes2, "Business profit") == year2["net"],
       (money(taxes2, "Business profit"), year2["net"]))
-dash2 = c.get("/admin/finances").get_data(as_text=True)
-check("the dashboard's Total Revenue goes up by the same $300",
-      round(money(dash2, "Total Revenue") - dash_before, 2) == 300.0, (dash_before, money(dash2, "Total Revenue")))
+dash2 = c.get(f"/admin/finances?year={YEAR}").get_data(as_text=True)
+check("the Overview's Income goes up by the same $300",
+      round(money(dash2, "Income") - dash_before, 2) == 300.0, (dash_before, money(dash2, "Income")))
 biz2 = re.sub(r"\s+", " ", c.get("/admin/businesses").get_data(as_text=True))
 check("Personal Training's tile reads its $300", "$300.00" in biz2)
 csv_text = c.get(f"/admin/books/{ids['bbb']}/year/{YEAR}.csv").get_data(as_text=True)

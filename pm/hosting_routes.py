@@ -12,16 +12,25 @@ sorted so the ones about to go underwater are at the top.
 
 A project's cost is two things added together. Vendor charges arrive through
 ServiceMapping.project_id - a mapping being the deliberate statement "this
-Railway project belongs to that build", made once, and what the monthly entry
-page writes against. Anything filed by hand straight onto a project counts too:
-a Twilio number bought for one build, or an agent billed to it, is as much the
-cost of running that build as its Railway bill is. Reading only the mapped half
-meant a cost could be entered against a project and never reach the page that
-asks what that project costs.
+Railway project belongs to that build", made once, and what a vendor's report
+(pulled, or typed on the Railway months tab) is recorded against. Anything
+filed by hand straight onto a project counts too: a Twilio number bought for
+one build, or an agent billed to it, is as much the cost of running that build
+as its Railway bill is. Reading only the mapped half meant a cost could be
+entered against a project and never reach the page that asks what that project
+costs.
 
-Expenses mirrored from a cost entry are counted once, on the mapped side. They
-carry a project_id as well, so summing both without excluding them would double
-every vendor charge on the page.
+Only the bank line is an expense (docs/finances_plan.md item 5). A vendor's
+report records what each project cost and splits the bank's charge across them
+(bank_feed.split), so each share carries a project_id AND the cost entry it
+came from (Expense.cost_entry_id). Those are counted once, on the mapped side,
+as are the expenses the old sync wrote before the bank took over
+(ServiceCostEntry.expense_id); summing both sides would double every vendor
+charge on the page.
+
+These pages are the Hosting section of Finances: Fees (this page), Mappings,
+Railway months and Vendors (pm/service_costs_routes.py), one tab row over all
+of them (templates/pm/hosting/_tabs.html). CEO only, like every money page.
 
 Client-level costs are deliberately out. Stripe's fee is attributed to a client
 but to no project, and it tracks whatever that client was invoiced for - mostly
@@ -33,9 +42,8 @@ import time
 from datetime import date, timedelta
 
 from flask import Blueprint, render_template, request, url_for, redirect, flash, abort, current_app, has_app_context
-from flask_login import login_required
-
 import hosting_billing
+from pm.users_routes import ceo_required
 
 import contract_docs
 from models import (db, Client, Project, ServiceMapping, ServiceCostEntry, ProviderInvoice,
@@ -204,6 +212,29 @@ def increases_due_count():
     return len(increases_due())
 
 
+def tab_counts():
+    """The counts on the Hosting tab row, each the same reading its tab's page
+    draws: Fees is the badge's count (hosting_rows), Railway months the months
+    with no bill (provider_bills.missing_bills, which Needs attention lists
+    too), Vendors the vendors whose sync is in trouble. Asked by every page
+    in the section, because the row is carried across a tab press and takes
+    its counts from the page that arrived."""
+    import provider_bills
+    from pm.service_costs_routes import sync_trouble
+    try:
+        bills = sum(b["count"] for b in provider_bills.missing_bills())
+        vendors = len(sync_trouble(ServiceProvider.query.all()))
+    except Exception:
+        db.session.rollback()
+        bills = vendors = 0
+    return {"fees": increases_due_count(), "bills": bills, "vendors": vendors}
+
+
+@hosting_bp.context_processor
+def _hosting_tabs():
+    return {"hosting_counts": tab_counts}
+
+
 # Charges that buy a year in one payment. A domain registration is the case:
 # it arrives as a single invoice in the month it renews, and bucketing the
 # whole thing into that month compares a year of cost against a month of fee.
@@ -256,7 +287,7 @@ def _costs_by_project(months):
     agree on what a period is: a monthly entry spans the calendar month, a flat
     charge is the single day it landed, and AWS reports whatever window it
     reports. period_end is the one they all place inside the month the money
-    belongs to, and it is what the mirrored expense is dated by.
+    belongs to.
     """
     if not months:
         return {}, {}
@@ -306,9 +337,10 @@ def _costs_by_project(months):
     # mapping to arrive through. Dated by the expense rather than by a billing
     # period, because that is all a hand-entered cost has.
     #
-    # Mirrored expenses are excluded by id. Every mapped cost entry writes one
-    # and stamps it with the project, so counting both sides would double each
-    # vendor charge the loop above just recorded.
+    # Expenses that stand for a cost entry are excluded: one the old sync
+    # wrote (by id) and a bank line's share of a vendor row (by cost_entry_id).
+    # Both carry the project, so counting them here would double each vendor
+    # charge the loop above just recorded.
     mirrored = (db.session.query(ServiceCostEntry.expense_id)
                 .filter(ServiceCostEntry.expense_id.isnot(None)))
     direct = (db.session.query(Expense.project_id, Expense.date, Expense.amount)
@@ -413,16 +445,16 @@ def _railway_all_time():
     Returns {"amount", "source", "months"}.
 
     It used to sum every expense whose description began with the provider's
-    display name. TWO different things write those: the flat monthly charge
-    from before per-project figures existed, and the sync, which books one
-    expense per project per month. Both match the prefix, so a month holding
-    both was counted twice and the page read $231.65 against $136.90 of real
-    invoices. The docstring even said the two populations existed; the fix it
+    display name. TWO different things wrote those: the flat monthly charge
+    from before per-project figures existed, and the old sync, which wrote one
+    expense per project per month before only the bank line made expenses.
+    Both match the prefix, so a month holding both was counted twice and the
+    page read $231.65 against $136.90 of real invoices. The docstring even said the two populations existed; the fix it
     chose added them together.
 
     A derived total was the wrong SHAPE of answer, not a wrong sum. The
     invoice is the one number the vendor actually charged, there is exactly
-    one per month, and it is now recorded on the monthly page. The old sum
+    one per month, and it is recorded on the Railway months tab (or pulled). The old sum
     stays only as a fallback for a board with nothing entered yet, and the
     tile says which of the two it is showing rather than presenting a guess
     as a fact.
@@ -455,7 +487,7 @@ STATUS_ORDER = {"loss": 0, "raise": 1, "unmapped": 2, "fine": 3, "free": 4}
 
 
 @hosting_bp.route("/")
-@login_required
+@ceo_required
 def hosting_index():
     # One month, the last complete one. The average that used to sit beside it
     # was answering a different question - whether an expensive month was a
@@ -533,7 +565,7 @@ def hosting_index():
 
 
 @hosting_bp.route("/billing/<int:client_id>", methods=["POST"])
-@login_required
+@ceo_required
 def billing_change(client_id):
     """Move the client's one hosting subscription item to the agreed fee,
     from the next cycle. The page asked first; this is the doing."""

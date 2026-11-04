@@ -108,6 +108,10 @@ with application.app_context():
     boss = User(username="mb", email="mb@example.test", first_name="Michael", role="ceo")
     boss.set_password("x")
     kenali = Client(name="Kenali Kendrick", email="k@example.test")
+    # The ledger is the home company's Books tab (2026-11-04).
+    from models import Business
+    db.session.add(Business(name="Built by Bean LLC", short_name="Built by Bean", slug="bbb",
+                            sales_source="board"))
     db.session.add_all([boss, kenali])
     db.session.flush()
     mine = ServiceProvider(
@@ -140,7 +144,7 @@ with c.session_transaction() as sess:
 
 
 def ledger_total():
-    page = c.get("/admin/expenses").data.decode("utf-8", "replace")
+    page = c.get("/admin/expenses", follow_redirects=True).data.decode("utf-8", "replace")
     import re
     m = re.search(r"TOTAL OUT.*?\$([\d,]+\.\d\d)", page, re.S | re.I)
     return float(m.group(1).replace(",", "")) if m else None

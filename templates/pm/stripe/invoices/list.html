@@ -1,29 +1,36 @@
 {% extends "pm/base.html" %}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
 
 {#
-  Invoicing, on one page.
+  Invoices (docs/finances_plan.md item 3): the list, New invoice, a thin strip
+  of what sits in the Stripe balance, and Time not yet billed.
 
-  These were two sidebar entries - Invoices and Stripe - and they were never
-  two things: Stripe is how the invoices get sent and how the money arrives.
-  The first half is every invoice raised; the second is the account behind
-  them, the balance, what came in and what was paid out.
+  Two tabs on the Finances kit. The strip and the tab row sit outside the
+  panel, so a tab press swaps only the panel (base.html, data-panel) and the
+  strip, which reads the same on both, is never drawn again.
 
-  The old Stripe dashboard also carried its own "Open & Draft" and "Recently
-  Paid" tables. On a page that now holds the full invoice list, those were the
-  same table twice, so they are gone.
+  The Stripe account half (four tiles, recent payments, recent payouts) and
+  the Sync All Clients and Setup Products presses went on 2026-11-04: the
+  money is on the Books page, a client links to its Stripe customer as it is
+  saved or invoiced, and an invoice line carries its own amount.
+
+  A contained-scroll page (LM-4): the strip, the tabs, the tiles and the bar
+  stand still, and the rows are the one scroller. Below 640px that left the
+  rows a sliver under everything pinned above them (measured at 375: the
+  table head and nothing else), so on a phone the page scrolls in #pm-scroll
+  instead and only the filter bar is pinned, which is the catalogue's phone
+  half of "The window never scrolls; one region under the bar does".
 #}
 
 {% block title %}Invoices - Built By Bean{% endblock %}
 {% block page_title %}Invoices{% endblock %}
-{% block page_subtitle %}Every invoice, and the account behind them{% endblock %}
+{% block page_subtitle %}Every invoice, and the time still to bill{% endblock %}
+{% block main_class %}contained-scroll invoices-page{% endblock %}
 
 {% block header_actions %}
-{# This page reads Stripe live, which is why it has always been right. The
-   rest of the board reads local rows, and a local row only existed for an
-   invoice the board raised itself, so the client and hosting pages were
-   reading an incomplete copy of what is shown here. This writes what is on
-   this screen down. It also runs nightly; the press is for the minute after
-   money arrives. #}
+{# This page reads Stripe live. The rest of the board reads local rows, which
+   the import writes nightly; this writes what is on this screen down now,
+   for the minute after money arrives. #}
 <form method="POST" action="{{ url_for('stripe.invoices_import') }}">
     <input type="hidden" name="next" value="{{ request.full_path }}">
     <button type="submit"
@@ -33,39 +40,46 @@
     </button>
 </form>
 <a href="{{ url_for('stripe.invoice_create') }}"
-   class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
-    + New Invoice
+   class="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
+    {{ icon('add', 'w-4 h-4') }}
+    New invoice
 </a>
 {% endblock %}
 
 {% block content %}
-<div x-data="{
-        view: window.location.hash === '#stripe' ? 'stripe' : 'invoices',
-        pick(v) {
-            this.view = v;
-            history.replaceState(null, '', v === 'stripe' ? '#stripe' : '#invoices');
-        },
-     }" x-cloak>
+{{ fin_script() }}
+<style>
+@media (max-width: 639px) {
+    #pm-main.invoices-page { display: block; flex: none; overflow: visible; }
+    .invoices-page .inv-fill { flex: none; min-height: 0; }
+    .invoices-page .inv-bar { position: sticky; top: 0; z-index: 30; background: var(--surface);
+                              padding-top: .5rem; padding-bottom: .5rem; }
+}
+</style>
 
-    <div class="flex gap-1 mb-6 p-1 glass-card w-full sm:w-fit">
-        <button type="button" @click="pick('invoices')"
-                :class="view === 'invoices' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
-                class="flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg transition-colors">
-            Invoices
-        </button>
-        <button type="button" @click="pick('stripe')"
-                :class="view === 'stripe' ? 'bg-brand-600 text-white shadow-sm' : 'text-surface-300 hover:bg-surface-800'"
-                class="flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg transition-colors">
-            Stripe account
-        </button>
-    </div>
+{# The Stripe balance, one line. Account wide, so it is named apart from the
+   list's own Unpaid in this list, which follows the filters. #}
+<div data-invoices-strip class="shrink-0 mb-4 flex flex-wrap items-baseline gap-x-5 gap-y-1 px-4 py-2.5 rounded-2xl border border-white/10 bg-surface-800/40 text-sm">
+    <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Stripe</span>
+    {% if stripe_ok is defined and not stripe_ok %}
+    <span class="text-surface-300">Did not answer</span>
+    {% else %}
+    <span class="whitespace-nowrap"><span class="font-semibold text-white tabular-nums">{{ available_balance | format_currency }}</span> <span class="text-surface-400">available</span></span>
+    <span class="whitespace-nowrap"><span class="font-semibold text-white tabular-nums">{{ pending_balance | format_currency }}</span> <span class="text-surface-400">pending</span></span>
+    {% endif %}
+    <span class="whitespace-nowrap"><span class="font-semibold text-amber-300 tabular-nums">{{ account_outstanding | format_currency }}</span> <span class="text-surface-400">open in Stripe, {{ open_invoice_count | commas }} invoice{{ '' if open_invoice_count == 1 else 's' }}</span></span>
+</div>
 
-    <div x-show="view === 'invoices'">
-        {% include "pm/stripe/_invoices.html" %}
-    </div>
+{{ fin_tabs('invoices', tab, [
+    ('invoices', 'Invoices', url_for('stripe.invoices_list'), none),
+    ('unbilled', 'Time not yet billed', url_for('stripe.unbilled'), unbilled_count),
+], 'Invoices') }}
 
-    <div x-show="view === 'stripe'">
-        {% include "pm/stripe/_account.html" %}
-    </div>
+<div data-panel="invoices" class="inv-fill flex-1 min-h-0 flex flex-col">
+    {% if tab == 'unbilled' %}
+    {% include "pm/stripe/_unbilled.html" %}
+    {% else %}
+    {% include "pm/stripe/_invoices.html" %}
+    {% endif %}
 </div>
 {% endblock %}

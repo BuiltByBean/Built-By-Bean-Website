@@ -300,6 +300,21 @@
 </div>
 {% endif %}
 
+{# What is due next, ticket due dates and project deliveries (moved from
+   the old Dashboard, 2026-11-04). One row that scrolls sideways on a phone. #}
+{% if deadlines %}
+<nav aria-label="Due next" class="shrink-0 mb-4 -mx-1 px-1 pb-1 flex gap-2 overflow-x-auto">
+  {% for d in deadlines %}
+  <a href="{{ d.url }}" style="flex: 0 0 auto"
+     class="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-xl border border-white/10 bg-surface-800/60 text-sm hover:border-brand-500/40">
+    <span class="font-semibold text-amber-300 tabular-nums whitespace-nowrap">{{ d.when.strftime('%b') }} {{ d.when.day }}</span>
+    <span class="text-white whitespace-nowrap max-w-[16rem] truncate">{{ d.title }}</span>
+    {% if d.who %}<span class="text-surface-400 whitespace-nowrap max-w-[10rem] truncate">{{ d.who }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}
+
 <div class="glass-card p-4 sm:p-6 flex flex-col flex-1 min-h-0">
   {# Each tab counts EXACTLY what clicking it shows, under the filters beside
      it. A row that scrolls sideways on a phone rather than wrapping into

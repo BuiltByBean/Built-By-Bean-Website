@@ -7,8 +7,6 @@ from flask import (
     abort, jsonify,
 )
 
-from flask_login import login_required
-
 from models import (db, Client, Project, ServiceProvider, ServiceMapping,
                     ServiceCostEntry, ProviderInvoice)
 from service_costs_service import (
@@ -16,12 +14,11 @@ from service_costs_service import (
     sync_provider, list_provider_resources, get_cost_summary, railway_token,
     _record_cost_entry, _month_bounds, _find_mapping,
 )
-
-
-# Providers whose per-resource costs can only be entered by hand, because the
-# vendor has no billing API. Kept as a list so a second such vendor is a
-# one-line add rather than a hunt through templates.
-MANUAL_MONTHLY_PROVIDERS = {"railway"}
+import provider_bills
+# Vendors recorded month by month (provider_bills says why). Imported here as
+# well because the expenses page and the door read it from this module.
+from provider_bills import MANUAL_MONTHLY_PROVIDERS  # noqa: F401
+from pm.users_routes import ceo_required
 
 # The row that catches everything the vendor's per-project screen does not
 # account for, so a month can reconcile to the invoice instead of to the sum of
@@ -137,6 +134,14 @@ def _project_name_index():
 
 service_costs_bp = Blueprint("service_costs", __name__, url_prefix="/admin/service-costs")
 
+
+@service_costs_bp.context_processor
+def _hosting_tabs():
+    """Every page here is a tab of Hosting (or a form under one), so its tab
+    row's counts are on hand; asked only by the templates that draw it."""
+    from pm.hosting_routes import tab_counts
+    return {"hosting_counts": tab_counts}
+
 PROVIDER_TYPES = [
     ("aws", "Amazon Web Services"),
     ("railway", "Railway"),
@@ -234,15 +239,15 @@ def _monthly_cost(provider_name=None):
 
     None and 0 mean different things here: None is "this vendor reports its
     own spend", 0 would be "this vendor costs nothing", and storing the second
-    when the user meant the first books a zero every month.
+    when the user meant the first records a zero every month.
 
-    Always None for a manual-monthly vendor. Railway spent months booked as a
+    Always None for a by-the-month vendor. Railway spent months recorded as a
     flat twenty because a number sat in this field: it charged a different
     amount every month, spread across a dozen projects, and a single unallocated
     line of the same size forever was wrong in the total and useless per client.
-    Those vendors get their real numbers from the Monthly Costs page, so this
-    field has nothing left to mean for them and refusing it here is what stops
-    it coming back.
+    Its real numbers come from its bills, pulled with an account token or typed
+    on the Railway months tab of Hosting, so this field has nothing left to
+    mean for it and refusing it here is what stops it coming back.
     """
     if provider_name in MANUAL_MONTHLY_PROVIDERS:
         return None
@@ -259,18 +264,14 @@ def _monthly_cost(provider_name=None):
 
 
 @service_costs_bp.route("/")
-@login_required
+@ceo_required
 def service_costs_dashboard():
-    """Kept as a redirect.
-
-    Service costs are not a page any more. A vendor charge writes an expense,
-    so it is a row in the expense ledger like everything else that went out,
-    and the vendor breakdown is a way of reading that ledger rather than a
-    second one beside it. This route still exists because bookmarks, the Sync
-    All redirect and the provider and mapping pages all point at it, and a dead
-    link is a worse answer than a hop.
-    """
-    return redirect(url_for("pm.expenses_list"))
+    """The old Service costs address, for bookmarks only: nothing on the board
+    links here any more. The vendor pages are tabs of Hosting now (Fees,
+    Mappings, Railway months, Vendors; docs/finances_plan.md item 9), so the
+    old front door opens Hosting. Gated like the pages, so a redirect is never
+    a way round the gate."""
+    return redirect(url_for("hosting.hosting_index"), code=301)
 
 
 # ── Providers ───────────────────────────────────────────────
@@ -315,17 +316,18 @@ def _save_invoice(provider, month_start):
 
 
 @service_costs_bp.route("/providers")
-@login_required
+@ceo_required
 def providers_list():
     providers = ServiceProvider.query.order_by(ServiceProvider.display_name).all()
     return render_template("pm/service_costs/providers/list.html",
         providers=providers,
         provider_types=PROVIDER_TYPES,
+        trouble=sync_trouble(providers),
     )
 
 
 @service_costs_bp.route("/providers/new", methods=["GET", "POST"])
-@login_required
+@ceo_required
 def provider_create():
     if request.method == "POST":
         name = request.form.get("name", "")
@@ -360,7 +362,7 @@ def provider_create():
 
 
 @service_costs_bp.route("/providers/<int:id>/edit", methods=["GET", "POST"])
-@login_required
+@ceo_required
 def provider_edit(id):
     provider = db.session.get(ServiceProvider, id) or abort(404)
 
@@ -379,13 +381,16 @@ def provider_edit(id):
         db.session.commit()
         note = ""
         if provider.account_client_id != was:
+            # Only an expense this vendor wrote before the bank took over (and
+            # Stripe's fees, which never cross a bank) can move here; a bank
+            # line's expense stays with the bank line.
             moved = _reconcile_ownership(provider)
             if provider.account_client_id and moved:
                 who = provider.account_client.name if provider.account_client else "the client"
                 note = (f" {moved} charge{'s' if moved != 1 else ''} came off your ledger: "
                         f"that account is on {who}'s card.")
             elif moved:
-                note = f" {moved} charge{'s' if moved != 1 else ''} booked back to you."
+                note = f" {moved} charge{'s' if moved != 1 else ''} back on your ledger."
         # A Railway account that can read its own bills pulls them on the
         # press, so the months it fills are there before anybody looks again.
         if provider.name == "railway" and creds.get("workspace_id") and railway_token(creds):
@@ -407,7 +412,7 @@ def provider_edit(id):
 
 
 @service_costs_bp.route("/providers/<int:id>/delete", methods=["POST"])
-@login_required
+@ceo_required
 def provider_delete(id):
     provider = db.session.get(ServiceProvider, id) or abort(404)
     name = provider.display_name
@@ -418,7 +423,7 @@ def provider_delete(id):
 
 
 @service_costs_bp.route("/providers/<int:id>/sync", methods=["POST"])
-@login_required
+@ceo_required
 def provider_sync(id):
     try:
         count, error = sync_provider(id)
@@ -432,7 +437,7 @@ def provider_sync(id):
 
 
 @service_costs_bp.route("/sync-all", methods=["POST"])
-@login_required
+@ceo_required
 def sync_all():
     providers = ServiceProvider.query.filter_by(is_active=True).all()
     total = 0
@@ -451,19 +456,21 @@ def sync_all():
         flash(f"Synced {total} entries with errors: {'; '.join(errors)}", "warning")
     else:
         flash(f"Synced {total} cost entries from {len(providers)} provider(s).", "success")
-    return redirect(url_for("service_costs.service_costs_dashboard"))
+    # Back to the page it was pressed on (the Vendors tab, or the Books page
+    # that carries the vendors), never the retired Service costs address.
+    return redirect(_safe_next(url_for("service_costs.providers_list")))
 
 
 # ── Mappings ────────────────────────────────────────────────
 
 
 @service_costs_bp.route("/mappings")
-@login_required
+@ceo_required
 def mappings_list():
-    provider_id = request.args.get("provider_id", "", type=str)
+    provider_id = request.args.get("provider_id", type=int) or ""
     query = ServiceMapping.query
     if provider_id:
-        query = query.filter(ServiceMapping.provider_id == int(provider_id))
+        query = query.filter(ServiceMapping.provider_id == provider_id)
     mappings = query.order_by(ServiceMapping.created_at.desc()).all()
     providers = ServiceProvider.query.order_by(ServiceProvider.display_name).all()
     return render_template("pm/service_costs/mappings/list.html",
@@ -474,7 +481,7 @@ def mappings_list():
 
 
 @service_costs_bp.route("/mappings/new", methods=["GET", "POST"])
-@login_required
+@ceo_required
 def mapping_create():
     if request.method == "POST":
         provider_id = request.form.get("provider_id", type=int)
@@ -534,7 +541,7 @@ def mapping_create():
 
 
 @service_costs_bp.route("/mappings/<int:id>/edit", methods=["GET", "POST"])
-@login_required
+@ceo_required
 def mapping_edit(id):
     mapping = db.session.get(ServiceMapping, id) or abort(404)
 
@@ -563,7 +570,7 @@ def mapping_edit(id):
 
 
 @service_costs_bp.route("/mappings/<int:id>/delete", methods=["POST"])
-@login_required
+@ceo_required
 def mapping_delete(id):
     mapping = db.session.get(ServiceMapping, id) or abort(404)
     db.session.delete(mapping)
@@ -580,7 +587,7 @@ def mapping_delete(id):
 
 
 @service_costs_bp.route("/api/resources/<int:provider_id>")
-@login_required
+@ceo_required
 def api_provider_resources(provider_id):
     provider = db.session.get(ServiceProvider, provider_id)
     if not provider:
@@ -596,49 +603,58 @@ def api_provider_resources(provider_id):
 
 
 @service_costs_bp.route("/api/costs-by-client")
-@login_required
+@ceo_required
 def api_costs_by_client():
     summary = get_cost_summary()
     return jsonify(summary["by_client"])
 
 
 @service_costs_bp.route("/api/costs-by-provider")
-@login_required
+@ceo_required
 def api_costs_by_provider():
     summary = get_cost_summary()
     return jsonify(summary["by_provider"])
 
 
-# ── Manual monthly entry ────────────────────────────────────
+# ── A vendor's month: Railway months ────────────────────────
 
 
-@service_costs_bp.route("/providers/<int:id>/monthly", methods=["GET", "POST"])
-@login_required
-def provider_monthly(id):
-    """Enter what a vendor's resources actually cost this month.
+def _railway_providers():
+    """Every Railway account, Built by Bean's own first (the tab opens on it),
+    then by name. Inactive ones too: their months are still correctable."""
+    rows = ServiceProvider.query.filter_by(name="railway").all()
+    return sorted(rows, key=lambda p: (not p.is_ours, not p.is_active,
+                                       (p.display_name or "").casefold(), p.id))
 
-    Railway is the case that made this: the board believed its API would not
-    report money, so once a month the numbers were copied off the Railway usage
-    screen. A Railway provider that names its workspace now fills its months
-    itself (service_costs_service._sync_railway); this page still corrects them. One input per
-    project, saving upserts a ServiceCostEntry keyed on the calendar month and
-    the resource so a second save this month corrects rather than doubles.
-    """
-    provider = db.session.get(ServiceProvider, id) or abort(404)
-    target = _parse_month(request.args.get("month") or request.form.get("month"))
+
+def _last_finished_month():
+    return (date.today().replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
+def _month_choices(providers):
+    """Every month a bill could be recorded for, newest first: from the
+    earliest any of these accounts has a cost or a bill (at least a year
+    back) to the month in progress. One list for every account, so changing
+    the account keeps the month that was picked."""
+    this_month = date.today().replace(day=1)
+    first = this_month
+    for _ in range(11):
+        first = (first - timedelta(days=1)).replace(day=1)
+    ids = [p.id for p in providers]
+    if ids:
+        for column, model in ((ServiceCostEntry.period_start, ServiceCostEntry),
+                              (ProviderInvoice.period_month, ProviderInvoice)):
+            earliest = (db.session.query(db.func.min(column))
+                        .filter(model.provider_id.in_(ids)).scalar())
+            if earliest and earliest.replace(day=1) < first:
+                first = earliest.replace(day=1)
+    months = provider_bills.month_starts(first, this_month) + [this_month]
+    return list(reversed(months))
+
+
+def _month_context(provider, target):
+    """Everything the month page draws for one vendor and one month."""
     p_start, p_end = _month_bounds(target)
-
-    if request.method == "POST":
-        _save_monthly_entries(provider, p_start, p_end)
-        problem = _save_invoice(provider, p_start)
-        if problem:
-            db.session.rollback()
-            flash(problem, "error")
-        else:
-            db.session.commit()
-            flash(f"{provider.display_name} costs for {p_start:%b %Y} saved.", "success")
-        return redirect(url_for("service_costs.provider_monthly",
-                                id=id, month=p_start.strftime("%Y-%m")))
 
     # Row set: live resources from the vendor, plus any resource_id that has
     # ever been billed against this provider so a project deleted from Railway
@@ -721,22 +737,105 @@ def provider_monthly(id):
         "is_other": True,
     })
 
-    total = sum(r["amount"] or 0 for r in rows)
-
-    return render_template("pm/service_costs/monthly.html",
+    return dict(
         provider=provider,
         rows=rows,
         month=p_start,
-        recent_months=_recent_months(),
-        total=total,
+        total=sum(r["amount"] or 0 for r in rows),
         suggested=suggested,
         other_id=other_id,
         invoice=invoice_for(provider.id, p_start),
     )
 
 
+def month_url(provider, month):
+    """Where one vendor's month lives: a Railway account's on the Railway
+    months tab, any other vendor's on its own address."""
+    key = month.strftime("%Y-%m")
+    if provider.name == "railway":
+        return url_for("service_costs.railway_months", provider=provider.id, month=key)
+    return url_for("service_costs.provider_monthly", id=provider.id, month=key)
+
+
+@service_costs_bp.route("/railway")
+@ceo_required
+def railway_months():
+    """The Railway months tab of Hosting: pick the account and the month, and
+    correct what each project cost and what the bill was.
+
+    A Railway account that names its workspace fills its months itself
+    (service_costs_service._sync_railway); one that does not is typed here off
+    Railway's usage screen. Either way the month's rows are how the bank's
+    Railway charge splits across projects (bank_feed.split): only the bank
+    line is an expense. The account and month are the query string, so the bar
+    over the page applies itself (liveFilter) and only the month swaps."""
+    providers = _railway_providers()
+    bills = provider_bills.missing_bills()
+    if not providers:
+        return render_template("pm/service_costs/monthly.html", provider=None,
+                               railway=True, providers=[], bills=bills)
+    wanted = request.args.get("provider", type=int)
+    provider = next((p for p in providers if p.id == wanted), providers[0])
+    target = (_parse_month(request.args["month"]) if request.args.get("month")
+              else _last_finished_month())
+    missing = {m for b in bills if b["provider"].id == provider.id for m in b["missing"]}
+    month_opts = [(m.strftime("%Y-%m"), m.strftime("%b %Y") + (" (no bill)" if m in missing else ""))
+                  for m in _month_choices(providers)]
+    return render_template("pm/service_costs/monthly.html", railway=True,
+                           providers=providers, bills=bills, month_opts=month_opts,
+                           month_url=month_url,
+                           **_month_context(provider, target))
+
+
+@service_costs_bp.route("/providers/<int:id>/monthly", methods=["GET", "POST"])
+@ceo_required
+def provider_monthly(id):
+    """Save one vendor's month; and the month page of a vendor that is not
+    Railway (a Railway account's opens on the Railway months tab, where
+    Needs attention's "Put it in" and the Expenses page's links land).
+
+    One input per project, saving upserts a ServiceCostEntry keyed on the
+    calendar month and the resource so a second save this month corrects
+    rather than doubles.
+    """
+    provider = db.session.get(ServiceProvider, id) or abort(404)
+    target = _parse_month(request.args.get("month") or request.form.get("month"))
+    p_start, p_end = _month_bounds(target)
+
+    if request.method == "POST":
+        _save_monthly_entries(provider, p_start, p_end)
+        problem = _save_invoice(provider, p_start)
+        if problem:
+            db.session.rollback()
+            flash(problem, "error")
+        else:
+            db.session.commit()
+            _forget_bills()
+            flash(f"{provider.display_name} costs for {p_start:%b %Y} saved.", "success")
+        return redirect(month_url(provider, p_start))
+
+    if provider.name == "railway":
+        return redirect(month_url(provider, p_start))
+
+    return render_template("pm/service_costs/monthly.html", railway=False,
+                           providers=[provider], bills=[], month_url=month_url,
+                           month_opts=[(m.strftime("%Y-%m"), m.strftime("%b %Y"))
+                                       for m in _month_choices([provider])],
+                           **_month_context(provider, target))
+
+
+def _forget_bills():
+    """A bill just recorded comes off Needs attention now, not when its ten
+    minute cache runs out, so the tab and the row agree."""
+    try:
+        from pm import attention_routes
+        attention_routes._BILLS_CACHE["value"] = None
+    except Exception:
+        pass
+
+
 @service_costs_bp.route("/providers/<int:id>/monthly/automap", methods=["POST"])
-@login_required
+@ceo_required
 def provider_automap(id):
     """Create mappings for resources whose name matches a project exactly.
 
@@ -773,8 +872,7 @@ def provider_automap(id):
 
     db.session.commit()
     flash(f"Mapped {created} resource{'' if created == 1 else 's'} by name.", "success")
-    return redirect(url_for("service_costs.provider_monthly",
-                            id=id, month=month.strftime("%Y-%m")))
+    return redirect(month_url(provider, month))
 
 
 def _save_monthly_entries(provider, p_start, p_end):
@@ -782,8 +880,11 @@ def _save_monthly_entries(provider, p_start, p_end):
 
     The form submits `amt:<resource_id>` for every row shown. A number > 0
     upserts through _record_cost_entry, which already handles the per-mapping
-    split. A blank or 0 removes the entry and its Expense for this month, so
-    a mistaken save is not one-way.
+    split. A blank or 0 removes the entry for this month, so a mistaken save
+    is not one-way. No expense comes or goes with it: the bank line is the
+    expense, and the resplit at the end moves its shares to match the rows
+    (discard_entry only drops an expense the old sync wrote, never a bank
+    line's).
 
     Also clears the legacy `railway:account` unallocated row for this month
     if present, so the old flat booking is not left doubling up under a
@@ -814,7 +915,7 @@ def _save_monthly_entries(provider, p_start, p_end):
         # stops listing still shows its name in later months, instead of
         # falling back to a raw id nobody can read or name-match.
         # Four places, because that is what Railway reports and what gets
-        # typed in. The expense that comes off this still rounds to cents;
+        # typed in. The bank line's share of it still rounds to cents;
         # keeping the raw figure exact is what lets the field round-trip the
         # number instead of showing back something the vendor never said.
         _record_cost_entry(
@@ -853,26 +954,18 @@ def pulls_itself(provider):
     """A Railway account that names its workspace reads its own bills
     (service_costs_service._sync_railway) and is not typed in by hand, so it
     is a synced vendor like any other: healthy when its last pull worked."""
-    if provider.name != "railway":
-        return False
-    try:
-        return bool(json.loads(provider.credentials_json or "{}").get("workspace_id"))
-    except ValueError:
-        return False
+    return provider.name == "railway" and provider_bills.pulls_its_bills(provider)
 
 
 def vendor_health(providers):
     """Which vendors need something, and a count for the ones that do not.
 
-    The Expenses page used to draw one bordered chip per vendor, all the same
-    weight, most of them reading "synced" and the same date. Five of those wrap
-    onto two lines and say almost nothing: the useful content was one failure
-    and one vendor waiting to be typed into, and both were camouflaged by the
-    three that were fine.
-
-    So a healthy vendor is a number here, not a chip. Only the ones with
-    something to do come back individually, each with the reason and where to
-    go about it.
+    A healthy vendor is a number, not a chip: one bordered pill per vendor gave
+    a failed sync the same weight as three vendors that were fine. Only the
+    ones with something to do come back individually, each with the reason and
+    where to go about it. The Vendors tab of Hosting counts the ones whose
+    sync is the trouble (`sync_trouble`); a month to type is the Railway
+    months tab's.
     """
     attention, healthy, oldest = [], 0, None
     now = datetime.now(timezone.utc)
@@ -883,7 +976,7 @@ def vendor_health(providers):
         if p.name in MANUAL_MONTHLY_PROVIDERS and not pulls_itself(p):
             attention.append({
                 "provider": p, "tone": "manual", "note": "enter monthly",
-                "href": url_for("service_costs.provider_monthly", id=p.id),
+                "href": url_for("service_costs.railway_months", provider=p.id),
             })
             continue
         if p.sync_error:
@@ -926,28 +1019,11 @@ def vendor_health(providers):
     return {"attention": attention, "healthy": healthy, "summary": summary}
 
 
-def months_missing_manual_costs(providers, lookback=1):
-    """Which of the given providers have no entries for recent past months.
+def sync_trouble(providers):
+    """{provider id: note} for every active vendor whose sync failed, never
+    ran, or has not run in STALE_AFTER_DAYS: the Vendors tab's count and the
+    note each of those vendors' cards carries, from one reading."""
+    return {a["provider"].id: a["note"]
+            for a in vendor_health([p for p in providers if p.is_active])["attention"]
+            if a["tone"] != "manual"}
 
-    Returns [(provider, month_start), ...] for months where a manual-entry
-    provider has zero cost entries. Feeds the nudge banner on Expenses.
-    """
-    out = []
-    today = date.today().replace(day=1)
-    for provider in providers:
-        # One that pulls itself is asked about on Needs attention, with the
-        # grace a billing month that starts mid-month needs; asking here too
-        # put EntertainHQ's October bill on the page before it existed.
-        if provider.name not in MANUAL_MONTHLY_PROVIDERS or pulls_itself(provider):
-            continue
-        for i in range(1, lookback + 1):
-            month = today
-            for _ in range(i):
-                month = (month - timedelta(days=1)).replace(day=1)
-            p_start, p_end = _month_bounds(month)
-            exists = db.session.query(ServiceCostEntry.id).filter_by(
-                provider_id=provider.id, period_start=p_start, period_end=p_end,
-            ).first()
-            if not exists:
-                out.append((provider, p_start))
-    return out

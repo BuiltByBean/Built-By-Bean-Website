@@ -1,22 +1,34 @@
+"""Invoices: the list, New invoice, a thin strip of the Stripe balance, and
+the time logged that is on no invoice yet.
+
+Every page here is the CEO's (docs/finances_plan.md items 3 and 10), so every
+route carries `ceo_required`, except the Stripe webhook, which Stripe calls
+with its signature and no login.
+"""
+import time
 from datetime import datetime, timezone, date, timedelta
 
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request,
     abort, jsonify,
 )
-from flask_login import login_required
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import joinedload
 
-from models import db, Client, Project, TimeEntry, Expense, Invoice, InvoiceLineItem, StripeWebhookLog
+from models import db, Client, Project, TimeEntry, Expense, Invoice, InvoiceLineItem
+from pm.users_routes import ceo_required
 from stripe_service import (
-    create_stripe_customer, get_stripe_balance, get_recent_payments,
-    get_recent_payouts, create_stripe_invoice, finalize_and_send_invoice,
-    void_stripe_invoice, sync_invoice_from_stripe, handle_webhook_event,
-    import_invoices_from_stripe,
-    process_invoice_event, ensure_products_exist, get_stripe_invoice_totals,
-    get_stripe_invoices, invoice_earned, invoice_kept,
+    create_stripe_customer, get_stripe_balance, create_stripe_invoice,
+    finalize_and_send_invoice, void_stripe_invoice, sync_invoice_from_stripe,
+    handle_webhook_event, import_invoices_from_stripe, process_invoice_event,
+    get_stripe_invoice_totals, get_stripe_invoices, invoice_earned, invoice_kept,
 )
 
 stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/stripe")
+
+# An invoice holds time while it is a draft, open or paid. A void or
+# uncollectible one has let its time go, so that time is waiting again.
+HOLDS_TIME = ("draft", "open", "paid")
 
 
 def _clip(text, limit=380):
@@ -28,66 +40,104 @@ def _clip(text, limit=380):
     return (text[:limit].rstrip() + "…") if len(text) > limit else text
 
 
-# ── Stripe Dashboard ────────────────────────────────────────
+# ── Time not yet billed ─────────────────────────────────────
 
 
-def _payer_name(charge, client_names):
-    """Who paid, in the name this business actually uses for them.
+def _invoiced_time_ids():
+    return db.session.query(InvoiceLineItem.time_entry_id).filter(
+        InvoiceLineItem.time_entry_id.isnot(None),
+        InvoiceLineItem.invoice.has(Invoice.status.in_(HOLDS_TIME)),
+    )
 
-    This used to read `billing_details.name`, which is the cardholder name a
-    payment form captured rather than anything about the customer. Stripe fills
-    it for a Checkout session that collected a name and leaves it empty for an
-    invoice paid against a saved payment method. That is the whole reason the
-    two subscription signups showed a name here and every invoice payment
-    showed "Unknown" while having a perfectly good customer attached to it.
 
-    So read the customer, and prefer the local client's name over Stripe's.
-    The PM is where these names are curated: a client renamed here should not
-    go on showing whatever was typed into Stripe when the account was opened.
+def _for_client(client_id):
+    """A time entry is the client's by its own client_id, or by its project's
+    when the entry carries none: an entry typed before client_id existed
+    would otherwise be counted as waiting and never offered on the invoice."""
+    return or_(
+        TimeEntry.client_id == client_id,
+        and_(TimeEntry.client_id.is_(None),
+             TimeEntry.project.has(Project.client_id == client_id)),
+    )
 
-    Falls back through the customer's own name, then their email, then the
-    cardholder name, and only says "Unknown" when a charge genuinely has
-    nobody attached to it.
+
+def unbilled_time():
+    """Logged time on no draft, open or paid invoice, per client.
+
+    Valued at `TimeEntry.cost`, so an MVP build hour and a maintenance hour
+    inside the free window count nothing and are left out: they are not
+    money waiting. Time logs itself from Claude sessions now
+    (session_time.py), so this is real money that nobody has to remember.
+    It came back from the Dashboard, where it had been computed and hidden
+    (finances plan item 3); the Dashboard's copy in app.py is the lead's to
+    delete.
+
+    Returns {"rows": [...], "total": dollars, "hours": hours}. A row is one
+    client: hours, value, entries, the oldest and newest day, and the hours
+    per project, biggest first; rows biggest value first.
     """
-    customer = getattr(charge, "customer", None)
-    customer_id = customer if isinstance(customer, str) else getattr(customer, "id", None)
+    entries = (TimeEntry.query
+               .options(joinedload(TimeEntry.project))
+               .filter(~TimeEntry.id.in_(_invoiced_time_ids()))
+               .all())
+    by_client = {}
+    for e in entries:
+        value = e.cost or 0.0
+        if value <= 0:
+            continue
+        cid = e.client_id or (e.project.client_id if e.project else None)
+        if cid is None:
+            continue
+        row = by_client.setdefault(cid, {
+            "client_id": cid, "hours": 0.0, "value": 0.0, "entries": 0,
+            "since": e.date, "latest": e.date, "projects": {},
+        })
+        row["hours"] += e.hours or 0.0
+        row["value"] += value
+        row["entries"] += 1
+        row["since"] = min(row["since"], e.date)
+        row["latest"] = max(row["latest"], e.date)
+        name = e.project.name if e.project else "No project"
+        row["projects"][name] = row["projects"].get(name, 0.0) + (e.hours or 0.0)
 
-    if customer_id and customer_id in client_names:
-        return client_names[customer_id]
-
-    # A deleted customer still expands, but to a stub carrying an id and
-    # nothing else, so `deleted` has to be checked before trusting the fields.
-    if customer is not None and not isinstance(customer, str) and not getattr(customer, "deleted", False):
-        for field in ("name", "email"):
-            value = getattr(customer, field, None)
-            if value:
-                return value
-
-    billing = getattr(charge, "billing_details", None)
-    return (getattr(billing, "name", None) if billing else None) or "Unknown"
-
-
-def _client_name_map():
-    """Stripe customer id to the name this business uses for them."""
+    clients = ({c.id: c for c in Client.query.filter(Client.id.in_(list(by_client))).all()}
+               if by_client else {})
+    rows = []
+    for cid, row in by_client.items():
+        client = clients.get(cid)
+        if client is None:
+            continue
+        row["client"] = client
+        row["value"] = round(row["value"], 2)
+        row["projects"] = sorted(row["projects"].items(), key=lambda kv: -kv[1])
+        rows.append(row)
+    rows.sort(key=lambda r: (-r["value"], r["client"].name.lower()))
     return {
-        c.stripe_customer_id: c.name
-        for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
+        "rows": rows,
+        "total": round(sum(r["value"] for r in rows), 2),
+        "hours": sum(r["hours"] for r in rows),
     }
 
 
-def _decorate(invoices, client_names):
-    """Copy each invoice row with the name the templates should show.
+# ── The Stripe strip ────────────────────────────────────────
 
-    Same precedence as the payments panel: the local client wins, because the
-    PM is where these names are curated, and Stripe's own name is the fallback
-    for a customer with no client record.
+
+def _decorate(invoices, client_names, local_ids=None):
+    """Copy each invoice row with the name the templates should show, and the
+    id of the board's own record of it when there is one.
+
+    The local client wins over Stripe's name, because the board is where
+    these names are curated; Stripe's is the fallback for a customer with no
+    client record.
     """
+    local_ids = local_ids or {}
     rows = []
     for inv in invoices:
         row = dict(inv)
         row["client_name"] = (
             client_names.get(inv["customer_id"]) or inv["customer_name"] or "Unknown"
         )
+        row["local_id"] = local_ids.get(inv.get("id"))
         rows.append(row)
     return rows
 
@@ -95,10 +145,9 @@ def _decorate(invoices, client_names):
 class _Page:
     """Just enough of Flask-SQLAlchemy's pagination for the invoice table.
 
-    The rows come from Stripe now rather than a query, and Stripe pages by
-    cursor rather than by number. The full list is small and already cached, so
-    it gets sliced here and the template's existing page links keep working
-    without being rewritten around cursors.
+    The rows come from Stripe rather than a query, and Stripe pages by
+    cursor rather than by number. The full list is small and already cached,
+    so it is sliced here and the shared pagination macro works unchanged.
     """
 
     def __init__(self, items, page, per_page):
@@ -126,96 +175,103 @@ class _Page:
                 last = num
 
 
+# The balance is asked for on every render of either tab, and a filter pick
+# renders the page again on the server even though the strip is never
+# swapped. A minute is fresh enough for a balance and keeps Stripe out of
+# every pick.
+_balance_cache = {"ts": 0.0, "data": None}
+BALANCE_TTL = 60
+
+
+def _balance():
+    now = time.time()
+    if _balance_cache["data"] is not None and now - _balance_cache["ts"] < BALANCE_TTL:
+        return _balance_cache["data"]
+    balance = get_stripe_balance()
+    if balance is None:
+        return None
+    figures = {"available": 0.0, "pending": 0.0}
+    for key in figures:
+        for b in getattr(balance, key, None) or []:
+            if getattr(b, "currency", None) == "usd":
+                figures[key] += (b.amount or 0) / 100.0
+    _balance_cache.update({"ts": now, "data": figures})
+    return figures
+
+
 def _account_overview():
-    """Balance, payments and payouts - the half of the Invoices page
-    that only Stripe can answer for.
+    """The thin strip over both tabs: what sits in the Stripe balance,
+    available and pending, and what is open in Stripe across the whole
+    account.
 
-    Every network read here is inside the try: a Stripe outage must
-    cost the account panel, not the invoice list beside it.
+    Open in Stripe is read from Stripe, not from local rows, so it holds every
+    open invoice, the ones raised in Stripe's own dashboard and by a
+    subscription included. The list's own figure is Unpaid in this list,
+    which follows the filters; the two were both called Outstanding until
+    2026-11-04.
+
+    Every network read is inside a try: a Stripe outage costs the strip,
+    never the list under it, and the strip then says Stripe did not answer
+    rather than showing $0.00.
     """
-    available = 0
-    pending = 0
-    payments = []
-    payouts = []
-
+    stripe_ok = True
+    available = pending = 0.0
     try:
-        balance = get_stripe_balance()
-        if balance:
-            for b in balance.available:
-                if b.currency == "usd":
-                    available = b.amount / 100.0
-            for b in balance.pending:
-                if b.currency == "usd":
-                    pending = b.amount / 100.0
-
-        # Read once for the whole page rather than per row. Duplicated ids
-        # would be a mapping mistake somewhere else; last one wins here.
-        client_names = _client_name_map()
-
-        raw_payments = get_recent_payments(limit=10)
-        for p in raw_payments:
-            payments.append({
-                "name": _payer_name(p, client_names),
-                "description": p.description or "Payment",
-                "amount": (p.amount or 0) / 100.0,
-                "status": p.status or "unknown",
-            })
-
-        raw_payouts = get_recent_payouts(limit=5)
-        for p in raw_payouts:
-            arrival = None
-            if p.arrival_date:
-                arrival = datetime.fromtimestamp(p.arrival_date, tz=timezone.utc)
-            payouts.append({
-                "amount": (p.amount or 0) / 100.0,
-                "status": p.status or "unknown",
-                "arrival_date": arrival,
-                "type": p.type or "bank_account",
-            })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-
-    # Outstanding is read from Stripe, not from local Invoice rows: a
-    # local record only exists for an invoice raised through this app's
-    # own New Invoice flow, and production has none. Reading the local
-    # rows showed nothing owed while real money sat open, which is the
-    # most misleading thing a finance page can do.
-    try:
-        invoice_totals = get_stripe_invoice_totals()
+        figures = _balance()
+        if figures is None:
+            stripe_ok = False
+        else:
+            available, pending = figures["available"], figures["pending"]
     except Exception:
-        invoice_totals = {"open": 0, "open_count": 0}
-
+        stripe_ok = False
+    try:
+        totals = get_stripe_invoice_totals()
+    except Exception:
+        totals = {"open": 0.0, "open_count": 0}
     return {
+        "stripe_ok": stripe_ok,
         "available_balance": available,
         "pending_balance": pending,
-        "payments": payments,
-        "payouts": payouts,
-        # Named apart from the invoice list's own total_outstanding,
-        # which is scoped to whatever the filters show. Same word, two
-        # numbers, and they share a template context now.
-        "account_outstanding": invoice_totals["open"],
-        "open_invoice_count": invoice_totals["open_count"],
+        "account_outstanding": totals["open"],
+        "open_invoice_count": totals["open_count"],
     }
 
 
-@stripe_bp.route("/")
-@login_required
-def stripe_dashboard():
-    """Kept as a redirect.
+def _page_context(tab):
+    """What both tabs draw outside their panel: the strip, and the tab row's
+    count, which is the number of client rows the Time not yet billed tab
+    shows, so the count and the tab cannot disagree."""
+    waiting = unbilled_time()
+    return dict(_account_overview(), tab=tab, unbilled=waiting,
+                unbilled_count=len(waiting["rows"]))
 
-    Stripe is how the invoices go out and how the money comes back, so
-    it is half of the Invoices page rather than a page of its own. This
-    route stays because bookmarks and old links point at it.
-    """
-    return redirect(url_for("stripe.invoices_list") + "#stripe")
+
+@stripe_bp.route("/")
+@ceo_required
+def stripe_dashboard():
+    """The old Stripe page's address. Nothing on the board links here any
+    more; bookmarks still do, so it answers a permanent redirect."""
+    return redirect(url_for("stripe.invoices_list"), code=301)
+
+
+@stripe_bp.route("/clients/sync-all", methods=["POST"])
+@stripe_bp.route("/setup-products", methods=["POST"])
+@ceo_required
+def retired_presses():
+    """Sync All Clients and Setup Products went on 2026-11-04 (finances plan
+    item 3): a client is linked to its Stripe customer as it is saved or
+    invoiced (`stripe_service.link_or_create_customer`), and an invoice line
+    carries its own amount, so no product needs setting up. A page left open
+    across the deploy still posts here, and lands back on the list rather
+    than on a 404."""
+    return redirect(url_for("stripe.invoices_list"), code=303)
 
 
 # ── Invoice List ────────────────────────────────────────────
 
 
 @stripe_bp.route("/invoices")
-@login_required
+@ceo_required
 def invoices_list():
     page = request.args.get("page", 1, type=int)
     status = request.args.get("status", "")
@@ -240,6 +296,8 @@ def invoices_list():
 
     clients = Client.query.order_by(Client.name).all()
     client_names = {c.stripe_customer_id: c.name for c in clients if c.stripe_customer_id}
+    local_ids = dict(db.session.query(Invoice.stripe_invoice_id, Invoice.id)
+                     .filter(Invoice.stripe_invoice_id.isnot(None)).all())
 
     # The filter is by local client; Stripe knows customers. A client with no
     # Stripe customer matches nothing, which is the truthful answer rather
@@ -249,41 +307,39 @@ def invoices_list():
         chosen = db.session.get(Client, int(client_id)) if client_id.isdigit() else None
         selected_customer = (chosen.stripe_customer_id or "") if chosen else ""
 
-    # Scope = client + month. Drives both the table and the summary cards, so
-    # the totals answer "for this client, this month". The status dropdown
-    # narrows only the table rows, keeping all three cards meaningful.
-    def in_scope(inv):
+    def shown(inv):
         if client_id and inv["customer_id"] != selected_customer:
             return False
         if month_start is not None:
             created = inv["created_at"]
             if created is None or not (month_start <= created < month_end):
                 return False
-        return True
+        return not status or inv["status"] == status
 
-    scoped = [i for i in _decorate(get_stripe_invoices(), client_names) if in_scope(i)]
-    rows = [i for i in scoped if not status or i["status"] == status]
+    # The tiles are of the rows, every filter included, status too: a figure
+    # named "in this list" that ignored the status filter would say $500
+    # unpaid over a list of paid invoices.
+    rows = [i for i in _decorate(get_stripe_invoices(), client_names, local_ids) if shown(i)]
     pagination = _Page(rows, page, 20)
 
-    # "Billed" rather than "Invoiced" deliberately. The dashboard's Invoiced
-    # means money still to come; this is a ledger of everything raised in the
-    # selected scope, paid included, and one word cannot be both.
-    total_billed = sum(i["total"] for i in scoped if i["status"] != "void")
+    # "Billed" rather than "Invoiced": everything raised in the list, paid
+    # included.
+    billed = [i for i in rows if i["status"] != "void"]
+    total_billed = sum(i["total"] for i in billed)
     # After refunds, because Stripe keeps a refunded invoice "paid". What is
     # left is the Books page's income once the sales tax beside it comes off.
-    total_paid = sum(invoice_kept(i) for i in scoped)
-    total_refunded = sum(i.get("refunded") or 0.0 for i in scoped)
-    total_sales_tax = sum(invoice_kept(i) - invoice_earned(i) for i in scoped if i["status"] == "paid")
-    total_outstanding = sum(
-        i["amount_due"] for i in scoped if i["status"] in ("draft", "open")
-    )
+    total_paid = sum(invoice_kept(i) for i in rows)
+    total_refunded = sum(i.get("refunded") or 0.0 for i in rows)
+    total_sales_tax = sum(invoice_kept(i) - invoice_earned(i) for i in rows if i["status"] == "paid")
+    unpaid = [i for i in rows if i["status"] in ("draft", "open")]
+    total_outstanding = sum(i["amount_due"] for i in unpaid)
 
     today = date.today()
     this_month = today.strftime("%Y-%m")
     last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
     return render_template("pm/stripe/invoices/list.html",
-        **_account_overview(),
+        **_page_context("invoices"),
         invoices=pagination.items,
         pagination=pagination,
         status=status,
@@ -292,6 +348,8 @@ def invoices_list():
         this_month=this_month,
         last_month=last_month,
         clients=clients,
+        billed_count=len(billed),
+        unpaid_count=len(unpaid),
         total_billed=total_billed,
         total_paid=total_paid,
         total_refunded=total_refunded,
@@ -300,11 +358,42 @@ def invoices_list():
     )
 
 
+@stripe_bp.route("/invoices/unbilled")
+@ceo_required
+def unbilled():
+    """The Time not yet billed tab: one row per client, and a press that
+    starts their invoice with every billable entry already ticked."""
+    return render_template("pm/stripe/invoices/list.html", **_page_context("unbilled"))
+
+
+@stripe_bp.route("/invoices/stripe/<stripe_id>")
+@ceo_required
+def invoice_open(stripe_id):
+    """A row of the list opens the board's record of the invoice.
+
+    The list reads Stripe live and the record is written by the import
+    (nightly, and Record these), so a row from the last few minutes may not
+    have one yet: it is written now, from the list already cached. An invoice
+    whose Stripe customer is on no client cannot be stored
+    (`import_invoices_from_stripe` says why), so that one says so and the
+    list comes back.
+    """
+    local = Invoice.query.filter_by(stripe_invoice_id=stripe_id).first()
+    if local is None:
+        import_invoices_from_stripe(ttl=300)
+        local = Invoice.query.filter_by(stripe_invoice_id=stripe_id).first()
+    if local is None:
+        flash("That invoice's Stripe customer is on no client here. Set it on the client to open it.",
+              "warning")
+        return redirect(url_for("stripe.invoices_list"))
+    return redirect(url_for("stripe.invoice_detail", id=local.id))
+
+
 # ── Generate Invoice ────────────────────────────────────────
 
 
 @stripe_bp.route("/invoices/import", methods=["POST"])
-@login_required
+@ceo_required
 def invoices_import():
     """Write Stripe's invoices down as local rows, now.
 
@@ -332,7 +421,7 @@ def invoices_import():
 
 
 @stripe_bp.route("/invoices/new", methods=["GET", "POST"])
-@login_required
+@ceo_required
 def invoice_create():
     if request.method == "POST":
         client_id = request.form.get("client_id", type=int)
@@ -466,12 +555,16 @@ def invoice_create():
     projects = Project.query.order_by(Project.name).all()
     preselect_client = request.args.get("client_id", type=int)
     preselect_project = request.args.get("project_id", type=int)
+    # From Time not yet billed: the client's billable time comes in ticked,
+    # because billing it is why the press was made.
+    take_all = request.args.get("take") == "all"
 
     return render_template("pm/stripe/invoices/generate.html",
         clients=clients,
         projects=projects,
         preselect_client=preselect_client,
         preselect_project=preselect_project,
+        take_all=take_all,
     )
 
 
@@ -479,7 +572,7 @@ def invoice_create():
 
 
 @stripe_bp.route("/invoices/<int:id>")
-@login_required
+@ceo_required
 def invoice_detail(id):
     invoice = db.session.get(Invoice, id) or abort(404)
     sync_invoice_from_stripe(invoice)
@@ -495,7 +588,7 @@ def invoice_detail(id):
 
 
 @stripe_bp.route("/invoices/<int:id>/send", methods=["POST"])
-@login_required
+@ceo_required
 def invoice_send(id):
     invoice = db.session.get(Invoice, id) or abort(404)
     if invoice.status != "draft":
@@ -519,7 +612,7 @@ def invoice_send(id):
 
 
 @stripe_bp.route("/invoices/<int:id>/void", methods=["POST"])
-@login_required
+@ceo_required
 def invoice_void(id):
     invoice = db.session.get(Invoice, id) or abort(404)
     if invoice.status not in ("draft", "open"):
@@ -541,7 +634,7 @@ def invoice_void(id):
 
 
 @stripe_bp.route("/invoices/<int:id>/sync", methods=["POST"])
-@login_required
+@ceo_required
 def invoice_sync(id):
     invoice = db.session.get(Invoice, id) or abort(404)
     if sync_invoice_from_stripe(invoice):
@@ -569,20 +662,17 @@ def _parse_date_arg(value):
 
 
 @stripe_bp.route("/api/uninvoiced-entries/<int:client_id>")
-@login_required
+@ceo_required
 def api_uninvoiced_entries(client_id):
     start = _parse_date_arg(request.args.get("start"))
     end = _parse_date_arg(request.args.get("end"))
     project_id = request.args.get("project_id", type=int)
 
-    invoiced_ids = db.session.query(InvoiceLineItem.time_entry_id).filter(
-        InvoiceLineItem.time_entry_id.isnot(None),
-        InvoiceLineItem.invoice.has(Invoice.status.in_(["draft", "open", "paid"]))
-    ).subquery()
-
+    # The same two questions Time not yet billed asks, so every entry that
+    # tab counts for a client is one this form offers for them.
     query = TimeEntry.query.filter(
-        TimeEntry.client_id == client_id,
-        ~TimeEntry.id.in_(db.session.query(invoiced_ids)),
+        _for_client(client_id),
+        ~TimeEntry.id.in_(_invoiced_time_ids()),
     )
     if start:
         query = query.filter(TimeEntry.date >= start)
@@ -610,7 +700,7 @@ def api_uninvoiced_entries(client_id):
 
 
 @stripe_bp.route("/api/uninvoiced-expenses/<int:client_id>")
-@login_required
+@ceo_required
 def api_uninvoiced_expenses(client_id):
     start = _parse_date_arg(request.args.get("start"))
     end = _parse_date_arg(request.args.get("end"))
@@ -672,50 +762,3 @@ def stripe_webhook():
         process_invoice_event(event)
 
     return jsonify({"status": "ok"}), 200
-
-
-# ── Sync All Clients ────────────────────────────────────────
-
-
-@stripe_bp.route("/clients/sync-all", methods=["POST"])
-@login_required
-def sync_all_clients():
-    try:
-        from stripe_service import link_or_create_customer
-        clients = Client.query.filter(Client.stripe_customer_id.is_(None)).all()
-        linked = made = 0
-        for client in clients:
-            # Found by the board's metadata or the email before anything is
-            # made: making one regardless is how a client ended up with two
-            # customers and its invoices with no home (audit fault 6).
-            customer, adopted = link_or_create_customer(client)
-            if customer is not None:
-                if adopted:
-                    linked += 1
-                else:
-                    made += 1
-        db.session.commit()
-        flash(f"Linked {linked} client(s) to their Stripe customer, created {made}.", "success")
-    except Exception as e:
-        flash(f"Stripe sync error: {e}", "error")
-    return redirect(url_for("stripe.stripe_dashboard"))
-
-
-# ── Setup Products ──────────────────────────────────────────
-
-
-@stripe_bp.route("/setup-products", methods=["POST"])
-@login_required
-def setup_products():
-    try:
-        import stripe
-        # Quick test that the key works
-        stripe.Balance.retrieve()
-        products = ensure_products_exist()
-        if products:
-            flash(f"Stripe products configured: {', '.join(products.keys())}", "success")
-        else:
-            flash("Products returned empty - check Stripe dashboard for errors.", "error")
-    except Exception as e:
-        flash(f"Stripe error: {type(e).__name__}: {e}", "error")
-    return redirect(url_for("stripe.stripe_dashboard"))

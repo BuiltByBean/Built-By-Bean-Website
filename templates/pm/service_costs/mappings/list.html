@@ -4,16 +4,21 @@
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
+{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
 
-{% block title %}Resource Mappings - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('pm.expenses_list'), 'Expenses') }}{% endblock %}
-{% block page_title %}Resource Mappings{% endblock %}
-{% block page_subtitle %}Map service resources to clients and projects{% endblock %}
+{# The Mappings tab of Hosting: which vendor resource is which build. A
+   vendor's report is recorded against these, and they are how its bank
+   charge splits across projects and clients (bank_feed.split). #}
+
+{% block title %}Mappings - Hosting - Built By Bean{% endblock %}
+{% block page_title %}Hosting{% endblock %}
+{% block page_subtitle %}Which vendor resource belongs to which build{% endblock %}
 
 {% block header_actions %}
 <a href="{{ url_for('service_costs.mapping_create') }}"
-   class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
-    + Add Mapping
+   class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
+    {{ icon('add', 'w-4 h-4') }}
+    Add mapping
 </a>
 {% endblock %}
 
@@ -22,19 +27,17 @@
 {% block main_class %}contained-scroll{% endblock %}
 
 {% block content %}
-<div class="flex flex-col flex-1 min-h-0 gap-6 stagger-in">
+{{ hosting_tabs('mappings') }}
+<div data-panel="hosting" class="flex flex-col flex-1 min-h-0 gap-4">
 
-    <!-- Filter -->
     {# Standing still because the page stands still; relative z-30 per LM-1
-       so the filter panel paints over the table card. #}
-    <div class="shrink-0 glass-card p-4 relative z-30">
-        <form method="GET" class="flex flex-wrap items-center gap-3">
-            {% set po = namespace(list=[("", "All Providers")]) %}
+       so the filter panel paints over the table card. The pick is the apply,
+       and only the table moves (liveFilter). #}
+    <div class="shrink-0 relative z-30">
+        <form method="GET" x-data="liveFilter()" @submit.prevent="apply()" class="flex flex-wrap items-center gap-3">
+            {% set po = namespace(list=[("", "Every vendor")]) %}
             {% for p in providers %}{% set po.list = po.list + [(p.id, p.display_name)] %}{% endfor %}
-            {{ select_dropdown("provider_id", po.list, provider_id, "All Providers", on_change="$el.closest('form').requestSubmit()", extra_class="max-w-[15rem]") }}
-            {% if provider_id %}
-            <a href="{{ url_for('service_costs.mappings_list') }}" class="text-sm text-brand-500 hover:text-brand-600">Clear</a>
-            {% endif %}
+            {{ select_dropdown("provider_id", po.list, provider_id, "Every vendor", on_change="apply()", extra_class="w-[16rem] max-w-full") }}
         </form>
     </div>
 
@@ -46,7 +49,7 @@
             <table class="w-full">
                 <thead>
                     <tr class="text-xs font-semibold uppercase tracking-wider text-surface-400 border-b border-surface-700">
-                        <th class="text-left py-3 px-5">Provider</th>
+                        <th class="text-left py-3 px-5">Vendor</th>
                         <th class="text-left py-3 px-5">Resource</th>
                         <th class="text-left py-3 px-5">Client</th>
                         <th class="text-left py-3 px-5">Project</th>
@@ -89,10 +92,10 @@
             </table>
         </div>
         {% else %}
-        <div class="py-12 text-center">
+        <div class="py-12 text-center empty">
             {{ icon('link', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
-            <p class="text-surface-400 mb-3">No resource mappings configured</p>
-            <a href="{{ url_for('service_costs.mapping_create') }}" class="inline-flex items-center min-h-[44px] px-4 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-300 hover:bg-brand-500/10 transition-colors">Create your first mapping</a>
+            <p class="text-surface-400 mb-3">{{ 'No mappings for this vendor' if provider_id else 'No mappings yet' }}</p>
+            <a href="{{ url_for('service_costs.mapping_create', provider_id=provider_id or none) }}" class="inline-flex items-center min-h-[44px] px-4 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-300 hover:bg-brand-500/10 transition-colors">Add a mapping</a>
         </div>
         {% endif %}
     </div>

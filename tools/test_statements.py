@@ -231,19 +231,19 @@ c = application.test_client()
 with c.session_transaction() as s:
     s["_user_id"] = str(ids["boss"])
     s["_fresh"] = True
-page = c.get("/admin/books/?tab=connections").get_data(as_text=True)
-check("the Books page lists the cards", 'id="statements"' in page and "Chase Sapphire" in page)
+page = c.get("/admin/books/?tab=connections", follow_redirects=True).get_data(as_text=True)
+check("the company's Connections lists its cards", 'id="statements"' in page and "Chase Sapphire" in page)
 check("no em dash", "\u2014" not in page)
-first = c.get("/admin/books/").get_data(as_text=True)
-check("the first tab is a company, not the cards",
-      "Chase Sapphire" not in first and 'id="company-' in first and "Connections" in first)
+first = c.get("/admin/books/", follow_redirects=True).get_data(as_text=True)
+check("Books opens on a company's Months, not the cards",
+      "Chase Sapphire" not in first and 'aria-label="Months"' in first and "Connections" in first)
 with application.app_context():
     sid = BankConnection.query.filter_by(label="Chase business debit").one().id
 r = c.post(f"/admin/books/statements/{sid}/upload",
            data={"statement": (io.BytesIO(DEBIT_CREDIT.encode()), "sentry.csv")},
            content_type="multipart/form-data", follow_redirects=False)
-check("an upload with lines to sort goes to the review list",
-      r.status_code == 302 and r.headers["Location"].endswith("/admin/bank/"), r.headers.get("Location"))
+check("an upload with lines to sort goes to the company's Bank tab",
+      r.status_code == 302 and r.headers["Location"].endswith("/bank"), r.headers.get("Location"))
 r = c.post(f"/admin/books/statements/{sid}/upload",
            data={"statement": (io.BytesIO(b"nothing,here\n1,2\n"), "junk.csv")},
            content_type="multipart/form-data", follow_redirects=True)

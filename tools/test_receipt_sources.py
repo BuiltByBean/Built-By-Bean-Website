@@ -190,7 +190,7 @@ c.post(f"/admin/expenses/{ids['first']}/delete")
 check("the Railway receipt is still on the volume", (RECEIPTS / "rw.html").exists())
 
 print("6. The page")
-html = c.get("/admin/books/receipts").get_data(as_text=True)
+html = c.get("/admin/books/receipts", follow_redirects=True).get_data(as_text=True)
 check("Missing comes first and lists the expense without one", "Office chair" in html and "Add receipt" in html)
 check("no em dash", "—" not in html)
 

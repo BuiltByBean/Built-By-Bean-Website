@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/taxes/_tabs.html" import tax_tabs with context %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 
@@ -32,9 +33,8 @@
     'uncollectible': ('Uncollectible', 'bg-red-900/30 text-red-400'),
 } %}
 {% set pct = '%g'|format(settings.effective_percent) %}
-<div class="space-y-4 stagger-in">
-
-    {% with here = 'ledger' %}{% include "pm/taxes/_sales_tabs.html" %}{% endwith %}
+{{ tax_tabs('sales') }}
+<div data-panel="taxes" class="space-y-4 stagger-in">
 
     <div data-live="sales-tiles" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="glass-card p-4 sm:p-5 min-w-0">

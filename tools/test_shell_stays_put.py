@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Moving between pages does not rebuild the parts that did not move.
 
-Pressing Expenses and then My Apps threw away and rebuilt the whole shell: the
+Pressing Expenses (now Books, Expenses) and then My Apps threw away and rebuilt the whole shell: the
 sidebar and its scroll position, the drawer on a phone, the banner, the running
 timer, every entry animation. None of that changes between two pages of this
 board. What changes is the title, the two lines in the banner, the back link
@@ -89,6 +89,10 @@ with application.app_context():
     boss = User(username="mb", email="mb@example.test", first_name="Michael", role="ceo")
     boss.set_password("password")
     client = Client(name="Shell Test Ltd", email="shell@example.test")
+    # The ledger is a company's Books tab since 2026-11-04 (docs/finances_plan.md).
+    from models import Business
+    db.session.add(Business(name="Built by Bean LLC", short_name="Built by Bean", slug="bbb",
+                            sales_source="board"))
     db.session.add_all([boss, client])
     db.session.flush()
     db.session.add(Project(name="Shell Test", client_id=client.id,
@@ -134,7 +138,7 @@ with sync_playwright() as p:
     page.click("button[type=submit]")
     page.wait_for_load_state("networkidle")
 
-    page.goto(BASE + "/admin/expenses", wait_until="domcontentloaded")
+    page.goto(BASE + "/admin/books/1/expenses", wait_until="domcontentloaded")
     page.wait_for_timeout(600)
     page.evaluate(WITNESS)
     before = page.evaluate(STATE)
@@ -152,7 +156,7 @@ with sync_playwright() as p:
     check("no page was loaded at all", after["ctx"] == "ALIVE", after["ctx"])
     check("the sidebar kept its own scroll position", after["navScroll"] == 40,
           after["navScroll"])
-    check("the lit link moved", before["active"] == ["Expenses"]
+    check("the lit link moved", before["active"] == ["Books"]
           and after["active"] == ["My Apps"], (before["active"], after["active"]))
     check("the URL changed", after["url"].startswith("/admin/apps"), after["url"])
     check("the title changed", after["title"] != before["title"], after["title"])
@@ -162,9 +166,9 @@ with sync_playwright() as p:
     page.go_back()
     page.wait_for_timeout(900)
     back = page.evaluate(STATE)
-    check("back lands on the page it came from", back["url"].startswith("/admin/expenses"),
+    check("back lands on the page it came from", back["url"].startswith("/admin/books/1/expenses"),
           back["url"])
-    check("with the right link lit", back["active"] == ["Expenses"], back["active"])
+    check("with the right link lit", back["active"] == ["Books"], back["active"])
     check("and still without a reload", back["ctx"] == "ALIVE", back["ctx"])
     page.go_forward()
     page.wait_for_timeout(900)
@@ -172,7 +176,7 @@ with sync_playwright() as p:
     check("forward goes forward again", fwd["url"].startswith("/admin/apps"), fwd["url"])
 
     print("\nA FILTER IS A NAVIGATION TOO:")
-    page.goto(BASE + "/admin/expenses", wait_until="domcontentloaded")
+    page.goto(BASE + "/admin/books/1/expenses", wait_until="domcontentloaded")
     page.wait_for_timeout(600)
     page.evaluate(WITNESS)
     page.evaluate("""() => {
@@ -224,7 +228,7 @@ with sync_playwright() as p:
     print("\nTHE GUARDS:")
     for what, href in (("a PDF", "/admin/contracts/1/signed.pdf"),
                        ("a page off the board", "/Bible-Study")):
-        page.goto(BASE + "/admin/expenses", wait_until="domcontentloaded")
+        page.goto(BASE + "/admin/books/1/expenses", wait_until="domcontentloaded")
         page.wait_for_timeout(500)
         page.evaluate(WITNESS)
         page.evaluate("""(href) => {

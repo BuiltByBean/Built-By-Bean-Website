@@ -1145,62 +1145,47 @@
                 Time Tracking
             </a>
             {% endif %}
-            <div class="my-2 border-t border-white/10"></div>
 
-            {# Money, whole: the overview first, then what is owed on it,
-               spent on it, charged monthly for it, and invoiced from it. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Finances</p>
-            <a href="{{ url_for('pm.dashboard') }}"
-               class="sidebar-link {% if request.endpoint == 'pm.dashboard' %}active{% endif %}">
-                {{ icon('finances') }}
-                Dashboard
-            </a>
-            <a href="{{ url_for('taxes.taxes_index') }}"
-               class="sidebar-link {% if request.endpoint and ('taxes' in request.endpoint or (request.endpoint.startswith('businesses.') and request.endpoint not in ('businesses.index', 'businesses.new', 'businesses.edit', 'businesses.detail', 'businesses.map_page', 'businesses.map_edit'))) %}active{% endif %}">
-                {{ icon('taxes') }}
-                Taxes
-            </a>
-            {# One entry for everything going out. What I paid and what the
-               vendors charged are one ledger, because a vendor charge writes
-               an expense - they were never two answers. #}
-            <a href="{{ url_for('pm.expenses_list') }}"
-               class="sidebar-link {% if request.endpoint and ('expense' in request.endpoint or 'service_costs' in request.endpoint) %}active{% endif %}">
-                {{ icon('expenses') }}
-                Expenses
-            </a>
-            {# Each company's books: the year, the monthly close, owners and
-               receipts, and the bank lines waiting to be sorted. CEO only,
-               like the businesses it reads. #}
+            {# Finances, in Michael's order (docs/finances_plan.md item 11,
+               2026-11-04): the overview, each company's books, the invoices,
+               the taxes, the hosting. CEO only, every page of it (item 10),
+               so the group is not drawn for anybody else rather than drawn
+               and refused (a divider, no heading, like Michael's other groups); Hannah keeps her work pages. Expenses and the bank
+               list are tabs of Books, the vendor pages tabs of Hosting. #}
             {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
+            {% set ep = request.endpoint or '' %}
+            <div data-group="finances" class="my-2 border-t border-white/10"></div>
+            <a href="{{ url_for('pm.dashboard') }}"
+               class="sidebar-link {% if ep == 'pm.dashboard' %}active{% endif %}">
+                {{ icon('finances') }}
+                Overview
+            </a>
             <a href="{{ url_for('books.index') }}"
-               class="sidebar-link {% if request.endpoint and (request.endpoint.startswith('books.') or request.endpoint.startswith('bank.')) %}active{% endif %}">
+               class="sidebar-link {% if ep.startswith(('books.', 'bank.')) or ep in ('pm.expenses_list', 'pm.expense_create', 'pm.expense_edit') %}active{% endif %}">
                 {{ icon('books') }}
                 Books
             </a>
-            {% endif %}
-            {# The recurring fee against the recurring cost. Its own entry
-               rather than a panel on Expenses, because it is the one page
-               that is about money coming in as well as going out. #}
-            <a href="{{ url_for('hosting.hosting_index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('hosting.') %}active{% endif %}">
-                {{ icon('hosting') }}
-                Hosting
-                {# How many fees have stopped clearing the floor. The page
-                   noticing is only half of it; the other half is being
-                   told without opening the page. #}
-                {% if hosting_due %}
-                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ hosting_due }}</span>
-                {% endif %}
-            </a>
-            {# Invoicing, whole: the invoices on one half and the Stripe
-               account behind them on the other. Stripe is how they go out
-               and how the money comes back, so it was never a second thing. #}
             <a href="{{ url_for('stripe.invoices_list') }}"
-               class="sidebar-link {% if request.endpoint and ('invoice' in request.endpoint or request.endpoint.startswith('stripe.')) %}active{% endif %}">
+               class="sidebar-link {% if ep.startswith('stripe.') or 'invoice' in ep %}active{% endif %}">
                 {{ icon('invoices') }}
                 Invoices
             </a>
+            <a href="{{ url_for('taxes.taxes_index') }}"
+               class="sidebar-link {% if ep.startswith(('taxes', 'taxes_deadlines.')) or (ep.startswith('businesses.') and ep not in ('businesses.index', 'businesses.new', 'businesses.edit', 'businesses.detail', 'businesses.map_page', 'businesses.map_edit')) %}active{% endif %}">
+                {{ icon('taxes') }}
+                Taxes
+            </a>
+            <a href="{{ url_for('hosting.hosting_index') }}"
+               class="sidebar-link {% if ep.startswith(('hosting.', 'service_costs.')) %}active{% endif %}">
+                {{ icon('hosting') }}
+                Hosting
+                {# How many fees have stopped clearing the floor: the Fees
+                   tab's own count. #}
+                {% if hosting_due %}
+                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ hosting_due | commas }}</span>
+                {% endif %}
+            </a>
+            {% endif %}
 
         </nav>
 

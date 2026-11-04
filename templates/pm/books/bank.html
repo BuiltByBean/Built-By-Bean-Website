@@ -1,87 +1,86 @@
-{% extends "pm/base.html" %}
+{% extends "pm/books/_hub.html" %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 
 {#
-  The bank lines nobody has a rule for yet (pm/bank_routes.py, bank_feed.py).
+  Bank: the lines this company's banks and cards read (pm/books_routes.bank,
+  bank_feed.py). To sort first, because that is the job; Every line for
+  checking; Tagged is what a session logged (log_expense) that no bank line
+  has taken yet.
 
-  Each row is one line: what it is, Claude's answer, and Settle, which
-  accepts that answer and remembers the vendor. Change opens the editor for
-  that row alone; the editor is not in the page until then. The bar and the
-  list are swapped in place after a press, so the list keeps its scroll. A row holding open dropdowns must paint over the rows below
-  it, so every row is `relative focus-within:z-30` (LM-7): the browser knows
-  which row is in use, and a tie between siblings is what LM-1 was.
+  Each row is one line: what it is, the suggestion beside it, and Settle,
+  which accepts the suggestion and remembers the vendor. Change opens the
+  editor for that row alone; the editor is not in the page until then. The
+  bar and the list are swapped in place after a press, so the list keeps
+  its scroll. A row holding open dropdowns paints over the rows below it,
+  so every row is `relative focus-within:z-30` (LM-7). The suggestions are
+  the board's own (bank_review.suggest_free) and the /bank skill's, run on
+  Michael's plan: nothing here calls a paid model.
 #}
 
-{% block title %}Bank - Built By Bean{% endblock %}
-{% block page_title %}Bank{% endblock %}
-{% block page_subtitle %}{% if waiting %}{{ waiting | commas }} line{{ '' if waiting == 1 else 's' }} to sort{% else %}Every line sorted{% endif %}{% endblock %}
+{% block hub_title %}Bank{% endblock %}
+{% block page_subtitle %}{{ business.name }} &middot; {% if waiting %}{{ waiting | commas }} line{{ '' if waiting == 1 else 's' }} to sort{% else %}every line sorted{% endif %}{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
+{% block panel_class %}flex flex-col flex-1 min-h-0 gap-4 min-w-0{% endblock %}
 
 {% macro money(v) %}<span class="{{ 'text-emerald-300' if v > 0 else 'text-white' }} tabular-nums">{{ '-' if v < 0 }}${{ '{:,.2f}'.format(v|abs) }}</span>{% endmacro %}
 
-{% block content %}
-<div class="flex flex-col flex-1 min-h-0 gap-5">
+{% block header_actions %}
+{% if suggested %}
+<form method="POST" action="{{ url_for('bank.accept_suggested') }}">
+    <input type="hidden" name="business_id" value="{{ business.id }}">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    {{ confirm_button('Accept ' ~ (suggested | commas) ~ ' suggested', 'Settle them as suggested?', tone='brand',
+                     btn_class='inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white') }}
+</form>
+{% endif %}
+{% endblock %}
 
-    <div data-live="bank-bar" class="shrink-0 flex flex-wrap items-center gap-2">
-        <a href="{{ url_for('bank.review') }}" {% if view != 'all' %}aria-current="page"{% endif %}
+{% block hub %}
+    <nav data-live="bank-bar" aria-label="Which lines" class="shrink-0 flex flex-wrap items-center gap-2">
+        {% for key, label, n in [('review', 'To sort', waiting), ('all', 'Every line', none), ('tags', 'Tagged', tags | length)] %}
+        <a href="{{ url_for('books.bank', id=business.id, view=key) }}" {% if view == key %}aria-current="page"{% endif %}
            class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
-                  {{ 'btn-brand text-white' if view != 'all' else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
-            To sort <span class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums bg-white/15">{{ waiting | commas }}</span></a>
-        <a href="{{ url_for('bank.review', view='all') }}" {% if view == 'all' %}aria-current="page"{% endif %}
-           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
-                  {{ 'btn-brand text-white' if view == 'all' else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
-            Every line</a>
-        <div class="flex flex-wrap items-center gap-2 ml-auto">
-            {% if suggesting %}
-            <span class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-400">
-                Claude is reading</span>
-            {% elif waiting and waiting > suggested %}
-            <form method="POST" action="{{ url_for('bank.suggest_now') }}">
-                <button type="submit"
-                        class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                    Ask Claude</button>
-            </form>
-            {% endif %}
-            {% if suggested %}
-            <form method="POST" action="{{ url_for('bank.accept_suggested') }}">
-                {{ confirm_button('Accept ' ~ (suggested | commas) ~ ' suggested', 'Settle them as suggested?', tone='brand',
-                                 btn_class='inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white') }}
-            </form>
-            {% endif %}
-        </div>
-    </div>
-
-    {% if connections %}
-    <div class="shrink-0 grid gap-3 sm:grid-cols-2">
-        {% for c in connections %}
-        <div class="glass-card p-4 flex flex-wrap items-center justify-between gap-3 min-w-0">
-            <div class="min-w-0">
-                <p class="text-sm font-semibold text-white break-words">{{ c.business.name }} &middot; {{ c.label or 'Mercury' }}</p>
-                <p class="text-xs mt-0.5 break-words {{ 'text-red-300' if c.last_ok == false else 'text-surface-400' }}">
-                    {% if c.last_synced_at %}{{ c.last_synced_at.strftime('%b') }} {{ c.last_synced_at.day }}: {% endif %}{{ c.last_note or 'Not read yet' }}</p>
-            </div>
-            <form method="POST" action="{{ url_for('bank.sync', id=c.id) }}" class="shrink-0">
-                <input type="hidden" name="next" value="{{ request.full_path }}">
-                <button type="submit"
-                        class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                    Read now</button>
-            </form>
-        </div>
+                  {{ 'btn-brand text-white' if view == key else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
+            {{ label }}{% if n is not none %} <span class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums bg-white/15">{{ n | commas }}</span>{% endif %}</a>
         {% endfor %}
-    </div>
-    {% endif %}
+    </nav>
 
+    {% if view == 'tags' %}
+    <div class="glass-card flex flex-col min-h-0">
+        <div data-live="bank-tags" class="min-h-0 overflow-y-auto divide-y divide-white/5">
+            {% for t in tags %}
+            <div class="px-4 py-3 sm:px-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div class="min-w-0 grow basis-64">
+                    <p class="font-medium text-white break-words">{{ t.vendor or t.description }}</p>
+                    <p class="text-xs text-surface-400 mt-0.5 break-words">
+                        {{ t.occurred_on.strftime('%b') }} {{ t.occurred_on.day }}, {{ t.occurred_on.year }}
+                        {% if t.project %}&middot; {{ t.project.name }}{% elif t.client %}&middot; {{ t.client.name }}{% endif %}
+                        {% if t.source %}&middot; from {{ t.source }}{% endif %}</p>
+                </div>
+                <p class="text-base font-semibold shrink-0">{{ money(-t.amount) }}</p>
+                <form method="POST" action="{{ url_for('books.tag_dismiss', tid=t.id) }}" data-live-action class="ml-auto">
+                    <input type="hidden" name="next" value="{{ request.full_path }}">
+                    {{ confirm_button('Set aside', 'It will never reach the bank?') }}
+                </form>
+            </div>
+            {% else %}
+            <p class="empty p-8 sm:p-12 text-center text-surface-400">No logged charge is waiting for its bank line</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
     <div class="glass-card flex flex-col min-h-0">
         <div data-live="bank-lines" x-data="{ open: null }" class="min-h-0 overflow-y-auto divide-y divide-white/5">
             {% if not lines %}
-            <div class="p-8 sm:p-12 text-center">
+            <div class="empty p-8 sm:p-12 text-center space-y-4">
                 {% if not connections %}
                 <p class="text-surface-400">No bank connected yet</p>
-                <p class="text-sm text-surface-500 mt-1">Connect one on its business's page.</p>
+                <a href="{{ url_for('books.connections', id=business.id) }}"
+                   class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Connect a bank</a>
                 {% else %}
-                <p class="text-surface-400">Nothing to sort</p>
+                <p class="text-surface-400">{{ 'Nothing to sort' if view == 'review' else 'No lines read yet' }}</p>
                 {% endif %}
             </div>
             {% endif %}
@@ -191,5 +190,5 @@
             {% endfor %}
         </div>
     </div>
-</div>
+    {% endif %}
 {% endblock %}

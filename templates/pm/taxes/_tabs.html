@@ -1,0 +1,20 @@
+{#
+  The five tabs over every tax page, in Michael's order (docs/finances_plan.md
+  item 4): Income tax, Sales tax, Returns, Deadlines, Guide. The kit's row
+  (finances/_kit.html), so a press slides the mark and swaps only the
+  data-panel="taxes" under it. Deadlines carries the same count as the
+  deadline rows on Needs attention (deadlines.attention_count, cached ten
+  minutes), through `tax_deadline_count` (pm/deadline_routes.py).
+#}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
+
+{% macro tax_tabs(active) %}
+{{ fin_script() }}
+{{ fin_tabs('taxes', active, [
+    ('income', 'Income tax', url_for('taxes.taxes_index')),
+    ('sales', 'Sales tax', url_for('taxes.sales_tax_index')),
+    ('returns', 'Returns', url_for('businesses.returns_index')),
+    ('deadlines', 'Deadlines', url_for('taxes_deadlines.index'), tax_deadline_count()),
+    ('guide', 'Guide', url_for('businesses.guide')),
+], 'Taxes') }}
+{% endmacro %}

@@ -22,6 +22,12 @@ from pm.users_routes import ceo_required
 deadline_bp = Blueprint("taxes_deadlines", __name__)
 
 
+@deadline_bp.app_context_processor
+def _tax_tab_count():
+    """The Deadlines tab's count, asked only when a tax page draws its tabs."""
+    return {"tax_deadline_count": deadlines.attention_count}
+
+
 def _back(default):
     """Back to the page the press came from, on this board only."""
     to = request.form.get("next") or ""

@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/taxes/_tabs.html" import tax_tabs with context %}
 
 {#
   How Texas sales tax is done here, end to end. Written 2026-10-30, the day
@@ -12,13 +13,13 @@
 {% set li = 'text-sm text-surface-200 leading-relaxed' %}
 {% set em = 'font-semibold text-white' %}
 
-{% block title %}How to file sales tax - Built By Bean{% endblock %}
+{% block title %}Guide - Taxes - Built By Bean{% endblock %}
 {% block page_title %}Taxes{% endblock %}
-{% block page_subtitle %}How to file Texas sales tax{% endblock %}
+{% block page_subtitle %}Texas sales tax, start to finish{% endblock %}
 
 {% block content %}
-<div class="space-y-4">
-    {% with here = 'guide' %}{% include "pm/taxes/_sales_tabs.html" %}{% endwith %}
+{{ tax_tabs('guide') }}
+<div data-panel="taxes" class="space-y-4">
 
     <div class="glass-card p-5 sm:p-6 min-w-0 space-y-3">
         <h3 class="{{ h }}">Every quarter</h3>

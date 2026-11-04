@@ -1,0 +1,233 @@
+{% extends "pm/books/_hub.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/icon_button.html" import delete_icon %}
+{% from "pm/components/checkbox.html" import checkbox %}
+
+{#
+  Connections: everything that feeds this company's books, gathered from the
+  four places it lived until 2026-11-04 (docs/finances_plan.md item 2): its
+  Mercury banks (were on the business page), its own Stripe (the business
+  page), its cards with no feed and the receipt mailboxes (the old Books
+  Connections tab), and the vendors whose reports split its charges (the
+  providers page, which stays under Hosting and is linked from here).
+
+  A token or app password is typed once, checked, and never shown again.
+  Every press comes back here (`next`). The statement pickers open over the
+  cards below, so that card is relative z-30 (LM-1).
+#}
+
+{% block hub_title %}Connections{% endblock %}
+
+{% macro status(ok, when, note) %}
+<p class="text-xs mt-0.5 break-words {{ 'text-red-300' if ok == false else 'text-surface-400' }}">
+    {% if when %}{{ when.strftime('%b') }} {{ when.day }}: {% endif %}{{ note or 'Not read yet' }}</p>
+{% endmacro %}
+
+{% block hub %}
+{% set btn = 'inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors' %}
+{% set field = 'w-full min-w-0 input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white rounded-xl' %}
+{% set here = request.full_path %}
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+
+    <section id="bank" class="glass-card p-5 sm:p-6 min-w-0 space-y-4" aria-label="Bank">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Bank</h2>
+        {% for c in banks %}
+        {% set accts = c.accounts %}
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-surface-800/40 min-w-0">
+            <div class="min-w-0 grow basis-64">
+                <p class="text-sm font-semibold text-white break-words">{{ c.label or 'Mercury' }}{% if accts %} &middot; {{ accts.values() | join(', ') }}{% endif %}</p>
+                {{ status(c.last_ok, c.last_synced_at, c.last_note) }}
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">
+                <form method="POST" action="{{ url_for('bank.sync', id=c.id) }}">
+                    <input type="hidden" name="next" value="{{ here }}">
+                    <button type="submit" aria-label="Read {{ c.label or 'Mercury' }} now" class="{{ btn }}">Read now</button>
+                </form>
+                <form method="POST" action="{{ url_for('bank.disconnect', id=c.id) }}">
+                    <input type="hidden" name="next" value="{{ here }}">
+                    {{ delete_icon(question='Disconnect it?', label='Disconnect ' ~ (c.label or 'Mercury')) }}
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        <form method="POST" action="{{ url_for('bank.connect') }}" autocomplete="off"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3">
+            <input type="hidden" name="business_id" value="{{ business.id }}">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="min-w-0">
+                    <label for="bank-label" class="block text-sm font-medium text-surface-300 mb-1.5">Bank</label>
+                    <input id="bank-label" name="label" value="Mercury" maxlength="120" class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <label for="bank-token" class="block text-sm font-medium text-surface-300 mb-1.5">Read only API token</label>
+                    <input id="bank-token" name="token" type="password" autocomplete="new-password" required class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <label for="bank-from" class="block text-sm font-medium text-surface-300 mb-1.5">Books start</label>
+                    <input id="bank-from" name="synced_from" type="date" value="2026-04-01" class="{{ field }}">
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Connect {{ 'another' if banks else 'a bank' }}</button>
+            </div>
+        </form>
+    </section>
+
+    {# Its own Stripe (stripe_books.py): where its sales happen. Not for the
+       company the board bills from, whose Stripe is this app's own. #}
+    {% if business.sales_source != 'board' %}
+    <section id="stripe" class="glass-card p-5 sm:p-6 min-w-0 space-y-4" aria-label="Stripe">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Stripe</h2>
+        {% if business.stripe_key %}
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-surface-800/40 min-w-0">
+            <div class="min-w-0 grow basis-64">
+                <p class="text-sm font-semibold text-white">Connected</p>
+                {{ status(business.stripe_ok, business.stripe_synced_at, business.stripe_note) }}
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">
+                <form method="POST" action="{{ url_for('books.stripe_sync', id=business.id) }}">
+                    <button type="submit" aria-label="Read its Stripe now" class="{{ btn }}">Read now</button>
+                </form>
+                <form method="POST" action="{{ url_for('books.stripe_disconnect', id=business.id) }}">
+                    {{ delete_icon(question='Disconnect Stripe?', label='Disconnect Stripe') }}
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <form method="POST" action="{{ url_for('books.stripe_connect', id=business.id) }}" autocomplete="off"
+              class="p-4 rounded-xl border border-dashed border-white/15 flex flex-wrap items-end gap-3">
+            <div class="min-w-0 grow basis-48">
+                <label for="stripe-key" class="block text-sm font-medium text-surface-300 mb-1.5">Restricted key</label>
+                <input id="stripe-key" name="key" type="password" autocomplete="new-password" required class="{{ field }}">
+            </div>
+            <button type="submit" class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                Connect</button>
+        </form>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <section id="statements" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30" aria-label="Card statements">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Card statements</h2>
+        {% for src in sources %}
+        <div class="p-3 rounded-xl bg-surface-800/40 min-w-0 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0 grow basis-64">
+                    <p class="text-sm font-semibold text-white break-words">{{ src.label }}
+                        {% if src.kind == 'personal' %}<span class="text-surface-400 font-normal">&middot; personal{% if src.owner_name %}, {{ src.owner_name }}{% endif %}</span>{% endif %}</p>
+                    <p class="text-xs text-surface-400 mt-0.5 break-words">
+                        {{ src.line_count | commas }} line{{ '' if src.line_count == 1 else 's' }}{% if src.through %}, through {{ src.through.strftime('%b') }} {{ src.through.day }}, {{ src.through.year }}{% endif %}</p>
+                </div>
+                <form method="POST" action="{{ url_for('books.statement_source_delete', cid=src.id) }}" class="ml-auto">
+                    <input type="hidden" name="next" value="{{ here }}">
+                    {{ delete_icon(question='Remove it?', label='Remove ' ~ src.label) }}
+                </form>
+            </div>
+            <form method="POST" action="{{ url_for('books.statement_upload', cid=src.id) }}" enctype="multipart/form-data"
+                  class="flex flex-wrap items-center gap-3">
+                <input type="hidden" name="next" value="{{ here }}">
+                <input type="file" name="statement" accept=".csv,text/csv" multiple aria-label="Statement file for {{ src.label }}"
+                       class="min-w-0 grow basis-48 min-h-[44px] text-sm text-surface-300 file:mr-3 file:min-h-[44px] file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-500/15 file:text-brand-300 hover:file:bg-brand-500/25 file:cursor-pointer cursor-pointer">
+                <button type="submit" class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Upload</button>
+            </form>
+        </div>
+        {% endfor %}
+        <form method="POST" action="{{ url_for('books.statement_source_add') }}"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3" x-data="{ kind: 'business' }">
+            <input type="hidden" name="business_id" value="{{ business.id }}">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="min-w-0">
+                    <label for="src-label" class="block text-sm font-medium text-surface-300 mb-1.5">Card or account</label>
+                    <input id="src-label" name="label" maxlength="120" required placeholder="Chase Sapphire" class="{{ field }} placeholder-surface-500">
+                </div>
+                <div class="min-w-0">
+                    <p class="block text-sm font-medium text-surface-300 mb-1.5">Whose card</p>
+                    {{ select_dropdown('kind', [('business', "The company's own"), ('personal', "Personal, an owner's")], 'business', full_width=true, model='kind') }}
+                </div>
+                <div class="min-w-0" x-show="kind === 'personal'">
+                    <label for="src-owner" class="block text-sm font-medium text-surface-300 mb-1.5">Owner</label>
+                    <input id="src-owner" name="owner_name" maxlength="120" value="Michael Bean" class="{{ field }}">
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                {{ checkbox('charges_positive', label='Its statements show purchases as positive numbers') }}
+                <button type="submit" class="ml-auto inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Add</button>
+            </div>
+        </form>
+    </section>
+
+    <section id="mailboxes" class="glass-card p-5 sm:p-6 min-w-0 space-y-4" aria-label="Receipt mailboxes">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Receipt mailboxes</h2>
+        {% for m in mailboxes %}
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-surface-800/40 min-w-0">
+            <div class="min-w-0 grow basis-64">
+                <p class="text-sm font-semibold text-white break-words">{{ m.address }}</p>
+                <p class="text-xs mt-0.5 break-words {{ 'text-red-300' if m.last_ok == false else 'text-surface-400' }}">
+                    {% if reading(m.id) %}Reading now{% else %}{% if m.last_synced_at %}{{ m.last_synced_at.strftime('%b') }} {{ m.last_synced_at.day }}: {% endif %}{{ m.last_note or 'Not read yet' }}{% endif %}</p>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2 ml-auto">
+                <form method="POST" action="{{ url_for('books.mailbox_sync', mid=m.id) }}">
+                    <input type="hidden" name="next" value="{{ here }}">
+                    <button type="submit" class="{{ btn }}">Read now</button>
+                </form>
+                <form method="POST" action="{{ url_for('books.mailbox_delete', mid=m.id) }}">
+                    <input type="hidden" name="next" value="{{ here }}">
+                    {{ delete_icon(question='Disconnect it?', label='Disconnect ' ~ m.address) }}
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        <form method="POST" action="{{ url_for('books.mailbox_add') }}" autocomplete="off"
+              class="p-4 rounded-xl border border-dashed border-white/15 space-y-3">
+            <input type="hidden" name="business_id" value="{{ business.id }}">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="min-w-0">
+                    <label for="mb-address" class="block text-sm font-medium text-surface-300 mb-1.5">Email address</label>
+                    <input id="mb-address" name="address" type="email" required class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <label for="mb-password" class="block text-sm font-medium text-surface-300 mb-1.5">App password</label>
+                    <input id="mb-password" name="password" type="password" autocomplete="new-password" required class="{{ field }}">
+                </div>
+                <div class="min-w-0">
+                    <label for="mb-from" class="block text-sm font-medium text-surface-300 mb-1.5">Read from</label>
+                    <input id="mb-from" name="read_from" type="date" value="2026-04-01" class="{{ field }}">
+                </div>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="inline-flex items-center justify-center min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white">
+                    Connect</button>
+            </div>
+        </form>
+    </section>
+
+    {# The vendors whose own reports say which project each charge was for.
+       They split what the bank books; they book nothing themselves (only
+       Stripe's fees, which never cross a bank). Set up under Hosting. #}
+    <section id="vendors" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 xl:col-span-2" aria-label="Vendor reports">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Vendor reports</h2>
+            <a href="{{ url_for('service_costs.providers_list') }}" class="{{ btn }}">Every vendor</a>
+        </div>
+        {% if providers %}
+        <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
+            {% for p in providers %}
+            <a href="{{ url_for('service_costs.provider_edit', id=p.id) }}"
+               class="flex flex-wrap items-center justify-between gap-3 p-3 min-h-[44px] rounded-xl bg-surface-800/40 hover:bg-surface-800/70 transition-colors min-w-0">
+                <div class="min-w-0 grow basis-40">
+                    <p class="text-sm font-semibold text-white break-words">{{ p.display_name }}</p>
+                    {{ status(false if p.sync_error else none, p.last_sync_at, p.sync_error or ('Read' if p.last_sync_at else 'Not read yet')) }}
+                </div>
+                {% if not p.is_active %}<span class="text-xs font-semibold text-surface-400">Off</span>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty text-sm text-surface-400">No vendor reports for {{ business.short_name or business.name }}</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

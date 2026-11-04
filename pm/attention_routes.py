@@ -61,24 +61,16 @@ def _bills_to_enter(force=False):
     enter, and asking would be inventing a monthly chore for the two vendors
     that already do it themselves.
     """
-    from pm.service_costs_routes import MANUAL_MONTHLY_PROVIDERS
     now = time.time()
     if not force and _BILLS_CACHE["value"] is not None and now - _BILLS_CACHE["at"] < _BILLS_TTL:
         return _BILLS_CACHE["value"]
 
     out = []
     try:
-        providers = (ServiceProvider.query.filter_by(is_active=True)
-                     .order_by(ServiceProvider.display_name).all())
-        for p in providers:
-            if p.name not in MANUAL_MONTHLY_PROVIDERS:
-                continue
-            # The one reading the door's get_costs shares (provider_bills),
-            # grace for a Railway account that pulls its own bills included.
-            missing, _ = provider_bills.bill_months(p)
-            if missing:
-                out.append({"provider": p, "missing": missing,
-                            "latest": missing[-1], "count": len(missing)})
+        # The one list (provider_bills.missing_bills): the Hosting section's
+        # Railway months tab counts and draws the same answer, and the door's
+        # get_costs reads the bill_months under it, grace included.
+        out = provider_bills.missing_bills()
     except Exception:
         # A table that does not exist yet must not take the whole board down.
         db.session.rollback()

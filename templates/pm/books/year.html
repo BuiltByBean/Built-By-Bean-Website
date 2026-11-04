@@ -1,4 +1,4 @@
-{% extends "pm/base.html" %}
+{% extends "pm/books/_hub.html" %}
 
 {#
   The year-end report the accountant works from (books_service.summarize).
@@ -8,9 +8,8 @@
   line, for a spreadsheet or the accountant's own software.
 #}
 
-{% block title %}{{ business.short_name or business.name }} {{ year }} - Books{% endblock %}
-{% block page_title %}{{ business.name }}{% endblock %}
-{% block page_subtitle %}{{ year }} books{% endblock %}
+{% block hub_title %}{{ year }} report{% endblock %}
+{% block page_subtitle %}{{ business.name }} &middot; {{ year }}{% endblock %}
 
 {% macro money(v) %}{{ '-' if v < 0 }}${{ '{:,.2f}'.format(v|abs) }}{% endmacro %}
 
@@ -20,15 +19,25 @@
     Download CSV</a>
 {% endblock %}
 
-{% block content %}
-<div class="space-y-6 stagger-in">
+{% block hub %}
+<div class="space-y-6">
+    {% if years | length > 1 %}
+    {# A year is an address: each press opens that year's report. #}
+    <nav aria-label="Year" class="flex flex-wrap gap-2">
+        {% for y in years %}
+        <a href="{{ url_for('books.year_report', id=business.id, year=y) }}" {% if y == year %}aria-current="page"{% endif %}
+           class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl tabular-nums transition-colors
+                  {{ 'btn-brand text-white' if y == year else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">{{ y }}</a>
+        {% endfor %}
+    </nav>
+    {% endif %}
 
     {% if s.unsorted or s.no_receipt %}
     <div class="glass-card p-4 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-white">
             {% if s.unsorted %}{{ s.unsorted | commas }} bank line{{ '' if s.unsorted == 1 else 's' }} not sorted{% endif %}{% if s.unsorted and s.no_receipt %}, {% endif %}{% if s.no_receipt %}{{ s.no_receipt | length | commas }} expense{{ '' if s.no_receipt|length == 1 else 's' }} without a receipt{% endif %}</p>
         {% if s.unsorted %}
-        <a href="{{ url_for('bank.review') }}"
+        <a href="{{ url_for('books.bank', id=business.id) }}"
            class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Sort them</a>
         {% endif %}
     </div>
@@ -122,7 +131,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <a href="{{ url_for('books.index', tab=business.id, year=year) }}"
+        <a href="{{ url_for('books.company', id=business.id, year=year) }}"
            class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/15 text-surface-200">Add its owners</a>
         {% endif %}
     </section>

@@ -1,30 +1,50 @@
 {% extends "pm/base.html" %}
-{% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
+{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
 
-{% block title %}Service Providers - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('pm.expenses_list'), 'Expenses') }}{% endblock %}
-{% block page_title %}Service Providers{% endblock %}
-{% block page_subtitle %}Manage API connections to your infrastructure services{% endblock %}
+{#
+  The Vendors tab of Hosting: every account a cost comes from, whose card it
+  is on, and whether its sync is healthy. A vendor's report records what each
+  project cost and splits the bank's charge across them; the charge itself is
+  booked from the bank line (only Stripe's fees are booked from the vendor,
+  because they never cross a bank). The Books page's Connections tab links
+  here for each vendor, so this keeps its endpoint.
+#}
+
+{% block title %}Vendors - Hosting - Built By Bean{% endblock %}
+{% block page_title %}Hosting{% endblock %}
+{% block page_subtitle %}The accounts each cost comes from{% endblock %}
 
 {% block header_actions %}
+<form method="POST" data-live-action action="{{ url_for('service_costs.sync_all') }}">
+    <input type="hidden" name="next" value="{{ url_for('service_costs.providers_list') }}">
+    <button type="submit"
+            class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+        {{ icon('refresh', 'w-4 h-4') }}
+        Sync all
+    </button>
+</form>
 <a href="{{ url_for('service_costs.provider_create') }}"
-   class="px-4 py-2 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
-    + Add Provider
+   class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
+    {{ icon('add', 'w-4 h-4') }}
+    Add vendor
 </a>
 {% endblock %}
 
 {% block content %}
-<div data-live="results" class="space-y-6 stagger-in">
+{{ hosting_tabs('vendors') }}
+<div data-panel="hosting">
+<div data-live="results" class="space-y-6">
 
     {% if providers %}
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
         {% for provider in providers %}
-        <div class="glass-card card-hover p-6">
-            <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center
+        {% set note = trouble.get(provider.id) %}
+        <div class="glass-card p-5 sm:p-6 min-w-0" data-vendor="{{ provider.id }}">
+            <div class="flex items-start justify-between gap-3 mb-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center
                         {% if provider.name == 'aws' %}bg-amber-900/30
                         {% elif provider.name == 'railway' %}bg-purple-900/30
                         {% elif provider.name == 'twilio' %}bg-red-900/30
@@ -36,16 +56,21 @@
                             {% elif provider.name == 'twilio' %}text-red-400
                             {% elif provider.name == 'cloudflare' %}text-orange-400
                             {% else %}text-surface-400{% endif %}">
-                            {% if provider.name == 'aws' %}AWS{% elif provider.name == 'railway' %}RW{% elif provider.name == 'twilio' %}TW{% elif provider.name == 'cloudflare' %}CF{% endif %}
+                            {% if provider.name == 'aws' %}AWS{% elif provider.name == 'railway' %}RW{% elif provider.name == 'twilio' %}TW{% elif provider.name == 'cloudflare' %}CF{% elif provider.name == 'stripe' %}ST{% else %}{{ (provider.display_name or '?')[:2] | upper }}{% endif %}
                         </span>
                     </div>
-                    <div>
-                        <h3 class="text-sm font-bold text-white">{{ provider.display_name }}</h3>
-                        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
-                            {% if provider.is_active %}bg-emerald-900/30 text-emerald-400
-                            {% else %}bg-surface-700 text-surface-400{% endif %}">
-                            {{ 'Active' if provider.is_active else 'Inactive' }}
-                        </span>
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-bold text-white truncate">{{ provider.display_name }}</h3>
+                        <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
+                                {% if provider.is_active %}bg-emerald-900/30 text-emerald-400
+                                {% else %}bg-surface-700 text-surface-400{% endif %}">
+                                {{ 'Active' if provider.is_active else 'Inactive' }}
+                            </span>
+                            {% if note %}
+                            <span data-trouble class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-amber-500/15 text-amber-300">{{ note[:1] | upper }}{{ note[1:] }}</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -56,75 +81,76 @@
                    contributes nothing to what this business spent, and that is
                    not something to have to open a form to find out. #}
                 <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400">Billed to</span>
+                    <span class="text-surface-400 shrink-0">Billed to</span>
                     {% if provider.account_client %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 text-right">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 text-right min-w-0 truncate">
                         {{ provider.account_client.name }}'s card
                     </span>
+                    {% elif provider.account_business %}
+                    <span class="text-white text-right min-w-0 truncate">{{ provider.account_business.name }}</span>
                     {% else %}
                     <span class="text-white text-right">Built by Bean</span>
                     {% endif %}
                 </div>
                 {% if provider.account_label %}
                 <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400">Account</span>
-                    <span class="text-surface-300 text-right truncate">{{ provider.account_label }}</span>
+                    <span class="text-surface-400 shrink-0">Account</span>
+                    <span class="text-surface-300 text-right truncate min-w-0">{{ provider.account_label }}</span>
                 </div>
                 {% endif %}
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-surface-400">Last Sync</span>
+                <div class="flex items-center justify-between text-sm gap-3">
+                    <span class="text-surface-400">Last sync</span>
                     <span class="text-white">{{ provider.last_sync_at|format_date if provider.last_sync_at else 'Never' }}</span>
                 </div>
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-surface-400">Cost Entries</span>
-                    <span class="text-white">{{ provider.cost_entries.count() }}</span>
+                <div class="flex items-center justify-between text-sm gap-3">
+                    <span class="text-surface-400">Cost entries</span>
+                    <span class="text-white tabular-nums">{{ provider.cost_entries.count() | commas }}</span>
                 </div>
-                <div class="flex items-center justify-between text-sm">
+                <div class="flex items-center justify-between text-sm gap-3">
                     <span class="text-surface-400">Mappings</span>
-                    <span class="text-white">{{ provider.mappings.count() }}</span>
+                    <span class="text-white tabular-nums">{{ provider.mappings.count() | commas }}</span>
                 </div>
                 {% if provider.sync_error %}
-                <div class="mt-2 p-2 rounded-lg bg-red-900/20">
-                    <p class="text-xs text-red-400">{{ provider.sync_error }}</p>
-                </div>
+                <p class="mt-2 text-xs text-red-400 break-words">{{ provider.sync_error }}</p>
                 {% endif %}
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-surface-700">
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-surface-700">
                 {% if provider.name == 'railway' %}
-                {# Railway's API reports no money, so the sync only lists projects and
-                   the actual amounts get typed in monthly. This is the primary action
-                   for it. #}
-                <a href="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
-                   class="px-3 min-h-[44px] inline-flex items-center text-xs font-semibold rounded-lg btn-brand transition-all">
-                    Monthly costs
+                {# A Railway account's months: pulled with an account token
+                   when it names its workspace, typed off the usage screen when
+                   it does not, corrected there either way. #}
+                <a href="{{ url_for('service_costs.railway_months', provider=provider.id) }}"
+                   class="inline-flex items-center px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+                    Months
                 </a>
                 {% endif %}
                 <form method="POST" data-live-action action="{{ url_for('service_costs.provider_sync', id=provider.id) }}">
-                    <button type="submit" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-900/30 text-brand-400 hover:bg-brand-900/50 transition-colors">
-                        {% if provider.name == 'railway' %}Refresh projects{% else %}Sync Now{% endif %}
+                    <button type="submit"
+                            class="inline-flex items-center px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                        Sync now
                     </button>
                 </form>
-                <a href="{{ url_for('service_costs.provider_edit', id=provider.id) }}" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-700 text-surface-300 hover:bg-surface-600 transition-colors">
-                    Edit
-                </a>
-                <form method="POST" action="{{ url_for('service_costs.provider_delete', id=provider.id) }}">
-                    {{ delete_icon('Delete it and its data?', 'Delete this provider') }}
+                {{ icon_button('edit', 'Edit ' ~ provider.display_name,
+                               href=url_for('service_costs.provider_edit', id=provider.id)) }}
+                <form method="POST" data-live-action action="{{ url_for('service_costs.provider_delete', id=provider.id) }}">
+                    {{ delete_icon('Delete it and its data?', 'Delete ' ~ provider.display_name) }}
                 </form>
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="glass-card p-12 text-center">
+    <div class="glass-card p-8 sm:p-12 text-center empty">
         {{ icon('vendors', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
-        <p class="text-surface-400 mb-3">No service providers configured yet</p>
+        <p class="text-surface-400 mb-3">No vendors yet</p>
         <a href="{{ url_for('service_costs.provider_create') }}" class="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-300 hover:bg-brand-500/10 transition-colors">
             {{ icon('add', 'w-4 h-4') }}
-            Add your first provider
+            Add a vendor
         </a>
     </div>
     {% endif %}
 
+</div>
 </div>
 {% endblock %}

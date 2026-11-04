@@ -123,8 +123,8 @@ c = application.test_client()
 with c.session_transaction() as s:
     s["_user_id"] = str(ids["boss"])
     s["_fresh"] = True
-page = c.get(f"/admin/businesses/{ids['ehq']}").get_data(as_text=True)
-check("the business page has its Stripe card", 'id="stripe"' in page and "Connected" in page)
+page = c.get(f"/admin/books/{ids['ehq']}/connections").get_data(as_text=True)
+check("its Books Connections has its Stripe card", 'id="stripe"' in page and "Connected" in page)
 check("and never prints the key", "rk_test_x" not in page)
 orig = stripe_books.check_key
 

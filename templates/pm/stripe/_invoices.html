@@ -1,149 +1,138 @@
 {#
-  Every invoice raised, with its filters. The other half of this page is
-  the Stripe account behind them.
+  The Invoices tab: every invoice in Stripe, filtered by client, status and
+  month. The pick is the apply (liveFilter in base.html): the tiles, the rows
+  and the clear control swap in from the server, the bar never moves.
+
+  The tiles are of exactly the rows the filters show, status included, so
+  "Unpaid in this list" is true of the list under it.
+
+  Every row opens the board's record of the invoice (stripe.invoice_detail,
+  through stripe.invoice_open when the import has not written it yet); the
+  square on its trailing edge opens it in Stripe, from sm up (on a phone the
+  invoice page's own View on Stripe does it).
 #}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
-<div class="space-y-6 stagger-in">
+{% from "pm/components/clear_filters.html" import clear_filters %}
+{% from "pm/components/pagination.html" import render_pagination %}
+{% from "pm/components/icon_button.html" import icon_button %}
 
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="glass-card p-5">
-            {# "Billed" not "Invoiced": the dashboard's Invoiced means money
-               still to come, and this is everything raised in scope, paid
-               included. One word cannot be both. #}
-            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Total Billed</span>
-            <p class="text-2xl font-bold text-white mt-1">{{ total_billed|format_currency }}</p>
-        </div>
-        <div class="glass-card p-5">
-            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Total Paid</span>
-            <p class="text-2xl font-bold text-emerald-400 mt-1">{{ total_paid|format_currency }}</p>
-            {% if total_sales_tax > 0.004 %}<p class="text-xs text-surface-400 mt-1">{{ total_sales_tax|format_currency }} of it sales tax</p>{% endif %}
-            {% if total_refunded > 0.004 %}<p class="text-xs text-surface-400 mt-0.5">{{ total_refunded|format_currency }} refunded</p>{% endif %}
-        </div>
-        <div class="glass-card p-5">
-            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Outstanding</span>
-            <p class="text-2xl font-bold text-amber-400 mt-1">{{ total_outstanding|format_currency }}</p>
-        </div>
+{# On a phone each tile is one row, label left and figure right: three
+   across at 320 cut "$58,327.50" off at its tile's edge. #}
+<div data-live="invoice-tiles" class="shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 mb-4">
+    <div class="glass-card p-3 sm:p-5 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 sm:block">
+        <p class="col-start-1 row-start-1 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-surface-400">Total Billed</p>
+        <p class="col-start-2 row-start-1 row-span-2 text-right sm:text-left text-xl sm:text-2xl font-bold text-white tabular-nums whitespace-nowrap sm:mt-1">{{ total_billed | format_currency }}</p>
+        <p class="col-start-1 row-start-2 text-xs text-surface-400 mt-0.5">{{ billed_count | commas }} invoice{{ '' if billed_count == 1 else 's' }}</p>
     </div>
-
-    <!-- Filters -->
-    {# sticky-filters carries the LM-1 z-30 and pins the card below the
-       header while the invoice list scrolls (LM-4). #}
-    <div class="glass-card p-4 sticky-filters">
-        <form method="GET" class="flex flex-wrap items-center gap-3">
-            {% set fo = namespace(status=[("", "All Statuses"), ("draft", "Draft"), ("open", "Open"), ("paid", "Paid"), ("void", "Void"), ("uncollectible", "Uncollectible")], cli=[("", "All Clients")]) %}
-            {% for c in clients %}{% set fo.cli = fo.cli + [(c.id, c.name)] %}{% endfor %}
-            {{ select_dropdown("status", fo.status, status, "All Statuses", on_change="$el.closest('form').requestSubmit()", extra_class="max-w-[13rem]") }}
-            {{ select_dropdown("client_id", fo.cli, client_id, "All Clients", on_change="$el.closest('form').requestSubmit()", extra_class="max-w-[15rem]") }}
-
-            <span class="w-px h-6 bg-surface-700"></span>
-
-            <input type="month" name="month" value="{{ month }}" onchange="this.form.submit()"
-                   class="input-ring px-3 py-2 text-sm bg-surface-800 text-white">
-            <a href="{{ url_for('stripe.invoices_list', month=this_month, status=status, client_id=client_id) }}"
-               class="px-3 py-1.5 rounded-full text-xs font-semibold border transition
-                      {% if month == this_month %}border-brand-500 bg-brand-500/10 text-brand-300
-                      {% else %}border-white/10 text-surface-500 hover:text-surface-300{% endif %}">This month</a>
-            <a href="{{ url_for('stripe.invoices_list', month=last_month, status=status, client_id=client_id) }}"
-               class="px-3 py-1.5 rounded-full text-xs font-semibold border transition
-                      {% if month == last_month %}border-brand-500 bg-brand-500/10 text-brand-300
-                      {% else %}border-white/10 text-surface-500 hover:text-surface-300{% endif %}">Last month</a>
-
-            {% if status or client_id or month %}
-            <a href="{{ url_for('stripe.invoices_list') }}" class="text-sm text-brand-500 hover:text-brand-600">Clear filters</a>
-            {% endif %}
-        </form>
-        {% if month or client_id %}
-        <p class="mt-3 text-xs text-surface-400">
-            Totals above reflect{% if client_id %} the selected client{% endif %}{% if client_id and month %} ·{% endif %}{% if month %} {{ month }}{% endif %}.
-        </p>
-        {% endif %}
+    <div class="glass-card p-3 sm:p-5 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 sm:block">
+        <p class="col-start-1 row-start-1 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-surface-400">Total Paid</p>
+        <p class="col-start-2 row-start-1 row-span-2 text-right sm:text-left text-xl sm:text-2xl font-bold text-emerald-400 tabular-nums whitespace-nowrap sm:mt-1">{{ total_paid | format_currency }}</p>
+        {% set bits = [] %}
+        {% if total_sales_tax > 0.004 %}{% set bits = bits + [(total_sales_tax | format_currency) ~ ' of it sales tax'] %}{% endif %}
+        {% if total_refunded > 0.004 %}{% set bits = bits + [(total_refunded | format_currency) ~ ' refunded'] %}{% endif %}
+        <p class="col-start-1 row-start-2 text-xs text-surface-400 mt-0.5">{{ bits | join(', ') if bits else 'After refunds' }}</p>
     </div>
+    <div class="glass-card p-3 sm:p-5 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 sm:block">
+        <p class="col-start-1 row-start-1 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-surface-400">Unpaid in this list</p>
+        <p class="col-start-2 row-start-1 row-span-2 text-right sm:text-left text-xl sm:text-2xl font-bold text-amber-400 tabular-nums whitespace-nowrap sm:mt-1">{{ total_outstanding | format_currency }}</p>
+        <p class="col-start-1 row-start-2 text-xs text-surface-400 mt-0.5">{{ unpaid_count | commas }} draft or open</p>
+    </div>
+</div>
 
-    <!-- Invoice Table -->
-    <div class="glass-card overflow-hidden">
-        {% if invoices %}
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="text-xs font-semibold uppercase tracking-wider text-surface-400 border-b border-surface-700">
-                        <th class="text-left py-3 px-5">Invoice</th>
-                        <th class="text-left py-3 px-5">Client</th>
-                        <th class="text-left py-3 px-5">Amount</th>
-                        <th class="text-left py-3 px-5">Status</th>
-                        <th class="text-left py-3 px-5">Date</th>
-                        <th class="text-left py-3 px-5">Due</th>
-                        <th class="text-right py-3 px-5">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-surface-800">
-                    {% for inv in invoices %}
-                    <tr class="hover:bg-surface-800/30 transition-colors">
-                        <td class="py-3 px-5">
-                            {# Opens the invoice in Stripe. There is no local
-                               record behind these any more, and the admin URL
-                               resolves for a draft where the customer facing
-                               hosted page does not exist yet. #}
-                            <a href="{{ inv.admin_url }}" target="_blank" rel="noopener noreferrer"
-                               class="text-sm font-semibold text-brand-400 hover:underline">
-                                {{ inv.number or 'Draft' }}
-                            </a>
-                        </td>
-                        <td class="py-3 px-5 text-sm text-surface-300">{{ inv.client_name }}</td>
-                        <td class="py-3 px-5 text-sm font-bold text-white">{{ inv.total|format_currency }}</td>
-                        <td class="py-3 px-5">
-                            {# Stripe keeps a refunded invoice "paid"; the row says what happened. #}
-                            {% set all_back = inv.status == 'paid' and inv.refunded and inv.refunded >= inv.amount_paid %}
-                            <span class="inline-block px-2.5 py-0.5 text-xs font-medium rounded-full
-                                {% if inv.status == 'draft' or all_back %}bg-surface-700 text-surface-300
-                                {% elif inv.status == 'open' %}bg-amber-900/30 text-amber-400
-                                {% elif inv.status == 'paid' %}bg-emerald-900/30 text-emerald-400
-                                {% elif inv.status == 'void' %}bg-red-900/30 text-red-400
-                                {% else %}bg-red-900/30 text-red-400
-                                {% endif %}">{{ 'Refunded' if all_back else inv.status|title }}</span>
-                            {% if inv.refunded and not all_back %}<span class="block text-xs text-surface-400 mt-1">{{ inv.refunded|format_currency }} refunded</span>{% endif %}
-                        </td>
-                        <td class="py-3 px-5 text-sm text-surface-400">{{ inv.created_at|format_date }}</td>
-                        <td class="py-3 px-5 text-sm text-surface-400">{{ inv.due_date|format_date if inv.due_date else '-' }}</td>
-                        <td class="py-3 px-5 text-right">
-                            <a href="{{ inv.admin_url }}" target="_blank" rel="noopener noreferrer"
-                               class="inline-flex items-center gap-1.5 text-sm text-brand-500 hover:text-brand-600">
-                                View
-                                {{ icon('external', 'w-3.5 h-3.5') }}
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="inv-fill glass-card p-3 sm:p-4 flex-1 min-h-0 flex flex-col">
+    {# Stands still; relative z-30 per LM-1 so the panels paint over the
+       rows. The month box and its two quick picks hold their own state, so
+       the highlight is right although the bar is never swapped. The two
+       quick picks are off on a phone, where the month box opens the phone's
+       own picker and the pinned bar has to stay two rows. #}
+    <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
+          class="inv-bar shrink-0 relative z-30 flex flex-wrap items-center gap-2 mb-3">
+        {% set fo = namespace(status=[("", "All statuses"), ("draft", "Draft"), ("open", "Open"), ("paid", "Paid"), ("uncollectible", "Uncollectible"), ("void", "Void")], cli=[("", "All clients")]) %}
+        {% for c in clients %}{% set fo.cli = fo.cli + [(c.id, c.name)] %}{% endfor %}
+        {{ select_dropdown("client_id", fo.cli, client_id, "All clients", on_change="apply()", extra_class="min-w-[8rem] sm:max-w-[15rem]") }}
+        {{ select_dropdown("status", fo.status, status, "All statuses", on_change="apply()", extra_class="min-w-[8rem] sm:max-w-[13rem]") }}
+        <div x-data="{ month: '{{ month }}' }" class="flex flex-wrap items-center gap-2 max-w-full">
+            <input type="month" name="month" x-model="month" @change="apply()" aria-label="Month"
+                   class="input-ring min-h-[44px] px-3 text-sm rounded-xl bg-surface-800 text-white max-w-full">
+            {% for value, label in [(this_month, 'This month'), (last_month, 'Last month')] %}
+            <button type="button" @click="month = (month === '{{ value }}' ? '' : '{{ value }}'); $nextTick(() => apply())"
+                    :aria-pressed="month === '{{ value }}' ? 'true' : 'false'"
+                    :class="month === '{{ value }}' ? 'border-brand-500 bg-brand-500/10 text-brand-300' : 'border-white/10 text-surface-300 hover:text-white'"
+                    class="hidden sm:inline-flex items-center min-h-[44px] px-3 text-sm font-medium rounded-xl border transition-colors
+                           {{ 'border-brand-500 bg-brand-500/10 text-brand-300' if month == value else 'border-white/10 text-surface-300' }}">{{ label }}</button>
+            {% endfor %}
         </div>
+        <span data-live="invoice-clear" class="ml-auto inline-flex items-center">
+            {% if status or client_id or month %}{{ clear_filters(href=url_for('stripe.invoices_list')) }}{% endif %}
+        </span>
+    </form>
+
+    {# display: contents, so the scroller and the pagination stay flex
+       children of the card while the whole region swaps as one. #}
+    <div data-live="invoice-rows" class="contents">
+    {% if invoices %}
+    <div class="inv-fill relative overflow-auto min-h-0 flex-1">
+        <table class="w-full">
+            <thead>
+                <tr class="text-xs font-semibold uppercase tracking-wider text-surface-400 border-b border-surface-700">
+                    <th class="text-left py-3 px-3">Invoice</th>
+                    <th class="text-left py-3 px-3 hidden sm:table-cell">Client</th>
+                    <th class="text-right py-3 px-3">Amount</th>
+                    <th class="text-left py-3 px-3 hidden md:table-cell">Date</th>
+                    <th class="text-left py-3 px-3 hidden md:table-cell">Due</th>
+                    <th class="py-3 px-3 hidden sm:table-cell"><span class="sr-only">In Stripe</span></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-surface-800">
+                {% for inv in invoices %}
+                {% set opens = url_for('stripe.invoice_detail', id=inv.local_id) if inv.local_id else url_for('stripe.invoice_open', stripe_id=inv.id) %}
+                <tr class="hover:bg-surface-800/30 transition-colors">
+                    <td class="py-2 px-3">
+                        <a href="{{ opens }}" class="block py-1.5 -my-1.5 min-w-0">
+                            <span class="block text-sm font-semibold text-brand-400 hover:underline">{{ inv.number or 'Draft' }}</span>
+                            <span class="block sm:hidden text-xs text-surface-400 break-words">{{ inv.client_name }}</span>
+                        </a>
+                    </td>
+                    <td class="py-2 px-3 text-sm text-surface-300 hidden sm:table-cell">{{ inv.client_name }}</td>
+                    {# The status rides under the amount rather than in a column
+                       of its own, so a phone row is two columns and nothing
+                       is cut off at its edge. #}
+                    <td class="py-2 px-3 text-right">
+                        <span class="block text-sm font-bold text-white tabular-nums whitespace-nowrap">{{ inv.total | format_currency }}</span>
+                        {# Stripe keeps a refunded invoice "paid"; the row says what happened. #}
+                        {% set all_back = inv.status == 'paid' and inv.refunded and inv.refunded >= inv.amount_paid %}
+                        <span class="inline-block mt-1 px-2.5 py-0.5 text-xs font-medium rounded-full
+                            {% if inv.status == 'draft' or all_back %}bg-surface-700 text-surface-300
+                            {% elif inv.status == 'open' %}bg-amber-900/30 text-amber-400
+                            {% elif inv.status == 'paid' %}bg-emerald-900/30 text-emerald-400
+                            {% else %}bg-red-900/30 text-red-400
+                            {% endif %}">{{ 'Refunded' if all_back else inv.status|title }}</span>
+                        {% if inv.refunded and not all_back %}<span class="block text-xs text-surface-400 mt-1">{{ inv.refunded|format_currency }} refunded</span>{% endif %}
+                    </td>
+                    <td class="py-2 px-3 text-sm text-surface-400 hidden md:table-cell whitespace-nowrap">{{ inv.created_at|format_date }}</td>
+                    <td class="py-2 px-3 text-sm text-surface-400 hidden md:table-cell whitespace-nowrap">{{ inv.due_date|format_date if inv.due_date else '-' }}</td>
+                    <td class="py-2 px-3 text-right hidden sm:table-cell">
+                        {# The admin URL resolves for a draft, where the
+                           customer facing hosted page does not exist yet. #}
+                        {{ icon_button('external', 'Open ' ~ (inv.number or 'this draft') ~ ' in Stripe',
+                                       href=inv.admin_url, target='_blank') }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {{ render_pagination(pagination, 'stripe.invoices_list', extra_args={'status': status, 'client_id': client_id, 'month': month}) }}
+    {% else %}
+    <div class="empty py-12 text-center">
+        {% if status or client_id or month %}
+        <p class="text-surface-400">No invoices match</p>
         {% else %}
-        <div class="py-12 text-center">
-            {{ icon('invoices', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
-            <p class="text-surface-400">No invoices yet</p>
-            <a href="{{ url_for('stripe.invoice_create') }}" class="inline-block mt-3 text-sm text-brand-500 hover:text-brand-600">Create your first invoice</a>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Pagination -->
-    {% if pagination.pages > 1 %}
-    <div class="flex justify-center gap-2">
-        {% if pagination.has_prev %}
-        <a href="{{ url_for('stripe.invoices_list', page=pagination.prev_num, status=status, client_id=client_id, month=month) }}" class="px-3 py-2 text-sm rounded-lg glass hover:bg-surface-800">&laquo; Prev</a>
-        {% endif %}
-        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-            {% if p %}
-            <a href="{{ url_for('stripe.invoices_list', page=p, status=status, client_id=client_id, month=month) }}"
-               class="px-3 py-2 text-sm rounded-lg {% if p == pagination.page %}bg-brand-600 text-white{% else %}glass hover:bg-surface-800 text-surface-300{% endif %}">{{ p }}</a>
-            {% else %}
-            <span class="px-2 py-2 text-surface-400">...</span>
-            {% endif %}
-        {% endfor %}
-        {% if pagination.has_next %}
-        <a href="{{ url_for('stripe.invoices_list', page=pagination.next_num, status=status, client_id=client_id, month=month) }}" class="px-3 py-2 text-sm rounded-lg glass hover:bg-surface-800">Next &raquo;</a>
+        <p class="text-surface-400 mb-4">No invoices yet</p>
+        <a href="{{ url_for('stripe.invoice_create') }}"
+           class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl btn-brand">New invoice</a>
         {% endif %}
     </div>
     {% endif %}
-
+    </div>
 </div>

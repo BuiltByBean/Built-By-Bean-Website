@@ -557,8 +557,117 @@ night has a failed step or no night has finished in 26 hours; it links to
 with no headings: Needs attention and the Workspace; then Businesses, My Apps,
 Client support and Org (Team, renamed, once its session lands); then Clients,
 Contracts and Leads; then the Handbook (Best Practices in the code and URLs),
-the MVP Builder and Time; then Finances. Notes and Projects left when the
+the MVP Builder and Time; then Finances, for the CEO alone: Overview, Books,
+Invoices, Taxes, Hosting. Notes and Projects left when the
 Workspace landed, and Products folded into the MVP Builder.
+
+## Finances, consolidated
+
+`docs/finances_plan.md` is Michael's decision on every item (2026-11-04: "the
+finances section as a whole could use some better processes top to bottom").
+Six pages computed the same figures in up to four places over different
+periods. Now:
+
+- **Every Finances page is CEO only** (`ceo_required` on every route, GET and
+  POST; the sidebar section is not drawn for anybody else). A refusal lands on
+  `/admin` (`admin_hub`), never on a money page: `ceo_required` sent a refused
+  login to the Dashboard, which would have refused it again for ever.
+  Login, the error pages and the contract fallback land there too.
+- **One tab kit** (`templates/pm/finances/_kit.html`): `fin_tabs` is the row on
+  every money page, kept across a press (`data-keep`) and told what the new page
+  said, so its links and counts follow the page that arrived (a company switch
+  changes every sub-tab's address); it scrolls sideways on a phone with the
+  current tab brought into the row by its own scrollLeft. What changes sits in
+  one `data-panel`, so a press swaps only that.
+- **Overview** (`pm.dashboard`, `/admin/finances`, `pm/finances/overview.html`)
+  replaced the Dashboard: a company and a year, its Income, Expenses and Net
+  from `books_service.summarize`, the estimated tax from `income_tax.estimate`,
+  and one To do list, each row a link to where it is cleared (overdue and
+  stalled invoices, bank lines to sort, missing receipts, months not closed,
+  vendor bills not recorded, hosting fees under the floor). A GET changes
+  nothing; it ran `sync_project_phases` until then. Financials by client went to
+  the Clients list (Paid, Open, Spent on; CEO only, `_client_money`), ticket and
+  delivery dates to Client support (`_support_deadlines`).
+- **Books is each company's one place for its money** (`pm/books_routes.py`,
+  `templates/pm/books/_hub.html`): a row of companies, then Months, Bank,
+  Expenses, Receipts, Year report, Connections, each `/admin/books/<id>/...`.
+  A DBA's address opens its company. Bank is the review list moved in from
+  `/admin/bank/`, scoped to the company, with Tagged beside it; Expenses is the
+  ledger moved in from `/admin/expenses`; Connections gathers the company's
+  Mercury, its own Stripe, its statement cards, its receipt mailboxes and its
+  vendor reports (the business page only links there now). Adding an expense
+  by hand stays, inside Books, with a company picker (`pm.expense_create`); a
+  row a bank line booked shows its amount and date and does not take them,
+  and cannot be deleted (settle the line instead). The "Ask Claude" press went
+  with the old review page: nothing on the server calls a paid model.
+- Every old address lands (301): `/admin/expenses` with its filters,
+  `/admin/bank/`, `/admin/books/?tab=...`, `/admin/books/receipts`. The
+  endpoints kept their names. `tools/test_finances_books.py`,
+  `tools/test_finances_browser.py` (320, 375 and 1600, with a planted fault it
+  must catch).
+- **Taxes** is five tabs on every tax page (`templates/pm/taxes/_tabs.html`):
+  Income tax, Sales tax, Returns, Deadlines, Guide. `income_tax.estimate` is the
+  one income-tax figure for Taxes and the Overview: the Books net per company,
+  Built by Bean on Schedule C, EntertainHQ as a partnership with each member's
+  share and no self-employment tax at the company, Schedule C companies stacked
+  before partnership shares so they add up to his whole return, and the set
+  aside on the same basis. `tools/test_taxes_tabs.py`.
+- **Invoices** (`pm/stripe_routes.py`): the list, New invoice, a one-line Stripe
+  strip ("open in Stripe" is the whole account; "Unpaid in this list" follows
+  every filter, status included, so the two Outstandings no longer share a
+  name), and Time not yet billed (`unbilled_time`, per client, its tab counts
+  its rows, each row starting an invoice with that client's time ticked). New
+  invoice shows the time step whatever `FEATURE_TIME_TRACKING` says. Setup
+  Products and Sync All Clients are gone (their old POSTs answer a 303 to the
+  list and make nothing); `/admin/stripe/` answers a 301. CEO only except the
+  webhook. `tools/test_invoices_page.py`.
+- **Hosting** is four tabs (`templates/pm/hosting/_tabs.html`): Fees, Mappings,
+  Railway months (`service_costs.railway_months`; `provider_monthly` for a
+  Railway account sends there) and Vendors. `provider_bills.missing_bills` is
+  the one missing-bill list: Needs attention, the tab's count and its page read
+  it, and `months_missing_manual_costs` is gone. `/admin/service-costs/`
+  answers a 301 to Hosting. A save inside a tab does not refresh the tab row's
+  counts until the next navigation. `tools/test_hosting_tabs.py`.
+
+**Only the bank line makes an expense** (item 5). Until 2026-11-04 a vendor
+sync (Railway, Cloudflare, Claude, AWS) wrote an Expense per cost entry and the
+bank line was "covered". Now `service_costs_service.writes_expenses` is true for
+Stripe alone (its fees never cross a bank: the Stripe balance is the account),
+and the bank line books the charge, split by the vendor's report:
+`bank_feed.split_shares` finds one row for the amount, one period's rows adding
+up to it, or one period several charges pay between them (Railway's March 2026,
+$9.75 and $5.00), and `bank_feed.split` writes one Expense per share
+(`Expense.bank_line_id`, `Expense.cost_entry_id`), the shares adding up to the
+charge to the cent. A report that lands after its charge splits it again
+(`resplit`: after every vendor sync and in the nightly bank read, 75 days back),
+and only the split moves, never the total. An expense the old sync wrote for a
+period before `SPLIT_FROM` (2026-12-01) is still corrected in place until its
+line takes it over, keeping its date, so a month already read does not move.
+A charge whose report beside it does not explain it still goes to review or to
+the twin company, as before.
+
+The migration `f2a7c9d41e63` carried the old rows over with
+`finance_carryover.py`, which is also the read-only dry run behind the door
+(`/api/guidance/books/carryover`), so the session could check production's
+figures it could not read directly. It refuses to run if any company's yearly
+total would move for a reason other than a double count or one of Michael's
+`DECISIONS`. On production: 18 covered lines took their vendor rows as shares
+unchanged, 92 vendor-written expenses carried over, March shared between its
+two charges, no double count found, and the $10.66 Claude charge of 2026-10-17
+that nothing had booked went to EntertainHQ (Michael's answer). Built by Bean's
+2026 stayed $3,016.95; EntertainHQ's moved $668.15 to $678.81.
+`tools/test_only_bank_books.py`.
+
+**A session's `log_expense` is a tag** (item 8, `ExpenseTag`). It makes no
+expense; the bank line for that charge takes it (same amount to the cent,
+within ten days, `bank_feed.take_tag`) and its expense lands on the client and
+project named. One logged after its line is put on it at once (`apply_tag`).
+One no line took in ten days is a Needs attention row (`books_upkeep.waiting_tags`),
+listed under Books, Bank, Tagged, where Set aside takes it off.
+
+**Recurring expenses retired** (item 6): the toggle and the generator went,
+every parent ended in the migration, and every past row stays. A bank rule
+catches what they caught.
 
 ## The books stand on the bank
 
@@ -587,24 +696,25 @@ because a pending charge changes amount when it settles.
 What a line is (`classify`): void (cancelled, its expense removed), transfer
 (Mercury's internal kinds, or a rule), expense (booked only once SETTLED,
 Mercury's own fees without a rule, a vendor refund as a negative expense),
-covered (a vendor sync already books it: Railway, Cloudflare, Claude, but
-only in Built by Bean's books, because those syncs write only Built by
-Bean's expenses), income, personal, or review. `VendorRule` is what a
-counterparty is, longest pattern wins, written when a line is settled with
-"remember" on, and settling one settles every waiting line like it.
-`/admin/bank/` is the review list with Claude's suggestion filled in
-(`suggest`, needs `ANTHROPIC_API_KEY`) and one press to accept them all.
+split (an expense split across projects by the vendor's own report:
+Railway, Cloudflare, Claude, only in Built by Bean's books, because those
+reports read only Built by Bean's accounts; it was "covered" until
+2026-11-04, see "Finances, consolidated"), income, personal, or review.
+`VendorRule` is what a counterparty is, longest pattern wins, written when a
+line is settled with "remember" on, and settling one settles every waiting
+line like it. Each company's Bank tab in Books is the review list with the
+board's own suggestion filled in and one press to accept them all.
 
 `adopt` is the guard against the commonest double count: an expense somebody
 already booked for the same charge (the expense form, or a session's
-`log_expense`, which now takes `business`) is ADOPTED by the bank line, not
+`log_expense` until it became a tag) is ADOPTED by the bank line, not
 written twice: same company, same amount to the cent, dated up to seven days
 before the bank's date or three after, not standing for another line and not
 written by a vendor sync. `tools/test_bank_feed.py`.
 
 ## The books
 
-`/admin/books/` (`pm/books_routes.py`, figures from `books_service.py`) is
+`/admin/books/<id>/` (`pm/books_routes.py`, figures from `books_service.py`) is
 each company's books, the board being the books (Michael has no bookkeeping
 software and no plans for any). Every reading is one function,
 `books_service.summarize`, so the year-end report, the monthly close and the
@@ -674,8 +784,8 @@ sweep's to attach, and only when the rows add up to the bill. The sweep no longe
 attaches a receipt to a charge that does not name its vendor: Railway's April
 invoice, which mentions $20.00, sat on a $20 Twilio row for seven months.
 
-**What a vendor sync holds is checked, not assumed** (`bank_feed.booked_by_sync`).
-A `covered` rule used to mean any charge from that vendor was already booked. A sync
+**What a vendor report holds is checked, not assumed** (`bank_feed.booked_by_sync`).
+A `covered` rule (now `split`) used to mean any charge from that vendor was already booked. A sync
 reads one account, and EntertainHQ's own Claude plan and Railway workspace are on
 the same card under the same names, so $261.57 of its real charges sat marked as
 booked by a sync that had never heard of them. A charge now counts as covered only
@@ -814,8 +924,7 @@ typed (this is how the 108 earlier expenses get checked), and waiting
 receipts attach. A row's id is a fingerprint plus its occurrence in the file,
 so re-uploads store nothing twice while two identical same-day charges stay
 two. On a `kind="personal"` card a business charge is an expense with
-`paid_by` its owner, and a covered vendor charge still counts as that owner's
-money in; card payments are transfers; money in is never income; and a
+`paid_by` its owner, a split vendor charge's shares likewise; card payments are transfers; money in is never income; and a
 "personal" rule learned there (`VendorRule.applies_to`) never touches a
 company card. A contribution rule only matches money in, a draw only money
 out. The nightly Mercury read skips statement accounts.
@@ -882,12 +991,10 @@ exactly ONE such charge, the entry becomes that charge on its day and the old
 guess goes. A month with two is left to review, because EntertainHQ's own Claude
 plan is on the same card under the same name and choosing between them moves
 money between companies. A prepaid vendor (`PREPAID_PROVIDERS`, Twilio) is the
-other way round: its top-up is the expense, even under a covered rule
+other way round: its top-up is the expense, even under a split rule
 (`bank_feed.is_prepaid`), and its usage rows record and attribute and book no
-expense. A recurring expense whose vendor has a rule is ended (the bank books
-every charge now, and fixed-amount children were the duplicates `adopt` missed
-whenever the price moved), and a child no bank line claimed within ten days is
-one row. `tools/test_vendors_follow_bank.py`.
+expense. Recurring expenses retired on 2026-11-04; an old child no bank line
+claimed within ten days is still one row. `tools/test_vendors_follow_bank.py`.
 
 **A receipt with no bank line** from a vendor the board already pays (its rules,
 providers and known vendors), within five days on any connection, is a card the
@@ -898,8 +1005,10 @@ last 45 days, so it clears itself; Set aside takes one off at once.
 
 ## What a month of usage cost
 
-`service_costs_service.py` books a vendor's charges as `ServiceCostEntry` rows
-with an `Expense` beside each one. The entry's key is (provider, resource,
+`service_costs_service.py` records a vendor's charges as `ServiceCostEntry` rows.
+Until 2026-11-04 each wrote an `Expense` beside it; now only Stripe's fees do,
+and the rows split the bank line's charge (see "Finances, consolidated"). What
+follows is why the rows are keyed as they are, and it still holds. The entry's key is (provider, resource,
 period_start, period_end, mapping), and **period_end being part of that key is
 the whole trap**: a month to date figure grows all month, so a nightly sync has
 to CORRECT the row it wrote last night rather than stack another beside it, and

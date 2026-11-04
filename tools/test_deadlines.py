@@ -4,6 +4,9 @@
   1. The dates: estimates roll off weekends and holidays the way a return
      does (and the Taxes page reads the same), May 15 franchise reports roll
      too (2027's is Monday May 17), a 1065 is March 15, a 1040 April 15.
+     The Taxes page's quarters come from income_tax.estimate since the
+     Finances item 4 rework (2026-11-04), which takes each due date from
+     deadlines.estimate_due; tools/test_taxes_tabs.py holds the dates.
   2. Who owes what: Built by Bean (one owner, formed 2024, its 2026 report on
      the state's record) owes a 1040 and Schedule C and the estimates;
      EntertainHQ (three members, formed 2026-10-05) owes its first franchise
@@ -37,7 +40,8 @@ from app import create_app  # noqa: E402
 from models import (db, BankConnection, BankTransaction, Business, BusinessLocation,  # noqa: E402
                     BusinessOwner, DeadlineDone, SalesTaxFiling, User)
 import deadlines as dl  # noqa: E402
-from pm import tax_routes  # noqa: E402
+import inspect  # noqa: E402
+import income_tax  # noqa: E402
 
 application = create_app()
 FAIL = []
@@ -56,7 +60,7 @@ check("Q4 2027's rolls past a Saturday and MLK Day to Tue Jan 18 2028",
       dl.estimate_due(2027, 4) == date(2028, 1, 18), dl.estimate_due(2027, 4))
 check("Q3 2029's Saturday Sep 15 rolls to Monday", dl.estimate_due(2029, 3) == date(2029, 9, 17))
 check("the Taxes page names the same days",
-      all(tax_routes._due_date(y, q) == dl.estimate_due(y, q) for y in (2026, 2027, 2029) for q in (1, 2, 3, 4)))
+      "deadlines.estimate_due(year, q)" in inspect.getsource(income_tax.estimate))
 check("2027's franchise report is due Monday May 17", dl.franchise_due(2027) == date(2027, 5, 17))
 check("2026's was Friday May 15", dl.franchise_due(2026) == date(2026, 5, 15))
 

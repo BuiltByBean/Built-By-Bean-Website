@@ -1,4 +1,4 @@
-{% extends "pm/base.html" %}
+{% extends "pm/books/_hub.html" %}
 
 {#
   Receipts (receipts_service.py). Missing is every expense in the books
@@ -10,16 +10,16 @@
   tax confirmations all attach themselves nightly.
 #}
 
-{% block title %}Receipts - Books{% endblock %}
-{% block page_title %}Receipts{% endblock %}
-{% block page_subtitle %}{{ missing | length | commas }} expense{{ '' if missing|length == 1 else 's' }} without one{% endblock %}
+{% block hub_title %}Receipts{% endblock %}
+{% block page_subtitle %}{{ business.name }} &middot; {{ missing | length | commas }} expense{{ '' if missing|length == 1 else 's' }} without one{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
+{% block panel_class %}flex flex-col flex-1 min-h-0 gap-4 min-w-0{% endblock %}
 
-{% block content %}
-<div class="flex flex-col flex-1 min-h-0 gap-5">
+{% block hub %}
+<div class="flex flex-col flex-1 min-h-0 gap-4">
     <nav aria-label="Receipts" class="shrink-0 flex flex-wrap gap-2">
         {% for key, label, n in [('missing', 'Missing', missing|length), ('statement', 'Statement only', statement_only|length), ('unmatched', 'Unmatched', rows|length)] %}
-        <a href="{{ url_for('books.receipts', view=key) }}" {% if view == key %}aria-current="page"{% endif %}
+        <a href="{{ url_for('books.company_receipts', id=business.id, view=key) }}" {% if view == key %}aria-current="page"{% endif %}
            class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
                   {{ 'btn-brand text-white' if view == key else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
             {{ label }} <span class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums bg-white/15">{{ n | commas }}</span></a>
@@ -42,13 +42,14 @@
                     <a href="{{ url_for('books.receipt_file', rid=r.id) }}" target="_blank" rel="noopener"
                        class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40">Open</a>
                     <form method="POST" action="{{ url_for('books.receipt_ignore', rid=r.id) }}">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
                         <button type="submit"
                                 class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-red-500/40 hover:text-red-300">Set aside</button>
                     </form>
                 </div>
             </div>
             {% else %}
-            <div class="p-8 text-center text-surface-400">Every receipt is attached</div>
+            <div class="empty p-8 text-center text-surface-400">Every receipt is attached</div>
             {% endfor %}
             {% else %}
             {% for e in (statement_only if view == 'statement' else missing) %}
@@ -67,7 +68,7 @@
                 </div>
             </div>
             {% else %}
-            <div class="p-8 text-center text-surface-400">{{ 'No expense is relying on its statement line' if view == 'statement' else 'Every expense has its receipt' }}</div>
+            <div class="empty p-8 text-center text-surface-400">{{ 'No expense is relying on its statement line' if view == 'statement' else 'Every expense has its receipt' }}</div>
             {% endfor %}
             {% endif %}
         </div>

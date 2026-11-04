@@ -9,8 +9,9 @@ and proves:
   1. The list shows each business's name, start date and lifetime revenue, and
      no WebFile or taxpayer number; each tile opens its business.
   2. Revenue is earned money: paid less its sales tax, nothing from a
-     back-tax invoice. The Businesses tile, the dashboard's Total Revenue, its
-     per-client column, its Profit before tax and the client page all read
+     back-tax invoice. The Businesses tile, the Overview's Income (the
+     Dashboard's Total Revenue until 2026-11-04) and its Net, the Clients
+     list's Paid column and the client page all read
      that same figure (they disagreed the evening this shipped, and then
      Michael chose to take the tax out). The API's "paid" stays cash in.
      A business on its app shows what the app last
@@ -156,15 +157,16 @@ check("shows each business by name", all(n in html for n in ("Built by Bean", "E
 check("with its start date", "Jan 17, 2024" in html and "Oct 05, 2026" in html,
       re.findall(r"[A-Z][a-z]{2} \d{1,2}, 20\d\d", html))
 dash = c.get("/admin/finances").get_data(as_text=True)
-m = re.search(r"Total Revenue.*?(\$[\d,]+\.\d\d)", dash, re.S)
+m = re.search(r"Income.*?(\$[\d,]+\.\d\d)", dash, re.S)
 dash_total = m.group(1) if m else None
-check("the dashboard's Total Revenue is paid less tax, no back tax: $12,350.00", dash_total == "$12,350.00", dash_total)
+check("the Overview's Income is paid less tax, no back tax: $12,350.00", dash_total == "$12,350.00", dash_total)
 check("and the Businesses tile shows the same figure", dash_total and dash_total in html,
       re.findall(r"\$[\d,]+\.\d\d", html))
-m = re.search(r"Profit before tax.*?(-?\$[\d,]+\.\d\d)", dash, re.S)
-check("Profit before tax is built on it (no expenses here)", m and m.group(1) == "$12,350.00", m and m.group(1))
-m = re.search(r"J&amp;D Entertainment.*?text-emerald-400\">(\$[\d,]+\.\d\d)", dash, re.S)
-check("the dashboard's per-client revenue leaves the tax out too", m and m.group(1) == "$12,350.00", m and m.group(1))
+m = re.search(r">Net<.*?(-?\$[\d,]+\.\d\d)", dash, re.S)
+check("Net is built on it (no expenses here)", m and m.group(1) == "$12,350.00", m and m.group(1))
+clients_page = c.get("/admin/clients").get_data(as_text=True)
+m = re.search(r"J&amp;D Entertainment.*?text-emerald-300[^>]*>(\$[\d,]+\.\d\d)", clients_page, re.S)
+check("the Clients list's Paid column leaves the tax out too", m and m.group(1) == "$12,350.00", m and m.group(1))
 client_page = c.get(f"/admin/clients/{ids['client']}").get_data(as_text=True)
 m = re.search(r"Total Revenue</p>\s*<p[^>]*>(\$[\d,]+\.\d\d)", client_page)
 check("the client page's Total Revenue is the same reading", m and m.group(1) == "$12,350.00", m and m.group(1))

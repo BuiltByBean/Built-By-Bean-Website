@@ -12,8 +12,11 @@ docs/automation_gaps.md item 5 and fault 6. Proves, with Stripe faked:
      and none when there are two.
   4. The webhook does the same: makes the row, finds the orphan's client,
      moves the stage on the first paid event.
-  5. Making a customer looks one up by metadata and email first, and Sync all
-     clients links rather than duplicates.
+  5. Making a customer looks one up by metadata and email first, and
+     link_or_create_customer links rather than duplicates. (The Sync all
+     clients press that ran it left the Invoices page with finances plan
+     item 3, 2026-11-04; its old address now lands on the list and makes
+     nothing.)
 
 Run: python tools/test_payment_moves_client.py
 """
@@ -233,23 +236,34 @@ with application.app_context():
     # Every customer with this email is now taken, so d gets a new one.
     CUSTOMERS.append(Obj(id="cus_spare", created=5, metadata=Obj(pm_client_id=str(d.id))))
     d_id, e_id = d.id, e.id
+# The Sync All Clients press went with finances plan item 3 (2026-11-04); what
+# it ran, link_or_create_customer, is what the client and invoice pages call,
+# so it is driven directly here and the old press must make nothing.
 with application.test_client() as http:
     with http.session_transaction() as s:
         with application.app_context():
             s["_user_id"] = str(User.query.filter_by(username="mb").first().id)
         s["_fresh"] = True
+    made_before = calls["create"]
     resp = http.post("/admin/stripe/clients/sync-all")
-    with http.session_transaction() as s:
-        page = " ".join(text for _, text in s.get("_flashes", []))
+    check("the retired Sync all clients press makes no customer and lands on the list",
+          calls["create"] == made_before and resp.status_code == 303
+          and resp.headers["Location"].endswith("/admin/stripe/invoices"),
+          (resp.status_code, resp.headers.get("Location")))
 with application.app_context():
-    check("Sync all clients links the client Stripe already has",
+    linked = made = 0
+    for client in Client.query.filter(Client.stripe_customer_id.is_(None)).all():
+        customer, adopted = stripe_service.link_or_create_customer(client)
+        if customer is not None:
+            linked, made = (linked + 1, made) if adopted else (linked, made + 1)
+    db.session.commit()
+    check("link_or_create_customer links the client Stripe already has",
           db.session.get(Client, d_id).stripe_customer_id == "cus_spare",
           db.session.get(Client, d_id).stripe_customer_id)
     check("and creates only for the one it does not",
           (db.session.get(Client, e_id).stripe_customer_id or "").startswith("cus_made"))
     # Created 3: Sync New, and the two twins, whom Stripe does not know.
-    check("and says which is which", "Linked 1 client(s)" in page and "created 3" in page,
-          page)
+    check("and says which is which", linked == 1 and made == 3, (linked, made))
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All passed.")

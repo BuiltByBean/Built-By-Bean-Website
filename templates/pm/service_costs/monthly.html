@@ -1,285 +1,36 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
 
 {#
-  Monthly cost entry for a vendor that has no billing API.
+  One vendor's month: the Railway months tab of Hosting, and the same page
+  for any other vendor kept by the month (pm/service_costs_routes.py).
 
-  Railway is the case: its GraphQL exposes CPU, memory, disk and network,
-  none of which is money. Once a month the numbers come off the Railway
-  usage screen into this form. Each project row upserts a ServiceCostEntry
-  keyed on (provider, resource, month), so saving twice corrects rather
-  than doubles.
+  A Railway account that names its workspace fills its months itself; one
+  that does not is copied off Railway's usage screen into this form. Either
+  way each row is what one project cost, and the rows are how the bank's
+  Railway charge splits across projects and clients (bank_feed.split). Only
+  the bank line is an expense: saving here records costs and moves the
+  line's shares, and books nothing of its own. Each row upserts a
+  ServiceCostEntry keyed on (provider, resource, month), so saving twice
+  corrects rather than doubles; a blank or 0 removes that month's entry,
+  which is the only way to walk a mistaken save back.
 
-  Blank or 0 removes an entry for the month, which is the only way to walk
-  a mistaken save back.
+  The bar applies itself (liveFilter) and only the month under it swaps; a
+  save swaps the same regions in place (data-live-action), so nothing on the
+  page moves under the press.
 #}
 
-{% block title %}{{ provider.display_name }} Monthly Costs - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('service_costs.providers_list'), 'Service Providers') }}{% endblock %}
-{% block page_title %}{{ provider.display_name }} monthly costs{% endblock %}
-{% block page_subtitle %}One row per resource, one number per month{% endblock %}
+{% block title %}{{ (provider.display_name ~ ' months') if provider else 'Railway months' }} - Hosting - Built By Bean{% endblock %}
+{% block back %}{% if not railway %}{{ back_link(url_for('service_costs.providers_list'), 'Vendors') }}{% endif %}{% endblock %}
+{% block page_title %}{{ 'Hosting' if railway else provider.display_name ~ ' months' }}{% endblock %}
+{% block page_subtitle %}{{ 'What each Railway project cost, and the bill' if railway else 'Hosting' }}{% endblock %}
 
 {% block content %}
-<div class="space-y-6 stagger-in">
-
-    <!-- Month picker -->
-    <div class="glass-card p-4">
-        <div class="flex flex-wrap items-center gap-2">
-            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400 mr-2">Month</span>
-            {% for m in recent_months %}
-            <a href="{{ url_for('service_costs.provider_monthly', id=provider.id, month=m.strftime('%Y-%m')) }}"
-               class="px-3 min-h-[44px] inline-flex items-center text-xs font-medium rounded-lg transition-colors
-                      {% if m == month %}bg-brand-600 text-white{% else %}bg-surface-800 text-surface-300 hover:bg-surface-700{% endif %}">
-                {{ m.strftime('%b %Y') }}
-            </a>
-            {% endfor %}
-
-            <form method="GET" action="{{ url_for('service_costs.provider_monthly', id=provider.id) }}"
-                  class="flex items-center gap-2 ml-auto">
-                <label class="text-xs text-surface-400">Other</label>
-                <input type="month" name="month" value="{{ month.strftime('%Y-%m') }}"
-                       onchange="this.form.submit()"
-                       class="input-ring px-2 min-h-[44px] text-xs bg-surface-800 text-white rounded-lg">
-            </form>
-        </div>
-    </div>
-
-    {#
-      Name matching is offered, never silently applied. The vendor's project
-      names were renamed to line up with the project names here, so an exact
-      match is nearly always right, but "nearly always" is the reason this is
-      a button rather than something that happens on page load.
-    #}
-    {% if suggested %}
-    <form method="POST" action="{{ url_for('service_costs.provider_automap', id=provider.id) }}"
-          class="glass-card p-4 flex flex-wrap items-center gap-3 border-brand-500/40">
-        <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
-        {% for row in suggested %}
-        <input type="hidden" name="map:{{ row.id }}" value="{{ row.suggestion.id }}">
-        {% endfor %}
-        <div class="w-full sm:flex-1 sm:min-w-0">
-            <p class="text-sm font-semibold text-white">
-                {{ suggested|length }} unmapped resource{{ '' if suggested|length == 1 else 's' }}
-                match a project by name
-            </p>
-            <p class="text-xs text-surface-400 mt-0.5">
-                {{ suggested[:4]|map(attribute='label')|join(', ') }}{% if suggested|length > 4 %}, and {{ suggested|length - 4 }} more{% endif %}
-            </p>
-        </div>
-        <button type="submit"
-                class="w-full sm:w-auto px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all shrink-0">
-            Map {{ suggested|length }} by name
-        </button>
-    </form>
-    {% endif %}
-
-    {#
-      Paste, rather than type.
-
-      The request was for a monthly upload and what got built was nineteen
-      number fields, which is the same job done by hand. The figures already
-      exist as text on the vendor's usage screen, so the shortest correct path
-      is to copy that screen and let this read it. Nothing is saved by pasting:
-      it fills the fields below, and the save button is still the save button,
-      so a bad parse is visible before it is a stored number.
-    #}
-    <div class="glass-card p-4" x-data="pasteFill()">
-        <button type="button" @click="open = !open"
-                class="w-full flex items-center justify-between gap-3 min-h-[44px] text-left">
-            <span class="text-sm font-semibold text-white">Paste from {{ provider.display_name }}</span>
-            {{ icon('expand', 'w-4 h-4 text-surface-400 transition-transform', attrs=':class="{ \'rotate-180\': open }"') }}
-        </button>
-
-        <div x-show="open" x-cloak class="mt-3 space-y-3">
-            <textarea x-model="raw" rows="5" spellcheck="false"
-                      placeholder="Talent Booker&#10;Current Cost&#10;$22.30&#10;Data Dungeon&#10;Current Cost&#10;$4.96"
-                      class="w-full input-ring px-3 py-2 text-xs font-mono bg-surface-800 text-white rounded-lg"></textarea>
-            <div class="flex flex-wrap items-center gap-2">
-                <button type="button" @click="apply()" :disabled="!raw.trim()"
-                        class="px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all disabled:opacity-40">
-                    Fill the amounts
-                </button>
-                <button type="button" @click="raw = ''; report = null"
-                        class="px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:text-surface-200 transition-colors">
-                    Clear
-                </button>
-            </div>
-
-            <template x-if="report">
-                <div class="text-xs space-y-1.5 pt-1">
-                    <p class="text-emerald-400" x-show="report.filled.length">
-                        Filled <span x-text="report.filled.length"></span>:
-                        <span class="text-surface-400" x-text="report.filled.join(', ')"></span>
-                    </p>
-                    {# A pasted name with no row means the vendor's API did not
-                       return that project, which is a different problem from a
-                       name that does not match, and the fix differs. #}
-                    <p class="text-amber-400" x-show="report.unmatched.length">
-                        No row here for <span x-text="report.unmatched.length"></span>:
-                        <span class="text-surface-400" x-text="report.unmatched.join(', ')"></span>
-                    </p>
-                    <p class="text-surface-400" x-show="report.untouched.length">
-                        Left alone, not in what you pasted:
-                        <span x-text="report.untouched.join(', ')"></span>
-                    </p>
-                    <p class="text-red-400" x-show="!report.filled.length && !report.unmatched.length">
-                        Nothing that looked like an amount was found in that.
-                    </p>
-                </div>
-            </template>
-        </div>
-    </div>
-
-    <!-- Entry table -->
-    <form method="POST" action="{{ url_for('service_costs.provider_monthly', id=provider.id) }}">
-        <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
-
-        <div class="glass-card">
-            <div class="p-4 border-b border-surface-700 flex items-center justify-between">
-                <h3 class="text-sm font-semibold text-white">{{ month.strftime('%B %Y') }}</h3>
-                {# The catch-all is not one of the vendor's projects, so it is
-                   not counted as one. #}
-                {% set project_rows = rows|length - 1 %}
-                <span class="text-xs text-surface-400">
-                    {{ project_rows }} project{{ '' if project_rows == 1 else 's' }}
-                </span>
-            </div>
-
-            {# A vendor listing no projects is not an error state. A month from
-               before the per-project breakdown was kept has nothing to list and
-               is entered as one figure on the catch-all row, which is the whole
-               reason that row exists, so the table draws either way. #}
-            <div class="divide-y divide-surface-800">
-                {% for row in rows %}
-                <div class="p-4 flex flex-wrap items-center gap-3">
-                    <input type="hidden" name="lbl:{{ row.id }}" value="{{ row.label }}">
-
-                    <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium {{ 'text-surface-300' if row.is_other else 'text-white' }} truncate">{{ row.label }}</div>
-                        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                            {# No Map link and no suggestion on the catch-all: the
-                               whole point of that row is the part of a month
-                               that has no owner - the plan fee, projects since
-                               deleted, and months with no breakdown at all - so
-                               offering to give it one would be wrong. #}
-                            {% if row.is_other %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400">
-                                Unallocated
-                            </span>
-                            {% else %}
-                            {% if row.historical %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400"
-                                  title="Not in the vendor's current project list">
-                                Historical
-                            </span>
-                            {% endif %}
-                            {% if row.mappings %}
-                                {% for m in row.mappings %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400">
-                                    {% if m.client %}{{ m.client.name }}{% else %}Unassigned{% endif %}
-                                    {% if m.project %} · {{ m.project.name }}{% endif %}
-                                    {% if m.split_percentage and m.split_percentage < 100 %} · {{ m.split_percentage }}%{% endif %}
-                                </span>
-                                {% endfor %}
-                            {% elif row.suggestion %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-brand-900/30 text-brand-300">
-                                    Matches {{ row.suggestion.name }}
-                                    {% if row.suggestion.client %} · {{ row.suggestion.client.name }}{% endif %}
-                                </span>
-                            {% else %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400">
-                                    Unmapped
-                                </span>
-                                <a href="{{ url_for('service_costs.mapping_create',
-                                        provider_id=provider.id,
-                                        resource_identifier=row.id,
-                                        resource_label=row.label,
-                                        next=url_for('service_costs.provider_monthly',
-                                                     id=provider.id,
-                                                     month=month.strftime('%Y-%m'))) }}"
-                                   class="min-h-[44px] inline-flex items-center px-2 text-brand-400 hover:text-brand-300 font-medium">Map →</a>
-                            {% endif %}
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-1.5 shrink-0">
-                        <span class="text-sm text-surface-400">$</span>
-                        {# data-fill-name is what the paste parser matches a
-                           vendor's project name against. #}
-                        <input type="number" name="amt:{{ row.id }}" step="0.0001" min="0"
-                               inputmode="decimal"
-                               data-fill-name="{{ row.label }}"
-                               {% if row.is_other %}data-fill-other="1"{% endif %}
-                               value="{{ row.amount_str }}"
-                               placeholder="0.00"
-                               class="w-28 min-h-[44px] input-ring px-3 py-2 text-sm text-right bg-surface-800 text-white rounded-lg">
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            <div class="p-4 border-t border-surface-700 flex items-center justify-between">
-                <div class="text-xs text-surface-400">
-                    Blank or 0 removes an entry for this month.
-                </div>
-                <div class="text-sm text-surface-300">
-                    Current total <span class="font-bold text-white">${{ "%.2f"|format(total) }}</span>
-                </div>
-            </div>
-
-            {#
-              The invoice, beside the split it reconciles against.
-
-              The rows above say how to divide a month between clients. This
-              says what the month cost, which is a different fact and used to
-              be guessed from the rows plus whatever else in the ledger looked
-              like this vendor. That read $231.65 against $136.90 of real
-              invoices. One number per month, typed off the bill.
-
-              The gap is shown rather than hidden: usage rarely equals the
-              invoice, because a plan fee and taxes ride on top, and seeing
-              the difference is how a wrong row gets noticed.
-            #}
-            <div class="p-4 border-t border-surface-700 bg-white/[0.02]">
-                <div class="flex flex-wrap items-end gap-4">
-                    <div class="min-w-[200px]">
-                        <label for="sc-invoice" class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
-                            What {{ provider.display_name }} billed for {{ month.strftime('%b %Y') }}</label>
-                        <div class="flex items-center gap-2">
-                            <span class="text-surface-500">$</span>
-                            <input id="sc-invoice" type="text" inputmode="decimal" name="invoice_amount"
-                                   value="{{ '%.2f'|format(invoice.amount) if invoice else '' }}"
-                                   placeholder="off the invoice"
-                                   class="input-ring w-40 px-3 min-h-[44px] text-sm bg-surface-800 text-white rounded-lg tabular-nums">
-                        </div>
-                    </div>
-                    {% if invoice %}
-                    <p class="text-xs text-surface-400 pb-3">
-                        Usage above is ${{ "%.2f"|format(total) }};
-                        {% set gap = invoice.amount - total %}
-                        {% if gap > 0.005 %}${{ "%.2f"|format(gap) }} of this bill is not usage
-                        {%- elif gap < -0.005 %}${{ "%.2f"|format(-gap) }} more usage than billed
-                        {%- else %}the same as the bill{% endif %}
-                    </p>
-                    {% else %}
-                    <p class="text-xs text-amber-300 pb-3">
-                        Not recorded. Until it is, the lifetime figure is an estimate.
-                    </p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <div class="mt-4 flex items-center gap-3">
-            <button type="submit" class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
-                Save {{ month.strftime('%b %Y') }}
-            </button>
-            <a href="{{ url_for('pm.expenses_list') }}"
-               class="px-6 min-h-[44px] inline-flex items-center text-sm font-medium text-surface-500 hover:text-surface-300">Cancel</a>
-        </div>
-    </form>
-</div>
+{{ hosting_tabs('railway' if railway else 'vendors',
+                railway=(month_url(provider, month) if railway and provider else none)) }}
+<div data-panel="hosting" class="space-y-4">
 
 <script>
 function pasteFill() {
@@ -384,4 +135,294 @@ function pasteFill() {
     };
 }
 </script>
+
+{% if not provider %}
+<div class="glass-card p-8 sm:p-12 text-center empty">
+    <p class="text-surface-400 mb-3">No Railway account yet</p>
+    <a href="{{ url_for('service_costs.provider_create') }}"
+       class="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-300 hover:bg-brand-500/10 transition-colors">
+        {{ icon('add', 'w-4 h-4') }}
+        Add a vendor
+    </a>
+</div>
+{% else %}
+
+{# The bills not recorded: provider_bills.missing_bills, the list Needs
+   attention draws and the tab counts, so the three always agree. #}
+<div data-live="rw-bills" class="space-y-3">
+    {% for b in bills %}
+    <div class="glass-card p-4 flex flex-wrap items-center gap-3" data-missing-bill="{{ b.provider.id }}">
+        <div class="min-w-0 grow basis-64">
+            <p class="text-sm font-semibold text-white truncate">{{ b.provider.display_name }}: {{ b.latest.strftime('%B %Y') }} bill not recorded</p>
+            {% if b.count > 1 %}
+            <p class="text-xs text-surface-400">{{ b.count | commas }} months missing, this is the newest</p>
+            {% endif %}
+        </div>
+        <a href="{{ month_url(b.provider, b.latest) }}"
+           class="w-full sm:w-auto justify-center inline-flex items-center px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+            Put it in</a>
+    </div>
+    {% endfor %}
+</div>
+
+{# Which account and which month. The pick is the apply; the bar stands
+   still and only the month under it moves. relative z-30 (LM-1) so the
+   panels open over the table. #}
+<div class="relative z-30">
+    <form method="GET" x-data="liveFilter()" @submit.prevent="apply()" data-live-filters
+          class="flex flex-wrap items-center gap-3">
+        {% if railway and providers | length > 1 %}
+        <label class="flex items-center gap-2 min-w-0 w-full sm:w-auto">
+            <span class="text-xs font-medium text-surface-500 uppercase tracking-wider shrink-0">Account</span>
+            {% set acct = namespace(opts=[]) %}
+            {% for p in providers %}{% set acct.opts = acct.opts + [(p.id, p.display_name)] %}{% endfor %}
+            {{ select_dropdown("provider", acct.opts, provider.id, "Account",
+                               on_change="apply()", extra_class="w-[16rem] max-w-full") }}
+        </label>
+        {% elif railway %}
+        <input type="hidden" name="provider" value="{{ provider.id }}">
+        {% endif %}
+        <label class="flex items-center gap-2 min-w-0 w-full sm:w-auto">
+            <span class="text-xs font-medium text-surface-500 uppercase tracking-wider shrink-0">Month</span>
+            {{ select_dropdown("month", month_opts, month.strftime('%Y-%m'), "Month",
+                               on_change="apply()", extra_class="w-[12rem] max-w-full") }}
+        </label>
+    </form>
+</div>
+
+<div data-live="rw-month" class="space-y-4">
+    {#
+      Name matching is offered, never silently applied. The vendor's project
+      names were renamed to line up with the project names here, so an exact
+      match is nearly always right, but "nearly always" is the reason this is
+      a button rather than something that happens on page load.
+    #}
+    {% if suggested %}
+    <form method="POST" data-live-action action="{{ url_for('service_costs.provider_automap', id=provider.id) }}"
+          class="glass-card p-4 flex flex-wrap items-center gap-3 border-brand-500/40">
+        <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+        {% for row in suggested %}
+        <input type="hidden" name="map:{{ row.id }}" value="{{ row.suggestion.id }}">
+        {% endfor %}
+        <div class="min-w-0 grow basis-64">
+            <p class="text-sm font-semibold text-white">
+                {{ suggested|length }} unmapped resource{{ '' if suggested|length == 1 else 's' }}
+                match a project by name
+            </p>
+            <p class="text-xs text-surface-400 mt-0.5 break-words">
+                {{ suggested[:4]|map(attribute='label')|join(', ') }}{% if suggested|length > 4 %}, and {{ suggested|length - 4 }} more{% endif %}
+            </p>
+        </div>
+        <button type="submit"
+                class="w-full sm:w-auto px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+            Map {{ suggested|length }} by name
+        </button>
+    </form>
+    {% endif %}
+
+    {#
+      Paste, rather than type.
+
+      The request was for a monthly upload and what got built was nineteen
+      number fields, which is the same job done by hand. The figures already
+      exist as text on the vendor's usage screen, so the shortest correct path
+      is to copy that screen and let this read it. Nothing is saved by pasting:
+      it fills the fields below, and the save button is still the save button,
+      so a bad parse is visible before it is a stored number.
+    #}
+    <div class="glass-card p-4" x-data="pasteFill()">
+        <button type="button" @click="open = !open"
+                class="w-full flex items-center justify-between gap-3 min-h-[44px] text-left">
+            <span class="text-sm font-semibold text-white">Paste from {{ provider.display_name }}</span>
+            <span class="shrink-0 text-surface-400 transition-transform" :class="{ 'rotate-180': open }">{{ icon('expand', 'w-4 h-4') }}</span>
+        </button>
+
+        <div x-show="open" x-cloak class="mt-3 space-y-3">
+            <textarea x-model="raw" rows="5" spellcheck="false"
+                      placeholder="Talent Booker&#10;Current Cost&#10;$22.30&#10;Data Dungeon&#10;Current Cost&#10;$4.96"
+                      class="w-full max-w-full input-ring px-3 py-2 text-xs font-mono bg-surface-800 text-white rounded-lg resize-y"></textarea>
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button" @click="apply()" :disabled="!raw.trim()"
+                        class="px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all disabled:opacity-40">
+                    Fill the amounts
+                </button>
+                <button type="button" @click="raw = ''; report = null"
+                        class="px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:text-surface-200 transition-colors">
+                    Clear
+                </button>
+            </div>
+
+            <template x-if="report">
+                <div class="text-xs space-y-1.5 pt-1">
+                    <p class="text-emerald-400" x-show="report.filled.length">
+                        Filled <span x-text="report.filled.length"></span>:
+                        <span class="text-surface-400" x-text="report.filled.join(', ')"></span>
+                    </p>
+                    {# A pasted name with no row means the vendor's API did not
+                       return that project, which is a different problem from a
+                       name that does not match, and the fix differs. #}
+                    <p class="text-amber-400" x-show="report.unmatched.length">
+                        No row here for <span x-text="report.unmatched.length"></span>:
+                        <span class="text-surface-400" x-text="report.unmatched.join(', ')"></span>
+                    </p>
+                    <p class="text-surface-400" x-show="report.untouched.length">
+                        Left alone, not in what you pasted:
+                        <span x-text="report.untouched.join(', ')"></span>
+                    </p>
+                    <p class="text-red-400" x-show="!report.filled.length && !report.unmatched.length">
+                        Nothing that looked like an amount was found in that.
+                    </p>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    {# The month's rows and its bill. Saved in place: the answer swaps this
+       region and the bills above, and the page stays where it was. A blank
+       or 0 removes that month's entry for the row (in a comment, not on the
+       page: _save_monthly_entries). #}
+    <form method="POST" data-live-action action="{{ url_for('service_costs.provider_monthly', id=provider.id) }}">
+        <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+
+        <div class="glass-card">
+            <div class="p-4 border-b border-surface-700 flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-white">{{ provider.display_name }}, {{ month.strftime('%B %Y') }}</h3>
+                {# The catch-all is not one of the vendor's projects, so it is
+                   not counted as one. #}
+                {% set project_rows = rows|length - 1 %}
+                <span class="text-xs text-surface-400 shrink-0">
+                    {{ project_rows | commas }} project{{ '' if project_rows == 1 else 's' }}
+                </span>
+            </div>
+
+            {# A vendor listing no projects is not an error state. A month from
+               before the per-project breakdown was kept has nothing to list and
+               is entered as one figure on the catch-all row, which is the whole
+               reason that row exists, so the table draws either way. #}
+            <div class="divide-y divide-surface-800">
+                {% for row in rows %}
+                <div class="p-4 flex flex-wrap items-center gap-3" data-month-row>
+                    <input type="hidden" name="lbl:{{ row.id }}" value="{{ row.label }}">
+
+                    <div class="flex-1 min-w-0 basis-48">
+                        <div class="text-sm font-medium {{ 'text-surface-300' if row.is_other else 'text-white' }} truncate">{{ row.label }}</div>
+                        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            {# No Map link and no suggestion on the catch-all: the
+                               whole point of that row is the part of a month
+                               that has no owner - the plan fee, projects since
+                               deleted, and months with no breakdown at all - so
+                               offering to give it one would be wrong. #}
+                            {% if row.is_other %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400">
+                                Unallocated
+                            </span>
+                            {% else %}
+                            {% if row.historical %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-700 text-surface-400"
+                                  title="Not in the vendor's current project list">
+                                Historical
+                            </span>
+                            {% endif %}
+                            {% if row.mappings %}
+                                {% for m in row.mappings %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400 max-w-full truncate">
+                                    {% if m.client %}{{ m.client.name }}{% else %}Unassigned{% endif %}
+                                    {% if m.project %} · {{ m.project.name }}{% endif %}
+                                    {% if m.split_percentage and m.split_percentage < 100 %} · {{ m.split_percentage }}%{% endif %}
+                                </span>
+                                {% endfor %}
+                            {% elif row.suggestion %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-brand-900/30 text-brand-300 max-w-full truncate">
+                                    Matches {{ row.suggestion.name }}
+                                    {% if row.suggestion.client %} · {{ row.suggestion.client.name }}{% endif %}
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400">
+                                    Unmapped
+                                </span>
+                                <a href="{{ url_for('service_costs.mapping_create',
+                                        provider_id=provider.id,
+                                        resource_identifier=row.id,
+                                        resource_label=row.label,
+                                        next=month_url(provider, month)) }}"
+                                   class="min-h-[44px] inline-flex items-center px-3 rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 font-medium transition-colors">Map it</a>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-sm text-surface-400">$</span>
+                        {# data-fill-name is what the paste parser matches a
+                           vendor's project name against. #}
+                        <input type="number" name="amt:{{ row.id }}" step="0.0001" min="0"
+                               inputmode="decimal"
+                               aria-label="{{ row.label }}"
+                               data-fill-name="{{ row.label }}"
+                               {% if row.is_other %}data-fill-other="1"{% endif %}
+                               value="{{ row.amount_str }}"
+                               placeholder="0.00"
+                               class="w-28 min-h-[44px] input-ring px-3 py-2 text-sm text-right bg-surface-800 text-white rounded-lg">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="p-4 border-t border-surface-700 flex items-center justify-end">
+                <div class="text-sm text-surface-300">
+                    Total <span class="font-bold text-white tabular-nums" data-month-total>{{ total | format_currency }}</span>
+                </div>
+            </div>
+
+            {#
+              The invoice, beside the split it reconciles against.
+
+              The rows above say how to divide a month between clients. This
+              says what the month cost, which is a different fact and used to
+              be guessed from the rows plus whatever else in the ledger looked
+              like this vendor. That read $231.65 against $136.90 of real
+              invoices. One number per month, typed off the bill (or pulled).
+
+              The gap is shown rather than hidden: usage rarely equals the
+              invoice, because a plan fee and taxes ride on top, and seeing
+              the difference is how a wrong row gets noticed.
+            #}
+            <div class="p-4 border-t border-surface-700 bg-white/[0.02]">
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="min-w-0">
+                        <label for="sc-invoice" class="block text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">
+                            Bill for {{ month.strftime('%b %Y') }}</label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-surface-500">$</span>
+                            <input id="sc-invoice" type="text" inputmode="decimal" name="invoice_amount"
+                                   value="{{ invoice.amount | commas if invoice else '' }}"
+                                   placeholder="off the invoice"
+                                   class="input-ring w-40 max-w-full px-3 min-h-[44px] text-sm bg-surface-800 text-white rounded-lg tabular-nums">
+                        </div>
+                    </div>
+                    {% if invoice %}
+                    {% set gap = invoice.amount - total %}
+                    <p class="text-xs text-surface-400 pb-3">
+                        Usage {{ total | format_currency }};
+                        {% if gap > 0.005 %}{{ gap | format_currency }} of the bill is not usage
+                        {%- elif gap < -0.005 %}{{ (-gap) | format_currency }} more usage than billed
+                        {%- else %}the same as the bill{% endif %}
+                    </p>
+                    {% else %}
+                    <p class="text-xs text-amber-300 pb-3" data-no-bill>Not recorded</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 flex items-center justify-end gap-3">
+            <button type="submit" class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+                Save {{ month.strftime('%b %Y') }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+</div>
 {% endblock %}

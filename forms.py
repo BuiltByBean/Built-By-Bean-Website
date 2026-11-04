@@ -189,6 +189,7 @@ class TicketForm(FlaskForm):
 
 
 class ExpenseForm(FlaskForm):
+    business_id = SelectField("Company", coerce=int, validators=[Optional()])
     client_id = SelectField("Client", coerce=int, validators=[Optional()])
     project_id = SelectField("Project", coerce=int, validators=[Optional()])
     ticket_id = SelectField("Ticket", coerce=int, validators=[Optional()])

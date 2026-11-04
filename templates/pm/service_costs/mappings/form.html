@@ -3,8 +3,9 @@
 
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
 
-{% block title %}{{ 'Edit' if editing else 'New' }} Mapping - Built By Bean{% endblock %}
+{% block title %}{{ 'Edit' if editing else 'New' }} mapping - Hosting - Built By Bean{% endblock %}
 {# Back to wherever the form was opened from. The monthly page passes ?next=,
    and it is constrained to this admin for the same reason the redirect is:
    an unchecked next is an open redirect. #}
@@ -13,13 +14,17 @@
     {%- if nxt.startswith('/admin/') -%}
         {{ back_link(nxt, 'Back') }}
     {%- else -%}
-        {{ back_link(url_for('service_costs.mappings_list'), 'Resource Mappings') }}
+        {{ back_link(url_for('service_costs.mappings_list'), 'Mappings') }}
     {%- endif -%}
 {% endblock %}
-{% block page_title %}{{ 'Edit' if editing else 'New' }} Resource Mapping{% endblock %}
-{% block page_subtitle %}Map a service resource to a client{% endblock %}
+{% block page_title %}{{ 'Edit mapping' if editing else 'New mapping' }}{% endblock %}
+{% block page_subtitle %}Hosting{% endblock %}
 
 {% block content %}
+{{ hosting_tabs('mappings') }}
+{# The panel holds the script too: a tab press runs the scripts inside the
+   panel it swaps in, before Alpine reaches the markup. #}
+<div data-panel="hosting">
 <div x-data="mappingForm()">
     <form method="POST" class="space-y-6">
         {% if request.args.get('next') %}
@@ -45,7 +50,7 @@
                 <div class="relative">
                     <input type="text" name="resource_identifier" x-model="resourceId"
                            value="{{ mapping.resource_identifier if mapping else '' }}"
-                           class="w-full input-ring px-4 py-2.5 text-sm bg-surface-800 text-white"
+                           class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white"
                            placeholder="e.g. aws:Amazon Simple Storage Service, railway:project-id" required
                            list="resource-suggestions">
                     <datalist id="resource-suggestions">
@@ -62,7 +67,7 @@
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1">Label (optional)</label>
                 <input type="text" name="resource_label" value="{{ mapping.resource_label if mapping else '' }}"
-                       class="w-full input-ring px-4 py-2.5 text-sm bg-surface-800 text-white"
+                       class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white"
                        placeholder="Human-friendly name">
             </div>
         </div>
@@ -88,7 +93,7 @@
                     <div class="flex items-center gap-2">
                         <input type="number" name="split_percentage" min="0" max="100" step="0.1"
                                value="{{ mapping.split_percentage if mapping else 100 }}"
-                               class="w-32 input-ring px-4 py-2.5 text-sm bg-surface-800 text-white">
+                               class="w-32 input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white">
                         <span class="text-sm text-surface-400">%</span>
                     </div>
                     <p class="text-xs text-surface-400 mt-1">100% for dedicated, split for shared resources.</p>
@@ -99,7 +104,7 @@
                         <span class="text-sm text-surface-400">$</span>
                         <input type="number" name="monthly_cost" min="0" step="0.01"
                                value="{{ mapping.monthly_cost if mapping and mapping.monthly_cost else '' }}"
-                               class="w-32 input-ring px-4 py-2.5 text-sm bg-surface-800 text-white"
+                               class="w-32 input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white"
                                placeholder="0.00">
                     </div>
                 </div>
@@ -113,8 +118,8 @@
         {% endif %}
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="px-6 py-2.5 text-sm font-semibold rounded-xl btn-brand transition-all">
-                {{ 'Update Mapping' if editing else 'Create Mapping' }}
+            <button type="submit" class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
+                {{ 'Save' if editing else 'Add mapping' }}
             </button>
             <a href="{{ url_for('service_costs.mappings_list') }}" class="inline-flex items-center min-h-[44px] px-6 rounded-xl border border-white/10 text-sm font-medium text-surface-400 hover:text-white transition-colors">Cancel</a>
         </div>
@@ -150,4 +155,5 @@ function mappingForm() {
     };
 }
 </script>
+</div>
 {% endblock %}

@@ -1,0 +1,28 @@
+{% extends "pm/base.html" %}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
+
+{#
+  Books: one place for each company's money (docs/finances_plan.md item 2,
+  Michael, 2026-11-04). A row of companies, a row of what there is to do
+  for the one chosen (Months, Bank, Expenses, Receipts, Year report,
+  Connections), and the panel under them. Both rows are kept across a
+  press (fin_tabs); only the panel is swapped (data-panel="books").
+
+  A child fills `hub` and may set `panel_class` and `main_class`; a list
+  page sets contained-scroll and makes its list the one scroller.
+#}
+
+{% block title %}{% block hub_title %}Books{% endblock %} - {{ business.short_name or business.name }}{% endblock %}
+{% block page_title %}Books{% endblock %}
+{% block page_subtitle %}{{ business.name }}{% endblock %}
+
+{% block content %}
+{{ fin_script() }}
+{% if company_tabs | length > 1 %}
+{{ fin_tabs('books-company', business.id | string, company_tabs, 'Company') }}
+{% endif %}
+{{ fin_tabs('books', hub_tab, hub_tabs, 'Books') }}
+<div data-panel="books" class="{% block panel_class %}space-y-6 min-w-0{% endblock %}">
+    {% block hub %}{% endblock %}
+</div>
+{% endblock %}

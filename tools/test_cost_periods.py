@@ -308,9 +308,15 @@ with application.app_context():
 print("\nTHE LEDGER SAYS THE MONTH, NOT A DAY:")
 import re  # noqa: E402
 
-from models import User  # noqa: E402
+from models import Business, User  # noqa: E402
 
 with application.app_context():
+    # The ledger is a company's Books tab since 2026-11-04, so the board has
+    # the company it bills from, and the rows above are in its books.
+    home = Business(name="Built by Bean LLC", short_name="Built by Bean", slug="bbb", sales_source="board")
+    db.session.add(home)
+    db.session.flush()
+    Expense.query.filter(Expense.business_id.is_(None)).update({"business_id": home.id})
     boss = User(username="mb2", email="mb2@example.test", first_name="Michael", role="ceo")
     boss.set_password("x")
     db.session.add(boss)
@@ -331,28 +337,23 @@ with client.session_transaction() as sess:
     sess["_user_id"] = str(boss_id)
     sess["_fresh"] = True
 
-page = client.get("/admin/expenses").data.decode("utf-8", "replace")
+page = client.get("/admin/expenses", follow_redirects=True).data.decode("utf-8", "replace")
 
 
 def when(needle):
-    """What the When column actually says for the row carrying `needle`.
-
-    The row, then its FIRST cell, rather than a search of the whole page: the
-    first version of this asked whether a string appeared anywhere in the HTML,
-    and two of its checks passed against the exact markup they were written to
-    catch, because the words were also somewhere else on the page.
-    """
-    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", page, re.S)
-    hit = next((r for r in rows if needle in r), None)
-    if hit is None:
-        return None
-    cell = re.search(r"<td[^>]*sm:table-cell[^>]*>(.*?)</td>", hit, re.S)
-    return " ".join(re.sub(r"<[^>]+>", " ", cell.group(1)).split()) if cell else None
+    """What the row carrying `needle` says for when, read from that row alone
+    (the Books ledger marks it data-when), rather than a search of the whole
+    page: the first version of this asked whether a string appeared anywhere
+    in the HTML, and two of its checks passed against the exact markup they
+    were written to catch, because the words were also somewhere else."""
+    for row in page.split("data-row")[1:]:
+        if needle in row:
+            m = re.search(r"<span data-when>(.*?)</span>", row, re.S)
+            return " ".join(re.sub(r"<[^>]+>", " ", m.group(1)).split()) if m else None
+    return None
 
 
 check("the page draws", "Twilio" in page)
-check("the column is headed When, because half of it is not a date",
-      ">When<" in page, "ledger header")
 
 # The month that is ACTUALLY in progress, not the one this was written in.
 # Hard-coding September made this pass in September and fail on 1 October,
@@ -370,7 +371,7 @@ check("a month that has finished drops the to date",
 
 typed = when("ChatGPT Plus subscription")
 check("a charge somebody typed off a receipt keeps its own day",
-      typed == typed_on.strftime("%b %d, %Y"), typed)
+      typed == f"{typed_on:%b} {typed_on.day}, {typed_on.year}", typed)
 
 print("\n" + ("ALL PASS" if not FAIL else str(len(FAIL)) + " FAILED: " + ", ".join(FAIL)))
 sys.exit(1 if FAIL else 0)

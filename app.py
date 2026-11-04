@@ -36,6 +36,7 @@ from models import (
 )
 from project_phases import sync_project_phases, explain as explain_phase
 from pm.contract_routes import wants_send as _wants_send  # noqa: E402
+from pm.users_routes import ceo_required  # noqa: E402
 import contract_effects  # noqa: E402
 from forms import (
     ClientForm, ProjectForm, TicketForm, ExpenseForm,
@@ -665,7 +666,7 @@ def create_app():
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if current_user.is_authenticated:
-            return redirect(url_for("pm.dashboard"))
+            return redirect(url_for("admin_hub"))
         form = LoginForm()
         if form.validate_on_submit():
             typed = (form.username.data or "").strip()
@@ -681,7 +682,7 @@ def create_app():
                 user.last_login_at = datetime.now(timezone.utc)
                 db.session.commit()
                 nxt = request.args.get("next") or ""
-                return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("pm.dashboard"))
+                return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("admin_hub"))
             flash("Invalid username or password.", "error")
         return render_template("login.html", form=form)
 
@@ -706,7 +707,7 @@ def create_app():
                 current_user.must_change_password = False
                 db.session.commit()
                 flash("Password updated successfully.", "success")
-                return redirect(url_for("pm.dashboard"))
+                return redirect(url_for("admin_hub"))
         return render_template("pm/auth/change_password.html")
 
     # ── Routes ───────────────────────────────────────────────
@@ -809,189 +810,126 @@ def create_app():
     # of the /admin/pm prefix, which left it at a bare trailing slash one
     # character away from /admin meaning something else entirely.
     @pm_bp.route("/finances")
-    @login_required
+    @ceo_required
     def dashboard():
-        sync_project_phases()
+        """Overview: one company's year at a glance and what is left to do
+        about its money (docs/finances_plan.md item 1, Michael, 2026-11-04).
+
+        Every figure is the Books' own reading (books_service.summarize) and
+        the tax is the Taxes page's (income_tax.estimate), so this page cannot
+        disagree with either. The old Dashboard ran all-time profit through
+        this year's brackets, read revenue and expenses from different places,
+        and ran sync_project_phases on every visit; a GET changes nothing now.
+
+        The To do list is a worklist, not a metric: each row is something to
+        press, and each press lands on the page that clears it.
+        """
+        import books_service
+        from pm.books_routes import _companies, _company, _home, review_count, _missing_receipts, _months
         today = date.today()
+        biz_id = request.args.get("business", type=int)
+        business = _company(biz_id) if biz_id else _home()
+        if business is None:
+            abort(404)
+        year = request.args.get("year", type=int) or today.year
+        summary = books_service.summarize(business, date(year, 1, 1), date(year + 1, 1, 1))
+        tax = _overview_tax(business, year, summary)
+        is_home = business.id == _home().id
+        todo = _overview_todo(business, is_home, today)
+        years = sorted({m.year for m in _months(today)} | {today.year}, reverse=True)
+        companies = _companies()
+        company_tabs = [(str(b.id), b.short_name or b.name,
+                         url_for("pm.dashboard", business=b.id, year=year)) for b in companies]
+        return render_template("pm/finances/overview.html", business=business, year=year,
+                               years=years, summary=summary, tax=tax, todo=todo,
+                               company_tabs=company_tabs)
 
-        # All-time financials, pulled live from Stripe rather than from local
-        # invoice records, since billing happens directly in Stripe and there
-        # are no local rows for any of it.
-        #
-        # "Invoiced" here means money that has been billed or committed and is
-        # NOT yet paid. Three parts:
-        #
-        #   open      sent, sitting unpaid
-        #   draft     written and dated but not sent. This is the load bearing
-        #             one: a year of monthly work gets drafted up front, so
-        #             excluding drafts as "not really invoiced" hides most of
-        #             what is actually booked.
-        #   scheduled what the recurring plans will bill before year end
-        #
-        # Paid deliberately does not appear in it. Collected money is Total
-        # Revenue; adding it here would make one number mean two things.
-        from stripe_service import (
-            get_stripe_invoice_totals, get_scheduled_subscription_revenue,
-            get_overdue_invoices, get_stalled_subscriptions,
-        )
-        stripe_totals = get_stripe_invoice_totals()
-        # Revenue is earned money: paid less its sales tax, no back-tax
-        # invoices (get_stripe_invoice_totals). Profit below is built on it.
-        stripe_by_customer = stripe_totals["revenue_by_customer"]
+    def _overview_tax(business, year, summary=None):
+        """The year's estimated income tax, as the Taxes page works it out.
+        None when it cannot be worked out, which the tile says in words."""
+        try:
+            import income_tax
+        except ImportError:
+            return None
+        try:
+            return income_tax.estimate(business, year, summary=summary)
+        except Exception:  # noqa: BLE001 - a tile never takes the page down
+            current_app.logger.exception("income tax estimate failed")
+            return None
 
-        # Only clients count toward the forward figure. A Stripe subscriber
-        # with no client record is somebody else's line of business.
-        client_customer_ids = {
-            row[0] for row in db.session.query(Client.stripe_customer_id).filter(
-                Client.stripe_customer_id.isnot(None)
-            ).all()
-        }
-        scheduled_subscriptions, scheduled_by_customer = get_scheduled_subscription_revenue(
-            client_customer_ids
-        )
-
-        # A DBA's income is the company's (Personal Training's checks), and
-        # the Books count it, so Total Revenue does too.
+    def _overview_todo(business, is_home, today):
+        """What is waiting on Michael about this company's money, one row per
+        thing to press: [(kind, title, detail, href, count)]."""
         import books_service
-        dba_revenue = books_service.board_dba_income_total()
-        total_revenue = stripe_totals["revenue"] + dba_revenue
-        total_awaiting = stripe_totals["open"]
-        total_invoiced = (
-            stripe_totals["open"] + stripe_totals["draft"] + scheduled_subscriptions
-        )
-        # Material expenses only - exclude any time-entry-linked (billable time)
-        # rows - and only Built by Bean's books. This page is that company's;
-        # EntertainHQ's spending showed here once and took its profit $620 low.
-        import books_service
-        board_biz = books_service.board_business()
-        board_family = books_service.family_ids(board_biz) if board_biz else None
-        total_expenses = books_service.board_expense_total()
+        from models import BankTransaction, MonthClose, ServiceProvider
+        from pm.books_routes import review_count, _missing_receipts, _months
+        rows = []
+        family = books_service.family_ids(business)
+        if is_home:
+            try:
+                from stripe_service import get_overdue_invoices, get_stalled_subscriptions
+                overdue = get_overdue_invoices()
+                stalled = get_stalled_subscriptions()
+            except Exception:  # noqa: BLE001 - Stripe down is not a page down
+                overdue, stalled = [], []
+            if overdue:
+                total = sum(i["amount_due"] for i in overdue)
+                rows.append(("invoice", f"{len(overdue):,} invoice{'' if len(overdue) == 1 else 's'} overdue",
+                             f"${total:,.2f} owed, oldest {max(i['days_overdue'] for i in overdue):,} days late"
+                             if overdue and "days_overdue" in overdue[0] else f"${total:,.2f} owed",
+                             url_for("stripe.invoices_list", status="open"), len(overdue)))
+            if stalled:
+                rows.append(("invoice", f"{len(stalled):,} plan{'' if len(stalled) == 1 else 's'} not collecting",
+                             ", ".join(s.get("customer_name") or s.get("customer") or "" for s in stalled)[:200],
+                             url_for("stripe.invoices_list"), len(stalled)))
+        n = review_count(business)
+        if n:
+            rows.append(("bank", f"{n:,} bank line{'' if n == 1 else 's'} to sort", "",
+                         url_for("books.bank", id=business.id), n))
+        n = _missing_receipts(business).count()
+        if n:
+            rows.append(("receipt", f"{n:,} expense{'' if n == 1 else 's'} without a receipt", "",
+                         url_for("books.company_receipts", id=business.id), n))
+        closed = {m.month for m in MonthClose.query.filter_by(business_id=business.id).all()}
+        for month in _months(today):
+            start, end = books_service.month_bounds(month)
+            if end > today or start in closed:
+                continue
+            unsorted = BankTransaction.query.filter(
+                BankTransaction.business_id.in_(family), BankTransaction.disposition == "review",
+                BankTransaction.occurred_on >= start, BankTransaction.occurred_on < end).count()
+            missing = _missing_receipts(business).filter(Expense.date >= start, Expense.date < end).count()
+            left = ", ".join(x for x in (f"{unsorted:,} to sort" if unsorted else "",
+                                         f"{missing:,} without a receipt" if missing else "") if x)
+            rows.append(("month", f"{start:%B %Y} {'is ready to close' if not left else 'is not closed'}",
+                         left, url_for("books.month_page", id=business.id, ym=start.strftime("%Y-%m")), 1))
+        try:
+            from pm.attention_routes import _bills_to_enter
+            for bill in _bills_to_enter():
+                p = bill["provider"]
+                owner = p.account_business_id or (_home_id() if p.is_ours else None)
+                if owner not in family:
+                    continue
+                rows.append(("bill", f"{p.display_name}: {bill['latest']:%B %Y} bill not recorded",
+                             f"{bill['count']:,} months missing" if bill["count"] > 1 else "",
+                             url_for("service_costs.provider_monthly", id=p.id, month=bill["latest"].strftime("%Y-%m")),
+                             bill["count"]))
+        except Exception:  # noqa: BLE001
+            current_app.logger.exception("vendor bills for the overview")
+        if is_home:
+            try:
+                from pm.hosting_routes import increases_due_count
+                n = increases_due_count()
+            except Exception:  # noqa: BLE001
+                n = 0
+            if n:
+                rows.append(("hosting", f"{n:,} hosting fee{'' if n == 1 else 's'} under the floor", "",
+                             url_for("hosting.hosting_index"), n))
+        return rows
 
-        # Unbilled: the dollar value of logged time not yet on a draft/open/paid
-        # invoice - money in the pipeline that still needs to be billed.
-        invoiced_ids = db.session.query(InvoiceLineItem.time_entry_id).filter(
-            InvoiceLineItem.time_entry_id.isnot(None),
-            InvoiceLineItem.invoice.has(Invoice.status.in_(["draft", "open", "paid"]))
-        ).subquery()
-        unbilled_entries = TimeEntry.query.filter(
-            ~TimeEntry.id.in_(db.session.query(invoiced_ids))
-        ).all()
-        total_unbilled = sum(e.cost for e in unbilled_entries)
-        unbilled_by_client = {}
-        for e in unbilled_entries:
-            if e.cost:
-                unbilled_by_client[e.client_id] = unbilled_by_client.get(e.client_id, 0.0) + e.cost
-
-        # Per-client financials
-        clients = Client.query.order_by(Client.name).all()
-        client_financials = []
-        for c in clients:
-            cust = c.stripe_customer_id
-            c_revenue = stripe_by_customer.get(cust, 0.0) if cust else 0.0
-            # The same two figures as the cards, split per client: everything
-            # still to come, and the part of it that has actually been sent.
-            c_awaiting = stripe_totals["open_by_customer"].get(cust, 0.0) if cust else 0.0
-            c_invoiced = (
-                c_awaiting
-                + (stripe_totals["draft_by_customer"].get(cust, 0.0) if cust else 0.0)
-                + (scheduled_by_customer.get(cust, 0.0) if cust else 0.0)
-            )
-            c_q = Expense.query.filter(Expense.client_id == c.id, Expense.time_entry_id.is_(None))
-            if board_family:
-                c_q = c_q.filter(Expense.business_id.in_(board_family))
-            c_expenses = sum(e.amount for e in c_q.all())
-            client_financials.append({
-                "id": c.id,
-                "name": c.name,
-                "stage": c.stage or "lead",
-                "revenue": c_revenue,
-                "invoiced": c_invoiced,
-                "awaiting": c_awaiting,
-                # Still calculated while Unbilled Revenue is hidden rather than
-                # retired. The template's column and card are commented out.
-                "unbilled": unbilled_by_client.get(c.id, 0.0),
-                "expenses": c_expenses,
-            })
-
-        # Upcoming deadlines, from both places a date can live.
-        #
-        # This only ever read tickets, and no ticket has ever carried a due
-        # date, so the panel was permanently empty while a project delivery
-        # date sat right there in the record. A project's mvp_date is the
-        # deadline that actually matters.
-        #
-        # "done" was never a ticket status either - the closed ones are
-        # resolved and dismissed - so the filter excluded nothing.
-        deadlines = []
-        for tk in Ticket.query.filter(
-            Ticket.due_date >= today,
-            ~Ticket.status.in_(TICKET_CLOSED_STATUSES),
-        ).order_by(Ticket.due_date.asc()).all():
-            deadlines.append({
-                "kind": "ticket", "when": tk.due_date, "title": tk.display_title,
-                "where": tk.who + (f" · {tk.project.name}" if tk.project else ""),
-                "url": url_for("pm.ticket_detail", id=tk.id),
-            })
-        for pr in Project.query.filter(
-            Project.mvp_date >= today, Project.status == "active",
-        ).order_by(Project.mvp_date.asc()).all():
-            deadlines.append({
-                "kind": "project", "when": pr.mvp_date, "title": pr.name + " - delivery",
-                "where": pr.client.name,
-                "url": url_for("pm.project_detail", id=pr.id),
-            })
-        deadlines.sort(key=lambda d: d["when"])
-        deadlines = deadlines[:10]
-
-        # ── What is owed on this, roughly ────────────────────
-        #
-        # Only the tax attributable to this business, not the household bill:
-        # tax_engine works out the difference the profit makes on top of the
-        # wages already entered on the Taxes page, which is the only honest
-        # way to answer "what does this cost me" when profit stacks on a
-        # salary and can straddle a bracket.
-        pre_tax_profit = total_revenue - total_expenses
-        settings = TaxSetting.get()
-        tax = tax_compute(
-            pre_tax_profit,
-            filing_status=settings.filing_status,
-            your_wages=settings.your_wages,
-            spouse_wages=settings.spouse_wages,
-            other_income=settings.other_income,
-            federal_withheld=settings.federal_withheld,
-            state_rate=settings.state_tax_rate,
-            year=today.year,
-        )
-        estimated_tax = tax["business_tax"]
-        post_tax_profit = pre_tax_profit - estimated_tax
-
-        # Money that has already been asked for and has not arrived, and plans
-        # that have stopped collecting. Both were being folded into "Invoiced",
-        # where a fifty-day-old invoice looks exactly like one raised this
-        # morning.
-        overdue = get_overdue_invoices()
-        stalled = get_stalled_subscriptions()
-        # The date that quietly turns free work into billable work.
-        from project_phases import maintenance_ending
-        ending = maintenance_ending()
-
-        return render_template("pm/dashboard/index.html",
-            overdue_invoices=overdue,
-            overdue_total=sum(i["amount_due"] for i in overdue),
-            stalled_subscriptions=stalled,
-            maintenance_ending=ending,
-            total_revenue=total_revenue,
-            total_invoiced=total_invoiced,
-            total_awaiting=total_awaiting,
-            total_unbilled=total_unbilled,
-            total_expenses=total_expenses,
-            client_financials=client_financials,
-            deadlines=deadlines,
-            pre_tax_profit=pre_tax_profit,
-            estimated_tax=estimated_tax,
-            post_tax_profit=post_tax_profit,
-            tax=tax,
-        )
+    def _home_id():
+        from models import home_business_id
+        return home_business_id()
 
     # ── Clients ──────────────────────────────────────────────
 
@@ -1013,6 +951,7 @@ def create_app():
         query = query.order_by(Client.name.asc(), Client.id.asc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
         return render_template("pm/clients/list.html",
+            money=_client_money(pagination.items),
             clients=pagination.items, pagination=pagination, search=search,
             stage=stage, stage_choices=CLIENT_STAGE_CHOICES,
             # Last contact is the newest mail either way, read for the whole
@@ -1024,6 +963,55 @@ def create_app():
             stage_counts=dict(
                 db.session.query(Client.stage, db.func.count(Client.id))
                 .group_by(Client.stage).all()))
+
+    def _client_money(clients):
+        """Financials by client, moved here from the old Dashboard
+        (docs/finances_plan.md item 1): what each has paid (earned, after tax
+        and refunds), what is open on Stripe, and what was spent on them in
+        the books of the company the board bills from. The CEO's alone, like
+        every money page; {} for anybody else, so nothing is read for them."""
+        if not (current_user.is_authenticated and getattr(current_user, "is_ceo", False)) or not clients:
+            return {}
+        import books_service
+        try:
+            from stripe_service import get_stripe_invoice_totals
+            totals = get_stripe_invoice_totals()
+        except Exception:  # noqa: BLE001 - Stripe down is not a page down
+            totals = {"revenue_by_customer": {}, "open_by_customer": {}}
+        board = books_service.board_business()
+        family = books_service.family_ids(board) if board else None
+        q = (db.session.query(Expense.client_id, db.func.sum(Expense.amount))
+             .filter(Expense.client_id.in_([c.id for c in clients]), Expense.time_entry_id.is_(None)))
+        if family:
+            q = q.filter(Expense.business_id.in_(family))
+        spent = dict(q.group_by(Expense.client_id).all())
+        out = {}
+        for c in clients:
+            cust = c.stripe_customer_id
+            out[c.id] = {"earned": totals["revenue_by_customer"].get(cust, 0.0) if cust else 0.0,
+                         "open": totals["open_by_customer"].get(cust, 0.0) if cust else 0.0,
+                         "spent": float(spent.get(c.id) or 0.0)}
+        return out
+
+    def _support_deadlines(limit=6):
+        """What is due next: a ticket's due date and a project's delivery
+        date. Moved here from the old Dashboard on 2026-11-04
+        (docs/finances_plan.md item 1); a delivery is client work, not money.
+        Soonest first."""
+        today = date.today()
+        out = []
+        for tk in support_service.on_board(Ticket.query.filter(
+                Ticket.due_date >= today, ~Ticket.status.in_(TICKET_CLOSED_STATUSES))).order_by(
+                Ticket.due_date.asc(), Ticket.id.asc()).limit(limit).all():
+            out.append({"when": tk.due_date, "title": tk.display_title, "who": tk.who,
+                        "url": url_for("pm.ticket_detail", id=tk.id)})
+        for pr in Project.query.filter(Project.mvp_date >= today, Project.status == "active").order_by(
+                Project.mvp_date.asc(), Project.id.asc()).limit(limit).all():
+            out.append({"when": pr.mvp_date, "title": f"{pr.name} delivery",
+                        "who": pr.client.name if pr.client else "",
+                        "url": url_for("pm.project_detail", id=pr.id)})
+        out.sort(key=lambda d: d["when"])
+        return out[:limit]
 
     def _apply_client_app_fields(client, form):
         """Wire a client's own app to this board.
@@ -1862,6 +1850,7 @@ def create_app():
 
         return render_template(
             "pm/tickets/list.html",
+            deadlines=_support_deadlines(),
             tickets=tickets, out_of_scope=out_of_scope,
             counts=_ticket_counts(f, board_id), tabs=SUPPORT_TABS,
             status_filter=tab, f=f, board_id=board_id,
@@ -2670,7 +2659,7 @@ def create_app():
             return redirect(url_for("pm.project_detail", id=project_id))
         elif client_id:
             return redirect(url_for("pm.client_detail", id=client_id))
-        return redirect(url_for("pm.dashboard"))
+        return redirect(url_for("admin_hub"))
 
     # ── Contract Templates ──────────────────────────────────
     #
@@ -3859,132 +3848,36 @@ def create_app():
     @pm_bp.route("/expenses")
     @login_required
     def expenses_list():
-        page = request.args.get("page", 1, type=int)
-        category = request.args.get("category", "")
-        project_id = request.args.get("project_id", "", type=str)
-        client_id = request.args.get("client_id", "", type=str)
-        business_id = request.args.get("business_id", "", type=str)
+        """Each company's ledger is its Expenses tab in Books since 2026-11-04
+        (docs/finances_plan.md item 2). The old address, and every link that
+        still filters it (a project page's Expenses tile), lands there."""
+        from pm.books_routes import _company, _home
+        biz_id = request.args.get("business_id", type=int)
+        business = _company(biz_id) if biz_id else _home()
+        if business is None:
+            abort(404)
+        keep = {k: v for k, v in request.args.items()
+                if k in ("category", "project_id", "client_id", "year", "page") and v}
+        return redirect(url_for("books.expenses", id=business.id, **keep), 301)
 
-        # Only real (material) expenses - time-entry-linked "billable time" rows are
-        # pipeline revenue, not expenses, and are shown on the Time Tracking side.
-        def _filtered(q):
-            if category:
-                q = q.filter(Expense.category == category)
-            if project_id:
-                q = q.filter(Expense.project_id == int(project_id))
-            if client_id:
-                q = q.filter(Expense.client_id == int(client_id))
-            if business_id:
-                # A company's books include its DBAs' (Data Dungeon trades
-                # under Built by Bean LLC, so its costs are the LLC's too).
-                family = [int(business_id)] + [b.id for b in Business.query.filter_by(
-                    parent_id=int(business_id)).all()]
-                q = q.filter(Expense.business_id.in_(family))
-            return q
+    def _company_choices():
+        """Each company, then its DBAs under it: whose books a typed expense
+        goes in (Michael, 2026-11-04: adding by hand stays, inside Books,
+        with a company picker)."""
+        out = []
+        for b in Business.query.filter_by(parent_id=None).order_by(Business.id).all():
+            out.append((b.id, b.name))
+            out += [(d.id, f"{d.name} (d/b/a of {b.short_name or b.name})")
+                    for d in Business.query.filter_by(parent_id=b.id).order_by(Business.name).all()]
+        return out
 
-        query = _filtered(Expense.query.filter(Expense.time_entry_id.is_(None))
-                          .outerjoin(Client, Expense.client_id == Client.id)
-                          .outerjoin(Project, Expense.project_id == Project.id)
-                          .outerjoin(Ticket, Expense.ticket_id == Ticket.id))
-        # The id last, and it is not decoration. Every vendor charge for a
-        # month is dated the last day of it, so well over twenty rows share a
-        # date, and a date alone is not a total order: the database may return
-        # that block differently for each query, and page one and page two then
-        # cut through it in different places. Measured on the live ledger,
-        # pages one and two returned eight of the same rows and eight expenses
-        # appeared on neither page. Any paginated list needs a unique column
-        # last or it is a different list on every press.
-        pagination = query.order_by(Expense.date.desc(), Expense.id.desc()).paginate(
-            page=page, per_page=20, error_out=False)
-
-        # Every figure on this page comes off this one list.
-        #
-        # It used to come off two. What I paid was the filtered expense total;
-        # what the vendors charged was every cost entry of the last six months,
-        # filtered by nothing. So the two halves shared a page and disagreed
-        # with each other, and neither was the answer to "what went out". A
-        # vendor charge already writes an Expense, so the ledger is the whole
-        # truth and the vendor breakdown is a way of reading it.
-        rows = _filtered(Expense.query.filter(Expense.time_entry_id.is_(None))).all()
-        total_expenses = sum(e.amount for e in rows)
-
-        # expense id -> the vendor that charged it, in one query rather than
-        # one per row. Absent means I spent it directly. The provider and the
-        # period ride along so a row's action can go to the page that actually
-        # governs the number, which is never the expense form.
-        # The PERIOD rides along as well as the provider. A vendor row is a
-        # month's usage, not a charge that landed on a day, and the ledger has
-        # to be able to say so: $59.67 of Twilio SMS did not happen on the
-        # 16th, it accrued over sixteen days. `covers` is the month when the
-        # entry spans one, and `to_date` says that month has not finished.
-        today = date.today()
-        vendor_by_expense = {}
-        for eid, pid, label, name, start, finish in db.session.query(
-                ServiceCostEntry.expense_id, ServiceProvider.id,
-                ServiceProvider.display_name, ServiceProvider.name,
-                ServiceCostEntry.period_start, ServiceCostEntry.period_end) \
-                .join(ServiceProvider, ServiceCostEntry.provider_id == ServiceProvider.id) \
-                .filter(ServiceCostEntry.expense_id.isnot(None)).all():
-            spans = bool(start and finish and finish > start)
-            vendor_by_expense[eid] = {
-                "provider_id": pid, "label": label, "name": name,
-                "month": start.strftime("%Y-%m") if start else "",
-                "covers": start.strftime("%b %Y") if spans else "",
-                "to_date": spans and finish > today,
-            }
-
-        vendor_total = sum(e.amount for e in rows if e.id in vendor_by_expense)
-        unallocated = sum(e.amount for e in rows if e.client_id is None)
-
-        by_vendor, by_client, by_month = {}, {}, {}
-        for e in rows:
-            who = vendor_by_expense.get(e.id, {}).get("label", "Direct spending")
-            by_vendor[who] = by_vendor.get(who, 0.0) + e.amount
-            name = e.client.name if e.client else "Unallocated"
-            by_client[name] = by_client.get(name, 0.0) + e.amount
-            if e.date:
-                key = e.date.strftime("%Y-%m")
-                by_month[key] = by_month.get(key, 0.0) + e.amount
-
-        # Newest last, so the trend reads left to right, and only the recent
-        # stretch: a chart of every month there has ever been is unreadable
-        # by the second year.
-        recent_months = sorted(by_month)[-6:]
-        summary = {
-            "total": total_expenses,
-            "vendor_total": vendor_total,
-            "allocated": total_expenses - unallocated,
-            "unallocated": unallocated,
-            "by_vendor": dict(sorted(by_vendor.items(), key=lambda kv: -kv[1])),
-            "by_client": dict(sorted(by_client.items(), key=lambda kv: -kv[1])),
-            "by_month": {m: by_month[m] for m in recent_months},
-        }
-
-        projects = Project.query.order_by(Project.name).all()
-        clients = Client.query.order_by(Client.name).all()
-
-        from pm.service_costs_routes import (
-            months_missing_manual_costs, vendor_health, MANUAL_MONTHLY_PROVIDERS,
-        )
-        providers = ServiceProvider.query.filter_by(is_active=True).order_by(
-            ServiceProvider.display_name).all()
-        # Nudge: manual-entry vendors whose last calendar month has no entries.
-        # The point is that a month with no numbers looks the same as a month
-        # of zero spend, and Railway is never a zero spend month.
-        pending_manual = months_missing_manual_costs(providers, lookback=1)
-
-        return render_template("pm/expenses/list.html",
-            expenses=pagination.items, pagination=pagination, projects=projects,
-            clients=clients, category=category, project_id=project_id,
-            client_id=client_id, total_expenses=total_expenses, summary=summary,
-            business_id=business_id,
-            businesses=Business.query.order_by(Business.parent_id.isnot(None), Business.name).all(),
-            providers=providers, vendors=vendor_health(providers),
-            vendor_by_expense=vendor_by_expense,
-            manual_monthly=MANUAL_MONTHLY_PROVIDERS, pending_manual=pending_manual)
+    def _expense_page(form, business_id, **ctx):
+        from pm.books_routes import _company, _home, _hub
+        business = _company(business_id) if business_id else _home()
+        return _hub("pm/books/expense_form.html", business, "expenses", form=form, **ctx)
 
     @pm_bp.route("/expenses/new", methods=["GET", "POST"])
-    @login_required
+    @ceo_required
     def expense_create():
         form = ExpenseForm()
         clients = Client.query.order_by(Client.name).all()
@@ -3992,6 +3885,9 @@ def create_app():
         form.client_id.choices = [(0, "No client")] + [(c.id, c.name) for c in clients]
         form.project_id.choices = [(0, "No project")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
         form.ticket_id.choices = _ticket_choices("No ticket")
+        form.business_id.choices = _company_choices()
+        if request.method == "GET":
+            form.business_id.data = request.args.get("business_id", type=int) or form.business_id.choices[0][0]
 
         pre_ticket = request.args.get("ticket_id", type=int)
         if request.method == "GET":
@@ -4014,6 +3910,7 @@ def create_app():
                 stored_name, original_name, size = save_upload(form.receipt.data, "receipts")
 
             expense = Expense(
+                business_id=form.business_id.data or None,
                 client_id=form.client_id.data or None,
                 project_id=form.project_id.data or None,
                 ticket_id=form.ticket_id.data or None,
@@ -4027,36 +3924,42 @@ def create_app():
             db.session.add(expense)
             db.session.commit()
             flash(f"Expense of {format_currency(expense.amount)} added.", "success")
-            return redirect(url_for("pm.expenses_list"))
-        return render_template("pm/expenses/form.html", form=form, editing=False)
+            return redirect(url_for("pm.expenses_list", business_id=expense.business_id))
+        return _expense_page(form, form.business_id.data, editing=False)
 
     @pm_bp.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
-    @login_required
+    @ceo_required
     def expense_edit(id):
         expense = db.session.get(Expense, id) or abort(404)
         if expense.is_auto_generated:
             flash("Auto-generated expenses can only be changed by editing the linked time entry.", "warning")
-            return redirect(url_for("pm.expenses_list"))
+            return redirect(url_for("pm.expenses_list", business_id=expense.business_id))
         form = ExpenseForm(obj=expense)
         clients = Client.query.order_by(Client.name).all()
         projects = Project.query.order_by(Project.name).all()
         form.client_id.choices = [(0, "No client")] + [(c.id, c.name) for c in clients]
         form.project_id.choices = [(0, "No project")] + [(p.id, f"{p.name} ({p.client.name})") for p in projects]
         form.ticket_id.choices = _ticket_choices("No ticket")
+        form.business_id.choices = _company_choices()
 
         if request.method == "GET":
+            form.business_id.data = expense.business_id
             form.client_id.data = expense.client_id or 0
             form.project_id.data = expense.project_id or 0
             form.ticket_id.data = expense.ticket_id or 0
 
         if form.validate_on_submit():
+            expense.business_id = form.business_id.data or expense.business_id
             expense.client_id = form.client_id.data or None
             expense.project_id = form.project_id.data or None
             expense.ticket_id = form.ticket_id.data or None
-            expense.amount = form.amount.data
             expense.description = form.description.data or ""
             expense.category = form.category.data
-            expense.date = form.date.data
+            # A bank line's amount and date are the bank's: the next read
+            # would put them back, so only a row typed by hand takes them.
+            if not expense.bank_line_id:
+                expense.amount = form.amount.data
+                expense.date = form.date.data
 
             if form.receipt.data:
                 stored_name, original_name, size = save_upload(form.receipt.data, "receipts")
@@ -4069,16 +3972,22 @@ def create_app():
                     expense.receipt_original_name = original_name
             db.session.commit()
             flash("Expense updated.", "success")
-            return redirect(url_for("pm.expenses_list"))
-        return render_template("pm/expenses/form.html", form=form, editing=True, expense=expense)
+            return redirect(url_for("pm.expenses_list", business_id=expense.business_id))
+        return _expense_page(form, expense.business_id, editing=True, expense=expense)
 
     @pm_bp.route("/expenses/<int:id>/delete", methods=["POST"])
-    @login_required
+    @ceo_required
     def expense_delete(id):
         expense = db.session.get(Expense, id) or abort(404)
+        back = _safe_next(url_for("pm.expenses_list", business_id=expense.business_id))
         if expense.is_auto_generated:
             flash("Auto-generated expenses are deleted when their time entry is deleted.", "warning")
-            return redirect(url_for("pm.expenses_list"))
+            return redirect(back)
+        if expense.bank_line_id:
+            # The bank says this money left. Settle the line differently on
+            # the Bank tab instead; deleting the row would be undone tonight.
+            flash("That one is booked by its bank line. Change the line on the Bank tab.", "warning")
+            return redirect(back)
         # One receipt can prove a whole split month (receipts_service.in_use),
         # so the file goes only when nothing else still points at it.
         import receipts_service
@@ -4088,10 +3997,10 @@ def create_app():
         db.session.commit()
         flash("Expense deleted.", "success")
         # Back to the filtered page it was pressed on, not the whole ledger.
-        return redirect(_safe_next(url_for("pm.expenses_list")))
+        return redirect(back)
 
     @pm_bp.route("/expenses/<int:id>/receipt")
-    @login_required
+    @ceo_required
     def expense_receipt(id):
         expense = db.session.get(Expense, id) or abort(404)
         if not expense.receipt_filename:

@@ -256,7 +256,7 @@ with c.session_transaction() as sess:
     sess["_fresh"] = True
 for url in ("/admin/books/", f"/admin/books/{ids['bbb']}/year/2026", f"/admin/books/{ids['bbb']}/month/2026-10",
             "/admin/books/receipts", f"/admin/books/{ids['ehq']}/year/2026"):
-    r = c.get(url)
+    r = c.get(url, follow_redirects=True)
     body = r.get_data(as_text=True)
     check(f"{url} renders", r.status_code == 200, r.status_code)
     check(f"{url} has no em dash", "\u2014" not in body)
@@ -335,10 +335,13 @@ with application.app_context():
         ServiceProvider(name="railway", display_name="Railway (typed)", is_active=True,
                         credentials_json="{}")])
     db.session.commit()
-ledger = c.get("/admin/expenses").get_data(as_text=True)
-check("the one that pulls is not asked to be entered",
-      "Railway (pulls): no costs recorded" not in ledger)
-check("the one typed by hand still is", "Railway (typed): no costs recorded" in ledger)
+# The nudge lives with the vendors now (Hosting, Vendors), not on the ledger.
+with application.test_request_context():
+    from pm.service_costs_routes import vendor_health
+    tones = {a["provider"].display_name: a["tone"]
+             for a in vendor_health(ServiceProvider.query.filter_by(is_active=True).all())["attention"]}
+check("the one that pulls is not asked to be entered", tones.get("Railway (pulls)") != "manual", tones)
+check("the one typed by hand still is", tones.get("Railway (typed)") == "manual", tones)
 
 print("6. EntertainHQ reads its own books")
 anon = application.test_client()

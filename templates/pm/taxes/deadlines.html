@@ -1,4 +1,5 @@
 {% extends "pm/base.html" %}
+{% from "pm/taxes/_tabs.html" import tax_tabs with context %}
 
 {#
   Every date the state or the IRS holds Michael to, soonest first
@@ -55,8 +56,8 @@
 {% endmacro %}
 
 {% block content %}
-<div class="space-y-4 stagger-in">
-    {% with here = 'deadlines' %}{% include "pm/taxes/_sales_tabs.html" %}{% endwith %}
+{{ tax_tabs('deadlines') }}
+<div data-panel="taxes" class="space-y-4 stagger-in">
 
     <div data-live="deadlines" class="space-y-4">
     {% for b in standing %}

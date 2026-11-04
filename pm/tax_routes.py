@@ -1,38 +1,26 @@
-"""A tax estimate over what Stripe actually paid out.
+"""The Taxes pages' own routes: income tax per company, and Texas sales tax.
 
-Facts in, working out. The user supplies filing status, wages and withholding;
-`tax_engine` does brackets, the standard deduction, QBI and self employment
-tax, and the page shows its own arithmetic so the number can be checked rather
-than taken on faith.
+Income tax (docs/finances_plan.md item 4): one company at a time, picked by
+the switch, and one year. The arithmetic is `income_tax.estimate`, which the
+Overview reads too, and its profit is the Books page's net for that company
+and year. Facts in, working out: filing status, wages and withholding are
+typed here and `tax_engine` does brackets, the standard deduction, QBI and
+self employment tax, and the page shows its own working so the number can be
+checked rather than taken on faith.
 
-Income comes from Stripe balance transactions rather than invoices, so refunds
-subtract and fees are already netted off. These figures agree with the bank
-rather than with what was billed, which is the right basis for tax.
+Every route here is CEO only, like the Books and the returns.
 """
 from datetime import date, timedelta
 
 from flask import (Blueprint, abort, current_app, flash, redirect, render_template,
                    request, url_for)
-from flask_login import login_required
 
-from models import db, Client, Expense, InvoiceLineItem, TaxSetting
-from stripe_service import get_stripe_income_transactions
-from tax_engine import FILING_STATUSES, compute, table_for
+import income_tax
+from models import db, Business, Client, InvoiceLineItem, TaxSetting
+from pm.users_routes import ceo_required
+from tax_engine import FILING_STATUSES, table_for
 
 tax_bp = Blueprint("taxes", __name__, url_prefix="/admin/taxes")
-
-# US estimated payments: Apr 15, Jun 15, Sep 15 and the next Jan 15, each
-# moved past a weekend or federal holiday the way a sales tax return's is
-# (deadlines.estimate_due; it did not roll until 2026-11-04).
-
-
-def _quarter(when):
-    return (when.month - 1) // 3 + 1
-
-
-def _due_date(year, quarter):
-    import deadlines
-    return deadlines.estimate_due(year, quarter)
 
 
 def _money(field, current):
@@ -61,10 +49,25 @@ def _percent(field, current):
         return current
 
 
+def _company(companies):
+    """The company asked for (a DBA's id answers its parent), else the first."""
+    wanted = request.values.get("company", type=int)
+    if wanted:
+        chosen = db.session.get(Business, wanted)
+        if chosen is not None:
+            root = chosen.parent or chosen
+            for c in companies:
+                if c.id == root.id:
+                    return c
+    return companies[0] if companies else None
+
+
 @tax_bp.route("/", methods=["GET", "POST"])
-@login_required
+@ceo_required
 def taxes_index():
     settings = TaxSetting.get()
+    companies = income_tax.tax_companies()
+    company = _company(companies)
 
     if request.method == "POST":
         status = request.form.get("filing_status", "")
@@ -75,120 +78,38 @@ def taxes_index():
         settings.other_income = _money("other_income", settings.other_income)
         settings.federal_withheld = _money("federal_withheld", settings.federal_withheld)
         settings.state_tax_rate = _percent("state_tax_rate", settings.state_tax_rate)
-        settings.set_aside_rate = _percent("set_aside_rate", settings.set_aside_rate)
         db.session.commit()
-        flash("Saved. The estimate below has been recalculated.", "success")
-        return redirect(url_for("taxes.taxes_index", year=request.args.get("year", "")))
+        flash("Saved.", "success")
+        return redirect(url_for("taxes.taxes_index", company=company.id if company else None,
+                                year=request.values.get("year", type=int)))
 
-    transactions = get_stripe_income_transactions()
-    years = sorted({t["date"].year for t in transactions if t["date"]}, reverse=True)
-    year = request.args.get("year", type=int) or (years[0] if years else date.today().year)
+    # One list of years for every company, so the year switch, which the
+    # company switch does not redraw, never offers a year another company
+    # lacks.
+    today = date.today()
+    years = {today.year}
+    for c in companies:
+        years.update(income_tax.years_for(c, today))
+    year = request.args.get("year", type=int) or today.year
+    if not 2000 <= year <= today.year + 1:
+        year = today.year
+    years = sorted(years | {year}, reverse=True)
 
-    client_names = {
-        c.stripe_customer_id: c.name
-        for c in Client.query.filter(Client.stripe_customer_id.isnot(None)).all()
-    }
-    set_aside_rate = (settings.set_aside_rate or 0) / 100.0
-
-    rows = []
-    for t in transactions:
-        if not t["date"] or t["date"].year != year:
-            continue
-        row = dict(t)
-        row["client_name"] = client_names.get(t["customer_id"]) or t["customer_id"] or "-"
-        # A refund is negative, so its set aside is negative too and hands back
-        # what the original payment put away.
-        row["set_aside"] = round(t["net"] * set_aside_rate, 2)
-        row["quarter"] = _quarter(t["date"])
-        rows.append(row)
-    rows.reverse()
-
-    # Profit is the Books page's, quarter by quarter: what was earned (paid,
-    # less its sales tax) less Built by Bean's own expenses. It was Stripe's
-    # payouts less every company's expenses, which counted the sales tax as
-    # income, took Stripe's fee off twice (once in the payout, once as the
-    # expense the Stripe sync books) and charged EntertainHQ's costs to this
-    # return. Material expenses only, as everywhere.
-    import books_service
-    board_biz = books_service.board_business()
-    expenses_by_quarter, earned_by_quarter = {}, {}
-    if board_biz is not None:
-        for e in books_service.expenses_between(board_biz, date(year, 1, 1), date(year + 1, 1, 1)):
-            q = _quarter(e.date)
-            expenses_by_quarter[q] = expenses_by_quarter.get(q, 0.0) + (e.amount or 0)
-        for when, amount, _label in books_service.income_between(
-                board_biz, date(year, 1, 1), date(year + 1, 1, 1)):
-            q = _quarter(when)
-            earned_by_quarter[q] = earned_by_quarter.get(q, 0.0) + amount
-
-    net_total = sum(r["net"] for r in rows)
-    earned_total = round(sum(earned_by_quarter.values()), 2)
-    expense_total = round(sum(expenses_by_quarter.values()), 2)
-    profit = round(earned_total - expense_total, 2)
-
-    calc = compute(
-        profit,
-        filing_status=settings.filing_status,
-        your_wages=settings.your_wages,
-        spouse_wages=settings.spouse_wages,
-        other_income=settings.other_income,
-        federal_withheld=settings.federal_withheld,
-        state_rate=settings.state_tax_rate,
-        year=year,
-    )
-    _year_used, table = table_for(year)
-
-    # Quarters share the year's effective rate rather than each being run
-    # through the brackets on its own. A quarter is not a tax year, and
-    # pretending otherwise would put every quarter in the lowest band.
-    effective = (calc["business_tax"] / profit) if profit > 0 else 0.0
-
-    quarters = []
-    for q in (1, 2, 3, 4):
-        in_q = [r for r in rows if r["quarter"] == q]
-        spend = expenses_by_quarter.get(q, 0.0)
-        earned = earned_by_quarter.get(q, 0.0)
-        if not in_q and not spend and not earned:
-            continue
-        q_net = sum(r["net"] for r in in_q)
-        q_profit = earned - spend
-        quarters.append({
-            "quarter": q,
-            "label": f"Q{q}",
-            "due": _due_date(year, q),
-            "count": len(in_q),
-            "gross": sum(r["gross"] for r in in_q),
-            "fees": sum(r["fee"] for r in in_q),
-            "net": q_net,
-            "earned": earned,
-            "expenses": spend,
-            "profit": q_profit,
-            "set_aside": sum(r["set_aside"] for r in in_q),
-            "estimated": round(max(0.0, q_profit) * effective, 2),
-        })
-
-    totals = {
-        "count": len(rows),
-        "gross": sum(r["gross"] for r in rows),
-        "fees": sum(r["fee"] for r in rows),
-        "net": net_total,
-        "earned": earned_total,
-        "expenses": expense_total,
-        "profit": profit,
-        "set_aside": sum(r["set_aside"] for r in rows),
-    }
-
-    return render_template("pm/taxes/index.html",
+    est = income_tax.estimate(company, year, today, settings=settings) if company else None
+    return render_template(
+        "pm/taxes/index.html",
         settings=settings,
         filing_statuses=FILING_STATUSES,
-        calc=calc,
-        table=table,
-        transactions=rows,
-        quarters=quarters,
-        totals=totals,
+        companies=companies,
+        company=company,
+        company_options=[(str(c.id), c.short_name or c.name) for c in companies],
+        year_options=[(str(y), str(y)) for y in years],
+        est=est,
+        calc=est["calc"] if est else None,
+        table=table_for(year)[1],
         year=year,
-        years=years or [year],
-        today=date.today(),
+        years=years,
+        today=today,
     )
 
 
@@ -237,7 +158,7 @@ def _back(client_id=None):
 
 
 @tax_bp.route("/sales")
-@login_required
+@ceo_required
 def sales_tax_index():
     # Every Stripe invoice is made a local row first, because the project it
     # belongs to, the not-taxable mark and the catch-up flag all live on the
@@ -261,7 +182,7 @@ def sales_tax_index():
 
 
 @tax_bp.route("/sales/settings", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_settings():
     settings = SalesTaxSetting.get()
     settings.rate_percent = _percent("rate_percent", settings.rate_percent)
@@ -280,7 +201,7 @@ def sales_tax_settings():
 
 
 @tax_bp.route("/sales/clients/<int:id>/exempt", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_client_exempt(id):
     client = db.session.get(Client, id) or abort(404)
     client.sales_tax_exempt = not client.sales_tax_exempt
@@ -292,7 +213,7 @@ def sales_tax_client_exempt(id):
 
 
 @tax_bp.route("/sales/invoices/<int:id>/project", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_invoice_project(id):
     inv = db.session.get(Invoice, id) or abort(404)
     project_id = request.form.get("project_id", type=int)
@@ -307,7 +228,7 @@ def sales_tax_invoice_project(id):
 
 
 @tax_bp.route("/sales/invoices/<int:id>/taxable", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_invoice_taxable(id):
     inv = db.session.get(Invoice, id) or abort(404)
     inv.sales_tax_exempt = not inv.sales_tax_exempt
@@ -316,7 +237,7 @@ def sales_tax_invoice_taxable(id):
 
 
 @tax_bp.route("/sales/invoices/<int:id>/back-tax", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_invoice_back_tax(id):
     """Say that an invoice bills back missed tax, or take that back.
 
@@ -342,7 +263,7 @@ def sales_tax_invoice_back_tax(id):
 
 
 @tax_bp.route("/sales/clients/<int:id>/catchup", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_catchup(id):
     """Draft the invoice that bills back the tax this client was never charged.
 
@@ -398,7 +319,7 @@ def sales_tax_catchup(id):
 
 
 @tax_bp.route("/sales/clients/<int:id>/drafts", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_drafts(id):
     """Put the tax on every draft this client has waiting to go out."""
     client = db.session.get(Client, id) or abort(404)
@@ -432,7 +353,7 @@ def sales_tax_drafts(id):
 
 
 @tax_bp.route("/sales/clients/<int:id>/subscriptions", methods=["POST"])
-@login_required
+@ceo_required
 def sales_tax_subscriptions(id):
     """Charge the tax on this client's subscriptions from the next bill on."""
     client = db.session.get(Client, id) or abort(404)

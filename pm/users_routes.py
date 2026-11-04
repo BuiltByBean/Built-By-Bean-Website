@@ -37,7 +37,7 @@ def ceo_required(view):
     def wrapped(*args, **kwargs):
         if not getattr(current_user, "is_ceo", False):
             flash("CEO only.", "warning")
-            return redirect(url_for("pm.dashboard"))
+            return redirect(url_for("admin_hub"))
         return view(*args, **kwargs)
     return wrapped
 

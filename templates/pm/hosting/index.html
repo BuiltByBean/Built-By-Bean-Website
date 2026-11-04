@@ -1,5 +1,6 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
 
 {#
   The recurring fee against the recurring cost, per application.
@@ -50,7 +51,9 @@
 {% endmacro %}
 
 {% block content %}
-<div class="space-y-6 stagger-in">
+{{ hosting_tabs('fees') }}
+{# The panel: all that a tab press replaces (base.html, data-panel). #}
+<div data-panel="hosting" class="space-y-6">
 
     {#
       Lifetime, not this month. The bars below ask whether each fee still

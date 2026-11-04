@@ -290,9 +290,9 @@ with c.session_transaction() as s:
     s["_user_id"] = str(ids["boss"])
     s["_fresh"] = True
 
-page = re.sub(r"\s+", " ", c.get("/admin/books/receipts?view=statement").get_data(as_text=True))
+page = re.sub(r"\s+", " ", c.get("/admin/books/receipts?view=statement", follow_redirects=True).get_data(as_text=True))
 check("Statement only is a tab of its own", "Statement only" in page, page[:200])
-page_missing = re.sub(r"\s+", " ", c.get("/admin/books/receipts").get_data(as_text=True))
+page_missing = re.sub(r"\s+", " ", c.get("/admin/books/receipts", follow_redirects=True).get_data(as_text=True))
 check("what is relying on a statement line is not on Missing", "QuikTrip" in page_missing and "Twilio phone number" in page_missing)
 started = []
 real_bg = rs.sync_in_background

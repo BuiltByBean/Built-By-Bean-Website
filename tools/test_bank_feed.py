@@ -255,12 +255,13 @@ c = application.test_client()
 with c.session_transaction() as s:
     s["_user_id"] = str(ids["boss"])
     s["_fresh"] = True
-page = c.get("/admin/bank/")
+page = c.get("/admin/bank/", follow_redirects=True)
 body = page.get_data(as_text=True)
-check("the review list renders", page.status_code == 200, page.status_code)
+check("the review list renders, as the company's Bank tab in Books", page.status_code == 200
+      and 'data-panel="books"' in body, page.status_code)
 check("it shows the suggestion and the accept press", "Error monitoring" in body and "Accept" in body)
 check("no em dashes", "\u2014" not in body)
-r = c.post("/admin/bank/accept-suggested", follow_redirects=False)
+r = c.post("/admin/bank/accept-suggested", data={"business_id": ids["bbb"]}, follow_redirects=False)
 with application.app_context():
     t12 = BankTransaction.query.filter_by(external_id="t12").one()
     t13 = BankTransaction.query.filter_by(external_id="t13").one()
@@ -271,8 +272,10 @@ with application.app_context():
           BankTransaction.query.filter_by(disposition="review").count() == 0,
           BankTransaction.query.filter_by(disposition="review").count())
 
-biz = c.get(f"/admin/businesses/{ids['bbb']}").get_data(as_text=True)
-check("the business page carries its bank", 'id="bank"' in biz and "Read the bank" in biz and "Checking" in biz)
+biz = c.get(f"/admin/books/{ids['bbb']}/connections").get_data(as_text=True)
+check("the company's Connections carries its bank", 'id="bank"' in biz and "Read now" in biz and "Checking" in biz)
+check("and the business page points there",
+      f"/admin/books/{ids['bbb']}/connections" in c.get(f"/admin/businesses/{ids['bbb']}").get_data(as_text=True))
 ehq_page = c.get(f"/admin/businesses/{ids['ehq']}").get_data(as_text=True)
 check("its token is never printed", "secret-token" not in biz and "secret-token" not in ehq_page)
 
@@ -292,10 +295,10 @@ check("a refused token is said plainly and nothing is kept",
 with application.app_context():
     check("no connection was made for it", BankConnection.query.filter_by(business_id=ids["dd"]).count() == 0)
 
-ledger = c.get(f"/admin/expenses?business_id={ids['ehq']}").get_data(as_text=True)
-check("the expense list filters to one business",
-      "Every business" in ledger and "Sentry" in ledger and "OpenAI" not in ledger)
-mine = c.get(f"/admin/expenses?business_id={ids['bbb']}").get_data(as_text=True)
+ledger = c.get(f"/admin/expenses?business_id={ids['ehq']}", follow_redirects=True).get_data(as_text=True)
+check("the expense list is one company's (its Books tab)",
+      "Sentry" in ledger and "OpenAI" not in ledger)
+mine = c.get(f"/admin/expenses?business_id={ids['bbb']}", follow_redirects=True).get_data(as_text=True)
 check("and a company's books include its DBA's", "GitHub" in mine and "Sentry" not in mine)
 
 print("7. The guidance door names the books (a tag since 2026-11-04, item 8)")

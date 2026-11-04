@@ -60,7 +60,7 @@ print("EVERY PAGINATED QUERY ENDS ON SOMETHING UNIQUE:")
 
 # The ordering that applies to a .paginate() is either on the same statement or
 # on the nearest order_by above it. Both shapes are in this repo.
-FILES = ["app.py", "pm/leads_routes.py", "pm/contract_routes.py",
+FILES = ["app.py", "pm/books_routes.py", "pm/leads_routes.py", "pm/contract_routes.py",
          "pm/messages_routes.py", "pm/features_routes.py", "pm/notes_routes.py"]
 found = 0
 for rel in FILES:
@@ -100,6 +100,11 @@ with application.app_context():
     boss = User(username="mb", email="mb@example.test", first_name="Michael", role="ceo")
     boss.set_password("x")
     db.session.add(boss)
+    # The ledger is the home company's Books tab since 2026-11-04.
+    from models import Business
+    db.session.add(Business(name="Built by Bean LLC", short_name="Built by Bean", slug="bbb",
+                            sales_source="board"))
+    db.session.flush()
     for n in range(45):
         db.session.add(Expense(category="service_cost", amount=1.0 + n,
                                date=date(2026, 8, 31),
@@ -130,7 +135,7 @@ def walk(path, needle):
     """Every row the pages hand back, in order, over the whole list."""
     seen = []
     for page in range(1, 8):
-        html = c.get(f"{path}?page={page}").data.decode("utf-8", "replace")
+        html = c.get(f"{path}?page={page}", follow_redirects=True).data.decode("utf-8", "replace")
         hits = re.findall(needle + r" number (\d\d)", html)
         if not hits:
             break

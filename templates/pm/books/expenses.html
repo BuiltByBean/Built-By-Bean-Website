@@ -1,0 +1,168 @@
+{% extends "pm/books/_hub.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+{% from "pm/components/pagination.html" import render_pagination %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+
+{#
+  Expenses: one company's ledger (pm/books_routes.ledger_context), moved in
+  from /admin/expenses on 2026-11-04. Every row a bank line booked says so
+  and follows the bank; a vendor's share says which report split it. Only a
+  row typed by hand (cash, or a card the board cannot see) is edited or
+  deleted here: a bank row's amount is the bank's, and editing it would be
+  undone by the next read.
+
+  The tiles, the rows and the breakdown are the one filtered list, so they
+  are always the same money. The bar stands still and the list under it is
+  the one scroller (contained-scroll); the filters apply themselves
+  (liveFilter) and only the `data-live` regions swap.
+#}
+
+{% block hub_title %}Expenses{% endblock %}
+{% block page_subtitle %}{{ business.name }} &middot; {{ count | commas }} expense{{ '' if count == 1 else 's' }}{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+{% block panel_class %}flex flex-col flex-1 min-h-0 gap-4 min-w-0{% endblock %}
+
+{% macro money(v) %}{{ '-' if v < 0 }}${{ '{:,.2f}'.format(v|abs) }}{% endmacro %}
+
+{% block header_actions %}
+<a href="{{ url_for('pm.expense_create', business_id=business.id) }}"
+   class="inline-flex items-center gap-2 px-4 min-h-[44px] btn-brand text-sm font-medium rounded-xl transition-all">
+    {{ icon('add', 'w-4 h-4') }}
+    Add expense
+</a>
+{% endblock %}
+
+{% block hub %}
+<div data-live="ledger-tiles" class="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="glass-card p-4 min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">Total out</p>
+        <p class="text-xl sm:text-2xl font-bold text-red-300 mt-1 tabular-nums whitespace-nowrap">{{ money(total) }}</p>
+        <p class="text-xs text-surface-400 mt-1">{{ 'Matching the filters' if filtered else business.short_name or business.name }}</p>
+    </div>
+    <div class="glass-card p-4 min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">From the bank</p>
+        <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap">{{ money(from_bank) }}</p>
+        <p class="text-xs text-surface-400 mt-1">Booked by a bank line</p>
+    </div>
+    <div class="glass-card p-4 min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">By hand</p>
+        <p class="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums whitespace-nowrap">{{ money(by_hand) }}</p>
+        <p class="text-xs text-surface-400 mt-1">Typed, or before the bank</p>
+    </div>
+    <div class="glass-card p-4 min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wider text-surface-400">No client</p>
+        <p class="text-xl sm:text-2xl font-bold tabular-nums whitespace-nowrap mt-1 {{ 'text-amber-300' if unallocated else 'text-surface-400' }}">{{ money(unallocated) }}</p>
+        <p class="text-xs text-surface-400 mt-1">The business's own costs</p>
+    </div>
+</div>
+
+{# relative z-30 (LM-1): the panels open over the list below. #}
+<form method="GET" x-data="liveFilter()" @submit.prevent="apply()" data-live-filters
+      class="shrink-0 relative z-30 grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-3">
+    {% set cat_opts = [["", "Every category"]] + expense_category_choices | list %}
+    {% set ns = namespace(proj=[["", "Every project"]], cli=[["", "Every client"]], yr=[["", "Every year"]]) %}
+    {% for p in projects %}{% set ns.proj = ns.proj + [[p.id | string, p.name]] %}{% endfor %}
+    {% for c in clients %}{% set ns.cli = ns.cli + [[c.id | string, c.name]] %}{% endfor %}
+    {% for y in years %}{% set ns.yr = ns.yr + [[y | string, y | string]] %}{% endfor %}
+    {{ select_dropdown("year", ns.yr, filters.year, "Every year", on_change="apply()", extra_class="sm:w-[10rem]") }}
+    {{ select_dropdown("category", cat_opts, filters.category, "Every category", on_change="apply()", extra_class="sm:w-[14rem]") }}
+    {{ select_dropdown("client_id", ns.cli, filters.client_id, "Every client", on_change="apply()", extra_class="sm:w-[14rem]") }}
+    {{ select_dropdown("project_id", ns.proj, filters.project_id, "Every project", on_change="apply()", extra_class="sm:w-[14rem]") }}
+    <span data-live="clear" class="inline-flex items-center">
+        {% if filtered %}{{ clear_filters(href=url_for('books.expenses', id=business.id)) }}{% endif %}
+    </span>
+</form>
+
+<div class="glass-card flex flex-col min-h-0 flex-1">
+    <div data-live="ledger" class="min-h-0 flex-1 overflow-y-auto">
+        {% if expenses %}
+        {% set cat_labels = dict(expense_category_choices) %}
+        <div class="divide-y divide-white/5">
+            {% for e in expenses %}
+            {% set vendor = vendor_of.get(e.id) %}
+            <div data-row class="px-4 py-3 sm:px-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div class="min-w-0 grow basis-64">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <p class="text-sm font-medium text-white break-words min-w-0">{{ e.description or (e.project.name if e.project else 'Expense') }}</p>
+                        {% if vendor %}<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-brand-500/10 text-brand-300 shrink-0">{{ vendor.label }}</span>{% endif %}
+                        {% if e.bank_line_id %}<span class="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white/5 text-surface-300 shrink-0">Bank</span>{% endif %}
+                    </div>
+                    <p class="text-xs text-surface-400 mt-0.5 break-words">
+                        {#- A vendor row an older sync wrote for a month of usage says
+                            the month, and "to date" while it runs: $59.67 of texts
+                            did not land on the day it was read. A bank line's share
+                            says the day the bank paid, and the month it was for. -#}
+                        <span data-when>{% if vendor and vendor.covers and not e.bank_line_id %}{{ vendor.covers }}{% if vendor.to_date %} to date{% endif %}
+                        {%- else %}{{ e.date.strftime('%b') }} {{ e.date.day }}, {{ e.date.year }}{% endif %}</span>
+                        {%- if vendor and vendor.covers and e.bank_line_id %} &middot; for {{ vendor.covers }}{% endif %}
+                        &middot; {{ cat_labels.get(e.category, e.category) }}
+                        {% if e.project %}&middot; {{ e.project.name }}{% elif e.client %}&middot; {{ e.client.name }}{% endif %}
+                        {% if e.paid_by %}&middot; paid by {{ e.paid_by }}{% endif %}
+                        {% if e.business_id != business.id and e.business %}&middot; {{ e.business.short_name or e.business.name }}{% endif %}
+                    </p>
+                    {#- One line: wrapped, it stood eight lines tall on a phone. The whole of it is on the title and the edit page. -#}
+                    {% if e.sales_tax_note %}<p class="text-xs text-surface-400 truncate mt-0.5" title="{{ e.sales_tax_note }}">{{ e.sales_tax_note }}</p>{% endif %}
+                </div>
+                <p class="text-sm font-semibold text-red-300 tabular-nums whitespace-nowrap">{{ money(e.amount) }}</p>
+                <div class="flex items-center gap-2 ml-auto">
+                    {% if e.receipt_filename %}
+                    <a href="{{ url_for('pm.expense_receipt', id=e.id) }}" target="_blank" rel="noopener" title="Receipt" aria-label="Receipt"
+                       class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl border border-white/10 text-brand-300 hover:border-brand-500/40">
+                        {{ icon('attach', 'w-4 h-4') }}
+                    </a>
+                    {% endif %}
+                    {% if vendor %}
+                    <a href="{{ url_for('service_costs.mappings_list', provider_id=vendor.provider_id) }}" title="Who this vendor's share is for" aria-label="Mapping"
+                       class="inline-flex items-center justify-center gap-1.5 min-w-[44px] min-h-[44px] px-3 rounded-xl border border-white/10 text-sm text-surface-200 hover:border-brand-500/40 hover:text-brand-300">
+                        {{ icon('link', 'w-4 h-4') }}
+                        <span class="hidden sm:inline">Mapping</span>
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('pm.expense_edit', id=e.id) }}" title="Edit" aria-label="Edit"
+                       class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300">
+                        {{ icon('edit', 'w-4 h-4') }}
+                    </a>
+                    {% endif %}
+                    {% if not e.bank_line_id and not vendor and not e.is_auto_generated %}
+                    <form method="POST" data-live-action action="{{ url_for('pm.expense_delete', id=e.id) }}">
+                        <input type="hidden" name="next" value="{{ request.full_path }}">
+                        {{ confirm_button('Delete', 'Delete it?') }}
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="px-4 pb-4">
+            {{ render_pagination(pagination, 'books.expenses', extra_args=dict(filters, id=business.id)) }}
+        </div>
+        {% if by_category %}
+        <div class="border-t border-white/10 grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 sm:p-5">
+            {% for title, rows in [('By category', by_category), ('By client', by_client), ('Last six months', by_month)] %}
+            <section class="min-w-0" aria-label="{{ title }}">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-2">{{ title }}</h2>
+                <div class="divide-y divide-white/5">
+                    {% for label, amount in rows %}
+                    <div class="flex items-center justify-between gap-3 py-2 min-w-0">
+                        <span class="text-sm text-surface-200 break-words min-w-0">{{ label }}</span>
+                        <span class="text-sm font-semibold text-white tabular-nums shrink-0">{{ money(amount) }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="empty p-8 sm:p-12 text-center space-y-4">
+            <p class="text-surface-400">{{ 'Nothing matches those filters' if filtered else 'No expenses yet' }}</p>
+            {% if not filtered %}
+            <a href="{{ url_for('books.connections', id=business.id) }}"
+               class="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Connect a bank</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -6,7 +6,7 @@
 {% block title %}Create Invoice - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('stripe.invoices_list'), 'Invoices') }}{% endblock %}
 {% block page_title %}Create Invoice{% endblock %}
-{% block page_subtitle %}Generate an invoice from {% if time_tracking %}time entries and {% endif %}expenses{% endblock %}
+{% block page_subtitle %}Generate an invoice from time entries and expenses{% endblock %}
 
 {% block content %}
 <div x-data="invoiceGenerator()" class="space-y-6 stagger-in">
@@ -55,7 +55,9 @@
         <input type="hidden" name="period_end" :value="range.end || ''">
 
         <!-- Step 2: Time Entries -->
-        {% if time_tracking %}
+        {# Shown whether or not FEATURE_TIME_TRACKING is on: time logs itself
+           from Claude sessions (session_time.py), and Time not yet billed
+           sends Michael here to bill it, so hiding the step hid the money. #}
         <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">2. Select Time Entries</h3>
@@ -117,13 +119,12 @@
                 </div>
             </template>
         </div>
-        {% endif %}
 
         <!-- Step 3: Expenses -->
         <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
             <div class="flex items-center justify-between mb-4">
                 {# Renumbered when the time step is not there to be step 2. #}
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">{% if time_tracking %}3{% else %}2{% endif %}. Select Expenses</h3>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">3. Select Expenses</h3>
                 <template x-if="expenses.length > 0">
                     <button type="button" @click="toggleAllExpenses()" class="text-xs text-brand-500 hover:text-brand-600">
                         <span x-text="allExpensesSelected ? 'Deselect All' : 'Select All'"></span>
@@ -170,7 +171,7 @@
 
         <!-- Step 4: Invoice Settings & Preview -->
         <div class="glass-card p-6 mb-6" x-show="clientId && (selectedTimeIds.length > 0 || selectedExpenseIds.length > 0)" x-transition>
-            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">{% if time_tracking %}4{% else %}3{% endif %}. Invoice Settings</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">4. Invoice Settings</h3>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
@@ -187,12 +188,10 @@
 
             <!-- Preview Total -->
             <div class="bg-surface-800/50 rounded-xl p-5">
-                {% if time_tracking %}
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-sm text-surface-400">Time entries</span>
                     <span class="text-sm font-medium text-white" x-text="selectedTimeIds.length + ' selected'"></span>
                 </div>
-                {% endif %}
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-sm text-surface-400">Expenses</span>
                     <span class="text-sm font-medium text-white" x-text="selectedExpenseIds.length + ' selected'"></span>
@@ -249,7 +248,7 @@ function invoiceGenerator() {
         ],
 
         init() {
-            if (this.clientId) this.loadEntries();
+            if (this.clientId) this.loadEntries({{ 'true' if take_all else 'false' }} ? 'time' : false);
         },
 
         // Compute an inclusive {start,end} ISO range for the active period.
@@ -314,8 +313,10 @@ function invoiceGenerator() {
                 this.timeEntries = await timeRes.json();
                 this.expenses = await expenseRes.json();
                 if (autoselect) {
-                    this.selectedTimeIds = this.timeEntries.filter(e => !e.is_free).map(e => String(e.id));
-                    this.selectedExpenseIds = this.expenses.map(e => String(e.id));
+                    this.selectedTimeIds = this.timeEntries.filter(e => !e.is_free && e.cost > 0).map(e => String(e.id));
+                    // From Time not yet billed only the time is ticked: an expense
+                    // on a client is not always one to bill them for.
+                    if (autoselect !== 'time') this.selectedExpenseIds = this.expenses.map(e => String(e.id));
                 }
             } catch (e) {
                 console.error('Failed to load entries:', e);

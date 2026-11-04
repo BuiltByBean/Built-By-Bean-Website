@@ -1,0 +1,23 @@
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
+
+{#
+  The Hosting section's tab row (docs/finances_plan.md item 9): Fees, the
+  vendor Mappings, Railway months and the Vendors themselves, which were
+  three pages under Expenses with back links and no way between them.
+
+  Every page in the section calls this once at the top of its content block
+  and wraps the rest in <div data-panel="hosting">, so a tab press swaps the
+  panel and the row slides its mark (base.html bbbNavigate). The counts are
+  hosting_routes.tab_counts, each the reading its own tab draws. `railway`
+  is the Railway months address to keep while on that tab.
+#}
+{% macro hosting_tabs(active, railway=none) %}
+{% set c = hosting_counts() %}
+{{ fin_script() }}
+{{ fin_tabs('hosting', active, [
+    ('fees', 'Fees', url_for('hosting.hosting_index'), c.fees),
+    ('mappings', 'Mappings', url_for('service_costs.mappings_list'), none),
+    ('railway', 'Railway months', railway or url_for('service_costs.railway_months'), c.bills),
+    ('vendors', 'Vendors', url_for('service_costs.providers_list'), c.vendors),
+], 'Hosting') }}
+{% endmacro %}

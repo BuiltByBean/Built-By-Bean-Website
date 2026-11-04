@@ -637,7 +637,7 @@ def send_document(document_id):
     doc = db.session.get(Document, document_id) or abort(404)
     if not doc.original_name.lower().endswith(".pdf"):
         flash("Only PDFs can be sent for signature.", "warning")
-        return redirect(url_for("pm.dashboard"))
+        return redirect(url_for("admin_hub"))
 
     client = doc.client or (doc.project.client if doc.project else None)
 

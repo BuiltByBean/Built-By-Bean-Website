@@ -395,7 +395,7 @@ check("a row refunded in full says so", re.sub(r"\s+", " ", html).count(">Refund
       re.sub(r"\s+", " ", html).count(">Refunded</span>"))
 check("a part refund says how much", "$53.30 refunded" in page)
 
-res = c.get("/admin/expenses?per_page=100")
+res = c.get("/admin/expenses?per_page=100", follow_redirects=True)
 check("the expense list renders", res.status_code == 200, res.status_code)
 check("the row says where the rest of the charge went",
       "$756.43 charged: $656.70 sales tax" in flat(res.get_data(as_text=True)))

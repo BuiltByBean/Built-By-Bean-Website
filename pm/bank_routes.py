@@ -1,15 +1,18 @@
-"""The bank feed's pages: connect a business's bank, and settle what it reads.
+"""The bank feed's presses: connect a business's bank, and settle what it reads.
 
-`/admin/bank/` is the review list: every bank line nobody has a rule for
-yet, newest first, each with Claude's suggestion filled in so the usual
-answer is one press, and "remember" on so the same vendor never asks again.
-The list is meant to empty itself: after the first month of answers almost
-every line arrives already settled by a rule (bank_feed.py says what each
-disposition means). `?view=all` is every line read, for checking.
+The review list itself is each company's Bank tab in Books since 2026-11-04
+(pm/books_routes.bank, docs/finances_plan.md item 2); `/admin/bank/` sends
+there. Every bank line nobody has a rule for yet, newest first, each with
+the board's own suggestion filled in so the usual answer is one press, and
+"remember" on so the same vendor never asks again. The list is meant to
+empty itself: after the first month of answers almost every line arrives
+already settled by a rule (bank_feed.py says what each disposition means).
 
-Connecting a bank is on the business's own page: its owner makes a read
-only token in Mercury and pastes it there. The board checks it against
-Mercury before keeping it and never displays it again.
+Connecting a bank is on the company's Connections tab in Books: its owner
+makes a read only token in Mercury and pastes it there. The board checks it
+against Mercury before keeping it and never displays it again. Nothing here
+calls a paid model: the "Ask Claude" press went on 2026-11-04, and the
+/bank skill does that reading on Michael's plan.
 """
 import json
 from datetime import date
@@ -54,7 +57,7 @@ def _back():
     nxt = request.form.get("next") or ""
     if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
         return nxt
-    return url_for("bank.review")
+    return url_for("books.index")
 
 
 def _int(name):
@@ -67,29 +70,12 @@ def _int(name):
 @bank_bp.route("/")
 @ceo_required
 def review():
-    view = request.args.get("view", "review")
-    q = BankTransaction.query
-    if view != "all":
-        q = q.filter_by(disposition="review")
-    lines = (q.order_by(BankTransaction.occurred_on.desc(), BankTransaction.id.desc())
-             .limit(300).all())
-    businesses = Business.query.order_by(Business.parent_id.isnot(None), Business.name).all()
-    projects = Project.query.order_by(Project.name).all()
-    waiting = BankTransaction.query.filter_by(disposition="review").count()
-    suggested = (BankTransaction.query.filter_by(disposition="review")
-                 .filter(BankTransaction.suggestion_json.isnot(None)).count())
-    connections = (BankConnection.query.filter_by(provider="mercury")
-                   .order_by(BankConnection.id).all())
-    return render_template(
-        "pm/bank/review.html", lines=lines, view=view, waiting=waiting, suggested=suggested,
-        connections=connections, suggesting=bank_feed.suggesting(),
-        business_options=[(b.id, b.name) for b in businesses],
-        project_options=[(0, "No project")] + [(p.id, p.name) for p in projects],
-        disposition_options=DISPOSITIONS, category_options=CATEGORIES, norm=bank_feed.norm,
-        category_labels=dict(EXPENSE_CATEGORY_CHOICES),
-        business_names={b.id: (b.short_name or b.name) for b in businesses},
-        owners_by_business={b.id: _first_owner(b.id) for b in businesses},
-        disposition_labels=dict(VendorRule.DISPOSITIONS, review="To review", void="Cancelled"))
+    """The list moved into each company's Bank tab."""
+    from pm.books_routes import _home
+    business = db.session.get(Business, request.args.get("business_id", type=int) or 0) or _home()
+    view = request.args.get("view")
+    return redirect(url_for("books.bank", id=business.parent_id or business.id,
+                            **({"view": view} if view else {})), 301)
 
 
 @bank_bp.route("/lines/<int:id>/decide", methods=["POST"])
@@ -121,8 +107,13 @@ def accept_suggested():
     """Every waiting line that carries a suggestion, settled as suggested and
     remembered, so the next charge from each vendor needs nobody."""
     done = 0
-    for line in (BankTransaction.query.filter_by(disposition="review")
-                 .filter(BankTransaction.suggestion_json.isnot(None)).all()):
+    q = (BankTransaction.query.filter_by(disposition="review")
+         .filter(BankTransaction.suggestion_json.isnot(None)))
+    business = db.session.get(Business, _int("business_id") or 0)
+    if business is not None:
+        import books_service
+        q = q.filter(BankTransaction.business_id.in_(books_service.family_ids(business)))
+    for line in q.all():
         if line.disposition != "review":
             continue  # settled already by a rule an earlier one in this loop wrote
         s = line.suggestion or {}
@@ -139,21 +130,7 @@ def accept_suggested():
         done += 1
     bank_feed.fold_duplicates()
     flash(f"Accepted {done:,} suggestion{'' if done == 1 else 's'}.", "success")
-    return redirect(url_for("bank.review"))
-
-
-@bank_bp.route("/suggest", methods=["POST"])
-@ceo_required
-def suggest_now():
-    import os
-    from flask import current_app
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        flash("No ANTHROPIC_API_KEY on the board.", "warning")
-        return redirect(url_for("bank.review"))
-    started = bank_feed.suggest_in_background(current_app._get_current_object())
-    flash("Claude is reading the lines. Reload in a few minutes." if started
-          else "Claude is already reading them.", "success")
-    return redirect(url_for("bank.review"))
+    return redirect(_back())
 
 
 @bank_bp.route("/connections", methods=["POST"])
@@ -161,7 +138,7 @@ def suggest_now():
 def connect():
     business = db.session.get(Business, _int("business_id") or 0) or abort(404)
     token = (request.form.get("token") or "").strip()
-    back = url_for("businesses.detail", id=business.id) + "#bank"
+    back = url_for("books.connections", id=business.parent_id or business.id)
     if not token:
         flash("Paste the read only token from Mercury.", "warning")
         return redirect(back)
@@ -211,4 +188,4 @@ def disconnect(id):
     db.session.delete(conn)
     db.session.commit()
     flash("Disconnected. The expenses it booked are still in the books.", "success")
-    return redirect(url_for("businesses.detail", id=business_id) + "#bank")
+    return redirect(_back() if request.form.get("next") else url_for("books.index", tab=business_id))
