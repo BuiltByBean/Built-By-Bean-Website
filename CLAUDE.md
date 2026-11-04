@@ -1391,6 +1391,30 @@ the tab, so it swaps to what is now true instead of standing stale.
 the room there is: in a contained list the last row's picker opened downward
 into a box that cut its options off.
 
+**A status press that reaches a person asks first** (`tickets/_status.html`,
+shared by the open row and the ticket page; catalogue rule "A button that sends
+something says what it will do, then waits for a second click"). The desk's
+Resolve shipped texting and emailing the reporter on one press with "Tell them"
+preselected. Now every status press that leaves the board names the outcome and
+the person ("Resolve and tell Kenali", "Resolve quietly"), shows one sentence of
+what goes out and to whom, and acts on a second press beside Cancel. The
+sentences are what each app's code does (EntertainHQ's `_desk_set_status`:
+In progress posts a note to My Tickets, Resolve texts and emails or not; Kuper's
+`/api/hub/status` applies and sends nothing); change one when that code
+changes. A ticket raised here reaches nobody, so its presses act at once.
+
+A tile's name picks that app in the App filter (`appPick`, shared through a
+`display: contents` wrapper and `select_dropdown`'s `model`) and the bar applies
+it in place, keeping every other filter.
+
+**Nested live regions.** The cards are regions inside the results region, and
+`bbbSwapLive` used to swap each card again after the results had brought it in,
+replacing it with itself, which removes it: every filter change emptied the
+list (live for an hour, 2026-11-04). It now skips a region that came in with its
+parent. In the desktop app's preview pane, while the pane is hidden, Alpine's
+x-show waits on an animation frame that never comes; check the board's
+interactions in headless Chromium.
+
 Data Dungeon has a full desk (`/admin/support`) and no door yet, so its tile
 says "Desk not connected" until it builds EntertainHQ's door (filed as its
 gap). `tools/test_support_board.py` runs both round trips, the desk against a
