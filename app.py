@@ -35,6 +35,7 @@ from models import (
 )
 from project_phases import sync_project_phases, explain as explain_phase
 from pm.contract_routes import wants_send as _wants_send  # noqa: E402
+import contract_effects  # noqa: E402
 from forms import (
     ClientForm, ProjectForm, TicketForm, ExpenseForm,
     TimeEntryForm, LoginForm,
@@ -317,8 +318,10 @@ def create_app():
     app.register_blueprint(business_bp)
 
     # ── Signatures (SignaDoc) ───────────────────────────────
-    from pm.contract_routes import contracts_bp, send_generated
+    from pm.contract_routes import contracts_bp, send_generated, start_signature_watcher
     app.register_blueprint(contracts_bp)
+    # Signatures land within fifteen minutes, not when somebody opens a page.
+    start_signature_watcher(app)
 
     # ── What I sell ─────────────────────────────────────────
     from pm.products_routes import products_bp
@@ -1298,16 +1301,10 @@ def create_app():
 
         Run on creation rather than offered as a choice, because GitHub and
         Railway are on every build and a question with one answer is not a
-        question.
+        question. One copy, in contract_effects, because a project a signed
+        statement of work creates gets the same.
         """
-        added = 0
-        for pb in Playbook.query.filter_by(is_default=True, is_active=True).all():
-            exists = ProjectPlaybook.query.filter_by(
-                project_id=project.id, playbook_id=pb.id).first()
-            if not exists:
-                db.session.add(ProjectPlaybook(project_id=project.id, playbook_id=pb.id))
-                added += 1
-        return added
+        return contract_effects.apply_default_playbooks(project)
 
     @pm_bp.route("/projects/<int:id>")
     @login_required
@@ -3262,11 +3259,12 @@ def create_app():
         safe_name = client_name.replace(" ", "_").replace("&", "and")
         filename = f"{safe_name}_SOW_{project_name.replace(' ', '_')}.pdf"
 
-        # Auto-save PDF to client and update stage/revenue
+        # File the PDF against the client and write down what it proposes.
         # Chosen from the picker above, so always found. This was an ilike on
         # a typed name, which filed nothing when the spelling drifted.
         doc = None
         project = None
+        sow_effects = None
         # Only on the way out. This route is posted twice: once to build the
         # preview, and again from the preview page, which replays every field
         # with `previewed` set. Everything below records something agreed, and
@@ -3293,20 +3291,15 @@ def create_app():
                 original_name=filename, file_size=len(pdf_bytes),
             )
             db.session.add(doc)
-            # Parse MVP price and update client stage + revenue
             try:
                 price_val = float(mvp_price.replace(",", "").replace("$", ""))
             except (ValueError, TypeError):
                 price_val = 0.0
-            client.stage = "contracted"
-            client.contract_revenue = price_val
-            # Update matching project with MVP date and maintenance days
             # Chosen from the picker where one was used, which is exact. The
             # name match stays as the fall-through: a preview stashed before
             # the picker existed replays without an id, a revision prefill
             # fills the name and not the select, and either has to keep
             # working.
-            project = None
             if project_id:
                 candidate = db.session.get(Project, project_id)
                 # A stale form can carry a project belonging to somebody else.
@@ -3319,44 +3312,27 @@ def create_app():
                     Project.client_id == client.id,
                     Project.name.ilike(project_name),
                 ).first()
-            # No match used to mean no record: the fee, budget, delivery date,
-            # maintenance window and phase all went into the PDF and stopped
-            # there, without a word, and the hosting page had no fee to hold
-            # the infrastructure cost against. An SOW is the thing that brings
-            # a project into being, so a name that matches nothing makes the
-            # project rather than skipping the block.
-            created_project = False
-            if project is None:
-                project = Project(client_id=client.id, name=project_name)
-                db.session.add(project)
-                # Flushed for its id, then given the playbooks every build
-                # gets. The project form has always done this and this path
-                # did not, so a project born from a statement of work started
-                # life with no GitHub or Railway checklist and nothing said so.
-                db.session.flush()
-                _apply_default_playbooks(project)
-                created_project = True
-            if project:
-                try:
-                    project.mvp_date = datetime.strptime(delivery_date, "%B %d, %Y").date()
-                except (ValueError, TypeError):
-                    pass
-                project.maintenance_days = maint_days
-                project.phase = "contracted"
-                project.budget = price_val
-                # What Section 7 just committed them to. Kept on the project so
-                # the hosting page can hold it against what the infrastructure
-                # for this project actually costs; typed into a PDF and nowhere
-                # else, it was a number nobody could ever check.
-                try:
-                    project.hosting_fee = float(str(hosting_fee).replace(",", "").replace("$", ""))
-                except (ValueError, TypeError):
-                    pass
-                project.hosting_cycle = hosting_cycle or "monthly"
+            try:
+                delivery = datetime.strptime(delivery_date, "%B %d, %Y").date()
+            except (ValueError, TypeError):
+                delivery = None
+            try:
+                fee_val = float(str(hosting_fee).replace(",", "").replace("$", ""))
+            except (ValueError, TypeError):
+                fee_val = None
+            # What this SOW changes on the board: the client and the package
+            # to contracted, the project (made if it does not exist yet) with
+            # its fee, budget, delivery date and maintenance window, and the
+            # package's products as sales. All of it waits for the signature
+            # (contract_effects.py, audit item 6): it used to be written here,
+            # as the document went out, and a decline took none of it back.
+            sow_effects = contract_effects.sow_effects(
+                client=client, project=project, project_name=project_name,
+                price=price_val, mvp_date=delivery, maintenance_days=maint_days,
+                hosting_fee=fee_val, hosting_cycle=hosting_cycle,
+                package=contract_effects.find_package(
+                    client, request.form.get("package_id", type=int), project_name))
             db.session.commit()
-            if created_project:
-                flash(f"Created project \"{project.name}\" and recorded the "
-                      f"fee, budget and dates from this SOW against it.", "success")
 
         if not request.form.get("previewed"):
             from pm.contract_routes import stash_preview
@@ -3378,8 +3354,13 @@ def create_app():
             # anywhere near the client.
             countersigner=bool(own_anchors),
             client=client, project=project, document=doc,
+            effects=sow_effects,
         )
-        from pm.contract_routes import finish_send
+        from pm.contract_routes import apply_if_paper, finish_send
+        made = apply_if_paper(sent, sow_effects)
+        if made is not None:
+            flash(f"Recorded the fee, budget and dates from this SOW against "
+                  f"\"{made.name}\".", "success")
         return finish_send(sent, pdf_bytes=bytes(pdf_bytes), filename=filename)
 
     # ── Time Tracking ────────────────────────────────────────

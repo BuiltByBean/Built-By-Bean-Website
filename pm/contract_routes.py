@@ -23,6 +23,7 @@ from flask import (
 )
 from flask_login import login_required
 
+import contract_effects
 import signadoc_service as signadoc
 from signadoc_service import SignaDocError
 from models import db, Document, SignatureRequest
@@ -143,7 +144,7 @@ def _parsed(stamp):
 def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_email,
                    message="", fields=None, client=None, project=None,
                    source_document=None, countersigner=False, form=None,
-                   revision_of=None, send=True):
+                   revision_of=None, send=True, effects=None):
     """Send a PDF out for signature and record where it went.
 
     Raises SignaDocError if the portal will not take it, having written
@@ -223,6 +224,10 @@ def create_request(*, pdf_bytes, filename, title, kind, signer_name, signer_emai
     )
     db.session.add(row)
     db.session.commit()
+    # What the document changes on the board, kept as a proposal until it is
+    # signed. Going out moves the client to "proposal sent" and no further.
+    if effects:
+        contract_effects.record_sent(row, effects)
     # Michael's own signing link, carried on the object rather than stored.
     # It is useful for about five minutes and a signing URL that outlives its
     # use is a signing URL sitting in a database.
@@ -241,13 +246,34 @@ def _apply(row, envelope):
         row.synced_at = _now()
         return False
 
+    # Compare-and-set, not a plain write. Two gunicorn workers each run the
+    # signature watcher, and a page can refresh at the same moment; whichever
+    # moves the row from what it was is the one that acts on the change, so a
+    # signed contract is filed and applied once.
+    moved = db.session.execute(
+        db.update(SignatureRequest)
+        .where(SignatureRequest.id == row.id, SignatureRequest.status == row.status)
+        .values(status=status)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    if moved != 1:
+        db.session.refresh(row)
+        return False
     row.status = status
     row.synced_at = _now()
     if not row.signer_ref:
         _adopt_signer(row, envelope)
     if status == "completed":
         row.completed_at = _parsed(envelope.get("completedAt")) or _now()
+        # What the document says, now that it is agreed. Before the signed
+        # copy is filed, because a project the contract creates is where
+        # that copy belongs.
+        summary = contract_effects.apply_signed(row)
+        if summary:
+            current_app.logger.info("Contracts: %s signed: %s", row.title, summary)
         _file_signed_copy(row)
+    elif status == "voided":
+        contract_effects.put_back(row)
     elif status == "declined":
         # The portal records the reason against whichever signer gave it, so
         # it is read off the signers rather than the envelope. Falling back to
@@ -259,6 +285,7 @@ def _apply(row, envelope):
                 break
         row.decline_reason = (reason or envelope.get("voidReason") or "").strip() or None
         row.declined_at = _now()
+        contract_effects.put_back(row)
     return True
 
 
@@ -343,6 +370,47 @@ def refresh_open_requests():
             changed += 1
     db.session.commit()
     return changed
+
+
+# What the watcher last did, for anybody asking (and for the test).
+watcher_state = {"last_run": None, "last_result": None}
+
+
+def start_signature_watcher(app):
+    """Ask the portal about open contracts every fifteen minutes.
+
+    Audit item 4: status used to refresh only when a Contracts page was
+    opened, so Michael learned somebody had signed by going to look, and a
+    signed SOW's effects (contract_effects.py) waited on that visit too. Now
+    a signature lands within fifteen minutes whoever is looking.
+
+    One thread per gunicorn worker, the hub reply sender's pattern. Two
+    workers asking twice is harmless: `_apply` moves a row with a
+    compare-and-set, so a completion is acted on once. Sleeps first, so a
+    boot (and every test that builds the app) asks nothing.
+    SIGNATURE_REFRESH_SECONDS sets the interval; 0 switches it off.
+    """
+    import threading
+    import time
+
+    interval = int(os.environ.get("SIGNATURE_REFRESH_SECONDS", "900") or 0)
+    if interval <= 0:
+        return None
+
+    def loop():
+        while True:
+            time.sleep(interval)
+            try:
+                with app.app_context():
+                    watcher_state["last_result"] = refresh_open_requests()
+                    watcher_state["last_run"] = _now()
+                    db.session.remove()
+            except Exception as exc:  # noqa: BLE001 - a dead thread is a silent one
+                app.logger.warning("contracts: signature refresh failed: %s", exc)
+
+    thread = threading.Thread(target=loop, daemon=True, name="signature-watcher")
+    thread.start()
+    return thread
 
 
 # ── Pages ────────────────────────────────────────────────
@@ -491,6 +559,7 @@ def contract_void(id):
         if exc.status == 404:
             row.status = "voided"
             row.synced_at = _now()
+            contract_effects.put_back(row)
             db.session.commit()
             flash("The signing portal has no such envelope, so this one is "
                   "marked voided here. Nothing was sent.", "warning")
@@ -499,8 +568,10 @@ def contract_void(id):
         return redirect(back)
     row.status = "voided"
     row.synced_at = _now()
+    undone = contract_effects.put_back(row)
     db.session.commit()
-    flash("Voided. The signing link no longer works.", "success")
+    flash("Voided. The signing link no longer works."
+          + (f" Put back: {undone}." if undone else ""), "success")
     return redirect(back)
 
 
@@ -669,7 +740,7 @@ SEND_FAILED = object()
 
 def send_generated(pdf_bytes, *, filename, title, kind, fields,
                    client=None, project=None, document=None,
-                   countersigner=False):
+                   countersigner=False, effects=None):
     """See create_request. The form is read from the request so every caller
     gets revision support without having to remember to pass it."""
     """Send a document this board just generated, if the form asked for it.
@@ -705,6 +776,7 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
             revision_of=SignatureRequest.query.get(
                 request.form.get("revision_of", type=int))
             if request.form.get("revision_of", type=int) else None,
+            effects=effects,
         )
     except SignaDocError as exc:
         flash(f"Could not send it for signature: {exc} Nothing was sent - the document is still here, try again.", "error")
@@ -712,6 +784,15 @@ def send_generated(pdf_bytes, *, filename, title, kind, fields,
 
     flash(sent_message(row), "success")
     return row
+
+
+def apply_if_paper(sent, effects):
+    """A contract downloaded rather than sent is signed on paper, where the
+    board cannot see it, so what it says applies as it is downloaded: the one
+    moment the board knows about. A failed send applies nothing."""
+    if sent is None and effects:
+        return contract_effects.apply_now(effects)
+    return None
 
 
 def finish_send(sent, *, pdf_bytes, filename):
@@ -817,7 +898,7 @@ def _script_font(pdf_family_owner):
 
 
 def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page_h,
-             client, project=None, party_name=None):
+             client, project=None, party_name=None, effects=None):
     """Show it first, then send it if asked, otherwise hand back the download.
 
     Unless the form says the document has already been read, this stops here
@@ -840,8 +921,9 @@ def _deliver(pdf_bytes, filename, title, kind, own, client_anchors, page_w, page
         fields = signadoc.fields_for(own, page_w, page_h, signer_id="bbb") + fields
     sent = send_generated(
         pdf_bytes, filename=filename, title=title, kind=kind, fields=fields,
-        countersigner=bool(own), client=client, project=project,
+        countersigner=bool(own), client=client, project=project, effects=effects,
     )
+    apply_if_paper(sent, effects)
     return finish_send(sent, pdf_bytes=pdf_bytes, filename=filename)
 
 
@@ -966,16 +1048,19 @@ def generate_hosting():
         reason=(request.form.get("reason") or "").strip(),
     )
 
-    # Written on the way out, not on the way to the preview: a document that was
-    # looked at and abandoned has not changed what anybody agreed to pay.
-    if project is not None and request.form.get("previewed"):
+    # The fee is the contract's proposal, applied when it is SIGNED (or as a
+    # paper copy is downloaded), never on the way to the preview and never
+    # merely because it went out: a fee update the client declines leaves the
+    # fee they agreed to last time (contract_effects.py).
+    effects = None
+    if project is not None:
         try:
-            project.hosting_fee = float(fee.replace(",", "").replace("$", ""))
-            project.hosting_cycle = cycle
-            db.session.commit()
+            effects = contract_effects.hosting_effects(
+                client=client, project=project,
+                fee=float(fee.replace(",", "").replace("$", "")), cycle=cycle)
         except (ValueError, TypeError):
-            db.session.rollback()
-    elif project is None and request.form.get("previewed"):
+            effects = None
+    elif request.form.get("previewed"):
         # The project picker is optional, so a fee can be agreed in a document
         # and never reach the row the hosting page reads. Saying so is the
         # difference between a number that is merely unset and one nobody
@@ -987,7 +1072,7 @@ def generate_hosting():
     stem = "HostingUpdate" if is_update else "Hosting"
     return _deliver(pdf_bytes, f"{_safe(client.name)}_{stem}_{_safe(application)}.pdf",
                     f"{label} - {application}",
-                    "hosting", own, cli, w, h, client, project)
+                    "hosting", own, cli, w, h, client, project, effects=effects)
 
 
 @contracts_bp.route("/new/addendum", methods=["GET"])

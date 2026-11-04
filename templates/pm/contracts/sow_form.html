@@ -35,6 +35,9 @@
                             { detail: { name: 'project_id', options: projOpts } })), 0)">
 
     {% include "pm/contracts/_prefill.html" %}
+            {#- The MVP package this SOW was written from. Once signed, the
+                package moves to contracted and its products become sales. -#}
+            <input type="hidden" name="package_id" value="{{ request.args.get('package_id', '') }}">
             <div class="space-y-5">
                 <!-- Client & Project -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

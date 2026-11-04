@@ -675,6 +675,9 @@ def package_sow(id):
 
     args = {
         "client_id": package.client_id,
+        # Named so the SOW, once SIGNED, moves this package to contracted and
+        # writes its products as sales (contract_effects.py).
+        "package_id": package.id,
         "project_name": package.name,
         "project_description": package.summary or "",
         "features": lines,

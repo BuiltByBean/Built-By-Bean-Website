@@ -1149,6 +1149,12 @@ class TimeEntry(db.Model):
     hours = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text, default="")
     rate_type = db.Column(db.String(20), nullable=False, default="maintenance")
+    # The Claude Code session this block of time was measured from, when the
+    # SessionEnd hook logged it (tools/hooks/session_end.py). Unique, so the
+    # hook running again for the same session corrects its entry rather than
+    # adding a second one.
+    session_ref = db.Column(db.String(80), nullable=True, unique=True,
+                            index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     @property
@@ -2489,6 +2495,16 @@ class SignatureRequest(db.Model):
     # The form that produced the document, so a revision starts from what was
     # actually sent rather than from a blank page and somebody's memory.
     form_json = db.Column(db.Text, nullable=True)
+
+    # What the document changes on the board once it is SIGNED, not sent:
+    # the client and package to contracted, the project's fee, budget and
+    # dates, the package's products as sales (contract_effects.py). Kept
+    # here as the proposal, applied on `completed`, and `undo_json` is what
+    # to put back on a decline or a void. A contract nobody signed takes
+    # nothing (Michael's decision on audit item 6, 2026-11-04).
+    effects_json = db.Column(db.Text, nullable=True)
+    undo_json = db.Column(db.Text, nullable=True)
+    effects_applied_at = db.Column(db.DateTime, nullable=True)
 
     # Set when this document replaces one the client asked to change, so the
     # back-and-forth reads as a thread instead of four unrelated envelopes.
