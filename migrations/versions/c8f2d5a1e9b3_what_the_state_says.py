@@ -5,14 +5,14 @@ Every column and table is guarded, because create_all runs on boot and wins
 the race on a fresh database.
 
 Revision ID: c8f2d5a1e9b3
-Revises: b4e9c2a7d153
+Revises: c6d2a8e41f97
 Create Date: 2026-11-04
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "c8f2d5a1e9b3"
-down_revision = "b4e9c2a7d153"
+down_revision = "c6d2a8e41f97"
 branch_labels = None
 depends_on = None
 
