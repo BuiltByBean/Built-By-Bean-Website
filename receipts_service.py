@@ -304,11 +304,11 @@ def match(receipt):
     rows = (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
                                  Expense.date >= lo, Expense.date <= hi).all())
     first = round(receipt.amount, 2) if receipt.amount else None
-    exact = [e for e in rows if first is not None and abs(round(e.amount, 2) - first) < 0.005]
+    exact = [e for e in rows if first is not None and abs(e.charged - first) < 0.005]
     if not exact:
         # Another total on the same receipt: only when it picks out one
         # charge, because a second figure is a weaker reading than the first.
-        others = [e for e in rows if any(abs(round(e.amount, 2) - a) < 0.005 for a in amounts - {first})]
+        others = [e for e in rows if any(abs(e.charged - a) < 0.005 for a in amounts - {first})]
         exact = others if len(others) == 1 else []
     word = (receipt.vendor or "").lower()
     said = _words(f"{receipt.vendor} {receipt.subject}")
@@ -340,6 +340,7 @@ def attach_filings():
     the receipts folder, so removing one never removes the other."""
     import shutil
     from flask import current_app
+    import books_service
     from models import db, Expense, SalesTaxFiling
     done = 0
     for filing in SalesTaxFiling.query.filter(SalesTaxFiling.filed_at.isnot(None)).all():
@@ -352,15 +353,15 @@ def attach_filings():
         near = (Expense.query.filter(Expense.receipt_filename.is_(None), Expense.time_entry_id.is_(None),
                                      Expense.date >= day - timedelta(days=MATCH_BEFORE),
                                      Expense.date <= day + timedelta(days=MATCH_AFTER)).all())
-        exact = [e for e in near if any(abs(round(e.amount, 2) - a) < 0.005 for a in amounts)]
+        exact = [e for e in near if any(abs(e.charged - a) < 0.005 for a in amounts)]
         # WebFile adds a card fee the return does not show, and it is not
         # always typed in: $739.54 of tax was a $756.43 card charge on
         # 2026-10-30. A charge to the Comptroller up to 3% over the tax is
         # the payment, the nearest one first.
         fee_on = [e for e in near
-                  if re.search(r"comptroller|texas tax|state tax", (e.description or "").lower())
-                  and paid <= e.amount <= paid * 1.03 + 0.01]
-        for e in (exact or sorted(fee_on, key=lambda x: x.amount - paid)[:1]):
+                  if books_service.STATE_TAX_PAYMENT.search(e.description or "")
+                  and paid <= e.charged <= paid * books_service.CARD_FEE_ROOM + 0.01]
+        for e in (exact or sorted(fee_on, key=lambda x: x.charged - paid)[:1]):
             os.makedirs(_receipts_dir(), exist_ok=True)
             src = (os.path.join(current_app.config["UPLOAD_FOLDER"], "tax_filings", files[0].stored_name)
                    if files else None)
@@ -399,7 +400,11 @@ def in_use(filename, but_not_expense_id=None):
 def rematch():
     """Try every waiting receipt again: an expense may have arrived since
     (a bank line settles, a statement is imported)."""
+    import books_service
     from models import db, Receipt
+    # A charge typed on the expense form reaches no bank path, so the nightly
+    # run is what catches one that paid a recorded return.
+    books_service.settle_sales_tax()
     done = attach_filings()
     for r in Receipt.query.filter_by(status="unmatched").all():
         if match(r) is not None:

@@ -39,6 +39,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
                    render_template, request, send_from_directory, url_for)
 from flask_login import current_user
 
+import books_service
 import hub
 import sales_tax
 import app_icon_service
@@ -867,6 +868,7 @@ def return_record(slug, year, quarter):
         db.session.add(filing)
     apply_filing(filing, values, getattr(current_user, "username", "") or "")
     db.session.flush()
+    books_service.settle_sales_tax(filing)
     kept, refused = _store_uploads(filing)
     db.session.commit()
     flash(f"{sales_tax.period_label(year, quarter)} recorded"
@@ -932,6 +934,7 @@ def filing_delete(id):
         path = os.path.join(_files_dir(), row.stored_name)
         if os.path.exists(path):
             os.remove(path)
+    books_service.unsettle_sales_tax(filing)
     db.session.delete(filing)
     db.session.commit()
     flash("Record removed. The return itself is still filed with the state.", "success")
@@ -1192,6 +1195,8 @@ def hub_record_filing():
         db.session.add(filing)
     who = str(data.get("recorded_by") or business.hub_slug)
     apply_filing(filing, values, f"{who} via {business.hub_slug}")
+    db.session.flush()
+    books_service.settle_sales_tax(filing)
     db.session.commit()
     return jsonify({"ok": True, "filing": _filing_out(filing)})
 
@@ -1214,6 +1219,7 @@ def hub_undo_filing():
         return jsonify({"ok": True, "removed": False})
     if not (filing.recorded_by or "").endswith(f"via {business.hub_slug}") or filing.files:
         return jsonify({"error": "recorded in the command center; take it back there"}), 409
+    books_service.unsettle_sales_tax(filing)
     db.session.delete(filing)
     db.session.commit()
     return jsonify({"ok": True, "removed": True})

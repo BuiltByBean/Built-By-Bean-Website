@@ -69,7 +69,7 @@ def inv(id, total, tax=0.0, status="paid", project_id=None, client_id=1, issued=
         catchup=False, exempt=False, paid=None):
     return NS(id=id, total=total, tax=tax, status=status, project_id=project_id, client_id=client_id,
               issued_on=issued, sales_tax_catchup=catchup, sales_tax_exempt=exempt,
-              amount_paid=total if paid is None else paid, amount_due=0.0,
+              amount_paid=total if paid is None else paid, amount_refunded=0.0, amount_due=0.0,
               invoice_number=f"000{id}")
 
 

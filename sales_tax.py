@@ -50,8 +50,13 @@ def invoice_row(inv, settings, client, project, *, client_exempt):
     due = int(round(base * settings.effective_percent / 100.0))
 
     excluded = None
+    # Only when every cent went back: a sale undone is no sale. A part refund
+    # stays whole here, which errs towards owing the state and not the reverse.
+    refunded = _cents(inv.amount_refunded)
     if inv.sales_tax_catchup:
         excluded = "catch-up"
+    elif refunded and refunded >= _cents(inv.amount_paid):
+        excluded = "refunded"
     elif client_exempt:
         excluded = "client exempt"
     elif inv.sales_tax_exempt:
@@ -165,7 +170,8 @@ def build(settings, clients, invoices, projects, subscriptions=(), rate_id=None)
         # catch-up has billed all of it, and counting only the remainder would
         # offer to bill the paid part a second time.
         billed = sum(_cents(c.total) for c in catchups if c.status == "open") / 100.0
-        collected = sum(_cents(c.amount_paid) for c in catchups if c.status == "paid") / 100.0
+        collected = sum(_cents(c.amount_paid) - _cents(c.amount_refunded)
+                        for c in catchups if c.status == "paid") / 100.0
         _round_all(money)
         to_bill = 0.0 if exempt else round(max(0.0, money["short"] - drafted - billed - collected), 2)
 

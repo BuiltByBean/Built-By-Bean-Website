@@ -360,7 +360,8 @@ def costs():
             "billed": round(sum(i.total or 0.0 for i in rows), 2),
             # Cash in, tax and all, as the key has always meant; revenue
             # (Client.total_revenue) leaves the tax out since 2026-11-01.
-            "paid": round(sum(i.amount_paid or 0.0 for i in rows if i.status == "paid"), 2),
+            "paid": round(sum((i.amount_paid or 0.0) - (i.amount_refunded or 0.0)
+                              for i in rows if i.status == "paid"), 2),
             # Only draft and open, which is what the invoices page does.
             # Stripe's amount_due is the amount due AT FINALISATION and does
             # not drop to zero when the invoice is paid (amount_remaining is

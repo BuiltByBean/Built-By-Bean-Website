@@ -138,7 +138,8 @@ def year_csv(id, year):
                     "", "", "", "invoices" if business.sales_source == "board" else "bank"])
     for e in s["expenses"]:
         line, number = books_service.tax_line(e.category)
-        w.writerow(["Expense", e.date.isoformat(), e.description or "",
+        w.writerow(["Expense", e.date.isoformat(),
+                    " ".join(p for p in (e.description, e.sales_tax_note and f"({e.sales_tax_note})") if p),
                     labels.get(e.category, e.category or ""), f"{line} ({number})",
                     f"{e.amount:.2f}", e.business.name if e.business else "",
                     e.client.name if e.client else "", e.project.name if e.project else "",

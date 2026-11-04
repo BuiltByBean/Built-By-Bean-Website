@@ -221,11 +221,11 @@ class Client(db.Model):
 
     @property
     def total_revenue(self):
-        """Earned from this client: each paid invoice less its sales tax, and
-        nothing from a catch-up invoice, which bills back tax. The same reading
-        as the dashboard's Total Revenue (stripe_service.get_stripe_invoice_totals)."""
-        return sum((inv.amount_paid or 0.0) - (inv.tax or 0.0) for inv in self.invoices
-                   if inv.status == "paid" and not inv.sales_tax_catchup)
+        """Earned from this client: each paid invoice less its sales tax and
+        its refunds, and nothing from a catch-up invoice, which bills back tax.
+        The same reading as the dashboard's Total Revenue
+        (stripe_service.get_stripe_invoice_totals)."""
+        return sum(inv.earned for inv in self.invoices)
 
     # No total_profit here on purpose. Client.total_expenses and the sum of
     # the projects' expenses are not the same number, so a profit property on
@@ -674,14 +674,47 @@ class Expense(db.Model):
     # in, because that is what it was: EntertainHQ's first $599.86 (its LLC
     # filing, Claude, Twilio, Google Play) went on Michael's own card.
     paid_by = db.Column(db.String(120), nullable=True)
+    # The part of this charge that was the state's money and not a cost.
+    # `amount` is always the expense, so every total in the app is right
+    # without knowing this exists; `charged` is what left the bank, and only
+    # the things that match a charge against a bank line or a receipt read it.
+    # Set by books_service.settle_sales_tax and nowhere else.
+    sales_tax_remitted = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
+    sales_tax_filing_id = db.Column(db.Integer, db.ForeignKey(
+        "sales_tax_filings.id", ondelete="SET NULL", name="fk_expenses_sales_tax_filing_id"),
+        nullable=True, index=True)
 
     business = db.relationship("Business", foreign_keys=[business_id])
+    sales_tax_filing = db.relationship("SalesTaxFiling", foreign_keys=[sales_tax_filing_id])
     client = db.relationship("Client", backref="expenses")
     project = db.relationship("Project", backref="expenses")
     ticket = db.relationship("Ticket", back_populates="expenses")
     time_entry = db.relationship("TimeEntry", backref=db.backref(
         "expense", uselist=False, cascade="all, delete-orphan"))
     children = db.relationship("Expense", backref=db.backref("parent_expense", remote_side="Expense.id"), lazy="dynamic")
+
+    @property
+    def charged(self):
+        """What actually left the bank for this: the expense plus any sales
+        tax it carried to the state. A bank line and a receipt both state
+        this figure, so matching reads this and never `amount`."""
+        return round((self.amount or 0.0) + (self.sales_tax_remitted or 0.0), 2)
+
+    @property
+    def sales_tax_note(self):
+        """How a sales tax payment breaks down, for the row that shows only
+        what it cost. The accountant reads this off the export."""
+        remitted = self.sales_tax_remitted or 0.0
+        if not remitted:
+            return ""
+        parts = [f"${remitted:,.2f} sales tax"]
+        paid = (self.sales_tax_filing.amount_paid or 0.0) if self.sales_tax_filing else self.charged
+        penalties, card = round(paid - remitted, 2), round(self.charged - paid, 2)
+        if penalties > 0:
+            parts.append(f"${penalties:,.2f} penalties and interest")
+        if card > 0:
+            parts.append(f"${card:,.2f} card fee")
+        return f"${self.charged:,.2f} charged: " + ", ".join(parts)
 
     @property
     def is_auto_generated(self):
@@ -1196,6 +1229,9 @@ class Invoice(db.Model):
     tax = db.Column(db.Float, default=0.0)
     total = db.Column(db.Float, default=0.0)
     amount_paid = db.Column(db.Float, default=0.0)
+    # Stripe leaves a refunded invoice "paid" with amount_paid untouched, so
+    # the money that went back has to be carried beside it.
+    amount_refunded = db.Column(db.Float, nullable=False, default=0.0, server_default="0")
     amount_due = db.Column(db.Float, default=0.0)
     due_date = db.Column(db.Date, nullable=True)
     period_start = db.Column(db.Date, nullable=True)
@@ -1229,6 +1265,18 @@ class Invoice(db.Model):
     project = db.relationship("Project", backref="invoices")
     line_items = db.relationship("InvoiceLineItem", back_populates="invoice",
                                  cascade="all, delete-orphan", lazy="dynamic")
+
+    @property
+    def earned(self):
+        """Earned on this invoice: paid, less its sales tax, less its refunds,
+        and nothing from a catch-up invoice. The local reading of
+        stripe_service.invoice_earned, so the client page and the dashboard
+        cannot disagree."""
+        paid = self.amount_paid or 0.0
+        if self.status != "paid" or self.sales_tax_catchup or paid <= 0:
+            return 0.0
+        kept = max(0.0, paid - (self.amount_refunded or 0.0))
+        return round(kept * (paid - (self.tax or 0.0)) / paid, 2)
 
     def __repr__(self):
         return f"<Invoice {self.invoice_number or self.id} - {self.status}>"

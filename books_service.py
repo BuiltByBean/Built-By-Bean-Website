@@ -22,8 +22,9 @@ report, the monthly close and EntertainHQ's read-only view in its own admin
                 settled as contribution and draw. A multi-member company's
                 accountant needs it per member for each K-1.
 """
+import re
 from collections import OrderedDict
-from datetime import date
+from datetime import date, timedelta
 
 # Category -> (the line on the return, Schedule C line number). The number is
 # shown only for a single-member company, which files Schedule C; a
@@ -105,7 +106,8 @@ def _stripe_paid_invoices():
     """The board's Stripe invoices, live, or None when Stripe is not set up
     (the tests, a dev machine). Live is the dashboard's source, and the books
     read the same one: on 2026-11-03 the books read the local invoice rows and
-    came out $5.97 under the dashboard for the same year."""
+    came out $5.97 under the dashboard for the same year. That $5.97 was three
+    refunded charges the dashboard was counting, so both now read refunds."""
     try:
         import stripe
         if not stripe.api_key:
@@ -123,6 +125,7 @@ def income_between(business, start, end, sales=None):
     root = business.parent or business
     out = []
     if root.sales_source == "board":
+        from stripe_service import earned_share
         live = _stripe_paid_invoices()
         if live is not None:
             for inv in live:
@@ -130,23 +133,27 @@ def income_between(business, start, end, sales=None):
                     continue
                 when = inv.get("paid_at") or inv.get("issued_at")
                 when = when.date() if when else None
-                if when is None or not (start <= when < end):
-                    continue
-                amount = round((inv.get("amount_paid") or 0.0) - (inv.get("tax") or 0.0), 2)
                 label = f"Invoice {inv.get('number') or inv.get('id')}"
                 if inv.get("customer_name"):
                     label += f", {inv['customer_name']}"
-                out.append((when, amount, label))
+                if when is not None and start <= when < end:
+                    out.append((when, round((inv.get("amount_paid") or 0.0) - (inv.get("tax") or 0.0), 2),
+                                label))
+                # Cash basis both ways: the sale on the day it was paid, the
+                # refund on the day it went back, which may be another month.
+                for refund in inv.get("refunds") or []:
+                    if start <= refund["on"] < end:
+                        out.append((refund["on"], -round(refund["amount"] * earned_share(inv), 2),
+                                    f"Refund, {label}"))
             return sorted(out)
         for inv in Invoice.query.filter(Invoice.status == "paid").all():
             when = (inv.paid_at.date() if inv.paid_at else inv.issued_on)
             if when is None or not (start <= when < end) or inv.sales_tax_catchup:
                 continue
-            amount = round((inv.amount_paid or 0.0) - (inv.tax or 0.0), 2)
             label = f"Invoice {inv.invoice_number or inv.id}"
             if inv.client:
                 label += f", {inv.client.name}"
-            out.append((when, amount, label))
+            out.append((when, inv.earned, label))
         return sorted(out)
     if root.stripe_key:
         import stripe_books
@@ -170,7 +177,9 @@ def owner_money_between(business, start, end):
     for e in (Expense.query.filter(Expense.business_id.in_(family_ids(business)),
                                    Expense.paid_by.isnot(None), Expense.paid_by != "",
                                    Expense.date >= start, Expense.date < end).all()):
-        out.setdefault(e.paid_by, {"in": 0.0, "out": 0.0})["in"] += e.amount
+        # The whole charge: the sales tax on a Comptroller payment is not this
+        # company's cost, but it was still the owner's money that paid it.
+        out.setdefault(e.paid_by, {"in": 0.0, "out": 0.0})["in"] += e.charged
     # A vendor sync books some charges itself (Railway, Cloudflare, Claude);
     # when one of those was paid on an owner's own card, the owner still put
     # that money in.
@@ -193,6 +202,88 @@ def owner_money_between(business, start, end):
         else:
             row["out"] += abs(line.amount)
     return {k: {"in": round(v["in"], 2), "out": round(v["out"], 2)} for k, v in out.items()}
+
+
+# What a payment to the state reads as on a card, a bank line or a typed expense.
+STATE_TAX_PAYMENT = re.compile(r"comptroller|texas tax|state tax|webfile", re.I)
+# WebFile adds a card fee the return does not show, and it is not always typed
+# in: $739.54 paid on a return was a $756.43 card charge on 2026-10-30.
+CARD_FEE_ROOM = 1.03
+FILED_BEFORE, FILED_AFTER = 3, 10
+
+
+def leaves_sales_tax_out_of_income(business):
+    """Whether this company's income is already net of sales tax. Only the
+    company the board bills from: its invoices are read less their tax.
+    A company on its own Stripe or its own app counts its sales gross, tax and
+    all, and there the payment to the state IS what takes the tax back out, so
+    its Comptroller charges stay whole expenses. Each is right on its own; one
+    company doing half of each is what took the tax off twice."""
+    return (business.parent or business).sales_source == "board"
+
+
+def filing_payment(filing):
+    """The expense that paid this return, if it has arrived. Named as the
+    state AND within a card fee of what the return says was paid, so a
+    franchise tax payment or another Comptroller charge is never taken for it."""
+    from models import Expense
+    paid = round(filing.amount_paid or 0.0, 2)
+    if paid <= 0:
+        return None
+    day = filing.filed_at.date()
+    rows = Expense.query.filter(Expense.business_id.in_(family_ids(filing.business)),
+                                Expense.sales_tax_filing_id.is_(None),
+                                Expense.time_entry_id.is_(None),
+                                Expense.date >= day - timedelta(days=FILED_BEFORE),
+                                Expense.date <= day + timedelta(days=FILED_AFTER)).all()
+    rows = [e for e in rows if STATE_TAX_PAYMENT.search(e.description or "")
+            and paid <= e.charged <= paid * CARD_FEE_ROOM + 0.01]
+    return min(rows, key=lambda e: (e.charged - paid, e.id)) if rows else None
+
+
+def settle_sales_tax(filing=None):
+    """Take the sales tax out of what a return's payment cost.
+
+    Sales tax collected is left out of income, so paying it over must not also
+    be an expense, or it comes off the profit twice: on 2026-11-03 that was
+    $996.60 of the $1,193.22 paid to the Comptroller. The penalties, interest
+    and card fee stay, because those were real money this company lost.
+
+    Works in either order, because a return can be recorded before its charge
+    arrives or after, and is safe to run on every read. Returns how many
+    expenses changed; the caller commits.
+    """
+    from models import db, Expense, SalesTaxFiling
+    filings = ([filing] if filing is not None
+               else SalesTaxFiling.query.filter(SalesTaxFiling.filed_at.isnot(None)).all())
+    done = 0
+    for f in filings:
+        if f.filed_at is None or f.business is None or not leaves_sales_tax_out_of_income(f.business):
+            continue
+        expense = Expense.query.filter_by(sales_tax_filing_id=f.id).first() or filing_payment(f)
+        if expense is None:
+            continue
+        charged = expense.charged
+        # A timely filing discount is tax the state let the seller keep.
+        tax = min(round(max(0.0, (f.tax_due or 0.0) - (f.discount or 0.0)), 2), charged)
+        if expense.sales_tax_filing_id == f.id and abs((expense.sales_tax_remitted or 0.0) - tax) < 0.005:
+            continue
+        expense.sales_tax_filing_id = f.id
+        expense.sales_tax_remitted = tax
+        expense.amount = round(charged - tax, 2)
+        done += 1
+    db.session.flush()
+    return done
+
+
+def unsettle_sales_tax(filing):
+    """A return taken off the board puts its charge back to a whole expense,
+    because nothing now says any of it was tax. The caller commits."""
+    from models import Expense
+    for expense in Expense.query.filter_by(sales_tax_filing_id=filing.id).all():
+        expense.amount = expense.charged
+        expense.sales_tax_remitted = 0.0
+        expense.sales_tax_filing_id = None
 
 
 def source_of(expense):

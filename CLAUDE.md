@@ -245,9 +245,9 @@ software and no plans for any). Every reading is one function,
 hub cannot disagree.
 
 - **Income** is cash basis: for the company the board bills from, paid
-  invoices less their sales tax and nothing from a catch-up invoice (the
-  dashboard's reading); for a company on its own app, the sales the app sends;
-  otherwise its bank's money in.
+  invoices less their sales tax and their refunds, and nothing from a catch-up
+  invoice (the dashboard's reading); for a company on its own app, the sales
+  the app sends; otherwise its bank's money in.
 - **Expenses** are the company's and its DBAs' Expense rows, grouped by
   `TAX_LINES` into the lines a return asks for. Schedule C line numbers are
   shown only for a single-owner company.
@@ -290,6 +290,64 @@ the Books' board income reads Stripe live (local rows only when Stripe is not
 configured), and the Expenses page's "everything" total is the companies'
 books added together. `tools/test_one_set_of_figures.py` holds the pages to
 the Books page's net, to the cent.
+
+**Sales tax comes off once, and a refund is money that went back** (Michael,
+2026-11-03: "the total paid is higher than my income, what gives?"). The gap
+was $1,201.20 of sales tax and Books was right to leave it out, but reconciling
+it to the cent found two faults underneath, in figures every money page reads.
+Together they had the net $990.63 too low.
+
+The first: income leaves sales tax out, and the two payments to the Comptroller
+were also expenses, so the tax came off the profit twice. Of $1,193.22 paid,
+$996.60 was tax, $169.87 penalties and interest, $26.75 card fees. Only the last
+two cost anything. **`Expense.amount` is always the expense**, so every total in
+the app is right without knowing any of this; `sales_tax_remitted` is the part
+of the charge that was the state's money, and **`Expense.charged` is what left
+the bank**. Only the code that matches a charge against something else reads
+`charged`, because a bank line and a receipt both state the whole charge:
+`adopt`, `book`, the receipt matching, `attach_filings`, and owner money, since
+an owner who paid on their own card put in all of it, tax included.
+`books_service.settle_sales_tax` is the one thing that writes the split. A
+return and its charge can arrive in either order, so it runs where each lands:
+recording a return, `bank_feed.fold_duplicates` (every path that brings a charge
+in passes through it) and the nightly `rematch` (for one typed on the form).
+Taking a return off the board puts the charge back whole
+(`unsettle_sales_tax`). A charge has to name the state AND sit within a card fee
+of what the return says was paid, so a franchise tax payment is never taken for
+one.
+
+Only the company the board bills from is split, because only its income is net
+of tax. A company on its own Stripe or its own app counts sales gross, tax and
+all, and there the payment to the state IS the deduction that takes the tax back
+out. Each is right on its own; one company doing half of each is the fault
+(`leaves_sales_tax_out_of_income`). It treats all the tax on a filed return as
+passed through. Tax paid over and never collected, a catch-up a client never
+pays, is really a cost and does not show as one; "Left to bill" on the sales tax
+page is where that would be seen.
+
+The second: Stripe leaves a refunded invoice "paid" with `amount_paid` untouched,
+so three refunded $1.99 charges counted as income and as money in. The $5.97 gap
+between Books and the dashboard that "One company, one set of figures" closed by
+moving Books onto Stripe live was exactly those refunds: the local rows only left
+them out because those invoices belong to no client and cannot be stored, and
+closing the gap moved Books to the wrong number. `stripe_service._refunds_by_invoice`
+reads them beside the invoices. On the API version the stripe library sends
+(2026-10-28) a charge no longer says which invoice it paid, so the road from a
+refund to its invoice is `stripe.InvoicePayment.list` on the payment intent, not
+`charge.invoice`; `_invoice_of_refund` tries both. A refund only shows on
+`post_payment_credit_notes_amount` if it went through a credit note, which one of
+the three did and two did not. A refund gives back sales tax
+in proportion (`earned_share`) and lands on the day it went back, so the sale and
+the refund can sit in different months. `Invoice.amount_refunded` and
+`Invoice.earned` are the same reading over the local rows. A sale refunded in
+full owes no sales tax; a part refund stays whole on the return, erring towards
+the state.
+
+So Total Paid on the Invoices page is what stayed, and **Total Paid less the sales
+tax shown under it is the Books page's income, to the cent**. The penalties and
+interest stay in Taxes and licenses, and whether they can be deducted is a
+question for the accountant, which is why the row and the year's CSV spell out
+the split (`Expense.sales_tax_note`). `tools/test_sales_tax_and_refunds.py`.
 
 **Income lives where the sale happens.** For a company with its own Stripe
 (EntertainHQ), `stripe_books.py` reads every line of its Stripe balance
@@ -516,13 +574,13 @@ the two pages disagreeing the same evening: one business's takings are one
 number.
 
 **Revenue is earned money, never sales tax** (owner, 2026-11-01, "take tax
-out"). Every revenue figure is paid less the tax on it, with nothing from a
-catch-up invoice: `get_stripe_invoice_totals()["revenue"]` (and
+out"). Every revenue figure is paid less the tax on it and less any refund, with
+nothing from a catch-up invoice: `get_stripe_invoice_totals()["revenue"]` (and
 `revenue_by_customer`) for the dashboard's Total Revenue, its per-client
 column, its Profit before tax and the Businesses tile; `Client.total_revenue`,
 the same reading over the local rows, for the client page and its profit.
-`paid` stays as cash in, tax and all, for the pages that mean cash, and the
-guidance API's `paid` key keeps that meaning. A new revenue figure reads one of
+`paid` stays as cash in, tax and all but after refunds, for the pages that mean
+cash, and the guidance API's `paid` key keeps that meaning. A new revenue figure reads one of
 those two, never `amount_paid` raw. A business on its own app shows what the app last reported
 (`revenue_total`); the list never asks the app, the business's page asks with
 a six second wait when the answer is an hour old, and "App not reporting" is
@@ -1182,7 +1240,10 @@ getting missed.
   children before parents, and run `flask db downgrade <prev>` then
   `flask db upgrade` before pushing. SQLite accepts orderings Postgres
   refuses, and Postgres performs newline string-literal concatenation in SQL
-  that SQLite refuses - use bound parameters for any multi-line text.
+  that SQLite refuses - use bound parameters for any multi-line text. The whole
+  chain does not run from an empty SQLite file (it stops on an old `task_id`
+  migration), so to do that check let the app build the tables, `flask db stamp
+  head`, then go down and up, with `DATABASE_URL` on a temp file.
 - **A pushed commit is not a deployed commit.** Check
   `railway deployment list` for SUCCESS on the new deploy, then verify
   against the public URL, never the container.

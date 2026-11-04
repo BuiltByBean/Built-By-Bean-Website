@@ -17,6 +17,8 @@
         <div class="glass-card p-5">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Total Paid</span>
             <p class="text-2xl font-bold text-emerald-400 mt-1">{{ total_paid|format_currency }}</p>
+            {% if total_sales_tax > 0.004 %}<p class="text-xs text-surface-400 mt-1">{{ total_sales_tax|format_currency }} of it sales tax</p>{% endif %}
+            {% if total_refunded > 0.004 %}<p class="text-xs text-surface-400 mt-0.5">{{ total_refunded|format_currency }} refunded</p>{% endif %}
         </div>
         <div class="glass-card p-5">
             <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">Outstanding</span>
@@ -90,13 +92,16 @@
                         <td class="py-3 px-5 text-sm text-surface-300">{{ inv.client_name }}</td>
                         <td class="py-3 px-5 text-sm font-bold text-white">{{ inv.total|format_currency }}</td>
                         <td class="py-3 px-5">
+                            {# Stripe keeps a refunded invoice "paid"; the row says what happened. #}
+                            {% set all_back = inv.status == 'paid' and inv.refunded and inv.refunded >= inv.amount_paid %}
                             <span class="inline-block px-2.5 py-0.5 text-xs font-medium rounded-full
-                                {% if inv.status == 'draft' %}bg-surface-700 text-surface-300
+                                {% if inv.status == 'draft' or all_back %}bg-surface-700 text-surface-300
                                 {% elif inv.status == 'open' %}bg-amber-900/30 text-amber-400
                                 {% elif inv.status == 'paid' %}bg-emerald-900/30 text-emerald-400
                                 {% elif inv.status == 'void' %}bg-red-900/30 text-red-400
                                 {% else %}bg-red-900/30 text-red-400
-                                {% endif %}">{{ inv.status|title }}</span>
+                                {% endif %}">{{ 'Refunded' if all_back else inv.status|title }}</span>
+                            {% if inv.refunded and not all_back %}<span class="block text-xs text-surface-400 mt-1">{{ inv.refunded|format_currency }} refunded</span>{% endif %}
                         </td>
                         <td class="py-3 px-5 text-sm text-surface-400">{{ inv.created_at|format_date }}</td>
                         <td class="py-3 px-5 text-sm text-surface-400">{{ inv.due_date|format_date if inv.due_date else '-' }}</td>

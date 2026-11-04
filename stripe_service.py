@@ -474,7 +474,65 @@ def get_stripe_invoices_list(status=None, limit=20):
 # not as outstanding.
 ISSUED_STATUSES = ("open", "paid", "uncollectible")
 
-_invoice_cache = {"ts": 0, "data": None}
+_invoice_cache = {"ts": 0, "data": None, "refunds": None}
+# A refund never moves to another invoice, so a lookup is only ever made once.
+_refund_invoices = {}
+
+
+def _invoice_of_refund(refund):
+    """The invoice a refund gives money back on. Newer Stripe API versions took
+    `invoice` off the charge, so the way there is the payment behind it."""
+    known = _refund_invoices.get(refund.id)
+    if known:
+        return known
+    charge = getattr(refund, "charge", None)
+    invoice_id = getattr(charge, "invoice", None) if charge is not None and not isinstance(charge, str) else None
+    if not invoice_id:
+        intent = getattr(refund, "payment_intent", None) or getattr(charge, "payment_intent", None)
+        if intent:
+            found = stripe.InvoicePayment.list(
+                payment={"type": "payment_intent", "payment_intent": intent}, limit=1)
+            invoice_id = found.data[0].invoice if found.data else None
+    if invoice_id:
+        _refund_invoices[refund.id] = invoice_id
+    return invoice_id
+
+
+def _refunds_by_invoice():
+    """{invoice id: [{"on": date, "amount": dollars}]}, for money that has gone
+    back or is on its way. A refund on a charge no invoice raised is nothing to
+    do with these rows."""
+    out = {}
+    for refund in stripe.Refund.list(limit=100, expand=["data.charge"]).auto_paging_iter():
+        if getattr(refund, "status", None) not in ("succeeded", "pending"):
+            continue
+        invoice_id = _invoice_of_refund(refund)
+        if invoice_id:
+            out.setdefault(invoice_id, []).append({
+                "on": datetime.fromtimestamp(refund.created, timezone.utc).date(),
+                "amount": (refund.amount or 0) / 100.0,
+            })
+    return out
+
+
+def invoice_kept(inv):
+    """What is still with the business out of what was paid on this invoice."""
+    return max(0.0, (inv.get("amount_paid") or 0.0) - (inv.get("refunded") or 0.0))
+
+
+def earned_share(inv):
+    """The part of each dollar paid on this invoice that was earned: the rest
+    is sales tax, and all of a catch-up invoice is. A refund gives both back in
+    the same proportion."""
+    paid = inv.get("amount_paid") or 0.0
+    if inv.get("catchup") or paid <= 0:
+        return 0.0
+    return (paid - (inv.get("tax") or 0.0)) / paid
+
+
+def invoice_earned(inv):
+    """Earned on this invoice: paid, less its sales tax, less its refunds."""
+    return round(invoice_kept(inv) * earned_share(inv), 2)
 
 
 def _empty_invoice_totals():
@@ -589,6 +647,19 @@ def get_stripe_invoices(ttl=300):
         current_app.logger.error(f"Stripe invoice list error: {e}")
         return _invoice_cache["data"] or []
 
+    # Stripe leaves a refunded invoice "paid" with amount_paid untouched, so
+    # the refunds are read beside the invoices. A failed read keeps the last
+    # good answer rather than losing the invoice list over it.
+    try:
+        refunds = _refunds_by_invoice()
+        _invoice_cache["refunds"] = refunds
+    except Exception as e:
+        current_app.logger.error(f"Stripe refund list error: {e}")
+        refunds = _invoice_cache.get("refunds") or {}
+    for row in rows:
+        row["refunds"] = refunds.get(row["id"], [])
+        row["refunded"] = round(sum(r["amount"] for r in row["refunds"]), 2)
+
     epoch = datetime.fromtimestamp(0, timezone.utc)
     rows.sort(key=lambda r: r["created_at"] or epoch, reverse=True)
     _invoice_cache.update({"ts": now, "data": rows})
@@ -654,8 +725,10 @@ def import_invoices_from_stripe(ttl=0):
         owner = by_customer.get(row.get("customer_id"))
         if local is None:
             if owner is None:
-                # Nowhere to put it. Named, not dropped.
-                orphans.append(row.get("number") or sid)
+                # Nowhere to put it. Named, not dropped, unless every cent of
+                # it went back: then there is no money left to place.
+                if not (row.get("refunded") and invoice_kept(row) <= 0):
+                    orphans.append(row.get("number") or sid)
                 continue
             local = Invoice(stripe_invoice_id=sid, client_id=owner.id)
             db.session.add(local)
@@ -669,6 +742,7 @@ def import_invoices_from_stripe(ttl=0):
         local.total = row.get("total") or 0.0
         local.amount_due = row.get("amount_due") or 0.0
         local.amount_paid = row.get("amount_paid") or 0.0
+        local.amount_refunded = row.get("refunded") or 0.0
         # Tax is Stripe's to say, and the subtotal is the total without it:
         # the old rule of copying the total in when the subtotal was empty
         # counted the tax as part of the sale, which is the one thing the
@@ -713,6 +787,7 @@ def get_stripe_invoice_totals(ttl=300):
     passing through. The dashboard's Total Revenue, its per-client revenue,
     its Profit before tax and the Businesses page all read this one (Michael,
     2026-11-01: "take tax out"); `paid` stays for the pages that mean cash in.
+    Both are after refunds, because Stripe keeps a refunded invoice "paid".
     """
     out = _empty_invoice_totals()
     for inv in get_stripe_invoices(ttl=ttl):
@@ -727,11 +802,12 @@ def get_stripe_invoice_totals(ttl=300):
             continue
 
         if status == "paid":
-            out["paid"] += inv["amount_paid"]
+            kept = invoice_kept(inv)
+            out["paid"] += kept
             if customer:
-                out["paid_by_customer"][customer] = out["paid_by_customer"].get(customer, 0.0) + inv["amount_paid"]
+                out["paid_by_customer"][customer] = out["paid_by_customer"].get(customer, 0.0) + kept
             if not inv.get("catchup"):
-                earned = inv["amount_paid"] - (inv.get("tax") or 0.0)
+                earned = invoice_earned(inv)
                 out["revenue"] += earned
                 if customer:
                     out["revenue_by_customer"][customer] = (
@@ -781,6 +857,11 @@ def get_hosting_revenue(ttl=300):
             continue
         customer_id = inv["customer_id"]
         if inv["status"] == "paid":
+            # Only what stayed: a refunded month collected nothing.
+            if inv.get("refunded"):
+                amount = round(amount * invoice_kept(inv) / (inv.get("amount_paid") or amount), 2)
+                if amount <= 0:
+                    continue
             collected += amount
             paid_invoices += 1
             if customer_id:

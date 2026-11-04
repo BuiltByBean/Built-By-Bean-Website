@@ -301,7 +301,9 @@ def book(line, rule=None, manual=None):
     if fresh:
         expense = Expense(amount=0, date=line.occurred_on, category="misc")
         db.session.add(expense)
-    expense.amount = round(-line.amount, 2)
+    # The bank states the whole charge; any sales tax in it was settled out of
+    # the expense and stays out when the amount is read again.
+    expense.amount = round(-line.amount - (expense.sales_tax_remitted or 0.0), 2)
     expense.date = line.occurred_on
     if spec is not None or fresh:
         spec = spec or {}
@@ -357,7 +359,7 @@ def adopt(line, business_id, exclude_id=None):
     if exclude_id is not None:
         q = q.filter(Expense.id != exclude_id)
     rows = q.all()
-    rows = [e for e in rows if abs(round(e.amount, 2) - target) < 0.005]
+    rows = [e for e in rows if abs(e.charged - target) < 0.005]
     if not rows:
         return None
     return min(rows, key=lambda e: (abs((e.date - line.occurred_on).days), e.id))
@@ -395,6 +397,10 @@ def fold_duplicates():
         db.session.delete(mine)
         db.session.flush()
         done += 1
+    # Every path that brings a charge in passes through here, so this is where
+    # one that paid a recorded return stops being counted as a cost.
+    import books_service
+    books_service.settle_sales_tax()
     db.session.commit()
     return done
 

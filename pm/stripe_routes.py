@@ -13,7 +13,7 @@ from stripe_service import (
     void_stripe_invoice, sync_invoice_from_stripe, handle_webhook_event,
     import_invoices_from_stripe,
     process_invoice_event, ensure_products_exist, get_stripe_invoice_totals,
-    get_stripe_invoices,
+    get_stripe_invoices, invoice_earned, invoice_kept,
 )
 
 stripe_bp = Blueprint("stripe", __name__, url_prefix="/admin/stripe")
@@ -269,7 +269,11 @@ def invoices_list():
     # means money still to come; this is a ledger of everything raised in the
     # selected scope, paid included, and one word cannot be both.
     total_billed = sum(i["total"] for i in scoped if i["status"] != "void")
-    total_paid = sum(i["amount_paid"] for i in scoped)
+    # After refunds, because Stripe keeps a refunded invoice "paid". What is
+    # left is the Books page's income once the sales tax beside it comes off.
+    total_paid = sum(invoice_kept(i) for i in scoped)
+    total_refunded = sum(i.get("refunded") or 0.0 for i in scoped)
+    total_sales_tax = sum(invoice_kept(i) - invoice_earned(i) for i in scoped if i["status"] == "paid")
     total_outstanding = sum(
         i["amount_due"] for i in scoped if i["status"] in ("draft", "open")
     )
@@ -290,6 +294,8 @@ def invoices_list():
         clients=clients,
         total_billed=total_billed,
         total_paid=total_paid,
+        total_refunded=total_refunded,
+        total_sales_tax=total_sales_tax,
         total_outstanding=total_outstanding,
     )
 
