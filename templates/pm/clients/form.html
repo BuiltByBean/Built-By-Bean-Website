@@ -1,13 +1,14 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button with context %}
 
 {% block back %}{%- if editing -%}{{ back_link(url_for('pm.client_detail', id=client.id), client.name) }}{%- else -%}{{ back_link(url_for('pm.clients_list'), 'Clients') }}{%- endif -%}{% endblock %}
 {% block page_title %}{{ 'Edit Client' if editing else 'New Client' }}{% endblock %}
 {% block page_subtitle %}{{ client.name if editing else 'Add a new client' }}{% endblock %}
 
 {% block content %}
-<div >
+<div>
     <div class="glass-card p-6">
         <form method="POST">
             {{ form.hidden_tag() }}
@@ -54,20 +55,26 @@
                     {{ form.address(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="2", placeholder="Street address, city, state, zip") }}
                 </div>
 
-                {# Only for a client whose app feeds this board. Blank for everyone
-                   else, which is most of them. #}
-                <div class="pt-4 mt-2 border-t border-surface-700">
-                    <p class="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-1">Their app</p>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
+                {# Only for a client whose app feeds this board (its tickets reach
+                   Client support through these). Folded away for everyone else,
+                   which is most of them; open when any of it is filled. #}
+                {% set has_app = form.origin_slug.data or form.origin_base_url.data %}
+                <div class="pt-4 mt-2 border-t border-surface-700" x-data="{ open: {{ 'true' if has_app else 'false' }} }">
+                    <button type="button" @click="open = !open" :aria-expanded="open"
+                            class="flex items-center justify-between w-full min-h-[44px] px-4 rounded-xl border border-white/10 text-sm font-medium text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        <span>Their app</span>
+                        <svg class="w-4 h-4 transition-transform" :class="open && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <div class="min-w-0">
                             <label class="block text-sm font-medium text-surface-300 mb-1.5">App slug</label>
                             {{ form.origin_slug(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="kuper") }}
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-sm font-medium text-surface-300 mb-1.5">Shared secret</label>
-                            {{ form.ingest_secret(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="long random string") }}
+                            {{ form.ingest_secret(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="Made for you on save") }}
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-sm font-medium text-surface-300 mb-1.5">App URL</label>
                             {{ form.origin_base_url(class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="https://kuperplumbing.com") }}
                         </div>
@@ -92,5 +99,24 @@
             </div>
         </form>
     </div>
+
+    {# Moved here from the client page, where a bin sat beside the stage picker
+       on every visit. invoices.client_id is NOT NULL, so the invoices go with
+       the client whether or not anybody expected them to; the question says so. #}
+    {% if editing %}
+    {% set n_proj = client.projects.count() %}
+    {% set n_inv = client.invoices | length %}
+    <div class="glass-card p-6 mt-6 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-surface-400 min-w-0">
+            Delete {{ client.name }}{% if n_proj or n_inv %}, with their
+            {%- if n_proj %} {{ n_proj }} project{{ '' if n_proj == 1 else 's' }}{% endif %}
+            {%- if n_proj and n_inv %} and{% endif %}
+            {%- if n_inv %} {{ n_inv }} invoice{{ '' if n_inv == 1 else 's' }}{% endif %}{% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('pm.client_delete', id=client.id) }}">
+            {{ confirm_button('Delete client', 'Delete for good?') }}
+        </form>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

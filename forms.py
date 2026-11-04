@@ -128,18 +128,6 @@ class SetPasswordForm(FlaskForm):
 from models import CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES  # noqa: E402,F401
 
 
-class ContactLogForm(FlaskForm):
-    """One attempt to reach a business.
-
-    The note is where the useful part lives - "left a voicemail", "spoke to
-    the owner, call back in September" - so it is the field with the room.
-    """
-
-    channel = SelectField("How", choices=CONTACT_CHANNEL_CHOICES, default="phone")
-    occurred_on = DateField("When", validators=[Optional()])
-    note = TextAreaField("What happened", validators=[Optional()])
-
-
 class ClientForm(FlaskForm):
     name = StringField("Client Name", validators=[DataRequired()])
     stage = SelectField("Stage", choices=CLIENT_STAGE_CHOICES, default="lead")

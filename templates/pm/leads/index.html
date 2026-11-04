@@ -277,6 +277,8 @@
                                 {% endif %}
                                 {% if l.client_id %}
                                 <span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-300">Client</span>
+                                {# The client's stage, which is where the lead went on to. #}
+                                <span class="shrink-0">{{ badge((l.client.stage if l.client else l.stage) or 'lead') }}</span>
                                 {% elif l.stage and l.stage != 'lead' %}
                                 <span class="shrink-0">{{ badge(l.stage) }}</span>
                                 {% endif %}

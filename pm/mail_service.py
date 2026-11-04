@@ -98,14 +98,21 @@ def watched_senders():
     # Last, not first. His address reaches this set two ways: he has a Client
     # row of his own, and the second loop re-adds any address that has ever
     # written in, so taking it off the client list alone would not have held.
-    return sorted(emails - own_addresses())
+    emails -= own_addresses()
+    # A client's whole business domain, so a colleague of theirs is heard
+    # too. Gmail's FROM search matches "@jdentertain.com" as a substring. An
+    # address the domain already covers is dropped rather than searched twice.
+    from pm.contact_matching import client_domains, domain_of
+    domains = set(client_domains())
+    emails = {e for e in emails if domain_of(e) not in domains}
+    return sorted(emails | {"@" + d for d in domains})
 
 
 def match_client(address):
-    address = (address or "").strip().lower()
-    if not address:
-        return None
-    return Client.query.filter(db.func.lower(Client.email) == address).first()
+    """The client a mail is from: their address, else their business domain
+    (pm/contact_matching.py has the rules)."""
+    from pm.contact_matching import match_client as _match
+    return _match(address)
 
 
 # ── Reading ──────────────────────────────────────────────
@@ -238,9 +245,6 @@ def ingest(msg):
         subject=_decode(msg.get("Subject"))[:300], body=body_text(msg),
         external_id=external_id, received_at=_when(msg), status="new",
     )
-    client = match_client(addr)
-    row.client_id = client.id if client else None
-
     # Threaded to what it answers, when that is something the board sent
     # or already holds; otherwise it starts a conversation of its own.
     parent = None
@@ -257,6 +261,10 @@ def ingest(msg):
         row.thread_id = parent.thread_id or parent.id
     else:
         row.thread_id = row.id
+    # A client's mail is contact: it files the row and moves their stage. A
+    # lead's is logged on the lead.
+    from pm.contact_matching import file_inbound
+    file_inbound(row)
     return row
 
 
@@ -290,6 +298,8 @@ def sync(app=None, force=False):
         for msg in fetch_recent(app, senders, since):
             if ingest(msg) is not None:
                 created += 1
+        from pm.contact_matching import relink_unmatched
+        relink_unmatched()
         db.session.commit()
         _state.update(last=now, error=None, new=created)
         return {"new": created, "senders": len(senders)}
@@ -430,6 +440,8 @@ def send_reply(original, text, app=None):
         status="sent", received_at=now,
     )
     db.session.add(row)
+    from pm.contact_matching import advance_client
+    advance_client(original.client, "out")
     original.status = "replied"
     original.replied_at = now
     db.session.commit()
@@ -445,10 +457,18 @@ def record_contact(name, address, project_type, body):
         body=(body or "")[:BODY_CAP], project_type=(project_type or "")[:80],
         status="new", received_at=datetime.now(timezone.utc),
     )
-    client = match_client(address)
-    row.client_id = client.id if client else None
     db.session.add(row)
     db.session.flush()
     row.thread_id = row.id
+    # Kept before anything else is tried: the enquiry is the thing that must
+    # survive, and filing it is a convenience on top.
     db.session.commit()
+    # A client writing in moves on; anybody else becomes, or finds, a lead.
+    from pm.contact_matching import file_inbound
+    try:
+        file_inbound(row)
+        db.session.commit()
+    except Exception as err:  # noqa: BLE001 - the enquiry is already saved
+        db.session.rollback()
+        log.warning("filing a contact form enquiry failed: %s", err)
     return row

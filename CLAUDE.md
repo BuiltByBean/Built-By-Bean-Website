@@ -1018,6 +1018,44 @@ email, and a customer no other client carries is adopted (oldest first, its
 metadata written) before one is made. Making one regardless is how clients got
 two customers and invoices with no home. `tools/test_payment_moves_client.py`.
 
+## Clients, and mail as the record of contact
+
+Michael, 2026-11-04: "make them more user friendly and dont have unused
+features as I have not been using most of them as a lot of them dont even
+properly talk to the rest of the PM". Every piece was checked against the live
+board and put to him one by one. The hand-typed contact log (`ClientContact`,
+the Log contact box, the Tried and Not tried filters, the channels column) had
+no rows on any of the six clients, while their mail was already here; it is
+gone from the screens and routes, and the table and its rows stay. Mail is the
+record of contact now: the client page lists their mail both ways, and the
+list's Last contact column is the newest mail (`Client.last_messages`, one
+query for the page). The Stripe "Synced" pill, green on every client, became
+an Invoices link. The page also shows their contracts (hidden ones stay
+hidden, as on Contracts) and their apps from My Apps. Delete client moved to
+the form, the app-hub fields fold away unless filled, Documents is compact,
+and on a phone the name sits under the company with no edit pencil so the
+table never scrolls sideways. `tools/test_clients_page.py`.
+
+**Who a mail is from** is `pm/contact_matching.py`, kept apart from
+`mail_service` so the reading and the matching change separately. A client is
+matched on their address, then on their business DOMAIN, so a colleague at
+jdentertain.com files under Kenali; a free mail domain, the board's own
+domains, and a domain two clients share never match, because a guess files
+one client's mail under another. The sync searches `@domain` for those
+clients. A reply from a client at Lead or Contacted moves them to In
+conversation, a reply sent from the board moves Lead to Contacted, and nothing
+walks a stage back. A contact form enquiry from anyone who is not a client
+finds their lead (address, a lead person's address, the lead's email domain or
+website host) or writes one, with the enquiry as a touch; later mail from that
+address is logged on the lead the same way. Mail filed to nobody is filed to a
+client added afterwards on the next sync, without moving their stage.
+
+**A converted lead has one stage, the client's.** It was pinned at In
+conversation for good. A `before_flush` listener in `models.py` moves the lead
+whenever its client's stage changes, whatever moved it, and the stage picker on
+a converted lead moves the client. Migration `c6d2e8a41f97` caught up the leads
+already converted.
+
 ## The loop, enforced
 
 Telling a session to consult the board and file what it learns was a

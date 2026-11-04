@@ -22,7 +22,7 @@ import signadoc_service
 import time
 from tax_engine import compute as tax_compute
 from models import (
-    db, Client, ClientContact, Project, Ticket, TicketNote, Expense, TimeEntry,
+    db, Client, Project, Ticket, TicketNote, Expense, TimeEntry,
     Document, User, Business,
     Invoice, InvoiceLineItem, TimerSession, TaxSetting,
     ServiceProvider, ServiceCostEntry, ServiceMapping,
@@ -31,12 +31,12 @@ from models import (
     TICKET_STATUSES, TICKET_STATUS_LABELS, TICKET_CLOSED_STATUSES,
     TICKET_PRIORITIES, TICKET_PRIORITY_LABELS,
     TICKET_BILLING_BUCKETS, TICKET_BILLING_LABELS, TICKET_BILLING_RATES,
-    CLIENT_STAGE_CHOICES, CONTACT_CHANNEL_CHOICES,
+    CLIENT_STAGE_CHOICES,
 )
 from project_phases import sync_project_phases, explain as explain_phase
 from pm.contract_routes import wants_send as _wants_send  # noqa: E402
 from forms import (
-    ClientForm, ContactLogForm, ProjectForm, TicketForm, ExpenseForm,
+    ClientForm, ProjectForm, TicketForm, ExpenseForm,
     TimeEntryForm, LoginForm,
     PHASE_CHOICES, PROJECT_STATUS_CHOICES, TICKET_STATUS_CHOICES,
     PRIORITY_CHOICES, RATE_TYPE_CHOICES, EXPENSE_CATEGORY_CHOICES,
@@ -1038,11 +1038,6 @@ def create_app():
         page = request.args.get("page", 1, type=int)
         search = request.args.get("search", "")
         stage = request.args.get("stage", "")
-        # Two halves of one question. "Emailed but not phoned yet" is a
-        # channel that has been used and a channel that has not, and there is
-        # no single dropdown that says it.
-        tried = request.args.get("tried", "")
-        not_tried = request.args.get("not_tried", "")
 
         query = Client.query
         if search:
@@ -1051,20 +1046,16 @@ def create_app():
             )
         if stage:
             query = query.filter(Client.stage == stage)
-        if tried == "none":
-            query = query.filter(~Client.contacts.any())
-        elif tried:
-            query = query.filter(Client.contacts.any(ClientContact.channel == tried))
-        if not_tried:
-            query = query.filter(~Client.contacts.any(ClientContact.channel == not_tried))
 
         query = query.order_by(Client.name.asc(), Client.id.asc())
         pagination = query.paginate(page=page, per_page=20, error_out=False)
         return render_template("pm/clients/list.html",
             clients=pagination.items, pagination=pagination, search=search,
-            stage=stage, tried=tried, not_tried=not_tried,
-            stage_choices=CLIENT_STAGE_CHOICES,
-            channel_choices=CONTACT_CHANNEL_CHOICES,
+            stage=stage, stage_choices=CLIENT_STAGE_CHOICES,
+            # Last contact is the newest mail either way, read for the whole
+            # page at once rather than a query per row.
+            last_mail=Client.last_messages([c.id for c in pagination.items]),
+            today=date.today(),
             # Counts for the whole roster, not this page of it: a stage with
             # nothing in it should still be pickable, and should say so.
             stage_counts=dict(
@@ -1129,6 +1120,7 @@ def create_app():
     @pm_bp.route("/clients/<int:id>")
     @login_required
     def client_detail(id):
+        from models import AppLink, Message, SignatureRequest
         client = db.session.get(Client, id) or abort(404)
         projects = client.projects.order_by(Project.created_at.desc()).all()
         total_hours = client.total_hours
@@ -1149,51 +1141,26 @@ def create_app():
         import sales_tax
         sales_tax_entry = sales_tax.client_balance(
             SalesTaxSetting.get(), client, list(client.invoices))
+        # The rest of the board, as it touches this client. Mail is the
+        # record of contact; contracts and apps are what was agreed and what
+        # was built. Hidden contracts stay hidden here as on Contracts.
+        mail = (Message.query.filter_by(client_id=client.id)
+                .order_by(Message.received_at.desc(), Message.id.desc()).limit(8).all())
+        project_ids = [p.id for p in projects]
+        contracts = (SignatureRequest.query.filter(
+                        SignatureRequest.archived_at.is_(None),
+                        db.or_(SignatureRequest.client_id == client.id,
+                               SignatureRequest.project_id.in_(project_ids or [-1])))
+                     .order_by(SignatureRequest.created_at.desc(),
+                               SignatureRequest.id.desc()).all())
+        apps = (AppLink.query.filter(AppLink.project_id.in_(project_ids or [-1]))
+                .order_by(AppLink.name.asc(), AppLink.id.asc()).all())
         return render_template("pm/clients/detail.html",
             client=client, projects=projects, documents=documents,
             total_hours=total_hours, total_revenue=total_revenue, total_expenses=total_expenses,
             total_invoiced=total_invoiced, total_profit=total_profit,
-            sales_tax=sales_tax_entry,
-            contact_form=ContactLogForm(), stage_choices=CLIENT_STAGE_CHOICES,
-            today_iso=date.today().isoformat())
-
-    @pm_bp.route("/clients/<int:id>/contacts", methods=["POST"])
-    @login_required
-    def client_contact_add(id):
-        """Record one attempt to reach a business."""
-        client = db.session.get(Client, id) or abort(404)
-        form = ContactLogForm()
-        if not form.validate_on_submit():
-            flash("That contact could not be saved.", "warning")
-            return redirect(url_for("pm.client_detail", id=client.id))
-
-        db.session.add(ClientContact(
-            client_id=client.id,
-            channel=form.channel.data or "phone",
-            occurred_on=form.occurred_on.data or date.today(),
-            note=(form.note.data or "").strip(),
-        ))
-        # Logging a call is the moment a name on a list stops being one, so
-        # the stage follows along rather than waiting to be remembered. Only
-        # from "lead": anything further on was set deliberately and a phone
-        # call is not a reason to walk it backwards.
-        moved = False
-        if (client.stage or "lead") == "lead":
-            client.stage = "contacted"
-            moved = True
-        db.session.commit()
-        flash(f"Contact logged{' - moved to Contacted' if moved else ''}.", "success")
-        return redirect(url_for("pm.client_detail", id=client.id))
-
-    @pm_bp.route("/contacts/<int:id>/delete", methods=["POST"])
-    @login_required
-    def client_contact_delete(id):
-        row = db.session.get(ClientContact, id) or abort(404)
-        client_id = row.client_id
-        db.session.delete(row)
-        db.session.commit()
-        flash("Contact removed.", "success")
-        return redirect(url_for("pm.client_detail", id=client_id))
+            sales_tax=sales_tax_entry, mail=mail, contracts=contracts, apps=apps,
+            stage_choices=CLIENT_STAGE_CHOICES, today=date.today())
 
     @pm_bp.route("/clients/<int:id>/stage", methods=["POST"])
     @login_required

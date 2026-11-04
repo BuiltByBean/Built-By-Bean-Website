@@ -355,6 +355,10 @@ def stage(id):
     lead = db.session.get(Lead, id) or abort(404)
     picked = request.form.get("stage", "")
     if picked in dict(CLIENT_STAGE_CHOICES):
+        # A converted lead has one stage, the client's: moving it here moves
+        # the client, and the lead follows (models._converted_lead_follows_its_client).
+        if lead.client is not None:
+            lead.client.stage = picked
         lead.stage = picked
         lead.stage_changed_at = datetime.now(timezone.utc)
         db.session.commit()

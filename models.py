@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timezone, date, timedelta
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import Session as _OrmSession
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -174,35 +175,43 @@ class Client(db.Model):
     tickets = db.relationship("Ticket", back_populates="client",
                               cascade="all, delete-orphan", lazy="dynamic")
     time_entries = db.relationship("TimeEntry", backref="client", lazy="dynamic")
-    # Newest first, because the only question anybody asks of this list is
-    # "when did we last try them".
+    # The old hand-typed contact log. Nothing writes it any more (mail is the
+    # record of contact now, see last_message); kept so its rows go with a
+    # deleted client rather than blocking the delete.
     contacts = db.relationship("ClientContact", back_populates="client",
                                cascade="all, delete-orphan",
                                order_by="ClientContact.occurred_on.desc(),"
                                         " ClientContact.id.desc()")
 
     @property
-    def last_contact(self):
-        """The most recent attempt, or None if nobody has tried yet."""
-        return self.contacts[0] if self.contacts else None
+    def last_message(self):
+        """The newest mail either way between us, or None.
 
-    @property
-    def channels_tried(self):
-        """Which channels have been used, in the order they are offered.
-
-        A set would be the obvious type and the wrong one: the row renders
-        this, and "Email · Phone" flipping to "Phone · Email" between page
-        loads reads as a change when nothing changed.
+        Contact is mail now. The hand-typed log it replaced held no rows on
+        any client in seven months, while every client's mail was already
+        here, filed to them by mail_service.
         """
-        used = {c.channel for c in self.contacts}
-        return [key for key, _ in CONTACT_CHANNEL_CHOICES if key in used]
+        return (Message.query.filter_by(client_id=self.id)
+                .order_by(Message.received_at.desc(), Message.id.desc()).first())
 
-    @property
-    def days_since_contact(self):
-        last = self.last_contact
-        if not last or not last.occurred_on:
-            return None
-        return (date.today() - last.occurred_on).days
+    @staticmethod
+    def last_messages(client_ids):
+        """{client_id: newest Message} for many clients in two queries, for
+        a list that would otherwise ask once per row."""
+        if not client_ids:
+            return {}
+        newest = (db.session.query(Message.client_id,
+                                   db.func.max(Message.received_at).label("at"))
+                  .filter(Message.client_id.in_(client_ids))
+                  .group_by(Message.client_id).subquery())
+        rows = (Message.query.join(newest, db.and_(
+                    Message.client_id == newest.c.client_id,
+                    Message.received_at == newest.c.at))
+                .order_by(Message.id.desc()).all())
+        out = {}
+        for row in rows:
+            out.setdefault(row.client_id, row)
+        return out
 
     @property
     def active_projects_count(self):
@@ -741,6 +750,28 @@ def home_business_id():
     if row is None:
         row = Business.query.filter_by(parent_id=None).order_by(Business.id).first()
     return row.id if row else None
+
+
+@db.event.listens_for(_OrmSession, "before_flush")
+def _converted_lead_follows_its_client(session, flush_context, instances):
+    """A lead that became a client shows the client's stage, whatever moved it.
+
+    It was pinned at In conversation for good once converted, while the client
+    went on to Contracted and Active client. Every path that moves a client
+    (the stage picker, a payment, a reply, a contract) ends in a flush, so the
+    lead is moved here rather than in each of them.
+    """
+    for obj in list(session.dirty):
+        if not isinstance(obj, Client):
+            continue
+        history = db.inspect(obj).attrs.stage.history
+        if not history.has_changes():
+            continue
+        with session.no_autoflush:
+            for lead in Lead.query.filter_by(client_id=obj.id).all():
+                if lead.stage != obj.stage:
+                    lead.stage = obj.stage
+                    lead.stage_changed_at = datetime.now(timezone.utc)
 
 
 @db.event.listens_for(Expense, "before_insert")
