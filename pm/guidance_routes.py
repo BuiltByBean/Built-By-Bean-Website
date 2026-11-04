@@ -386,6 +386,20 @@ def clients():
         for c in rows]})
 
 
+@guidance_bp.route("/books/carryover")
+def books_carryover():
+    """What making the bank line the only thing that books an expense does to
+    the rows already written (finance_carryover.py), read only. The session
+    that wrote it could not read production's database, and the change may
+    not move any company's totals except to remove a double count, so this
+    is how the figures were checked before the migration ran."""
+    import finance_carryover
+    report = finance_carryover.plan(db.session.connection())
+    db.session.rollback()
+    report["summary"] = finance_carryover.summary(report)
+    return jsonify(report)
+
+
 @guidance_bp.route("/costs")
 def costs():
     """What each vendor has actually cost, and where that figure came from.
