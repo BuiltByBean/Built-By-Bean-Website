@@ -47,6 +47,12 @@ except Exception:
     pass
 
 import service_costs_service as costs  # noqa: E402
+
+# Twilio's payload is the vehicle here for what every month-bucket vendor shares
+# (periods that do not move, whose account it is). Twilio itself is prepaid now:
+# its top-up on the bank is the expense and its usage books none
+# (tools/test_vendors_follow_bank.py), so it is treated as postpaid for this file.
+costs.PREPAID_PROVIDERS = set()
 from app import create_app  # noqa: E402
 from models import db, Expense, ServiceCostEntry, ServiceProvider  # noqa: E402
 

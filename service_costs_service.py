@@ -45,6 +45,13 @@ def _existing_entry(provider_id, resource_id, period_start, period_end, mapping_
 PREPAID_PROVIDERS = {"twilio"}
 
 
+def writes_expenses(provider):
+    """Whether this provider's cost entries become Expenses: only an account
+    that is this business's own and is not paid by top-ups. The sync and the
+    ownership press on the providers page both ask this, never one half of it."""
+    return provider.is_ours and provider.name not in PREPAID_PROVIDERS
+
+
 def _month_bounds(when=None):
     """The calendar month `when` falls in, first and last day inclusive.
 
@@ -639,7 +646,7 @@ def _record_cost_entry(provider, resource_id, p_start, p_end, amount, desc_prefi
         entry.description = description if attributed else f"{description} [unallocated]"
         entry.raw_data_json = json.dumps(raw_data) if raw_data else None
         db.session.flush()
-        if not provider.is_ours or provider.name in PREPAID_PROVIDERS:
+        if not writes_expenses(provider):
             # Their account, their card. The cost is worth recording and worth
             # seeing against them; it is not money this business spent, so it
             # never becomes an Expense. Any expense a previous sync wrote for

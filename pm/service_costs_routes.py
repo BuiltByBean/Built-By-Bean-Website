@@ -196,7 +196,7 @@ def _reconcile_ownership(provider):
     Michael's ledger until tomorrow, and the whole point of the setting is the
     number it takes out of his totals today. Returns how many expenses moved.
     """
-    from service_costs_service import _drop_expense, _sync_expense
+    from service_costs_service import _drop_expense, _sync_expense, writes_expenses
     touched = 0
     for entry in provider.cost_entries.all():
         # Who the cost is attributed to moves with the account, so the row
@@ -207,7 +207,7 @@ def _reconcile_ownership(provider):
         attributed = ((entry.mapping.client_id if entry.mapping else None)
                       or provider.account_client_id)
         entry.description = base if attributed else base + " [unallocated]"
-        if not provider.is_ours:
+        if not writes_expenses(provider):
             if entry.expense_id:
                 _drop_expense(entry)
                 touched += 1
