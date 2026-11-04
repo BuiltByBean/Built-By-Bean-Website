@@ -171,6 +171,19 @@ client work, and Data Dungeon has no client and is. Never move a tile by
 detaching its project: the project page lists its app, and `register_app`
 re-attaches the project on the next call. `tools/test_app_groups.py`.
 
+On 2026-11-04 the halves were renamed for what they mean to him: "the top
+section is products that make me money. bottom section is my personal
+projects." The screen says Makes money and Personal projects
+(`apps_routes.GROUP_LABELS`); the stored values stay `client` and `mine`, so
+no row moved. Each tile carries a grip: drag it to the other half, or press
+it, and one POST to `apps.move_group` records the choice while the tile moves
+in place. It is pointer events on the grip with `touch-action: none`, because
+HTML5 drag and drop does nothing on a phone; the empty half is drawn only
+while dragging, as somewhere to drop; the drop target is read at release, not
+from the last frame, so a quick flick lands; and the edge auto-scroll runs on
+a timer, because a finger held still sends no moves and animation frames do
+not run in a throttled tab (they never fired in the preview pane at all).
+
 A phone app's tile also carries its two store ids (`app_store_bundle_id`,
 `play_package`; `register_app` takes them as `app_store_bundle_id` /
 `play_package`, or `bundle_id` / `package`) and the last answer each PUBLIC

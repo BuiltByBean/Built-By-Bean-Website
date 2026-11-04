@@ -12,6 +12,8 @@ database and proves:
   4. register_app re-attaching the project does not move the tile back.
   5. The migration picks the five by project or by name, leaves everything
      else alone, and leaves a choice already made untouched.
+  6. The halves are named "Makes money" and "Personal projects" (2026-11-04),
+     a tile dragged across is saved by one POST, and a bad group is refused.
 
 Run: python tools/test_app_groups.py
 """
@@ -132,10 +134,10 @@ def halves():
 
 print("The page")
 h = halves()
-check("Data Dungeon shows under Client work", h.get("Data Dungeon") == "Client work", h)
-check("Robinson & Co. shows under Mine", h.get("Robinson & Co.") == "Mine", h)
-check("EntertainHQ still shows under Client work", h.get("EntertainHQ") == "Client work", h)
-check("Bible Study still shows under Mine", h.get("Bible Study") == "Mine", h)
+check("Data Dungeon shows under Makes money", h.get("Data Dungeon") == "Makes money", h)
+check("Robinson & Co. shows under Personal projects", h.get("Robinson & Co.") == "Personal projects", h)
+check("EntertainHQ still shows under Client work", h.get("EntertainHQ") == "Makes money", h)
+check("Bible Study still shows under Mine", h.get("Bible Study") == "Personal projects", h)
 
 print("The edit form")
 
@@ -149,9 +151,9 @@ def save(name, group):
 
 
 r = save("EntertainHQ", "mine")
-check("choosing Mine saves", r.status_code in (302, 303) and halves().get("EntertainHQ") == "Mine", r.status_code)
+check("choosing Mine saves", r.status_code in (302, 303) and halves().get("EntertainHQ") == "Personal projects", r.status_code)
 save("EntertainHQ", "")
-check("a blank puts it back on its project", halves().get("EntertainHQ") == "Client work")
+check("a blank puts it back on its project", halves().get("EntertainHQ") == "Makes money")
 form_html = c.get(f"/admin/apps/{ids['Robinson & Co.']}/edit").data.decode("utf-8", "replace")
 check("the form offers the choice", "Shows under" in form_html and "Follows the project" in form_html)
 
@@ -160,7 +162,22 @@ r = c.post("/api/guidance/apps", headers={"Authorization": "Bearer test-key"},
            json={"name": "Robinson & Co.", "url": "https://robinsonandco.example.test",
                  "client": "Zachary Robinson", "project": "Robinsonandco Project Manager"})
 check("re-registering with its project answers 200", r.status_code == 200, r.get_json())
-check("and the tile stays under Mine", halves().get("Robinson & Co.") == "Mine", halves())
+check("and the tile stays under Mine", halves().get("Robinson & Co.") == "Personal projects", halves())
+
+print("Dragging a tile across")
+r = c.post(f"/admin/apps/{ids['Data Dungeon']}/group", data={"group": "mine"})
+check("the move answers ok", r.status_code == 200 and r.get_json() == {"ok": True, "group": "mine"}, r.data)
+check("and the tile is under Personal projects", halves().get("Data Dungeon") == "Personal projects", halves())
+r = c.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "client"})
+check("and back the other way", halves().get("Bible Study") == "Makes money", halves())
+r = c.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "elsewhere"})
+check("a group that does not exist is refused", r.status_code == 400 and halves().get("Bible Study") == "Makes money")
+page = c.get("/admin/apps/").data.decode("utf-8", "replace")
+check("each tile has a grip that says where it goes",
+      'aria-label="Move Data Dungeon to Makes money"' in page and 'aria-label="Move Bible Study to Personal projects"' in page)
+check("no em dash", chr(0x2014) not in page)
+c2 = application.test_client()
+check("signed out, nothing moves", c2.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "mine"}).status_code in (302, 401))
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All passed.")

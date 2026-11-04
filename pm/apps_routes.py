@@ -96,11 +96,30 @@ def index():
         db.session.commit()
     return render_template(
         "pm/apps/index.html",
-        groups=[
-            {"label": "Client work", "apps": [a for a in apps if a.is_client_work]},
-            {"label": "Mine", "apps": [a for a in apps if not a.is_client_work]},
-        ],
+        groups=[{"key": key, "label": label,
+                 "apps": [a for a in apps if a.is_client_work == (key == "client")]}
+                for key, label in GROUP_LABELS],
         total=len(apps))
+
+
+# The halves of the board (Michael, 2026-11-04): "the top section is products
+# that make me money. bottom section is my personal projects." The stored
+# values stay "client" and "mine" so no row moves; only the names changed.
+GROUP_LABELS = (("client", "Makes money"), ("mine", "Personal projects"))
+
+
+@apps_bp.route("/<int:id>/group", methods=["POST"])
+@login_required
+def move_group(id):
+    """A tile dragged to the other half of the board. Answers JSON, because
+    the page has already moved the tile and only needs to know it held."""
+    link = db.session.get(AppLink, id) or abort(404)
+    group = request.form.get("group") or ""
+    if group not in AppLink.BOARD_GROUPS:
+        return {"ok": False}, 400
+    link.board_group = group
+    db.session.commit()
+    return {"ok": True, "group": group}
 
 
 def _store_upload(link, upload):
@@ -213,7 +232,7 @@ def edit(id=None):
         (p.id, f"{p.name} - {p.client.name}")
         for p in Project.query.order_by(Project.name).all()
     ]
-    group_options = [("", "Follows the project"), ("client", "Client work"), ("mine", "Mine")]
+    group_options = [("", "Follows the project")] + list(GROUP_LABELS)
     return render_template("pm/apps/form.html", link=link,
                            project_options=project_options,
                            group_options=group_options)

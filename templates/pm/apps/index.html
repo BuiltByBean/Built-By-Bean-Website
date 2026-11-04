@@ -6,12 +6,17 @@
   you actually go: the running app, the Railway service that serves it, and
   the repo behind it.
 
-  It is in two groups now - client work, then mine. An app belongs to an
-  engagement or it does not, and project_id already knew which; the board was
-  simply throwing that away and showing fifteen tiles in one wall. Client work
-  is first because that is the half with somebody waiting on it. A group with
-  nothing in it is not drawn at all: an empty "Client work" heading would be a
-  claim about the business, not a state of the board.
+  It is in two groups: what makes money (client builds and his own products
+  that earn), then personal projects (Michael, 2026-11-04). A group with
+  nothing in it is drawn only while a tile is being dragged, as somewhere to
+  drop it: an empty heading at rest would be a claim about the business, not
+  a state of the board.
+
+  The grip on each tile moves it to the other half: drag it there, or press it.
+  The tile moves in place and one small POST records it, so nothing else on
+  the page is rebuilt. Dragging is pointer events on the grip, not HTML5
+  drag and drop, which a phone does not do; `touch-action: none` on the grip
+  keeps a finger's drag from being taken as a scroll.
 
   The tile is no longer one big anchor. It holds three separate links now, and
   a link inside a link is invalid and behaves differently in every browser -
@@ -30,8 +35,8 @@
 {% block page_title %}My Apps{% endblock %}
 {% block page_subtitle %}Everything running{% endblock %}
 
-{% macro tile(app) %}
-<div class="glass-card p-4 sm:p-5 flex flex-col gap-4 min-w-0 relative">
+{% macro tile(app, other) %}
+<div class="glass-card p-4 sm:p-5 flex flex-col gap-4 min-w-0 relative" data-app-tile data-app-id="{{ app.id }}" data-app-name="{{ app.name }}">
 
     <div class="flex items-start gap-4 min-w-0">
         {% if app.icon_file %}
@@ -121,26 +126,42 @@
             <span class="sr-only">GitHub</span>
         </a>
         {% endif %}
+
+        <button type="button" data-app-grip aria-label="Move {{ app.name }} to {{ other }}" title="Drag to move"
+                class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-400 hover:text-white hover:bg-white/5 transition-colors cursor-grab select-none"
+                style="touch-action: none">
+            <svg class="w-4 h-4 pointer-events-none" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+                <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+                <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+            </svg>
+        </button>
     </div>
 </div>
 {% endmacro %}
 
 {% block content %}
-<div class="space-y-8 stagger-in">
+<style>
+    [data-apps-board]:not(.is-dragging) [data-group-section][data-empty] { display: none; }
+    [data-apps-board].is-dragging [data-group-grid] { min-height: 7rem; border-radius: 1rem; outline: 2px dashed rgba(255,255,255,0.08); outline-offset: 4px; }
+    [data-apps-board] [data-group-section].is-target [data-group-grid] { outline-color: rgba(167,139,250,0.6); background: rgba(167,139,250,0.05); }
+    [data-app-tile].is-lifted { position: relative; z-index: 30; pointer-events: none; box-shadow: 0 18px 40px rgba(0,0,0,0.45); opacity: 0.95; }
+    [data-app-tile].is-settling { transition: transform 160ms ease; }
+</style>
+<div class="space-y-8 stagger-in" data-apps-board data-move-url="{{ url_for('apps.move_group', id=0) }}">
 
     {% if total %}
         {% for group in groups %}
-        {% if group.apps %}
-        <section class="space-y-3">
+        {% set other = (groups | rejectattr('key', 'equalto', group.key) | first).label %}
+        <section class="space-y-3" data-group-section data-group="{{ group.key }}" data-label="{{ group.label }}"{% if not group.apps %} data-empty{% endif %}>
             <div class="flex items-baseline gap-2 px-1">
                 <h2 class="text-[11px] font-semibold uppercase tracking-wider text-white/40">{{ group.label }}</h2>
-                <span class="text-[11px] text-white/25 tabular-nums">{{ group.apps|length | commas }}</span>
+                <span class="text-[11px] text-white/25 tabular-nums" data-group-count>{{ group.apps|length | commas }}</span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {% for app in group.apps %}{{ tile(app) }}{% endfor %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" data-group-grid>
+                {% for app in group.apps %}{{ tile(app, other) }}{% endfor %}
             </div>
         </section>
-        {% endif %}
         {% endfor %}
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center">
@@ -152,4 +173,136 @@
     {% endif %}
 
 </div>
+<script>
+// Moving a tile between the two halves. Listeners go on the document once,
+// because bbbNavigate re-runs this script on every visit to the page.
+(function () {
+    if (window.__appsGroupDrag) return;
+    window.__appsGroupDrag = true;
+    var drag = null;
+    var EDGE = 64;
+
+    function board() { return document.querySelector('[data-apps-board]'); }
+    function scroller() { return document.getElementById('pm-scroll') || document.scrollingElement; }
+    function sectionAt(x, y) {
+        var el = document.elementFromPoint(x, y);
+        return el && el.closest('[data-group-section]');
+    }
+
+    function refresh(b) {
+        b.querySelectorAll('[data-group-section]').forEach(function (sec) {
+            var n = sec.querySelectorAll('[data-app-tile]').length;
+            sec.querySelector('[data-group-count]').textContent = n.toLocaleString();
+            if (n) sec.removeAttribute('data-empty'); else sec.setAttribute('data-empty', '');
+        });
+    }
+
+    // Tiles keep their order by id inside a half, so a moved tile lands
+    // where it will be on the next load rather than wherever it was dropped.
+    function place(tile, sec) {
+        var grid = sec.querySelector('[data-group-grid]');
+        var id = +tile.dataset.appId;
+        var after = Array.prototype.find.call(grid.querySelectorAll('[data-app-tile]'),
+            function (t) { return +t.dataset.appId > id; });
+        grid.insertBefore(tile, after || null);
+        var other = Array.prototype.find.call(board().querySelectorAll('[data-group-section]'),
+            function (s) { return s !== sec; });
+        tile.querySelector('[data-app-grip]').setAttribute('aria-label',
+            'Move ' + tile.dataset.appName + ' to ' + (other ? other.dataset.label : ''));
+    }
+
+    function move(tile, to) {
+        var b = board();
+        var from = tile.closest('[data-group-section]');
+        if (!to || to === from) return;
+        place(tile, to);
+        refresh(b);
+        var body = new FormData();
+        body.append('group', to.dataset.group);
+        fetch(b.dataset.moveUrl.replace('/0/group', '/' + tile.dataset.appId + '/group'),
+              {method: 'POST', body: body, credentials: 'same-origin'})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); })
+            .catch(function () { place(tile, from); refresh(b); });
+    }
+
+    function other(tile) {
+        var mine = tile.closest('[data-group-section]');
+        return Array.prototype.find.call(board().querySelectorAll('[data-group-section]'),
+            function (s) { return s !== mine; });
+    }
+
+    function follow() {
+        if (!drag || !drag.lifted) return;
+        var sc = scroller();
+        var r = sc.getBoundingClientRect ? sc.getBoundingClientRect() : {top: 0, bottom: innerHeight};
+        var step = drag.y < r.top + EDGE ? -12 : drag.y > r.bottom - EDGE ? 12 : 0;
+        if (step) sc.scrollTop += step;
+        var dy = drag.y - drag.y0 + (sc.scrollTop - drag.s0);
+        drag.tile.style.transform = 'translate(' + (drag.x - drag.x0) + 'px,' + dy + 'px)';
+        var sec = sectionAt(drag.x, drag.y);
+        board().querySelectorAll('[data-group-section]').forEach(function (s) {
+            s.classList.toggle('is-target', s === sec && s !== drag.home);
+        });
+        drag.target = sec;
+    }
+
+    document.addEventListener('pointerdown', function (e) {
+        var grip = e.target.closest && e.target.closest('[data-app-grip]');
+        if (!grip || e.button > 0) return;
+        var tile = grip.closest('[data-app-tile]');
+        e.preventDefault();
+        try { grip.setPointerCapture(e.pointerId); } catch (err) { /* the document listeners still follow it */ }
+        drag = {grip: grip, tile: tile, id: e.pointerId, x0: e.clientX, y0: e.clientY,
+                x: e.clientX, y: e.clientY, s0: scroller().scrollTop, lifted: false,
+                home: tile.closest('[data-group-section]'), target: null};
+    });
+
+    document.addEventListener('pointermove', function (e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag.x = e.clientX; drag.y = e.clientY;
+        if (!drag.lifted && Math.hypot(drag.x - drag.x0, drag.y - drag.y0) > 6) {
+            drag.lifted = true;
+            drag.tile.classList.add('is-lifted');
+            board().classList.add('is-dragging');
+            // A timer, not animation frames: a finger held still at the edge
+            // sends no moves, and frames do not run in a throttled tab.
+            drag.timer = setInterval(follow, 16);
+        }
+        follow();
+    });
+
+    function end(e, cancelled) {
+        if (!drag || e.pointerId !== drag.id) return;
+        var d = drag;
+        drag = null;
+        clearInterval(d.timer);
+        var b = board();
+        if (!d.lifted) {
+            if (!cancelled) move(d.tile, other(d.tile));
+            return;
+        }
+        b.querySelectorAll('.is-target').forEach(function (s) { s.classList.remove('is-target'); });
+        // Where the finger let go, read now: a quick flick can end before
+        // the next frame has worked out the target.
+        var dropped = sectionAt(e.clientX, e.clientY) || d.target;
+        d.tile.classList.remove('is-lifted');
+        d.tile.style.transform = '';
+        b.classList.remove('is-dragging');
+        if (!cancelled) move(d.tile, dropped);
+        refresh(b);
+    }
+    document.addEventListener('pointerup', function (e) { end(e, false); });
+    document.addEventListener('pointercancel', function (e) { end(e, true); });
+    // A keyboard press on the grip moves it too; a pointer press is handled
+    // above, so only clicks with no pointer behind them (detail 0) count here.
+    document.addEventListener('click', function (e) {
+        var grip = e.target.closest && e.target.closest('[data-app-grip]');
+        if (grip && e.detail === 0) {
+            var tile = grip.closest('[data-app-tile]');
+            move(tile, other(tile));
+            grip.focus();
+        }
+    });
+})();
+</script>
 {% endblock %}
