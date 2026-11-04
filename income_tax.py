@@ -1,7 +1,7 @@
 """What each company's profit costs Michael in income tax, for one year.
 
 docs/finances_plan.md item 4 (Michael, 2026-11-04). The Taxes page and the
-Overview both read `estimate(business, year)`, so the two can never show
+the top of Books (its Months tab) both read `estimate(business, year)`, so the two can never show
 different taxes for the same company and year.
 
 The profit is the Books page's: `books_service.summarize(company, Jan 1,

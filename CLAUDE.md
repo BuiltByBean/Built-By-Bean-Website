@@ -557,8 +557,9 @@ night has a failed step or no night has finished in 26 hours; it links to
 with no headings: Needs attention and the Workspace; then Businesses, My Apps,
 Client support and Org (Team, renamed, once its session lands); then Clients,
 Contracts and Leads; then the Handbook (Best Practices in the code and URLs),
-the MVP Builder and Time; then Finances, for the CEO alone: Overview, Books,
-Invoices, Taxes, Hosting. Notes and Projects left when the
+the MVP Builder and Time; then Finances, for the CEO alone: Books, Taxes,
+Invoicing, Hosting (Michael retired the Overview into Books the evening it
+shipped). Notes and Projects left when the
 Workspace landed, and Products folded into the MVP Builder.
 
 ## Finances, consolidated
@@ -579,15 +580,19 @@ periods. Now:
   changes every sub-tab's address); it scrolls sideways on a phone with the
   current tab brought into the row by its own scrollLeft. What changes sits in
   one `data-panel`, so a press swaps only that.
-- **Overview** (`pm.dashboard`, `/admin/finances`, `pm/finances/overview.html`)
-  replaced the Dashboard: a company and a year, its Income, Expenses and Net
-  from `books_service.summarize`, the estimated tax from `income_tax.estimate`,
-  and one To do list, each row a link to where it is cleared (overdue and
-  stalled invoices, bank lines to sort, missing receipts, months not closed,
-  vendor bills not recorded, hosting fees under the floor). A GET changes
-  nothing; it ran `sync_project_phases` until then. Financials by client went to
-  the Clients list (Paid, Open, Spent on; CEO only, `_client_money`), ticket and
-  delivery dates to Client support (`_support_deadlines`).
+- **Books is the front door; the Dashboard is retired.** An Overview replaced
+  the Dashboard for a few hours on 2026-11-04, then Michael: "Dashboard (retire
+  move books into this spot)". `pm.dashboard` (`/admin/finances`) now 301s to
+  the company's Books, keeping `business` and `year`. The top of each company's
+  Months tab is what the Overview held: Income, Expenses and Net from
+  `books_service.summarize`, the estimated tax from `income_tax.estimate`
+  (`books_routes.estimated_tax`), and one To do list (`books_routes.todo`),
+  each row a link to where it is cleared (overdue and stalled invoices, bank
+  lines to sort, missing receipts, vendor bills not recorded, hosting fees
+  under the floor; not the months, which are listed right below it). A GET
+  changes nothing; the Dashboard ran `sync_project_phases`. Financials by client
+  went to the Clients list (Paid, Open, Spent on; CEO only, `_client_money`),
+  ticket and delivery dates to Client support (`_support_deadlines`).
 - **Books is each company's one place for its money** (`pm/books_routes.py`,
   `templates/pm/books/_hub.html`): a row of companies, then Months, Bank,
   Expenses, Receipts, Year report, Connections, each `/admin/books/<id>/...`.
@@ -607,12 +612,12 @@ periods. Now:
   must catch).
 - **Taxes** is five tabs on every tax page (`templates/pm/taxes/_tabs.html`):
   Income tax, Sales tax, Returns, Deadlines, Guide. `income_tax.estimate` is the
-  one income-tax figure for Taxes and the Overview: the Books net per company,
+  one income-tax figure for Taxes and the top of Books: the Books net per company,
   Built by Bean on Schedule C, EntertainHQ as a partnership with each member's
   share and no self-employment tax at the company, Schedule C companies stacked
   before partnership shares so they add up to his whole return, and the set
   aside on the same basis. `tools/test_taxes_tabs.py`.
-- **Invoices** (`pm/stripe_routes.py`): the list, New invoice, a one-line Stripe
+- **Invoicing** (`pm/stripe_routes.py`, Invoices until Michael renamed it): the list, New invoice, a one-line Stripe
   strip ("open in Stripe" is the whole account; "Unpaid in this list" follows
   every filter, status included, so the two Outstandings no longer share a
   name), and Time not yet billed (`unbilled_time`, per client, its tab counts

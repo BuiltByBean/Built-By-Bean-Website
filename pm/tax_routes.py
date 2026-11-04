@@ -2,7 +2,7 @@
 
 Income tax (docs/finances_plan.md item 4): one company at a time, picked by
 the switch, and one year. The arithmetic is `income_tax.estimate`, which the
-Overview reads too, and its profit is the Books page's net for that company
+top of Books reads too, and its profit is the Books page's net for that company
 and year. Facts in, working out: filing status, wages and withholding are
 typed here and `tax_engine` does brackets, the standard deduction, QBI and
 self employment tax, and the page shows its own working so the number can be

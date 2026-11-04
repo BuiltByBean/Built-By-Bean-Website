@@ -1146,34 +1146,30 @@
             </a>
             {% endif %}
 
-            {# Finances, in Michael's order (docs/finances_plan.md item 11,
-               2026-11-04): the overview, each company's books, the invoices,
-               the taxes, the hosting. CEO only, every page of it (item 10),
+            {# Finances, in Michael's order (2026-11-04, second pass: "Dashboard
+               (retire move books into this spot) ... then the taxes, Invoicing,
+               Hosting"): each company's books, which open on its year and its To
+               do list, then taxes, invoicing and hosting. CEO only, every page of it (item 10),
                so the group is not drawn for anybody else rather than drawn
                and refused (a divider, no heading, like Michael's other groups); Hannah keeps her work pages. Expenses and the bank
                list are tabs of Books, the vendor pages tabs of Hosting. #}
             {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
             {% set ep = request.endpoint or '' %}
             <div data-group="finances" class="my-2 border-t border-white/10"></div>
-            <a href="{{ url_for('pm.dashboard') }}"
-               class="sidebar-link {% if ep == 'pm.dashboard' %}active{% endif %}">
-                {{ icon('finances') }}
-                Overview
-            </a>
             <a href="{{ url_for('books.index') }}"
-               class="sidebar-link {% if ep.startswith(('books.', 'bank.')) or ep in ('pm.expenses_list', 'pm.expense_create', 'pm.expense_edit') %}active{% endif %}">
+               class="sidebar-link {% if ep.startswith(('books.', 'bank.')) or ep in ('pm.dashboard', 'pm.expenses_list', 'pm.expense_create', 'pm.expense_edit') %}active{% endif %}">
                 {{ icon('books') }}
                 Books
-            </a>
-            <a href="{{ url_for('stripe.invoices_list') }}"
-               class="sidebar-link {% if ep.startswith('stripe.') or 'invoice' in ep %}active{% endif %}">
-                {{ icon('invoices') }}
-                Invoices
             </a>
             <a href="{{ url_for('taxes.taxes_index') }}"
                class="sidebar-link {% if ep.startswith(('taxes', 'taxes_deadlines.')) or (ep.startswith('businesses.') and ep not in ('businesses.index', 'businesses.new', 'businesses.edit', 'businesses.detail', 'businesses.map_page', 'businesses.map_edit')) %}active{% endif %}">
                 {{ icon('taxes') }}
                 Taxes
+            </a>
+            <a href="{{ url_for('stripe.invoices_list') }}"
+               class="sidebar-link {% if ep.startswith('stripe.') or 'invoice' in ep %}active{% endif %}">
+                {{ icon('invoices') }}
+                Invoicing
             </a>
             <a href="{{ url_for('hosting.hosting_index') }}"
                class="sidebar-link {% if ep.startswith(('hosting.', 'service_costs.')) %}active{% endif %}">

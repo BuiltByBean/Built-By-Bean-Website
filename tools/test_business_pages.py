@@ -156,7 +156,7 @@ html = c.get("/admin/businesses").get_data(as_text=True)
 check("shows each business by name", all(n in html for n in ("Built by Bean", "EntertainHQ", "Shelf Company LLC")))
 check("with its start date", "Jan 17, 2024" in html and "Oct 05, 2026" in html,
       re.findall(r"[A-Z][a-z]{2} \d{1,2}, 20\d\d", html))
-dash = c.get("/admin/finances").get_data(as_text=True)
+dash = c.get("/admin/finances", follow_redirects=True).get_data(as_text=True)
 m = re.search(r"Income.*?(\$[\d,]+\.\d\d)", dash, re.S)
 dash_total = m.group(1) if m else None
 check("the Overview's Income is paid less tax, no back tax: $12,350.00", dash_total == "$12,350.00", dash_total)

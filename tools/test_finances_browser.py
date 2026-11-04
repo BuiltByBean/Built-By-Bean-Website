@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""The Overview and Books, measured in a real browser at 320, 375 and 1600.
+"""Books (the money's front door), measured in a real browser at 320, 375 and 1600.
 
 Seeded with long names and enough rows to scroll, because short seed data
 hides every overflow fault this board has had. On every page, at every width:
@@ -148,7 +148,7 @@ INSIDE = """() => { const row = document.querySelector('[data-keep="books-tabs"]
   const r = row.getBoundingClientRect(), t = a.getBoundingClientRect();
   return t.left >= r.left - 1 && t.right <= r.right + 1 ? 'inside' : `${Math.round(t.left)}..${Math.round(t.right)} vs ${Math.round(r.left)}..${Math.round(r.right)}`; }"""
 
-PAGES = ["/admin/finances", f"/admin/finances?business={IDS['ehq']}", f"/admin/books/{IDS['bbb']}/",
+PAGES = [f"/admin/books/{IDS['ehq']}/", f"/admin/books/{IDS['bbb']}/",
          f"/admin/books/{IDS['bbb']}/bank", f"/admin/books/{IDS['bbb']}/bank?view=tags",
          f"/admin/books/{IDS['bbb']}/expenses", f"/admin/books/{IDS['bbb']}/receipts",
          f"/admin/books/{IDS['bbb']}/year/{today.year}", f"/admin/books/{IDS['bbb']}/connections",

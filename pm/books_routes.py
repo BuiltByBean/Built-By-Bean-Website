@@ -163,6 +163,80 @@ def _hub(template, business, active, **ctx):
                            company_tabs=company_tabs, **ctx)
 
 
+# ── What the Overview was: the year's tax and what is left to do ─────────
+# Michael retired the Overview the evening it shipped (2026-11-04) and put
+# Books in its place; these are drawn at the top of a company's Months tab.
+
+def estimated_tax(business, year, summary=None):
+    """The year's estimated income tax, as the Taxes page works it out.
+    None when it cannot be worked out, which the tile says in words."""
+    try:
+        import income_tax
+    except ImportError:
+        return None
+    try:
+        return income_tax.estimate(business, year, summary=summary)
+    except Exception:  # noqa: BLE001 - a tile never takes the page down
+        current_app.logger.exception("income tax estimate failed")
+        return None
+
+
+def todo(business, is_home, today):
+    """What is waiting on Michael about this company's money, one row per
+    thing to press: [(kind, title, detail, href, count)]."""
+    import books_service
+    rows = []
+    family = books_service.family_ids(business)
+    if is_home:
+        try:
+            from stripe_service import get_overdue_invoices, get_stalled_subscriptions
+            overdue = get_overdue_invoices()
+            stalled = get_stalled_subscriptions()
+        except Exception:  # noqa: BLE001 - Stripe down is not a page down
+            overdue, stalled = [], []
+        if overdue:
+            total = sum(i["amount_due"] for i in overdue)
+            rows.append(("invoice", f"{len(overdue):,} invoice{'' if len(overdue) == 1 else 's'} overdue",
+                         f"${total:,.2f} owed, oldest {max(i['days_overdue'] for i in overdue):,} days late"
+                         if overdue and "days_overdue" in overdue[0] else f"${total:,.2f} owed",
+                         url_for("stripe.invoices_list", status="open"), len(overdue)))
+        if stalled:
+            rows.append(("invoice", f"{len(stalled):,} plan{'' if len(stalled) == 1 else 's'} not collecting",
+                         ", ".join(s.get("customer_name") or s.get("customer") or "" for s in stalled)[:200],
+                         url_for("stripe.invoices_list"), len(stalled)))
+    n = review_count(business)
+    if n:
+        rows.append(("bank", f"{n:,} bank line{'' if n == 1 else 's'} to sort", "",
+                     url_for("books.bank", id=business.id), n))
+    n = _missing_receipts(business).count()
+    if n:
+        rows.append(("receipt", f"{n:,} expense{'' if n == 1 else 's'} without a receipt", "",
+                     url_for("books.company_receipts", id=business.id), n))
+    try:
+        from pm.attention_routes import _bills_to_enter
+        for bill in _bills_to_enter():
+            p = bill["provider"]
+            owner = p.account_business_id or (_home().id if p.is_ours else None)
+            if owner not in family:
+                continue
+            rows.append(("bill", f"{p.display_name}: {bill['latest']:%B %Y} bill not recorded",
+                         f"{bill['count']:,} months missing" if bill["count"] > 1 else "",
+                         url_for("service_costs.provider_monthly", id=p.id, month=bill["latest"].strftime("%Y-%m")),
+                         bill["count"]))
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("vendor bills for the overview")
+    if is_home:
+        try:
+            from pm.hosting_routes import increases_due_count
+            n = increases_due_count()
+        except Exception:  # noqa: BLE001
+            n = 0
+        if n:
+            rows.append(("hosting", f"{n:,} hosting fee{'' if n == 1 else 's'} under the floor", "",
+                         url_for("hosting.hosting_index"), n))
+    return rows
+
+
 @books_bp.route("/admin/books/<int:id>/")
 @ceo_required
 def company(id):
@@ -175,8 +249,11 @@ def company(id):
     year = request.args.get("year", type=int) or today.year
     months = [month_status(business, m) for m in _months(min(today, date(year, 12, 1))) if m.year == year]
     years = sorted({m.year for m in _months(today)} | {today.year}, reverse=True)
+    summary = books_service.summarize(business, date(year, 1, 1), date(year + 1, 1, 1))
+    home = _home()
     return _hub("pm/books/months.html", business, "months", year=year, years=years,
-                summary=books_service.summarize(business, date(year, 1, 1), date(year + 1, 1, 1)),
+                summary=summary, tax=estimated_tax(business, year, summary),
+                todo=todo(business, bool(home and business.id == home.id), today),
                 months=list(reversed(months)))
 
 

@@ -130,7 +130,7 @@ STATE = """() => ({
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
-    page = browser.new_context(viewport={"width": 1280, "height": 900},
+    page = browser.new_context(viewport={"width": 1280, "height": 560},
                                color_scheme="dark").new_page()
     page.goto(BASE + "/login", wait_until="domcontentloaded")
     page.fill("[name=username]", "mb")
@@ -154,8 +154,11 @@ with sync_playwright() as p:
     check("and so is the banner", after["topbar"] == "TOPBAR", after["topbar"])
     check("and so is the scroller", after["scroller"] == "SCROLLER", after["scroller"])
     check("no page was loaded at all", after["ctx"] == "ALIVE", after["ctx"])
-    check("the sidebar kept its own scroll position", after["navScroll"] == 40,
-          after["navScroll"])
+    # Short enough that the sidebar scrolls at all: it holds fewer links than
+    # it did, and a nav that fits cannot be scrolled to test.
+    check("the sidebar had somewhere to scroll", before["navScroll"] > 0, before["navScroll"])
+    check("the sidebar kept its own scroll position", after["navScroll"] == before["navScroll"],
+          (before["navScroll"], after["navScroll"]))
     check("the lit link moved", before["active"] == ["Books"]
           and after["active"] == ["My Apps"], (before["active"], after["active"]))
     check("the URL changed", after["url"].startswith("/admin/apps"), after["url"])

@@ -8,15 +8,19 @@ four places over different periods. Michael decided each piece below.
 
 ## What changes
 
-1. **Overview replaces the Dashboard.**
+1. **The Dashboard retires, and Books takes its spot.** Michael, the same
+   evening, after the Overview shipped: "Dashboard (retire move books into
+   this spot)". What the Overview held is the top of each company's Books
+   (the Months tab), so nothing it showed is lost, and `/admin/finances`
+   redirects to Books:
    - A company switcher and a year picker.
    - Income, Expenses, Net and the year's estimated tax, read from
      `books_service.summarize` and the Taxes calculation. That fixes the
      all-time profit run through this year's brackets, which disagreed with
      Books and Taxes.
    - One To do list: overdue and stalled invoices, bank lines to sort, missing
-     receipts, months ready to close, missing vendor bills, and hosting fees
-     under the floor.
+     receipts, missing vendor bills, and hosting fees under the floor. Months
+     not yet closed are the list right under it, each with what is left.
    - Financials by client moves to the Clients page. Ticket and delivery
      deadlines move to Client support.
    - `sync_project_phases()` stops running on a GET.
@@ -80,8 +84,11 @@ four places over different periods. Michael decided each piece below.
 10. **CEO only.** Every Finances page is CEO only, like Books and Businesses.
     Hannah keeps her work pages.
 
-11. **The sidebar:** Finances is Overview, Books, Invoices, Taxes, Hosting,
-    in that order.
+11. **The sidebar:** Finances is Books, Taxes, Invoicing, Hosting, in that
+    order (Michael's second pass, 2026-11-04: "Dashboard (retire move books
+    into this spot) / Expenses (... retired too since we track all expense in
+    the books) / then the taxes / Invoicing / Hosting"). Invoices is called
+    Invoicing. A divider and no heading, like his other groups.
 
 ## Small fixes found on the way
 

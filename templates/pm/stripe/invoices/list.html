@@ -22,8 +22,8 @@
   half of "The window never scrolls; one region under the bar does".
 #}
 
-{% block title %}Invoices - Built By Bean{% endblock %}
-{% block page_title %}Invoices{% endblock %}
+{% block title %}Invoicing - Built By Bean{% endblock %}
+{% block page_title %}Invoicing{% endblock %}
 {% block page_subtitle %}Every invoice, and the time still to bill{% endblock %}
 {% block main_class %}contained-scroll invoices-page{% endblock %}
 
@@ -73,7 +73,7 @@
 {{ fin_tabs('invoices', tab, [
     ('invoices', 'Invoices', url_for('stripe.invoices_list'), none),
     ('unbilled', 'Time not yet billed', url_for('stripe.unbilled'), unbilled_count),
-], 'Invoices') }}
+], 'Invoicing') }}
 
 <div data-panel="invoices" class="inv-fill flex-1 min-h-0 flex flex-col">
     {% if tab == 'unbilled' %}

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""The Overview and the Books hub (docs/finances_plan.md items 1, 2, 7, 10, 11).
+"""Books, the money's front door (docs/finances_plan.md items 1, 2, 7, 10, 11).
 
 What is proved:
 
-  1. Overview: one company and year at a time, its Income, Expenses and Net
+  1. Books opens on a company's Months (the Overview was retired into it the
+     evening it shipped): one company and year at a time, its Income, Expenses and Net
      the Books' own figures to the cent, the tax tile, and a To do list whose
      every row is a link that lands where it is cleared (bank lines, missing
      receipts, a month to close). A GET changes nothing (no phase sync).
@@ -134,26 +135,31 @@ def page(path, who=c):
     return r.status_code, r.get_data(as_text=True), r
 
 
-print("1. Overview")
-code, html, _ = page("/admin/finances")
-check("opens for the CEO", code == 200, code)
-check("leads with the home company", "Built by Bean LLC" in html)
+print("1. Books is the front door (Michael retired the Overview, 2026-11-04)")
+code, _, r = page("/admin/finances")
+check("the old Overview address lands on the home company's Books",
+      code == 301 and r.location.endswith(f"/admin/books/{ids['bbb']}/"), (code, r.location))
+code, _, r = page(f"/admin/finances?business={ids['ehq']}&year={today.year}")
+check("with its company and year", code == 301 and f"/admin/books/{ids['ehq']}/?year={today.year}" in r.location,
+      r.location)
+code, html, _ = page(f"/admin/books/{ids['bbb']}/")
+check("Months opens for the CEO", code == 200, code)
 check("its Expenses are the Books' to the cent", f"${year_exp:,.2f}" in html, year_exp)
 check("and its Net", f"${abs(year_net):,.2f}" in html)
+check("with the estimated tax beside them", "Estimated tax" in html)
 todo = re.findall(r'data-todo="(\w+)"', html)
-check("To do names the bank lines to sort, the missing receipts and the month to close",
-      "bank" in todo and "receipt" in todo and "month" in todo, todo)
+check("To do names the bank lines to sort and the missing receipts, and not the months listed below it",
+      "bank" in todo and "receipt" in todo and "month" not in todo, todo)
 check("each To do row is a link to where it is cleared",
       f'/admin/books/{ids["bbb"]}/bank' in html and f'/admin/books/{ids["bbb"]}/receipts' in html)
-check("financials by client and deadlines are gone from it",
+check("financials by client and deadlines are not on it",
       "Financials by client" not in html and "Kuper Plumbing delivery" not in html)
-code, html, _ = page(f"/admin/finances?business={ids['ehq']}")
-check("the company switch shows EntertainHQ's", code == 200 and "EntertainHQ LLC" in html and "$99.00" in html)
+code, html, _ = page(f"/admin/books/{ids['ehq']}/")
+check("EntertainHQ's opens on its own", code == 200 and "EntertainHQ LLC" in html)
 check("and its To do is its own", "1 bank line to sort" in html, re.findall(r"\d+ bank lines? to sort", html))
-src = (ROOT / "app.py").read_text(encoding="utf-8")
-body = src[src.index("    def dashboard():"):src.index("    def _overview_tax(")]
-check("a GET changes nothing: no phase sync on the Overview",
-      "sync_project_phases(" not in body.split('"""', 2)[-1])
+src = (ROOT / "pm" / "books_routes.py").read_text(encoding="utf-8")
+body = src[src.index("def company(id):"):src.index("def bank(id):")]
+check("a GET changes nothing: no phase sync on Months", "sync_project_phases(" not in body)
 
 print("2. Books is a tab per company")
 code, _, r = page("/admin/books/")
@@ -249,13 +255,13 @@ r = m.post(f"/admin/expenses/{ids['typed']}/delete")
 with application.app_context():
     check("a member's delete is refused", db.session.get(Expense, ids["typed"]) is not None)
 html = m.get("/admin/clients").get_data(as_text=True)
-check("the sidebar draws no Finances for a member", 'data-group="finances"' not in html and "Overview" not in html)
+check("the sidebar draws no Finances for a member", 'data-group="finances"' not in html and "Invoicing" not in html)
 html = c.get("/admin/clients").get_data(as_text=True)
 nav = html[html.index('data-group="finances"'):html.index('data-group="finances"') + 4000]
-order = [w for w in ("Overview", "Books", "Invoices", "Taxes", "Hosting") if w in nav]
-check("the CEO's Finances is Overview, Books, Invoices, Taxes, Hosting",
-      order == ["Overview", "Books", "Invoices", "Taxes", "Hosting"]
-      and nav.index("Overview") < nav.index("Books") < nav.index("Invoices") < nav.index("Taxes") < nav.index("Hosting"),
+order = [w for w in ("Books", "Taxes", "Invoicing", "Hosting") if w in nav]
+check("the CEO's Finances is Books, Taxes, Invoicing, Hosting",
+      order == ["Books", "Taxes", "Invoicing", "Hosting"]
+      and nav.index("Books") < nav.index("Taxes") < nav.index("Invoicing") < nav.index("Hosting"),
       order)
 check("and no Expenses or Dashboard link", "/admin/expenses\"" not in nav and "Dashboard" not in nav)
 

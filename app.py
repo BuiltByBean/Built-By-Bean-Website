@@ -812,124 +812,17 @@ def create_app():
     @pm_bp.route("/finances")
     @ceo_required
     def dashboard():
-        """Overview: one company's year at a glance and what is left to do
-        about its money (docs/finances_plan.md item 1, Michael, 2026-11-04).
-
-        Every figure is the Books' own reading (books_service.summarize) and
-        the tax is the Taxes page's (income_tax.estimate), so this page cannot
-        disagree with either. The old Dashboard ran all-time profit through
-        this year's brackets, read revenue and expenses from different places,
-        and ran sync_project_phases on every visit; a GET changes nothing now.
-
-        The To do list is a worklist, not a metric: each row is something to
-        press, and each press lands on the page that clears it.
-        """
-        import books_service
-        from pm.books_routes import _companies, _company, _home, review_count, _missing_receipts, _months
-        today = date.today()
-        biz_id = request.args.get("business", type=int)
-        business = _company(biz_id) if biz_id else _home()
+        """The money's front door is Books (Michael, 2026-11-04: "Dashboard
+        (retire move books into this spot)"). The Overview this was for a few
+        hours, its tiles, the estimated tax and the To do list, is the top of
+        each company's Books Months tab now. Old links keep landing there."""
+        biz = request.args.get("business", type=int)
+        year = request.args.get("year", type=int)
+        from pm.books_routes import _company, _home
+        business = _company(biz) if biz else _home()
         if business is None:
             abort(404)
-        year = request.args.get("year", type=int) or today.year
-        summary = books_service.summarize(business, date(year, 1, 1), date(year + 1, 1, 1))
-        tax = _overview_tax(business, year, summary)
-        is_home = business.id == _home().id
-        todo = _overview_todo(business, is_home, today)
-        years = sorted({m.year for m in _months(today)} | {today.year}, reverse=True)
-        companies = _companies()
-        company_tabs = [(str(b.id), b.short_name or b.name,
-                         url_for("pm.dashboard", business=b.id, year=year)) for b in companies]
-        return render_template("pm/finances/overview.html", business=business, year=year,
-                               years=years, summary=summary, tax=tax, todo=todo,
-                               company_tabs=company_tabs)
-
-    def _overview_tax(business, year, summary=None):
-        """The year's estimated income tax, as the Taxes page works it out.
-        None when it cannot be worked out, which the tile says in words."""
-        try:
-            import income_tax
-        except ImportError:
-            return None
-        try:
-            return income_tax.estimate(business, year, summary=summary)
-        except Exception:  # noqa: BLE001 - a tile never takes the page down
-            current_app.logger.exception("income tax estimate failed")
-            return None
-
-    def _overview_todo(business, is_home, today):
-        """What is waiting on Michael about this company's money, one row per
-        thing to press: [(kind, title, detail, href, count)]."""
-        import books_service
-        from models import BankTransaction, MonthClose, ServiceProvider
-        from pm.books_routes import review_count, _missing_receipts, _months
-        rows = []
-        family = books_service.family_ids(business)
-        if is_home:
-            try:
-                from stripe_service import get_overdue_invoices, get_stalled_subscriptions
-                overdue = get_overdue_invoices()
-                stalled = get_stalled_subscriptions()
-            except Exception:  # noqa: BLE001 - Stripe down is not a page down
-                overdue, stalled = [], []
-            if overdue:
-                total = sum(i["amount_due"] for i in overdue)
-                rows.append(("invoice", f"{len(overdue):,} invoice{'' if len(overdue) == 1 else 's'} overdue",
-                             f"${total:,.2f} owed, oldest {max(i['days_overdue'] for i in overdue):,} days late"
-                             if overdue and "days_overdue" in overdue[0] else f"${total:,.2f} owed",
-                             url_for("stripe.invoices_list", status="open"), len(overdue)))
-            if stalled:
-                rows.append(("invoice", f"{len(stalled):,} plan{'' if len(stalled) == 1 else 's'} not collecting",
-                             ", ".join(s.get("customer_name") or s.get("customer") or "" for s in stalled)[:200],
-                             url_for("stripe.invoices_list"), len(stalled)))
-        n = review_count(business)
-        if n:
-            rows.append(("bank", f"{n:,} bank line{'' if n == 1 else 's'} to sort", "",
-                         url_for("books.bank", id=business.id), n))
-        n = _missing_receipts(business).count()
-        if n:
-            rows.append(("receipt", f"{n:,} expense{'' if n == 1 else 's'} without a receipt", "",
-                         url_for("books.company_receipts", id=business.id), n))
-        closed = {m.month for m in MonthClose.query.filter_by(business_id=business.id).all()}
-        for month in _months(today):
-            start, end = books_service.month_bounds(month)
-            if end > today or start in closed:
-                continue
-            unsorted = BankTransaction.query.filter(
-                BankTransaction.business_id.in_(family), BankTransaction.disposition == "review",
-                BankTransaction.occurred_on >= start, BankTransaction.occurred_on < end).count()
-            missing = _missing_receipts(business).filter(Expense.date >= start, Expense.date < end).count()
-            left = ", ".join(x for x in (f"{unsorted:,} to sort" if unsorted else "",
-                                         f"{missing:,} without a receipt" if missing else "") if x)
-            rows.append(("month", f"{start:%B %Y} {'is ready to close' if not left else 'is not closed'}",
-                         left, url_for("books.month_page", id=business.id, ym=start.strftime("%Y-%m")), 1))
-        try:
-            from pm.attention_routes import _bills_to_enter
-            for bill in _bills_to_enter():
-                p = bill["provider"]
-                owner = p.account_business_id or (_home_id() if p.is_ours else None)
-                if owner not in family:
-                    continue
-                rows.append(("bill", f"{p.display_name}: {bill['latest']:%B %Y} bill not recorded",
-                             f"{bill['count']:,} months missing" if bill["count"] > 1 else "",
-                             url_for("service_costs.provider_monthly", id=p.id, month=bill["latest"].strftime("%Y-%m")),
-                             bill["count"]))
-        except Exception:  # noqa: BLE001
-            current_app.logger.exception("vendor bills for the overview")
-        if is_home:
-            try:
-                from pm.hosting_routes import increases_due_count
-                n = increases_due_count()
-            except Exception:  # noqa: BLE001
-                n = 0
-            if n:
-                rows.append(("hosting", f"{n:,} hosting fee{'' if n == 1 else 's'} under the floor", "",
-                             url_for("hosting.hosting_index"), n))
-        return rows
-
-    def _home_id():
-        from models import home_business_id
-        return home_business_id()
+        return redirect(url_for("books.company", id=business.id, **({"year": year} if year else {})), 301)
 
     # ── Clients ──────────────────────────────────────────────
 

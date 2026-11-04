@@ -56,6 +56,13 @@ def check(name, cond, detail=""):
         FAIL.append(name)
 
 
+def tile(text, label):
+    """The figure on the stat tile labelled `label` (the tab row above the
+    tiles carries some of the same words)."""
+    m = re.search(r">\s*" + re.escape(label) + r"\s*</p>\s*<p[^>]*>\s*(-?)\$([\d,]+\.\d\d)", text)
+    return None if not m else float(m.group(2).replace(",", "")) * (-1 if m.group(1) else 1)
+
+
 def money(text, label):
     """The first dollar figure after `label` in the page's text."""
     flat = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text))
@@ -106,12 +113,12 @@ with c.session_transaction() as s:
     s["_fresh"] = True
 
 print("1. The Overview is Built by Bean's, in Built by Bean's figures")
-dash = c.get(f"/admin/finances?year={YEAR}").get_data(as_text=True)
+dash = c.get(f"/admin/finances?year={YEAR}", follow_redirects=True).get_data(as_text=True)
 check("Expenses is Built by Bean and its DBA, not EntertainHQ",
-      money(dash, "Expenses") == 140.0, money(dash, "Expenses"))
+      tile(dash, "Expenses") == 140.0, tile(dash, "Expenses"))
 check("its Income and Net are the Books' to the cent",
-      money(dash, "Income") == bbb_year["income_total"] and money(dash, "Net") == bbb_year["net"],
-      (money(dash, "Income"), money(dash, "Net")))
+      tile(dash, "Income") == bbb_year["income_total"] and tile(dash, "Net") == bbb_year["net"],
+      (tile(dash, "Income"), tile(dash, "Net")))
 check("EntertainHQ's spending is not on it", "$619.78" not in dash and "$719.78" not in dash)
 clients = c.get("/admin/clients").get_data(as_text=True)
 check("the client's Spent on column leaves EntertainHQ's spending out",
@@ -145,7 +152,7 @@ check("EntertainHQ's lifetime revenue is its Stripe sales",
       "$250.00" in biz and biz.count("App not reporting") == 0, biz.count("App not reporting"))
 
 print("5. A DBA's checks are the company's income, under the DBA's name")
-dash_before = money(dash, "Income")
+dash_before = tile(dash, "Income")
 with application.app_context():
     from models import BankConnection, BankTransaction
     pt = Business(name="Personal Training", short_name="Personal Training", slug="pt", parent_id=ids["bbb"])
@@ -175,9 +182,9 @@ check("the Books page names Personal Training", "Personal Training" in books and
 taxes2 = c.get("/admin/taxes/").get_data(as_text=True)
 check("Taxes moves with it to the cent", money(taxes2, "Business profit") == year2["net"],
       (money(taxes2, "Business profit"), year2["net"]))
-dash2 = c.get(f"/admin/finances?year={YEAR}").get_data(as_text=True)
+dash2 = c.get(f"/admin/finances?year={YEAR}", follow_redirects=True).get_data(as_text=True)
 check("the Overview's Income goes up by the same $300",
-      round(money(dash2, "Income") - dash_before, 2) == 300.0, (dash_before, money(dash2, "Income")))
+      round(tile(dash2, "Income") - dash_before, 2) == 300.0, (dash_before, tile(dash2, "Income")))
 biz2 = re.sub(r"\s+", " ", c.get("/admin/businesses").get_data(as_text=True))
 check("Personal Training's tile reads its $300", "$300.00" in biz2)
 csv_text = c.get(f"/admin/books/{ids['bbb']}/year/{YEAR}.csv").get_data(as_text=True)
