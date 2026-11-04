@@ -177,6 +177,17 @@ with application.app_context():
                           payload_json=json.dumps({"name": "Our Twilio number", "what_went_wrong": "It is 555."})),
     ])
     db.session.commit()
+    # A rewrite held for days, and a session's lesson arriving after it on the
+    # same field: applying the old one as proposed would delete the lesson.
+    stale_note = CatalogueProposal(kind="rule", target_slug="em-dash", field="pitfalls_md",
+                                   mode="replace", proposed="A rewrite from three days ago.",
+                                   project="Kuper Plumbing", status="candidate")
+    db.session.add(stale_note)
+    db.session.commit()
+    result, _ = _propose(kind="rule", slug="em-dash", field="pitfalls_md", mode="append",
+                         text="A lesson filed after the rewrite.", reason="found today",
+                         project="Kuper Plumbing")
+    check("the later lesson went straight in", result.get("action") == "applied", result)
     notes = {CatalogueProposal.query.filter_by(status="candidate").filter(
         CatalogueProposal.payload_json.contains(n)).first().id: n
         for n in ("Swept heading", "Dark mode", "Our Twilio number")}
@@ -197,6 +208,7 @@ with application.app_context():
                   what_went_wrong="A white flash on every load."),
             blank(id=ids["Our Twilio number"], action="discard", why="Only true of one repo"),
             blank(id=replace_note.id, action="apply"),
+            blank(id=stale_note.id, action="apply"),
             blank(id=999999, action="create", name="Invented"),
         ]},
         "plan": {
@@ -274,6 +286,15 @@ with application.app_context():
           db.session.get(CatalogueProposal, ids["Our Twilio number"]).status == "discarded")
     check("a proposed rewrite was applied as proposed",
           Feature.query.filter_by(slug="em-dash").one().gold_standard_md == "Use a comma or a full stop.")
+    db.session.refresh(stale_note)  # the night ran in its own session
+    check("a rewrite the field has moved past is set aside, whatever the model says",
+          stale_note.status == "discarded" and "changed since" in stale_note.reason,
+          (stale_note.status, stale_note.reason))
+    check("and what arrived after it is still there",
+          "A lesson filed after the rewrite." in Feature.query.filter_by(slug="em-dash").one().pitfalls_md
+          and "three days ago" not in Feature.query.filter_by(slug="em-dash").one().pitfalls_md)
+    check("and the model was never asked about it",
+          not any("three days ago" in text for text, _ in prompts if "THE NOTES" in text))
     check("no note is left waiting", CatalogueProposal.query.filter_by(status="candidate").count() == 0,
           CatalogueProposal.query.filter_by(status="candidate").count())
     check("a merge retires what it absorbed",
@@ -290,7 +311,7 @@ with application.app_context():
     check("invented slugs changed nothing", Feature.query.filter_by(name="Invented").first() is None
           and Feature.query.filter_by(slug="invented").first() is None)
     check("the night's counts", (run.added, run.folded, run.merged, run.tightened, run.retired, run.discarded)
-          == (1, 2, 1, 1, 1, 1), (run.added, run.folded, run.merged, run.tightened, run.retired, run.discarded))
+          == (1, 2, 1, 1, 1, 2), (run.added, run.folded, run.merged, run.tightened, run.retired, run.discarded))
     check("rules before and after", (run.rules_before, run.rules_after) == (6, 4),
           (run.rules_before, run.rules_after))
     retired = CatalogueProposal.query.filter_by(target_slug="old-vendor", mode="retire",

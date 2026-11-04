@@ -43,6 +43,12 @@ so History shows it with a Revert, and a retire switches a rule off rather
 than deleting it. `CuratorRun` is the night; `tools/test_curator.py` runs
 one against a scripted model.
 
+Applying a held note writes it as filed, and a replace is the whole field, so
+`_overtaken` sets aside any held replace whose field has changed since it was
+written. On 2026-11-04 twenty-two runbook rewrites from three days earlier were
+queued, and sessions had filed lessons on those fields in between. They were
+filed again from the live text, and tonight's run clears the old copies.
+
 The catalogue had only ever grown: 485 rules, and the session-start brief
 was 986KB. Claude Code keeps about ten thousand characters of a hook's
 output and replaces the rest with a 2KB preview, so every session on the

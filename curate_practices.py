@@ -260,12 +260,42 @@ def _repo_of(p):
     return project.replace(" (swept)", "") if project else CURATOR
 
 
+def _overtaken(p):
+    """A held rewrite of a field that has changed since it was written.
+
+    A replace is the whole field and `apply` writes it exactly as it was filed,
+    so one that sat for days carries none of what arrived after it, and applying
+    it deletes all of that with History reading as if a rule had been improved.
+    On 2026-11-04 twenty-two runbook rewrites from three days earlier were in this
+    queue, written before sessions had filed new lessons on the same fields. An
+    append adds to whatever is there and is never overtaken.
+    """
+    from models import CatalogueProposal as C
+    if p.mode != "replace":
+        return False
+    return C.query.filter(
+        C.id != p.id, C.kind == p.kind, C.target_slug == p.target_slug,
+        C.field == p.field, C.status.in_(("applied", "accepted")),
+        C.decided_at >= p.created_at).first() is not None
+
+
+OVERTAKEN = "the field has changed since this was written; applying it would delete what came after"
+
+
 def handle_notes(client, run, log):
     from models import db, CatalogueProposal, Feature
     from pm.guidance_routes import apply_proposal
-    notes = (CatalogueProposal.query.filter_by(status="candidate")
-             .order_by(CatalogueProposal.created_at, CatalogueProposal.id)
-             .limit(NOTES_PER_NIGHT).all())
+    held = (CatalogueProposal.query.filter_by(status="candidate")
+            .order_by(CatalogueProposal.created_at, CatalogueProposal.id)
+            .limit(NOTES_PER_NIGHT).all())
+    notes = []
+    for p in held:
+        if _overtaken(p):
+            _decide(p, "discarded", OVERTAKEN)
+            run.discarded += 1
+            log.append(f"set aside #{p.id}: {p.target_slug} {p.field} has moved")
+        else:
+            notes.append(p)
     for start in range(0, len(notes), NOTES_PER_CALL):
         batch = notes[start:start + NOTES_PER_CALL]
         by_id = {p.id: p for p in batch}
@@ -293,6 +323,11 @@ def handle_notes(client, run, log):
                 continue
             action, why = d.get("action"), _one_line(d.get("why"), 300)
             if action == "apply" and p.mode != "create":
+                # Again here: an earlier decision tonight can have moved it.
+                if _overtaken(p):
+                    _decide(p, "discarded", OVERTAKEN)
+                    run.discarded += 1
+                    continue
                 ok, message = apply_proposal(p)
                 if ok:
                     p.project = f"{p.project} (curated)"[:120]
