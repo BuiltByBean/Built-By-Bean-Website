@@ -18,8 +18,8 @@
   contained-scroll (LM-4): the bar stands still and the list scrolls.
 #}
 
-{% block title %}Best Practices - Built By Bean{% endblock %}
-{% block page_title %}Best Practices{% endblock %}
+{% block title %}Handbook - Built By Bean{% endblock %}
+{% block page_title %}Handbook{% endblock %}
 {% block page_subtitle %}Everything Claude reads before it builds{% endblock %}
 {% block main_class %}contained-scroll{% endblock %}
 
@@ -53,7 +53,7 @@
 
     <form role="search" @submit.prevent class="shrink-0 relative z-30 glass-card p-4 flex flex-wrap items-center gap-2">
         <input type="search" x-model="q" placeholder="Search names, guidance, traps"
-               aria-label="Search Best Practices"
+               aria-label="Search the Handbook"
                class="input-ring flex-1 min-w-0 min-h-[44px] px-4 py-2.5 bg-surface-800/50 text-white text-sm rounded-xl">
         {{ clear_filters(click="clear()", show="active") }}
     </form>

@@ -3727,6 +3727,41 @@ class CuratorRun(db.Model):
         return f"<CuratorRun {self.started_at} {self.status}>"
 
 
+class NightRun(db.Model):
+    """One run of the nightly cost-sync job, with a result per step
+    (night_log.py). Needs attention reads the newest: a failed step, or no run
+    finished in a day and a bit, is one row there."""
+
+    __tablename__ = "night_runs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    # running, ok, partial (some steps failed) or failed (all of them).
+    status = db.Column(db.String(10), nullable=False, default="running", server_default="running")
+    steps_json = db.Column(db.Text, default="[]")
+
+    @property
+    def steps(self):
+        import json
+        try:
+            return json.loads(self.steps_json or "[]")
+        except ValueError:
+            return []
+
+    @steps.setter
+    def steps(self, value):
+        import json
+        self.steps_json = json.dumps(value or [])
+
+    @property
+    def failed_steps(self):
+        return [s for s in self.steps if not s.get("ok")]
+
+    def __repr__(self):
+        return f"<NightRun {self.started_at} {self.status}>"
+
+
 class MvpPackage(db.Model):
     """One client's build, assembled while they are still talking.
 

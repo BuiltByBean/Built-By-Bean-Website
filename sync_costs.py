@@ -37,27 +37,35 @@ from service_costs_service import sync_all_providers
 
 
 def main():
+    """The night, step by step, each recorded (night_log.Night). A step that
+    fails is recorded and the next one still runs; the exit is non-zero only
+    when every vendor sync failed, the shape of a real outage."""
+    import night_log
     app = create_app()
-    with app.app_context():
-        results = sync_all_providers()
+    night = night_log.Night(app)
+    outcome = {"failed_all": False}
 
-    if not results:
-        print("no active providers, nothing to sync")
-        _sweep()
-        return 0
+    def vendors():
+        with app.app_context():
+            results = sync_all_providers()
+        if not results:
+            return "no active providers"
+        failed = [name for name, _, error in results if error]
+        for name, count, error in results:
+            print(f"  {name:12} {'FAILED  ' + error[:160] if error else f'ok      {count} entries'}", flush=True)
+        if failed and len(failed) == len(results):
+            outcome["failed_all"] = True
+        if failed:
+            raise RuntimeError(f"{len(failed)}/{len(results)} vendors failed: {', '.join(failed)}")
+        return f"{len(results)} vendors synced"
 
-    failed = 0
-    for name, count, error in results:
-        if error:
-            failed += 1
-            print(f"  {name:12} FAILED  {error[:160]}")
-        else:
-            print(f"  {name:12} ok      {count} cost entr{'y' if count == 1 else 'ies'}")
-
-    print(f"{len(results) - failed}/{len(results)} providers synced")
-    _invoices(app)
-    _sweep()
-    return 1 if failed == len(results) else 0
+    night.step("vendor costs", vendors)
+    # Not skipped when no vendor is active: the invoice import and everything
+    # after it used to return early with the vendors (audit fault 7).
+    night.step("Stripe invoices", lambda: _invoices(app))
+    _sweep(night)
+    night.finish()
+    return 1 if outcome["failed_all"] else 0
 
 
 def _invoices(app):
@@ -68,71 +76,40 @@ def _invoices(app):
     on the floor. So a subscription invoice Stripe wrote on its own, or one
     raised in the dashboard, showed on the invoices page (which reads Stripe
     live) and nowhere else. Cason Kuper read Total Revenue $0.00 against
-    $3,500 collected.
-
-    Its failure is reported and never turns a good cost sync into a bad exit,
-    the same way the repo sweep is treated."""
-    try:
-        from stripe_service import import_invoices_from_stripe
-        with app.app_context():
-            made, updated, orphans = import_invoices_from_stripe()
-        print(f"invoices: {made} new, {updated} updated", flush=True)
-        if orphans:
-            print(f"  {len(orphans)} had no client here: "
-                  f"{', '.join(orphans[:6])}", flush=True)
-    except Exception as err:  # noqa: BLE001
-        print(f"invoice import failed: {str(err)[:200]}", flush=True)
+    $3,500 collected."""
+    from stripe_service import import_invoices_from_stripe
+    with app.app_context():
+        made, updated, orphans = import_invoices_from_stripe()
+    note = f"{made} new, {updated} updated"
+    if orphans:
+        note += f"; {len(orphans)} with no client here: {', '.join(orphans[:6])}"
+    return note
 
 
-def _sweep():
-    """The other nightly job, on the same schedule, after the money. Its
-    failure is reported and never turns a good cost sync into a bad exit."""
-    try:
-        import sweep_repos
-        print("sweeping repos for new lessons", flush=True)
-        sweep_repos.main()
-        import audit_repos
-        print("auditing repos against the rules", flush=True)
-        audit_repos.main()
-    except Exception as err:  # noqa: BLE001
-        print(f"repo sweep failed: {str(err)[:200]}", flush=True)
+def _sweep(night):
+    """Everything after the money, in order. Each is its own step."""
+    def run(module_name, label):
+        def go():
+            module = __import__(module_name)
+            result = module.main()
+            return None if result in (0, None) else result
+        night.step(label, go)
+
+    run("sweep_repos", "repo sweep")
+    run("audit_repos", "rule audit")
     # A phone app's store ids are written in its repo; a tile missing one never
     # asks that store, so My Apps would say nothing about Play. No model.
-    try:
-        import store_ids_service
-        print("reading store ids from app repos", flush=True)
-        store_ids_service.main()
-    except Exception as err:  # noqa: BLE001
-        print(f"store ids failed: {str(err)[:200]}", flush=True)
+    run("store_ids_service", "store ids")
     # Each company's own Stripe: its sales and its fees.
-    try:
-        import stripe_books
-        print("reading each company's Stripe", flush=True)
-        stripe_books.main()
-    except Exception as err:  # noqa: BLE001
-        print(f"stripe books failed: {str(err)[:200]}", flush=True)
+    run("stripe_books", "company Stripe books")
     # Each business's bank, after the vendor syncs so a line a vendor's sync
     # covers finds that vendor's expense already written.
-    try:
-        import bank_feed
-        print("reading each business's bank", flush=True)
-        bank_feed.main()
-    except Exception as err:  # noqa: BLE001
-        print(f"bank feed failed: {str(err)[:200]}", flush=True)
+    run("bank_feed", "bank feed")
     # Receipts after the bank, so tonight's settled charges can take theirs.
-    try:
-        import receipts_service
-        print("reading receipts from every mailbox", flush=True)
-        receipts_service.main()
-    except Exception as err:  # noqa: BLE001
-        print(f"receipts failed: {str(err)[:200]}", flush=True)
+    run("receipts_service", "receipts")
     # Last, because it reads what the sweep filed and what the audit found.
-    try:
-        import curate_practices
-        print("curating Best Practices", flush=True)
-        curate_practices.main()
-    except Exception as err:  # noqa: BLE001
-        print(f"curator failed: {str(err)[:200]}", flush=True)
+    # Off unless CURATOR_ENABLED (it is the paid step).
+    run("curate_practices", "curator")
 
 
 if __name__ == "__main__":

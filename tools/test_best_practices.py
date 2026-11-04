@@ -106,10 +106,11 @@ for url, tab in PAGES.items():
     lit = re.findall(r'aria-current="page"[^>]*>\s*([^<\n]+)', body)
     check(f"{url} renders", r.status_code == 200, r.status_code)
     check(f"{url} lights {tab}", lit and lit[0].strip() == tab, lit)
-    check(f"{url} is titled Best Practices",
-          re.search(r'id="pm-page-title"[^>]*>\s*Best Practices', body) is not None)
-    check(f"{url} lights the Best Practices sidebar link",
-          re.search(r'sidebar-link active">\s*<svg[^>]*>\s*<path[^>]*/>\s*</svg>\s*Best Practices', body) is not None)
+    # Called the Handbook on screen since 2026-11-04.
+    check(f"{url} is titled Handbook",
+          re.search(r'id="pm-page-title"[^>]*>\s*Handbook', body) is not None)
+    check(f"{url} lights the Handbook sidebar link",
+          re.search(r'sidebar-link active">\s*<svg[^>]*>\s*<path[^>]*/>\s*</svg>\s*Handbook', body) is not None)
     check(f"{url} has no Rules, Features, Playbooks or Cerebro sidebar link",
           not re.search(r'</svg>\s*(Rules|Features|Playbooks|Cerebro)\s*</a>', body))
     check(f"{url} shows no money", "$" not in re.sub(r"<script.*?</script>|<style.*?</style>|\$(el|dispatch|refs|watch|nextTick|store|root|data|id|event)\b", "", body, flags=re.S)
@@ -127,7 +128,7 @@ check("its page redirects here", r.status_code == 302 and r.headers["Location"].
       (r.status_code, r.headers.get("Location")))
 
 print("6. Products have left Best Practices, and the sell flow still works")
-check("no Products tab in the strip", "/admin/products/" not in body.split('aria-label="Best Practices"', 1)[-1].split("</nav>", 1)[0])
+check("no Products tab in the strip", "/admin/products/" not in body.split('aria-label="Handbook"', 1)[-1].split("</nav>", 1)[0])
 check("a Products link of its own in the sidebar",
       re.search(r'</svg>\s*Products\s*</a>', body) is not None)
 products = c.get(f"/admin/products/?sell={product_id}").get_data(as_text=True)

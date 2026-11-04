@@ -324,6 +324,20 @@ five minutes as a NEW row with a new id and a new status, and archiving it
 did nothing anybody could see. Mail without that header now gets a
 fingerprint of its sender, date and subject.
 
+**The nightly job keeps a record** (`night_log.py`, `NightRun`, 2026-11-04).
+Every step of cost-sync runs through `Night.step`, which records its summary or
+its error and moves on, and the invoice import no longer returns early with the
+vendors when none is active. Needs attention carries ONE row when the newest
+night has a failed step or no night has finished in 26 hours; it links to
+`/admin/attention/nights`. A new nightly step goes through `night.step(...)` in
+`sync_costs._sweep`, never a bare try/print. `tools/test_night_log.py`.
+
+**The sidebar's Work section is Michael's order** (2026-11-04): Businesses,
+Notes, Clients, Leads, Projects, Client support (Tickets in the code), Contracts,
+MVP Builder, Products, My Apps, Handbook (Best Practices in the code and URLs),
+Time. Notes and Projects give way to the Workspace when it lands, and Products
+folds into the MVP Builder.
+
 ## The books stand on the bank
 
 Michael, 2026-11-03: "I use an unbelievable amount of services ... I need my

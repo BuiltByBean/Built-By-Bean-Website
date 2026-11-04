@@ -1009,6 +1009,14 @@
                     {%- endif %}
                 </span>
             </a>
+            <div class="my-2 border-t border-white/10"></div>
+
+            {# The work, in Michael's order (2026-11-04): the businesses first,
+               then the list of things to do, who the work is for, the work
+               itself, client support, the paper behind it, the builder that
+               starts the next one, what has been built, and how to build. #}
+            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Work</p>
             {# The command center: every business owned, above the work of
                any one of them. CEO only, like Users, because it carries the
                numbers that link a tax account to an eSystems login. #}
@@ -1021,14 +1029,6 @@
                 Businesses
             </a>
             {% endif %}
-            <div class="my-2 border-t border-white/10"></div>
-
-            {# The work, first, because it is what the day is. The list of
-               things to do, then who the work is for, the work itself, what
-               gets raised about it, the paper behind it, and the builder
-               that starts the next one. #}
-            <p class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Work</p>
             {# The to-do list leads: it is the page the day opens on, and
                everything under it is a place work already lives. #}
             <a href="{{ url_for('notes.index') }}"
@@ -1048,6 +1048,13 @@
                     {%- endif %}
                 </span>
             </a>
+            <a href="{{ url_for('pm.clients_list') }}"
+               class="sidebar-link {% if request.endpoint and 'client' in request.endpoint %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Clients
+            </a>
             <a href="{{ url_for('leads.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('leads.') %}active{% endif %}">
                 {# A megaphone: nothing else in the sidebar is one. #}
@@ -1056,13 +1063,6 @@
                           d="M10.34 15.84a3 3 0 105.66 2.06M3 11v2a1 1 0 001 1h2.5l6.2 3.72A1 1 0 0014 17V7a1 1 0 00-1.3-.95L6.5 10H4a1 1 0 00-1 1zm15 1a3 3 0 00-1.5-2.6m1.5 2.6a3 3 0 01-1.5 2.6"/>
                 </svg>
                 Leads
-            </a>
-            <a href="{{ url_for('pm.clients_list') }}"
-               class="sidebar-link {% if request.endpoint and 'client' in request.endpoint %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                Clients
             </a>
             <a href="{{ url_for('pm.projects_list') }}"
                class="sidebar-link {% if request.endpoint and 'project' in request.endpoint %}active{% endif %}">
@@ -1076,7 +1076,7 @@
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
-                Tickets
+                Client support
             </a>
             <a href="{{ url_for('contracts.contracts_index') }}"
                class="sidebar-link {% if request.endpoint and ('contract' in request.endpoint or request.endpoint in ('pm.engagement_letter_form', 'pm.generate_engagement_letter', 'pm.sow_form', 'pm.generate_sow')) %}active{% endif %}">
@@ -1106,6 +1106,25 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
                 </svg>
                 Products
+            </a>
+            {# My Apps is what has been built and where it lives. The Handbook
+               (Best Practices in the code) is how to build: rules, features,
+               blueprints, playbooks, gaps and the history of what changed,
+               one tab strip across its pages (pm/practices_routes.py). Both
+               sit in Work since 2026-11-04, Michael's order. #}
+            <a href="{{ url_for('apps.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                </svg>
+                My Apps
+            </a>
+            <a href="{{ url_for('practices.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.split('.')[0] in ('practices', 'features', 'playbooks', 'inbox', 'blueprints') %}active{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"/>
+                </svg>
+                Handbook
             </a>
             {% if time_tracking %}
             <a href="{{ url_for('pm.time_list') }}"
@@ -1184,26 +1203,6 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 Invoices
-            </a>
-            <div class="my-2 border-t border-white/10"></div>
-
-            {# My Apps is what has been built and where it lives. Best
-               Practices is how to build: rules, features, playbooks
-               and the history of what changed, one tab strip across six
-               pages (pm/practices_routes.py says why). #}
-            <a href="{{ url_for('apps.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('apps.') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                </svg>
-                My Apps
-            </a>
-            <a href="{{ url_for('practices.index') }}"
-               class="sidebar-link {% if request.endpoint and request.endpoint.split('.')[0] in ('practices', 'features', 'playbooks', 'inbox') %}active{% endif %}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"/>
-                </svg>
-                Best Practices
             </a>
 
             {# Who may open this board. CEO only: a member has no business

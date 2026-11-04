@@ -1,5 +1,9 @@
 """Needs attention: the mail that is waiting on Michael, on one page.
 
+Plus, since 2026-11-04, one row when the nightly job broke or did not run
+(night_log.py), because a broken night is otherwise silent until a number
+looks wrong, and nothing else on the board would say so.
+
 This page used to carry seven signals - declined contracts, hosting fees under
 the floor, overdue invoices, catalogue rewrites, untriaged tickets, late builds
 and mail. Every one of them already had a home on the page that owns it, and a
@@ -130,6 +134,35 @@ def _unanswered():
     return q.order_by(Message.received_at.desc())
 
 
+# The night job is meant to finish once a day (13:00 UTC). A day and two
+# hours without a finished run means it did not run, which is as much a
+# failure as a step that broke.
+NIGHT_GRACE_HOURS = 26
+
+
+def _night_problem():
+    """None, or the one thing wrong with the nightly job: a step that failed
+    in the newest run, or no run finished in NIGHT_GRACE_HOURS. One row, not
+    one per step: the night page has the detail."""
+    from datetime import datetime, timezone
+    from models import NightRun
+    try:
+        latest = NightRun.query.order_by(NightRun.started_at.desc(), NightRun.id.desc()).first()
+        done = (NightRun.query.filter(NightRun.finished_at.isnot(None))
+                .order_by(NightRun.finished_at.desc()).first())
+    except Exception:  # noqa: BLE001 - the table may not exist yet
+        db.session.rollback()
+        return None
+    if latest is None:
+        return None  # never run since this shipped: nothing to say yet
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if done is None or (now - done.finished_at.replace(tzinfo=None)).total_seconds() > NIGHT_GRACE_HOURS * 3600:
+        return {"kind": "missing", "run": done or latest}
+    if done.failed_steps:
+        return {"kind": "failed", "run": done, "steps": done.failed_steps}
+    return None
+
+
 def attention_counts():
     """The sidebar's badges.
 
@@ -143,9 +176,10 @@ def attention_counts():
     # Mail and bills both, because both are things only he can do and neither
     # has anywhere else to be answered. Hosting rides along for its own badge
     # and is not a row here.
-    return {"messages": messages, "bills": bills,
+    night = 1 if _night_problem() else 0
+    return {"messages": messages, "bills": bills, "night": night,
             "hosting": increases_due_count(),
-            "total": messages + bills}
+            "total": messages + bills + night}
 
 
 @attention_bp.route("/")
@@ -158,6 +192,17 @@ def index():
     # force: the page itself must never show a ten minute old answer about
     # something the reader may have just entered.
     bills = _bills_to_enter(force=True)
+    night = _night_problem()
     return render_template("pm/attention/index.html", messages=messages,
-                           bills=bills, total=len(messages) + len(bills),
+                           bills=bills, night=night,
+                           total=len(messages) + len(bills) + (1 if night else 0),
                            here=url_for("attention.index"))
+
+
+@attention_bp.route("/nights")
+@login_required
+def nights():
+    """The last fortnight of nightly runs, each step with how it went."""
+    from models import NightRun
+    runs = NightRun.query.order_by(NightRun.started_at.desc(), NightRun.id.desc()).limit(14).all()
+    return render_template("pm/attention/nights.html", runs=runs)
