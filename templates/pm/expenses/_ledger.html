@@ -146,9 +146,11 @@
                             </span>
                             {%- if vendor %}<span class="sm:hidden"> &middot; <span class="text-brand-300 font-medium">{{ vendor.label }}</span></span>{% endif -%}
                         </p>
-                        {# Wraps rather than truncates: the row's amount is only part
-                           of the charge, and this is what says where the rest went. #}
-                        {% if expense.sales_tax_note %}<p class="text-xs text-surface-400 break-words mt-0.5">{{ expense.sales_tax_note }}</p>{% endif %}
+                        {# The row's amount is only part of the charge, and this says
+                           where the rest went. One line like every other row: wrapped,
+                           it stood eight lines tall in the 87px a phone leaves this
+                           cell. The whole of it is on the title and the edit page. #}
+                        {% if expense.sales_tax_note %}<p class="text-xs text-surface-400 truncate mt-0.5" title="{{ expense.sales_tax_note }}">{{ expense.sales_tax_note }}</p>{% endif %}
                     </td>
 
                     {# nowrap on both: the What cell is w-full and takes every

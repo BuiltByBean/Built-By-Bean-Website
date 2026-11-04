@@ -346,8 +346,11 @@ the state.
 So Total Paid on the Invoices page is what stayed, and **Total Paid less the sales
 tax shown under it is the Books page's income, to the cent**. The penalties and
 interest stay in Taxes and licenses, and whether they can be deducted is a
-question for the accountant, which is why the row and the year's CSV spell out
-the split (`Expense.sales_tax_note`). `tools/test_sales_tax_and_refunds.py`.
+question for the accountant, which is why the row, its edit page and the year's
+CSV spell out the split (`Expense.sales_tax_note`). A return paid with no fee and
+no penalty leaves a $0.00 row, which the expense form will not save
+(`NumberRange(min=0.01)`); there is nothing on one to edit.
+`tools/test_sales_tax_and_refunds.py`.
 
 **Income lives where the sale happens.** For a company with its own Stripe
 (EntertainHQ), `stripe_books.py` reads every line of its Stripe balance

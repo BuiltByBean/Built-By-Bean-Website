@@ -399,6 +399,12 @@ res = c.get("/admin/expenses?per_page=100")
 check("the expense list renders", res.status_code == 200, res.status_code)
 check("the row says where the rest of the charge went",
       "$756.43 charged: $656.70 sales tax" in flat(res.get_data(as_text=True)))
+check("and the row stays one line, because wrapped it stood eight lines tall on a phone",
+      'truncate mt-0.5" title="$756.43 charged' in res.get_data(as_text=True))
+form_page = flat(c.get(f"/admin/expenses/{ids['big']}/edit").get_data(as_text=True))
+check("the edit page says it whole, the one place a phone can read it",
+      "$756.43 charged: $656.70 sales tax, $82.84 penalties and interest, $16.89 card fee" in form_page,
+      form_page[:200])
 check("the books say the same to the accountant",
       "$756.43 charged: $656.70 sales tax, $82.84 penalties and interest, $16.89 card fee"
       in c.get(f"/admin/books/{ids['bbb']}/year/{YEAR}.csv").get_data(as_text=True))
