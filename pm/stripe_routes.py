@@ -681,14 +681,21 @@ def stripe_webhook():
 @login_required
 def sync_all_clients():
     try:
+        from stripe_service import link_or_create_customer
         clients = Client.query.filter(Client.stripe_customer_id.is_(None)).all()
-        synced = 0
+        linked = made = 0
         for client in clients:
-            result = create_stripe_customer(client)
-            if result:
-                synced += 1
+            # Found by the board's metadata or the email before anything is
+            # made: making one regardless is how a client ended up with two
+            # customers and its invoices with no home (audit fault 6).
+            customer, adopted = link_or_create_customer(client)
+            if customer is not None:
+                if adopted:
+                    linked += 1
+                else:
+                    made += 1
         db.session.commit()
-        flash(f"Synced {synced} client(s) to Stripe.", "success")
+        flash(f"Linked {linked} client(s) to their Stripe customer, created {made}.", "success")
     except Exception as e:
         flash(f"Stripe sync error: {e}", "error")
     return redirect(url_for("stripe.stripe_dashboard"))

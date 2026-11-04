@@ -28,6 +28,7 @@ from flask_login import login_required
 from models import (db, Message, ServiceProvider, ServiceCostEntry,
                     ProviderInvoice)
 from pm import mail_service
+import provider_bills
 from pm.hosting_routes import increases_due_count
 
 attention_bp = Blueprint("attention", __name__, url_prefix="/admin/attention")
@@ -38,15 +39,6 @@ attention_bp = Blueprint("attention", __name__, url_prefix="/admin/attention")
 # same ten minutes the hosting badge uses.
 _BILLS_CACHE = {"at": 0.0, "value": None}
 _BILLS_TTL = 600
-
-
-def _months_between(first, stop):
-    """Every month start from `first` up to but not including `stop`."""
-    out, m = [], first.replace(day=1)
-    while m < stop:
-        out.append(m)
-        m = (m + timedelta(days=32)).replace(day=1)
-    return out
 
 
 def _bills_to_enter(force=False):
@@ -74,7 +66,6 @@ def _bills_to_enter(force=False):
     if not force and _BILLS_CACHE["value"] is not None and now - _BILLS_CACHE["at"] < _BILLS_TTL:
         return _BILLS_CACHE["value"]
 
-    this_month = date.today().replace(day=1)
     out = []
     try:
         providers = (ServiceProvider.query.filter_by(is_active=True)
@@ -82,29 +73,9 @@ def _bills_to_enter(force=False):
         for p in providers:
             if p.name not in MANUAL_MONTHLY_PROVIDERS:
                 continue
-            first_entry = (db.session.query(db.func.min(ServiceCostEntry.period_start))
-                           .filter(ServiceCostEntry.provider_id == p.id).scalar())
-            first_invoice = (db.session.query(db.func.min(ProviderInvoice.period_month))
-                             .filter(ProviderInvoice.provider_id == p.id).scalar())
-            starts = [d for d in (first_entry, first_invoice) if d]
-            if not starts:
-                continue
-            have = {r.period_month for r in
-                    ProviderInvoice.query.filter_by(provider_id=p.id).all()}
-            # A Railway account that names its workspace pulls its own bills
-            # (service_costs_service._sync_railway), and its billing month
-            # need not start on the 1st: EntertainHQ's runs 16th to 16th, so
-            # its October bill does not exist until November 16. Ask about
-            # those only once a whole further month has passed, which is
-            # when a missing one means the pull has stopped working.
-            stop = this_month
-            try:
-                if json.loads(p.credentials_json or "{}").get("workspace_id"):
-                    stop = (this_month - timedelta(days=1)).replace(day=1)
-            except ValueError:
-                pass
-            missing = [m for m in _months_between(min(starts), stop)
-                       if m not in have]
+            # The one reading the door's get_costs shares (provider_bills),
+            # grace for a Railway account that pulls its own bills included.
+            missing, _ = provider_bills.bill_months(p)
             if missing:
                 out.append({"provider": p, "missing": missing,
                             "latest": missing[-1], "count": len(missing)})

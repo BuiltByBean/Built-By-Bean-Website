@@ -349,6 +349,9 @@ def create_app():
     # ── What clients and leads write ───────────────────────
     from pm.messages_routes import messages_bp
     app.register_blueprint(messages_bp)
+    # The mailbox is read every five minutes whether or not a page is open.
+    from pm.mail_service import start_background as start_mail_sync
+    start_mail_sync(app)
 
     # ── Every client held against the catalogue ───────────
     from pm.cerebro_routes import cerebro_bp

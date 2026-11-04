@@ -1004,11 +1004,20 @@ def _merge_duplicates(db, Lead, LeadPerson):
     return removed
 
 
-def run(cache=None, enrich=True, verbose=True):
+def run(cache=None, enrich=True, verbose=True, app=None, prune=True):
+    """Build or refresh the list. Returns what it did, as a dict.
+
+    `prune` removes rows no source holds any more. It is skipped, whatever was
+    asked, when any source came back empty: an empty source is far more often
+    a network failure or a missing DuckDB than every business in it closing,
+    and a prune on a partial read deletes every unworked lead that source
+    alone supplied. That is how Overture's 4,640 places were deleted once, and
+    the weekly run on cost-sync (leads_refresh.py) has no DuckDB at all.
+    """
     from app import create_app
     from models import db, Lead, LeadPerson
 
-    app = create_app()
+    app = app or create_app()
     with app.app_context():
         print("Reading the public record...")
         permits = get_permits(cache)
@@ -1043,6 +1052,15 @@ def run(cache=None, enrich=True, verbose=True):
 
         print("Statewide location counts...")
         locations = statewide_locations({p.get("taxpayer_number") for p in permits})
+
+        # Which sources answered. A source that did not is "unread": its marks
+        # stay on the rows it supplied, and nothing is pruned (see `run`).
+        answered = {"comptroller": permits, "franchise": franchise,
+                    "openstreetmap": osm, "npi": npi, "overture": places,
+                    "fmcsa": carriers, "tdlr": licences and salons}
+        unread = {mark for mark, rows in answered.items() if not rows}
+        if unread:
+            print(f"  not read this time: {', '.join(sorted(unread))}; nothing will be pruned")
 
         # Everything is assembled in memory first, keyed by dedupe_key, so a
         # business seen by three sources is written once.
@@ -1480,8 +1498,12 @@ def run(cache=None, enrich=True, verbose=True):
             # Marks the import does not own - "site", left by enrich_sites.py
             # when it read the business's own pages - survive a re-run. An
             # overwrite here would make every later pass redo its work.
+            # So do the marks of a source that was not read this time: the
+            # row still came from it, and check_websites --reguess reads the
+            # "overture" mark to know a website was published, not guessed.
             keep = [m for m in (lead.sources or "").split(",")
-                    if m and m not in KNOWN_SOURCES]
+                    if m and (m not in KNOWN_SOURCES or m in unread)
+                    and m not in entry["sources"]]
             lead.sources = ",".join(entry["sources"] + keep)[:200]
 
             if entry["people"]:
@@ -1506,9 +1528,10 @@ def run(cache=None, enrich=True, verbose=True):
         # A row that no longer belongs, and that nobody has worked, goes.
         # One that has been rung, noted or converted stays whatever the
         # filter thinks: her work outranks the import.
-        stale = [lead for lead in Lead.query.all()
-                 if lead.dedupe_key not in book and not lead.touches
-                 and not (lead.notes or "").strip() and not lead.client_id]
+        stale = [] if (unread or not prune) else [
+            lead for lead in Lead.query.all()
+            if lead.dedupe_key not in book and not lead.touches
+            and not (lead.notes or "").strip() and not lead.client_id]
         for lead in stale:
             db.session.delete(lead)
         if stale:
@@ -1535,6 +1558,8 @@ def run(cache=None, enrich=True, verbose=True):
             by_source[lead.sources] = by_source.get(lead.sources, 0) + 1
         for src, n in sorted(by_source.items(), key=lambda x: -x[1])[:8]:
             print(f"    {src or '(none)':34} {n}")
+        return {"made": made, "updated": updated, "removed": len(stale),
+                "merged": merged, "total": total, "unread": sorted(unread)}
 
 
 if __name__ == "__main__":

@@ -32,7 +32,89 @@ def invoice_tax_cents(inv):
 # ── Customer Management ─────────────────────────────────────
 
 
+def _meta_client_ref(obj):
+    """The board's client id written into a Stripe customer's metadata, or
+    None. Works on a StripeObject and on a plain dict."""
+    meta = obj.get("metadata") if isinstance(obj, dict) else getattr(obj, "metadata", None)
+    if meta is None:
+        return None
+    try:
+        ref = meta.get("pm_client_id") if hasattr(meta, "get") else getattr(meta, "pm_client_id", None)
+    except Exception:  # noqa: BLE001 - a StripeObject raises on a missing key
+        ref = None
+    ref = str(ref or "").strip()
+    return int(ref) if ref.isdigit() else None
+
+
+def existing_customer_for(client):
+    """A Stripe customer that is already this client's, or None.
+
+    `create_stripe_customer` used to make a NEW customer every time it was
+    asked, so a client whose id had been cleared, or one typed in twice, ended
+    up with two customers at Stripe, and every invoice on the second one was an
+    orphan the importer could not place (audit fault 6). The board's own
+    metadata is asked first, then the email. Only a customer no other client
+    already carries is offered, and of several the oldest, which is the one
+    most likely to hold the history.
+    """
+    if not stripe.api_key:
+        return None
+    from models import Client
+    taken = {cid for (cid,) in Client.query.with_entities(Client.stripe_customer_id)
+             .filter(Client.stripe_customer_id.isnot(None),
+                     Client.id != client.id).all()}
+    candidates = []
+    if client.id:
+        try:
+            found = stripe.Customer.search(query=f"metadata['pm_client_id']:'{client.id}'")
+            candidates.extend(getattr(found, "data", None) or [])
+        except Exception as e:  # noqa: BLE001 - search is a nicety; the email still works
+            current_app.logger.info(f"Stripe customer search skipped: {e}")
+    email = (client.email or "").strip()
+    if email:
+        try:
+            listed = stripe.Customer.list(email=email, limit=20)
+            candidates.extend(getattr(listed, "data", None) or [])
+        except Exception as e:  # noqa: BLE001
+            current_app.logger.error(f"Stripe customer lookup error: {e}")
+    free = [c for c in candidates
+            if getattr(c, "id", None) and c.id not in taken and not getattr(c, "deleted", False)]
+    if not free:
+        return None
+    mine = [c for c in free if _meta_client_ref(c) == client.id]
+    pool = mine or free
+    return sorted(pool, key=lambda c: getattr(c, "created", 0) or 0)[0]
+
+
+def link_or_create_customer(client):
+    """Give a client its Stripe customer: an existing one when Stripe already
+    has them (by the board's metadata, then by email), a new one otherwise.
+
+    Returns (customer, adopted). An adopted customer gets the board's client
+    id written into its metadata, so the next match does not need the email.
+    """
+    if not stripe.api_key or client.stripe_customer_id:
+        return None, False
+    found = existing_customer_for(client)
+    if found is not None:
+        client.stripe_customer_id = found.id
+        if _meta_client_ref(found) != client.id and client.id:
+            try:
+                stripe.Customer.modify(found.id, metadata={"pm_client_id": str(client.id)})
+            except Exception as e:  # noqa: BLE001 - the link is made either way
+                current_app.logger.info(f"Stripe metadata not written: {e}")
+        return found, True
+    return _create_customer(client), False
+
+
 def create_stripe_customer(client):
+    """The client's Stripe customer, found first and made only when Stripe
+    has none (see existing_customer_for)."""
+    customer, _ = link_or_create_customer(client)
+    return customer
+
+
+def _create_customer(client):
     if not stripe.api_key or client.stripe_customer_id:
         return None
     try:
@@ -247,18 +329,96 @@ def sync_invoice_from_stripe(local_invoice):
         return False
 
 
-def _mark_client_active(invoice):
+def _mark_client_active(invoice, client=None):
     """Move a client to Active client the first time they pay something.
 
     Only ever forward, and never off Active client, so this cannot undo a
     stage set by hand. A payment from somebody marked Not interested is
     unusual rather than wrong - a returning client, most likely - and the
     payment is the better evidence of the two.
+
+    Its only caller used to be the Sync press on one invoice, so the webhook
+    and the six-hourly importer wrote the payment down and left the stage
+    where it was (audit item 5). Both call it now, on the payment ARRIVING,
+    never on an old paid invoice read again: see `newly_paid`.
     """
-    client = getattr(invoice, "client", None)
+    if client is None:
+        client = getattr(invoice, "client", None)
+    if client is None and getattr(invoice, "client_id", None):
+        from models import db, Client
+        client = db.session.get(Client, invoice.client_id)
     if client is None or client.stage == "active_client":
-        return
+        return False
     client.stage = "active_client"
+    return True
+
+
+# A payment older than this, read for the first time, is history rather than
+# news: the importer meets every old invoice the day a client is first linked,
+# and a client paid a year ago and since set to Follow up later must not be
+# pulled back to Active by it.
+RECENT_PAYMENT_DAYS = 45
+
+
+def newly_paid(was_paid_at, paid_at, now=None):
+    """True when this read is the one that saw the payment arrive, and the
+    payment is recent enough to say something about the client today."""
+    if was_paid_at is not None or paid_at is None:
+        return False
+    now = now or datetime.now(timezone.utc)
+    if paid_at.tzinfo is None:
+        paid_at = paid_at.replace(tzinfo=timezone.utc)
+    return (now - paid_at).days <= RECENT_PAYMENT_DAYS
+
+
+def client_for_customer(customer_id, email=None, client_ref=None):
+    """The client a Stripe customer belongs to, or None.
+
+    The id first, which is what every client carrying one is matched by. Then,
+    for an orphan, the board's own `metadata.pm_client_id`, which only the
+    board writes, so the invoice goes to that client even when it already
+    carries a different (duplicate) customer. Then the email, but only when
+    exactly one client has it AND that client carries no customer yet, because
+    two clients sharing an address is a guess, and a guess moves money between
+    clients.
+
+    Fills `Client.stripe_customer_id` only when it was empty: an id somebody
+    typed is never overruled, and the column is unique, so a second orphan on
+    the same client finds the slot taken and stays an orphan rather than
+    raising.
+    """
+    from models import db, Client
+    if not customer_id:
+        return None
+    found = Client.query.filter_by(stripe_customer_id=customer_id).first()
+    if found is not None:
+        return found
+    if client_ref:
+        try:
+            client = db.session.get(Client, int(client_ref))
+        except (TypeError, ValueError):
+            client = None
+        if client is not None:
+            if not client.stripe_customer_id:
+                client.stripe_customer_id = customer_id
+            return client
+    email = (email or "").strip().lower()
+    if email:
+        same = Client.query.filter(db.func.lower(db.func.trim(Client.email)) == email).all()
+        if len(same) == 1 and not same[0].stripe_customer_id:
+            same[0].stripe_customer_id = customer_id
+            return same[0]
+    return None
+
+
+def only_project_id(client):
+    """The client's project when it has exactly one, else None. The rule the
+    sales tax ledger already uses for an invoice with no project: with two or
+    more, picking one would put one build's money on another."""
+    if client is None:
+        return None
+    ids = [p.id for p in client.projects.limit(2).all()]
+    return ids[0] if len(ids) == 1 else None
 
 # ── Sales tax ───────────────────────────────────────────────
 
@@ -592,15 +752,21 @@ def get_stripe_invoices(ttl=300):
     try:
         for inv in stripe.Invoice.list(limit=100, expand=["data.customer"]).auto_paging_iter():
             customer = getattr(inv, "customer", None)
+            customer_email = getattr(inv, "customer_email", None)
+            client_ref = None
             if isinstance(customer, str):
                 customer_id, customer_name = customer, None
             elif customer is None:
                 customer_id, customer_name = None, None
             else:
                 customer_id = getattr(customer, "id", None)
-                customer_name = None if getattr(customer, "deleted", False) else (
+                gone = getattr(customer, "deleted", False)
+                customer_name = None if gone else (
                     getattr(customer, "name", None) or getattr(customer, "email", None)
                 )
+                if not gone:
+                    customer_email = getattr(customer, "email", None) or customer_email
+                    client_ref = _meta_client_ref(customer)
 
             transitions = getattr(inv, "status_transitions", None)
             invoice_id = getattr(inv, "id", None)
@@ -612,6 +778,9 @@ def get_stripe_invoices(ttl=300):
                 "status": getattr(inv, "status", None),
                 "customer_id": customer_id,
                 "customer_name": customer_name,
+                # How an orphan customer finds its client (client_for_customer).
+                "customer_email": customer_email,
+                "customer_client_ref": client_ref,
                 "total": total_cents / 100.0,
                 "tax": invoice_tax_cents(inv) / 100.0,
                 "amount_due": (getattr(inv, "amount_due", 0) or 0) / 100.0,
@@ -723,6 +892,13 @@ def import_invoices_from_stripe(ttl=0):
             continue
         local = existing.get(sid)
         owner = by_customer.get(row.get("customer_id"))
+        if owner is None and local is None and row.get("customer_id"):
+            # An orphan finds its client by the board's metadata, then by
+            # email, filling an empty customer id as it goes (item 5).
+            owner = client_for_customer(row["customer_id"], row.get("customer_email"),
+                                        row.get("customer_client_ref"))
+            if owner is not None and owner.stripe_customer_id == row["customer_id"]:
+                by_customer[row["customer_id"]] = owner
         if local is None:
             if owner is None:
                 # Nowhere to put it. Named, not dropped, unless every cent of
@@ -757,12 +933,21 @@ def import_invoices_from_stripe(ttl=0):
             local.sales_tax_catchup = True
         if row.get("due_date"):
             local.due_date = row["due_date"].date() if hasattr(row["due_date"], "date") else row["due_date"]
+        was_paid_at = local.paid_at
         if row.get("paid_at") and not local.paid_at:
             local.paid_at = row["paid_at"]
         # Only fill an owner in, never take one away: somebody may have
         # attached an invoice to a client by hand that Stripe cannot know.
         if local.client_id is None and owner is not None:
             local.client_id = owner.id
+        client = owner if (owner is not None and owner.id == local.client_id) else None
+        if client is None and local.client_id:
+            client = db.session.get(Client, local.client_id)
+        # The project is the board's, so it is only ever filled, never moved.
+        if local.project_id is None:
+            local.project_id = only_project_id(client)
+        if row.get("status") == "paid" and newly_paid(was_paid_at, local.paid_at):
+            _mark_client_active(local, client)
 
     db.session.commit()
     return made, updated, orphans
@@ -1209,6 +1394,18 @@ def process_invoice_event(event):
             customer_id = getattr(customer_id, "id", None)
         owner = (Client.query.filter_by(stripe_customer_id=customer_id).first()
                  if customer_id else None)
+        if owner is None and customer_id:
+            # An orphan: the board's metadata on the customer, then the
+            # invoice's email (client_for_customer). The event carries the
+            # customer as an id, so its metadata costs one read.
+            ref = None
+            if stripe.api_key:
+                try:
+                    ref = _meta_client_ref(stripe.Customer.retrieve(customer_id))
+                except Exception as e:  # noqa: BLE001 - the email still works
+                    current_app.logger.info(f"Stripe customer read skipped: {e}")
+            owner = client_for_customer(customer_id,
+                                        getattr(invoice_data, "customer_email", None), ref)
         if owner is None:
             # invoices.client_id is NOT NULL, so there is nowhere to put this
             # one. Say which customer it was, rather than the old message
@@ -1227,9 +1424,12 @@ def process_invoice_event(event):
         local_invoice.total = (getattr(invoice_data, "total", 0) or 0) / 100.0
         local_invoice.amount_due = (getattr(invoice_data, "amount_due", 0) or 0) / 100.0
         local_invoice.subtotal = local_invoice.total
+        local_invoice.project_id = only_project_id(owner)
         db.session.add(local_invoice)
         db.session.flush()
         log.error_message = "Made a local invoice for one raised outside the board"
+
+    was_paid_at = local_invoice.paid_at
 
     # Use getattr for Stripe SDK v15+ StripeObject compatibility
     if event_type == "invoice.finalized":
@@ -1259,6 +1459,13 @@ def process_invoice_event(event):
         local_invoice.status = "paid"
         local_invoice.paid_at = datetime.now(timezone.utc)
         local_invoice.amount_paid = (getattr(invoice_data, "amount_paid", 0) or 0) / 100.0
+
+    # The webhook is the payment arriving, so the first paid event moves the
+    # client (item 5). Stripe sends both paid and payment_succeeded; the
+    # second finds paid_at already set and does nothing.
+    if (event_type in ("invoice.paid", "invoice.payment_succeeded")
+            and newly_paid(was_paid_at, local_invoice.paid_at)):
+        _mark_client_active(local_invoice)
 
     log.processed = True
     db.session.commit()

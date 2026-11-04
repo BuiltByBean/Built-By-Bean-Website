@@ -272,8 +272,14 @@ def sync(app=None, force=False):
         return {"skipped": "running"}
     _state["running"] = True
     try:
+        if not _our_turn():
+            # The other gunicorn worker is reading the same mailbox right
+            # now; it will write what this pass would have.
+            _state.update(last=now)
+            return {"skipped": "another worker"}
         senders = watched_senders()
         if not senders:
+            db.session.commit()
             _state.update(last=now, error=None, new=0)
             return {"new": 0, "senders": 0}
         latest = (db.session.query(db.func.max(Message.received_at))
@@ -294,6 +300,75 @@ def sync(app=None, force=False):
         return {"error": str(err)[:300]}
     finally:
         _state["running"] = False
+
+
+# Any constant will do, as long as nothing else in the app takes the same one.
+MAIL_LOCK_KEY = 0x6D61696C  # "mail"
+
+
+def _our_turn():
+    """Only one process reads the mailbox at a time.
+
+    The board runs two gunicorn workers, and each starts its own background
+    sync on the same schedule from the same boot, so without this they read
+    the same new mail at the same moment and the second insert of it fails on
+    the unique Message-ID, rolling back that whole pass. On Postgres a
+    transaction-level advisory lock settles it and lets go at the commit; on
+    SQLite (local and the tests) there is one process and nothing to settle.
+    """
+    if db.engine.dialect.name != "postgresql":
+        return True
+    return bool(db.session.execute(
+        db.text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": MAIL_LOCK_KEY}).scalar())
+
+
+_timer = {"started": False, "app": None}
+
+
+def start_background(app):
+    """Read the mail every five minutes whether or not anybody looks.
+
+    It only synced when Needs attention or Messages was opened (`kick`), so the
+    sidebar badge and the attention list were as old as the last visit, and a
+    client's reply sat unseen until somebody happened to open the page that
+    would have shown it (audit item 4). Same shape as the hub's reply sender in
+    app.py: one thread per process, guarded on a flag, never allowed to die,
+    and not on the boot itself, because a worker spending its first seconds on
+    IMAP is not answering Railway's health check. `kick` stays, so opening the
+    page still asks when a pass is due.
+    """
+    import os
+    interval = int(os.environ.get("MAIL_SYNC_INTERVAL_SECONDS", str(SYNC_EVERY_SECONDS)))
+    if interval <= 0 or os.environ.get("MAIL_SYNC_DISABLED") == "1":
+        return False
+    # Guarded per PROCESS, not per app: app.py builds an app when it is
+    # imported and gunicorn's "app:create_app()" builds a second, so a flag on
+    # the app let every worker run two timers. The timer serves the newest.
+    _timer["app"] = app
+    if _timer["started"]:
+        return False
+    _timer["started"] = True
+    first_delay = int(os.environ.get("MAIL_SYNC_FIRST_DELAY_SECONDS", "90"))
+
+    def loop():
+        time.sleep(first_delay)
+        while True:
+            app = _timer["app"]
+            try:
+                # Asked every pass rather than once, so mail turned on after
+                # the boot starts syncing without a deploy.
+                if configured(app):
+                    with app.app_context():
+                        try:
+                            sync(app)
+                        finally:
+                            db.session.remove()
+            except Exception as err:  # noqa: BLE001 - a dead thread is a badge that stops
+                log.warning("mail: background sync failed: %s", err)
+            time.sleep(interval)
+
+    threading.Thread(target=loop, daemon=True, name="mail-sync-timer").start()
+    return True
 
 
 def kick(app):

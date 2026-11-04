@@ -434,19 +434,13 @@ def costs():
                    .filter(Expense.description.ilike(f"{provider.display_name} -%"))
                    .scalar())
 
-        first_entry = (db.session.query(db.func.min(ServiceCostEntry.period_start))
-                       .filter(ServiceCostEntry.provider_id == provider.id).scalar())
-        starts = [d for d in (first_entry,
-                              invoices[0].period_month if invoices else None) if d]
-        missing = []
-        if starts:
-            have = {i.period_month for i in invoices}
-            month = min(starts).replace(day=1)
-            this_month = date.today().replace(day=1)
-            while month < this_month:
-                if month not in have:
-                    missing.append(month.strftime("%Y-%m"))
-                month = (month + timedelta(days=32)).replace(day=1)
+        # The same reading Needs attention asks (provider_bills), so the two
+        # cannot disagree about a month: they did about Railway (EntertainHQ)'s
+        # October, whose bill does not exist until November 16 (fault 8).
+        import provider_bills
+        missing_months, waiting_months = provider_bills.bill_months(provider)
+        missing = [m.strftime("%Y-%m") for m in missing_months]
+        waiting = [m.strftime("%Y-%m") for m in waiting_months]
 
         by_hand = provider.name in MANUAL_MONTHLY_PROVIDERS
         if invoices:
@@ -475,6 +469,9 @@ def costs():
             # has nothing outstanding, so an empty list here is a fact rather
             # than a coincidence.
             "months_not_recorded": missing if by_hand else [],
+            # A pulled account's month just finished, whose bill its own
+            # billing day may not have written yet. Not missing; not here yet.
+            "months_not_billed_yet": waiting if by_hand else [],
             "invoices": [{"month": i.period_month.strftime("%Y-%m"),
                           "amount": round(i.amount or 0.0, 2),
                           "note": i.note or ""} for i in invoices],

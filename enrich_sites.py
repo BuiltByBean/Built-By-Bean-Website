@@ -381,15 +381,21 @@ def read_site(site, business=""):
     }
 
 
-def run(recheck=False, workers=20, limit=None):
+def run(recheck=False, workers=20, limit=None, app=None, since=None):
+    """Returns what it found, as a dict. `since` reads only the sites of rows
+    whose website was checked at or after that moment, which in the weekly
+    refresh (leads_refresh.py) is the rows that run added: a site that failed
+    to read last week is not fetched again every week."""
     from app import create_app
     from models import db, Lead, LeadPerson
 
-    app = create_app()
+    app = app or create_app()
     with app.app_context():
         query = Lead.query.filter(Lead.website.isnot(None), Lead.website != "")
         if not recheck:
             query = query.filter(~Lead.sources.like("%site%"))
+        if since is not None:
+            query = query.filter(Lead.website_checked_at >= since)
         leads = query.all()
         if limit:
             leads = leads[:limit]
@@ -451,6 +457,7 @@ def run(recheck=False, workers=20, limit=None):
               f"{Lead.query.filter(Lead.email != '', Lead.email.isnot(None)).count()} have an email, "
               f"{Lead.query.filter(Lead.phone != '', Lead.phone.isnot(None)).count()} a phone, "
               f"{LeadPerson.query.count()} named contacts on file")
+        return dict(got, read=len(leads))
 
 
 if __name__ == "__main__":

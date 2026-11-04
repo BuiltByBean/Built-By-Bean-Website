@@ -707,6 +707,14 @@ pull loses its no-mapping row on the next one (`prune_stale_allocations`,
 shared with the monthly page), or the month reads double: $54.30 against a
 $43.71 bill in the test. `tools/test_railway_billing.py`.
 
+**Which bills are missing is one function** (`provider_bills.bill_months`),
+read by Needs attention and by the door's `get_costs`. Each had its own loop
+and only Needs attention gave a pulled account its month of grace, so the door
+reported Railway (EntertainHQ)'s October as not recorded while its bill could
+not exist before November 16 (audit fault 8). The door now lists that month
+under `months_not_billed_yet`. `tools/test_bills_months.py` asks both surfaces
+and fails on the old code.
+
 Chasing that one found a second, unrelated fault on the same page. The ledger
 ordered by `Expense.date.desc()` and nothing else, and every vendor charge for
 a month is dated the last day of it, so far more than twenty rows share a date.
@@ -972,6 +980,44 @@ attention or messages page opens, at most every five minutes; "Check
 mail" is the synchronous version. Unanswered inbound mail is an attention
 signal; the messages page is the full history, linked from there.
 
+**Mail reads itself every five minutes** (`mail_service.start_background`,
+started from `create_app`, audit item 4), not only when Needs attention or
+Messages is opened, so the badge is never as old as the last visit. Two traps
+it found. `app.py` builds an app on import and gunicorn's `app:create_app()`
+builds a second, so a flag on the app gave every worker two timers: the guard
+is per process (`_timer`) and the timer serves the newest app. And the two
+workers still each run one on the same schedule from the same boot, so a pass
+takes `pg_try_advisory_xact_lock` first and steps aside when the other worker
+holds it; otherwise both insert the same new mail and the second pass dies on
+the unique Message-ID. The hub threads above are still guarded per app, so
+each runs twice per worker; harmless because they upsert, but worth folding
+into the same guard. `MAIL_SYNC_DISABLED=1` turns it off.
+`tools/test_mail_every_five.py`.
+
+## A payment moves the client
+
+Audit item 5 and fault 6, in `stripe_service.py`. The first payment moves a
+client to Active through the webhook and the six-hourly importer, not only the
+Sync press on one invoice. Only when THIS read saw the payment arrive (the
+local `paid_at` was empty) and it is under `RECENT_PAYMENT_DAYS` old
+(`newly_paid`): the first import after a client is linked meets every old paid
+invoice, and must not pull a client set to Follow up later back to Active.
+
+An invoice whose Stripe customer no client carries finds its client
+(`client_for_customer`) by the board's own `metadata.pm_client_id`, then by an
+email exactly one client has and that client carries no customer yet; it fills
+only an empty `stripe_customer_id`, which is unique, so a second orphan on the
+same client stays an orphan rather than raising. A metadata match places the
+invoice even when the client carries a different customer, because only the
+board writes that id. A new local invoice takes the client's project when
+there is exactly one (`only_project_id`, the sales tax ledger's rule).
+
+`create_stripe_customer` and Sync all clients go through
+`link_or_create_customer`: Stripe is searched by metadata, then listed by
+email, and a customer no other client carries is adopted (oldest first, its
+metadata written) before one is made. Making one regardless is how clients got
+two customers and invoices with no home. `tools/test_payment_moves_client.py`.
+
 ## The loop, enforced
 
 Telling a session to consult the board and file what it learns was a
@@ -1221,6 +1267,21 @@ page of the same list, and the prefix is load bearing because the stage form
 posts `stage` as the new stage. "Make them a client" writes a `Client`
 carrying the address, the contact and everything learned, and links the two
 rows.
+
+**The list refreshes itself weekly** (`leads_refresh.py`, a step of the
+nightly cost-sync job, audit item 17). It is asked every night and runs when no
+night in the last 6.5 days finished it, so a failed week is retried the next
+night: the import without its per-site email scrape, then `check_websites` on
+rows never checked (the new ones, capped at `CHECK_CAP`), then `enrich_sites`
+on the rows that check just stamped (`since`), so a site that failed to read is
+not fetched every week. cost-sync has no DuckDB, so it runs without Overture.
+That made the import's prune dangerous: it deleted every unworked lead no
+source held this run, so a run without Overture would delete every lead only
+Overture supplied, which it did once to 4,640 places. `import_leads.run` now
+prunes only when every source answered, keeps an unread source's marks on its
+rows (`check_websites --reguess` reads the overture mark), and names the unread
+sources in the night's record. `LEADS_REFRESH_FORCE=1` runs it now;
+`LEADS_REFRESH_DISABLED=1` stops it. `tools/test_leads_refresh.py`.
 
 ## Contracts, and clearing the tests off the list
 

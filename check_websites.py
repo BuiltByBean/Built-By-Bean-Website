@@ -162,11 +162,13 @@ def look(name, city):
     return ""
 
 
-def run(recheck=False, workers=32, limit=None, reguess=False):
+def run(recheck=False, workers=32, limit=None, reguess=False, app=None):
+    """Returns {"checked", "found"}. With nothing asked, only rows never
+    checked are looked at, which after the first run means new rows."""
     from app import create_app
     from models import db, Lead
 
-    app = create_app()
+    app = app or create_app()
     with app.app_context():
         if reguess:
             # Only the ones this file guessed. A website that came from a
@@ -219,6 +221,7 @@ def run(recheck=False, workers=32, limit=None, reguess=False):
         with_site = Lead.query.filter(Lead.website.isnot(None), Lead.website != "").count()
         print(f"\n{found} found by looking. Of {total} businesses, {checked} have been "
               f"checked: {with_site} have a site, {checked - with_site} none found.")
+        return {"checked": len(leads), "found": found}
 
 
 if __name__ == "__main__":

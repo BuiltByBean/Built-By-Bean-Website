@@ -107,6 +107,9 @@ def _sweep(night):
     run("bank_feed", "bank feed")
     # Receipts after the bank, so tonight's settled charges can take theirs.
     run("receipts_service", "receipts")
+    # Weekly, though asked every night: the lead list from the public record,
+    # then websites and site reads for the new rows only. No model.
+    run("leads_refresh", "leads refresh")
     # Last, because it reads what the sweep filed and what the audit found.
     # Off unless CURATOR_ENABLED (it is the paid step).
     run("curate_practices", "curator")
