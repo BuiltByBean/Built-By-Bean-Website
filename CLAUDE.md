@@ -1264,6 +1264,13 @@ getting missed.
 
 ## House rules
 
+- **Nothing behind the login is cached.** Cloudflare caches by what a URL ends in
+  (.csv, .pdf, .zip and so on) and knows nothing about logins, so a route like that
+  with no cache header is public from the moment somebody signed in opens it. On
+  2026-11-03 the books export for both companies came back 200 to a request with no
+  cookies. `nothing_behind_the_login_is_cached` in `app.py` marks everything under
+  `/admin` and `/api/` `private, no-store`. A new route ending in a file extension
+  outside those prefixes has to say the same. `tools/test_nothing_cached.py`.
 - **Phone first.** Design at 375px and let it grow. Nothing scrolls the page
   sideways, nothing overflows its card, every tap target is at least 44px
   (base.html enforces that below 640px on every button, every link styled

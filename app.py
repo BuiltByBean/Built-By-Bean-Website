@@ -278,6 +278,20 @@ def create_app():
     init_stripe(app)
 
     from pm.stripe_routes import stripe_bp
+    @app.after_request
+    def nothing_behind_the_login_is_cached(response):
+        """Cloudflare caches by what a URL ends in, and it does not know about
+        logins. A .csv or .pdf route that says nothing about caching is stored at
+        the edge the first time somebody signed in opens it, and from then on it
+        is served to anybody who asks: on 2026-11-03 the books export for both
+        companies came back 200 to a request with no cookies at all. So every
+        answer under /admin and /api says it is private. The admin's own static
+        files stay cacheable, because they are the same for everybody."""
+        endpoint = (request.endpoint or "").rsplit(".", 1)[-1]
+        if endpoint != "static" and request.path.startswith(("/admin", "/api/")):
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
+
     app.register_blueprint(stripe_bp)
 
     # ── Service Costs ───────────────────────────────────────
