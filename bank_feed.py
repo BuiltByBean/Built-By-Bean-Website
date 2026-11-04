@@ -797,7 +797,11 @@ def main():
     from app import create_app
     app = create_app()
     sync_all(app)
-    if "--suggest" in sys.argv or os.environ.get("ANTHROPIC_API_KEY"):
+    # Off unless asked for, like the curator (Michael, 2026-11-04: nothing
+    # billed to the API while the paid steps are off). Lines still sort by
+    # rule every night; Ask Claude on the Bank page is the press that spends.
+    nightly = os.environ.get("BANK_SUGGEST_NIGHTLY", "").strip().lower() in ("1", "true", "yes", "on")
+    if "--suggest" in sys.argv or (nightly and os.environ.get("ANTHROPIC_API_KEY")):
         with app.app_context():
             try:
                 print(f"  bank: {suggest()} lines given a suggestion", flush=True)

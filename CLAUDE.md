@@ -48,7 +48,10 @@ one against a scripted model.
 usage? that way it doesn't cost me any extra and later once im making more
 money we can set it up automatic every night"). `curate_practices.curate`
 does nothing and writes no night unless `CURATOR_ENABLED=1` is on cost-sync;
-the free parts of the night (sweep, audit, store ids) still run. The upkeep
+the free parts of the night (sweep, audit, store ids) still run. The nightly
+bank suggestions were a second paid call nobody had named, and are off the
+same way unless `BANK_SUGGEST_NIGHTLY=1`; Ask Claude on the Bank page still
+spends on the press. The upkeep
 is the Tend command, `.claude/skills/tend/SKILL.md` (`.gitignore` lets
 `.claude/skills/` through so it travels with the repo), run in a Claude Code
 session in this repo: fold the notes into rules and playbooks, prune the
