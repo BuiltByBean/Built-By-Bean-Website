@@ -12,7 +12,9 @@
   drop it: an empty heading at rest would be a claim about the business, not
   a state of the board.
 
-  The grip on each tile moves it to the other half: drag it there, or press it.
+  The edge down the left of each tile drags it to the other half. A tap on it
+  moves nothing, so a stray thumb on a phone cannot send a tile across; Enter
+  on it does, for the keyboard.
   The tile moves in place and one small POST records it, so nothing else on
   the page is rebuilt. Dragging is pointer events on the grip, not HTML5
   drag and drop, which a phone does not do; `touch-action: none` on the grip
@@ -36,7 +38,22 @@
 {% block page_subtitle %}Everything running{% endblock %}
 
 {% macro tile(app, other) %}
-<div class="glass-card p-4 sm:p-5 flex flex-col gap-4 min-w-0 relative" data-app-tile data-app-id="{{ app.id }}" data-app-name="{{ app.name }}">
+<div class="glass-card flex min-w-0 relative overflow-hidden" data-app-tile data-app-id="{{ app.id }}" data-app-name="{{ app.name }}">
+    {# The drag edge, the whole height of the tile (Michael, 2026-11-04, from a
+       screenshot: "I prefer a drag edge like this"). 28px wide is narrower
+       than the 44px rule asks of a press, and on purpose: the rule is about a
+       small square a thumb can miss, and this is a strip as tall as the tile,
+       so the thumb has well over 44px of it in every direction it moves. #}
+    <button type="button" data-app-grip aria-label="Move {{ app.name }} to {{ other }}" title="Drag to move"
+            class="w-7 shrink-0 self-stretch flex items-center justify-center bg-white/[0.06] border-r border-white/5 text-surface-400 hover:text-white hover:bg-white/[0.1] transition-colors cursor-grab select-none"
+            style="touch-action: none">
+        <svg class="w-4 h-4 pointer-events-none" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+            <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+            <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+        </svg>
+    </button>
+<div class="p-4 sm:p-5 flex flex-col gap-4 min-w-0 flex-1">
 
     <div class="flex items-start gap-4 min-w-0">
         {% if app.icon_file %}
@@ -126,17 +143,8 @@
             <span class="sr-only">GitHub</span>
         </a>
         {% endif %}
-
-        <button type="button" data-app-grip aria-label="Move {{ app.name }} to {{ other }}" title="Drag to move"
-                class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-400 hover:text-white hover:bg-white/5 transition-colors cursor-grab select-none"
-                style="touch-action: none">
-            <svg class="w-4 h-4 pointer-events-none" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
-                <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
-                <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
-            </svg>
-        </button>
     </div>
+</div>
 </div>
 {% endmacro %}
 
@@ -277,10 +285,7 @@
         drag = null;
         clearInterval(d.timer);
         var b = board();
-        if (!d.lifted) {
-            if (!cancelled) move(d.tile, other(d.tile));
-            return;
-        }
+        if (!d.lifted) return;  // an edge is for dragging; a stray tap moves nothing
         b.querySelectorAll('.is-target').forEach(function (s) { s.classList.remove('is-target'); });
         // Where the finger let go, read now: a quick flick can end before
         // the next frame has worked out the target.

@@ -175,9 +175,12 @@ On 2026-11-04 the halves were renamed for what they mean to him: "the top
 section is products that make me money. bottom section is my personal
 projects." The screen says Makes money and Personal projects
 (`apps_routes.GROUP_LABELS`); the stored values stay `client` and `mine`, so
-no row moved. Each tile carries a grip: drag it to the other half, or press
-it, and one POST to `apps.move_group` records the choice while the tile moves
-in place. It is pointer events on the grip with `touch-action: none`, because
+no row moved. Each tile has a drag edge down its left side, the whole height
+of the tile (his pick, from a screenshot of another app: "I prefer a drag edge
+like this"): drag it to the other half and one POST to `apps.move_group`
+records the choice while the tile moves in place. A tap on the edge moves
+nothing, so a stray thumb cannot send a tile across; Enter on it does, for the
+keyboard. It is pointer events on the edge with `touch-action: none`, because
 HTML5 drag and drop does nothing on a phone; the empty half is drawn only
 while dragging, as somewhere to drop; the drop target is read at release, not
 from the last frame, so a quick flick lands; and the edge auto-scroll runs on
