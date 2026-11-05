@@ -41,10 +41,10 @@ def check(name, cond, detail=""):
         FAIL.append(name)
 
 
-def migrate(direction):
+def migrate(direction, name="e2b7d4f8a1c6_not_contracted.py"):
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
-    path = ROOT / "migrations" / "versions" / "e2b7d4f8a1c6_not_contracted.py"
+    path = ROOT / "migrations" / "versions" / name
     spec = importlib.util.spec_from_file_location("m_not_contracted", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -89,6 +89,12 @@ with app.app_context():
         db.session.add(p)
         db.session.flush()
         rows[(client_name, name)] = p.id
+        if client_name == "Zachary Robinson":
+            # As production has it: something completed stands against it.
+            db.session.add(SignatureRequest(envelope_id="env-rob", title="Hub link test", kind="document",
+                                            client_id=client.id, project_id=p.id, signer_name="Z",
+                                            signer_email="z@example.test", status="completed",
+                                            completed_at=datetime(2026, 9, 5, tzinfo=timezone.utc)))
         if client_name == "Sam Signed":
             # Same name, but signed: the migration must leave it contracted.
             db.session.add(SignatureRequest(envelope_id="env-sam", title="SOW", kind="sow",
@@ -106,6 +112,10 @@ with app.app_context():
 
     print("1. up")
     migrate("upgrade")
+    db.session.expire_all()
+    check("Robinson with a signed row on file is left by the first migration (as on the live board)",
+          db.session.get(Project, rows[("Zachary Robinson", "Robinsonandco Project Manager")]).phase == "contracted")
+    migrate("upgrade", "f4c9a2e6b318_robinson_not_contracted.py")
     check("projects gained not_live_on", "not_live_on" in {c["name"] for c in inspect(db.engine).get_columns("projects")})
     get = lambda key: db.session.get(Project, rows[key])  # noqa: E731
     db.session.expire_all()
@@ -129,9 +139,10 @@ with app.app_context():
           get(("Sam Signed", "Christ Community Church")).phase == "contracted")
     with db.engine.connect() as conn:
         kept = conn.execute(text("SELECT count(*) FROM project_phase_corrections")).scalar()
-    check("every changed row is kept for the way back", kept == 5, kept)
+    check("every changed row is kept for the way back", kept == 6, kept)
 
     print("2. down puts every row back")
+    migrate("downgrade", "f4c9a2e6b318_robinson_not_contracted.py")
     migrate("downgrade")
     with db.engine.connect() as conn:
         after = {r[0]: tuple(r[1:]) for r in conn.execute(text(
@@ -143,6 +154,7 @@ with app.app_context():
 
     print("3. up again")
     migrate("upgrade")
+    migrate("upgrade", "f4c9a2e6b318_robinson_not_contracted.py")
     db.session.expire_all()
     check("and right again", get(("Cason Kuper", "Kuper Plumbing")).phase == "in_production"
           and get(("Louis Lucas", "Deed in Hand")).phase == "not_contracted")
