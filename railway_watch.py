@@ -12,7 +12,8 @@ deployment.
 What it writes, and the rule for each:
 
   - RailwayService: one row per service per environment, the picture as it is
-    tonight. Upserted on (service, environment), so it is always current.
+    tonight. Upserted on (service, environment), so it is always current, and
+    a service the workspace no longer has is taken off (`prune`).
   - ServiceMapping: only for a Railway project that points at exactly ONE
     board project (by repo, or by a tile it serves), and only where no
     mapping exists or the one that does names no project. Two candidates is
@@ -153,6 +154,32 @@ def store(provider_id, rows, now=None):
         row.seen_at = now
     db.session.flush()
     return len(rows)
+
+
+def prune(provider_id, rows):
+    """Take off the rows of services this workspace no longer has, and say which.
+
+    `store` only ever upserted, so a project deleted on Railway stayed on the
+    board for good: its web service kept reading "live on Railway, not on My
+    Apps" and its last deploy kept being judged (2026-11-05, Personal Trainer
+    and Dom's Painting). Called only with the rows of a read that answered.
+    An answer with nothing in it, or one missing more than half of what this
+    workspace had, removes nothing: that is likelier a bad read than a cull,
+    and the night's note says what was held back.
+    """
+    from models import db, RailwayService
+    keep = {(r["service_ref"], r["environment"]) for r in rows if r.get("service_ref")}
+    have = RailwayService.query.filter_by(provider_id=provider_id).all()
+    gone = [s for s in have if (s.service_ref, s.environment) not in keep]
+    if not gone:
+        return [], None
+    if not keep or len(gone) * 2 > len(have):
+        return [], f"{len(gone)} of {len(have)} services missing from the read, none removed"
+    names = [f"{s.project_name}/{s.service_name} ({s.environment})" for s in gone]
+    for s in gone:
+        db.session.delete(s)
+    db.session.flush()
+    return names, None
 
 
 def read_branch_heads(get=None):
@@ -317,12 +344,13 @@ def _gql(token, query, variables):
 
 
 def read_all(gql=None):
-    """Every Railway provider that names its workspace, read and stored.
-    Returns a summary. Raises only when no workspace could be read."""
+    """Every Railway provider that names its workspace, read and stored, and
+    what each no longer has taken off. Returns (read, errors, removed).
+    Raises only when no workspace could be read."""
     from models import db, ServiceProvider
     import service_costs_service
     gql = gql or _gql
-    read, errors = 0, []
+    read, errors, removed = 0, [], []
     providers = ServiceProvider.query.filter_by(name="railway", is_active=True).all()
     for p in providers:
         creds = service_costs_service._get_credentials(p)
@@ -335,16 +363,23 @@ def read_all(gql=None):
         except Exception as err:  # noqa: BLE001 - one workspace never stops the other
             errors.append(f"{p.display_name}: {str(err)[:160]}")
             continue
-        read += store(p.id, parse_workspace(ws))
+        rows = parse_workspace(ws)
+        read += store(p.id, rows)
+        gone, held = prune(p.id, rows)
+        removed += gone
+        if held:
+            errors.append(f"{p.display_name}: {held}")
     db.session.commit()
     if errors and not read:
         raise RuntimeError("; ".join(errors))
-    return read, errors
+    return read, errors, removed
 
 
 def run(gql=None, get=None):
     from models import db, AppLink, Project, RailwayService
-    read, errors = read_all(gql)
+    read, errors, removed = read_all(gql)
+    for name in removed:
+        print(f"railway: gone from Railway, taken off: {name}", flush=True)
     try:
         read_branch_heads(get)
     except Exception as err:  # noqa: BLE001
@@ -359,8 +394,8 @@ def run(gql=None, get=None):
         print(f"railway: {note}", flush=True)
     loose = unlisted(services, links)
     broken = deploy_problems(services)
-    note = (f"{read} services, {len(mapped)} mapped, {len(tiles)} tile links, "
-            f"{len(loose)} live with no tile, {len(broken)} deploy problems")
+    note = (f"{read} services, {len(removed)} gone from Railway, {len(mapped)} mapped, "
+            f"{len(tiles)} tile links, {len(loose)} live with no tile, {len(broken)} deploy problems")
     if errors:
         note += "; " + "; ".join(errors)
     return note

@@ -245,6 +245,43 @@ with application.app_context():
 check("and answers the list again, for the live action to swap in place",
       r.status_code == 302 and r.headers.get("Location", "").endswith("/admin/apps/railway"))
 
+print("\n7b. A PROJECT DELETED ON RAILWAY LEAVES THE BOARD")
+# The same branch heads as the first read, so the deploy checks below still see them.
+HEADS = lambda path: {"sha": "zzzz9999", "commit": {"committer": {"date": "2026-11-01T00:00:00Z"}}}  # noqa: E731
+with application.app_context():
+    before = RailwayService.query.count()
+    without_twin = {"projects": {"edges": [e for e in WORKSPACE["projects"]["edges"]
+                                           if e["node"]["id"] != "p-twin"]}}
+    note = railway_watch.run(gql=lambda token, q, v: {"workspace": without_twin}, get=HEADS)
+    check("a project deleted on Railway is off the board on the next read",
+          RailwayService.query.filter_by(project_ref="p-twin").count() == 0
+          and RailwayService.query.count() == before - 1, (before, RailwayService.query.count()))
+    check("and the night's note counts it", "1 gone from Railway" in note, note)
+    check("everything still on Railway stays",
+          RailwayService.query.filter_by(service_ref="s-ideas").count() == 1
+          and RailwayService.query.filter_by(service_ref="s-ehq-web").count() == 2)
+    after = RailwayService.query.count()
+    try:
+        railway_watch.run(gql=lambda token, q, v: {"workspace": {"projects": {"edges": []}}}, get=HEADS)
+        said = ""
+    except RuntimeError as err:
+        said = str(err)
+    check("an answer with nothing in it removes nothing, and fails the night's step saying so",
+          RailwayService.query.count() == after and "none removed" in said, said)
+    only_ideas = {"projects": {"edges": [e for e in WORKSPACE["projects"]["edges"]
+                                         if e["node"]["id"] == "p-ideas"]}}
+    note = railway_watch.run(gql=lambda token, q, v: {"workspace": only_ideas}, get=HEADS)
+    check("an answer missing most of the workspace removes nothing",
+          RailwayService.query.count() == after and "none removed" in note, note)
+
+    def down(token, q, v):
+        raise RuntimeError("railway is down")
+    try:
+        railway_watch.run(gql=down, get=HEADS)
+    except RuntimeError:
+        pass
+    check("a read that failed removes nothing", RailwayService.query.count() == after)
+
 print("\n9. SITES, CERTIFICATES, DOMAINS")
 
 
