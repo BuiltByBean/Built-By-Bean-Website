@@ -1662,11 +1662,10 @@ def retire_app():
     for keep their split; and the board's rows for that project's services
     go. A project on the board is never touched: it holds money and time.
     The answer carries every removed tile whole, which is what it takes to
-    register it again.
+    register it again. The work is app_retire.retire, which the nightly
+    Railway read also calls for a project gone from Railway.
     """
-    import os
-    from models import RailwayService, ServiceMapping, SiteCheck
-    from pm.apps_routes import _icon_folder
+    import app_retire
     body = request.get_json(silent=True) or {}
     reason = _cap(body.get("reason"), 300)
     url = _normalise_url(_cap(body.get("url"), 500)) if body.get("url") else ""
@@ -1678,53 +1677,13 @@ def retire_app():
         return jsonify({"error": "give url, name or railway_project"}), 400
     if rail and not _UUID.match(rail):
         return jsonify({"error": "railway_project is the Railway project id, a UUID"}), 400
-
-    tiles = {}
-    if url:
-        host = _host(url)
-        for row in AppLink.query.filter(AppLink.url.ilike(f"%{host}%")).all():
-            if row.host.lower() == host:
-                tiles[row.id] = row
-    if name:
-        for row in AppLink.query.filter(db.func.lower(AppLink.name) == name.lower()).all():
-            tiles[row.id] = row
-    if rail:
-        for row in AppLink.query.filter(AppLink.railway_url.ilike(f"%{rail}%")).all():
-            tiles[row.id] = row
-    mappings = (ServiceMapping.query.filter(ServiceMapping.resource_identifier.in_(
-        [f"railway:{rail}", rail])).all() if rail else [])
-    services = RailwayService.query.filter_by(project_ref=rail).all() if rail else []
-    if not (tiles or mappings or services):
+    done = app_retire.retire(url=url, name=name, railway_project=rail)
+    if not (done["removed_apps"] or done["mappings_switched_off"] or done["railway_rows_removed"]):
+        db.session.rollback()
         return jsonify({"error": "nothing on the board matches", "removed_apps": []}), 404
-
-    removed = []
-    for link in sorted(tiles.values(), key=lambda r: r.id):
-        removed.append({
-            "id": link.id, "name": link.name, "url": link.url, "github_url": link.github_url,
-            "railway_url": link.railway_url, "description": link.description,
-            "project": link.project.name if link.project else None,
-            "board_group": link.board_group, "app_store_bundle_id": link.app_store_bundle_id,
-            "play_package": link.play_package})
-        prefix = (link.url or "").rstrip("/")
-        if prefix:
-            for check in SiteCheck.query.filter(SiteCheck.url.ilike(prefix + "%")).all():
-                db.session.delete(check)
-        if link.icon_file:
-            try:
-                os.remove(os.path.join(_icon_folder(), link.icon_file))
-            except OSError:
-                pass
-        db.session.delete(link)
-    off = []
-    for m in mappings:
-        if m.is_active:
-            m.is_active = False
-            off.append({"id": m.id, "label": m.resource_label})
-    gone = [f"{s.project_name}/{s.service_name} ({s.environment})" for s in services]
-    for s in services:
-        db.session.delete(s)
     db.session.commit()
     current_app.logger.info("guidance: retired %s (%s); mappings off %s; railway rows %s",
-                            [r["name"] for r in removed], reason, [m["id"] for m in off], gone)
-    return jsonify({"removed_apps": removed, "mappings_switched_off": off,
-                    "railway_rows_removed": gone, "reason": reason})
+                            [r["name"] for r in done["removed_apps"]], reason,
+                            [m["id"] for m in done["mappings_switched_off"]],
+                            done["railway_rows_removed"])
+    return jsonify(dict(done, reason=reason))

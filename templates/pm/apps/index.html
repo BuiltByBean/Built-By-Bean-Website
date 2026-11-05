@@ -1,10 +1,30 @@
 {% extends "pm/base.html" %}
-{% from "pm/components/brand_icons.html" import launch, railway, github %}
+{% from "pm/components/brand_icons.html" import launch, railway, github, app_store, google_play %}
 
 {#
-  The board. Each tile is its app's own icon, its name, and the three places
-  you actually go: the running app, the Railway service that serves it, and
-  the repo behind it.
+  The board. Each tile is its app's own icon, its name, where it lives, and
+  the places you actually go: the running app, its store listings, the Railway
+  service that serves it, and the repo behind it.
+
+  Nothing on a tile is typed (Michael, 2026-11-05: "an edit button on these my
+  apps should not even [be] there ... nothing should be manual"). There is no
+  pencil and no form: register_app and the nightly Railway read keep each
+  tile's name, address, links and icon (pm/apps_routes.py says which keeps
+  what), and a tile whose Railway project is gone leaves on its own.
+
+  Every tile is one height, a web app's (Michael, the same day: "the height of
+  one like wedding planner ... should be the default height"). So nothing on a
+  tile may add a line: the name truncates, a phone app's store versions sit on
+  the host line beside the host, and a site that is not answering turns the
+  host red rather than adding a pill. The versions say it in colour alone:
+  green where every live store agrees, red where two disagree, yellow "not
+  live" where a store does not list it yet. No pills ("I don't need to see
+  stuff like an additional not live yet pill").
+
+  The project folder button went the same day, for an App Store and a Google
+  Play button where the app is live there. The address is what the store's
+  own public answer gave (store_versions_service), so a button is never drawn
+  for a listing that does not exist.
 
   It is in two groups: what makes money (client builds and his own products
   that earn), then personal projects (Michael, 2026-11-04). A group with
@@ -21,20 +41,12 @@
   reload draws what was dropped. A tap on the edge moves nothing, so a stray
   thumb cannot move a tile; for the keyboard, Enter sends it to the other half
   and the arrows move it one place. Dragging is pointer events on the grip, not
-  HTML5 drag and drop, which a phone does not do; `touch-action: none` on the
+  HTML5 drag and drop, which a phone does not do; touch-action none on the
   grip keeps a finger's drag from being taken as a scroll.
 
-  The tile is no longer one big anchor. It holds three separate links now, and
-  a link inside a link is invalid and behaves differently in every browser -
-  so the card is a plain div and every destination is its own button.
-
-  There is deliberately no "Add an app" or "Fetch missing icons" button.
-  Michael adds apps by asking Claude, so a form he will never fill in was two
-  controls of permanent clutter above the thing he actually came for. The
-  routes behind them still exist and still work - `apps.edit` is what the
-  per-tile pencil uses, and /new and the refresh endpoints stay reachable by
-  URL - so this is an unlinked path, not an orphaned one. Do not "fix" it by
-  putting the buttons back.
+  The tile is not one big anchor. It holds several separate links, and a link
+  inside a link is invalid and behaves differently in every browser - so the
+  card is a plain div and every destination is its own button.
 #}
 
 {% block title %}My Apps - Built By Bean{% endblock %}
@@ -42,7 +54,13 @@
 {% block page_subtitle %}Everything running{% endblock %}
 
 {% macro tile(app, other) %}
-<div class="glass-card flex min-w-0 relative overflow-hidden" data-app-tile data-app-id="{{ app.id }}" data-app-name="{{ app.name }}">
+{# How many square buttons sit beside Open. Five presses in a row are 14px
+   wider than a 320px phone gives a tile, so there a crowded tile lets Open
+   go (the style block below) and its icon opens the app, as it does at every
+   width; a second row of buttons would make it taller than the rest. #}
+{% set ns = namespace(n=(1 if app.railway_url else 0) + (1 if app.github_url else 0)) %}
+{% if app.stores %}{% for label, row in app.stores.rows if row.status == 'live' and row.url %}{% set ns.n = ns.n + 1 %}{% endfor %}{% endif %}
+<div class="glass-card flex min-w-0 relative overflow-hidden" data-app-tile data-app-id="{{ app.id }}" data-app-name="{{ app.name }}"{% if ns.n >= 4 %} data-crowded{% endif %}>
     {# The drag edge, the whole height of the tile (Michael, 2026-11-04, from a
        screenshot: "I prefer a drag edge like this"). 28px wide is narrower
        than the 44px rule asks of a press, and on purpose: the rule is about a
@@ -55,81 +73,73 @@
     </button>
 <div class="p-4 sm:p-5 flex flex-col gap-4 min-w-0 flex-1">
 
-    <div class="flex items-start gap-4 min-w-0">
+    <div class="flex items-center gap-4 min-w-0">
+        {# The app's icon opens the app, like a phone's home screen. #}
+        <a href="{{ app.url }}" {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
+           aria-label="Open {{ app.name }}" title="Open {{ app.name }}" data-app-icon
+           class="w-12 h-12 flex-shrink-0 rounded-xl hover:ring-2 hover:ring-brand-500/40 transition-shadow">
         {% if app.icon_file %}
         {# object-contain, not cover: these are logos, and cropping a
            logo to fill a square cuts somebody's name off. #}
         <img src="{{ url_for('apps.icon', id=app.id) }}" alt=""
-             class="w-12 h-12 flex-shrink-0 rounded-xl object-contain">
+             class="w-12 h-12 rounded-xl object-contain">
         {% else %}
-        <div class="w-12 h-12 flex-shrink-0 rounded-xl bg-brand-500/15 flex items-center justify-center">
+        <span class="w-12 h-12 rounded-xl bg-brand-500/15 flex items-center justify-center">
             <span class="text-sm font-bold text-brand-300">{{ app.initials }}</span>
-        </div>
+        </span>
         {% endif %}
+        </a>
 
-        <div class="min-w-0 pr-7">
-            <h3 class="text-base font-bold text-white break-words">{{ app.name }}</h3>
-            {# No description here on purpose: the tile is an icon, a
-               name and three ways in. It is still stored and still
-               editable, it just does not belong on the board. #}
-            <p class="text-xs text-surface-400 mt-0.5 truncate" title="{{ app.description or app.url }}">{{ app.host }}</p>
-            {# A phone app's live store versions, and whether the two stores
-               agree. Read off the public store pages (store_versions_service),
-               so an app still in review reads as not live yet. #}
-            {% if app.stores %}
-            <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <div class="min-w-0 flex-1">
+            <h3 class="text-base font-bold text-white truncate" title="{{ app.name }}">{{ app.name }}</h3>
+            {% set down = site_down.get(app.id) %}
+            <div class="mt-0.5 flex items-center gap-2.5 min-w-0 text-xs leading-4" data-app-line>
+                <span class="truncate min-w-0 {{ 'text-red-400' if down else 'text-surface-400' }}"
+                      title="{% if down %}Not answering since {{ down | format_date }}{% else %}{{ app.description or app.url }}{% endif %}"
+                      {% if down %}data-site-down{% endif %}>{{ app.host }}{% if down %}<span class="sr-only">, not answering since {{ down | format_date }}</span>{% endif %}</span>
+                {# A phone app's live version on each store, read off the
+                   public store pages (store_versions_service). #}
+                {% if app.stores %}
                 {% for label, row in app.stores.rows %}
-                <span class="text-surface-400 whitespace-nowrap">{{ label }}
-                    <span class="text-white tabular-nums">{% if row.status == 'live' %}{{ row.version or 'varies by device' }}{% elif row.status == 'not_listed' %}not live{% elif row.status == 'unknown' %}unchecked{% else %}unreachable{% endif %}</span></span>
-                {% endfor %}
-                {% if app.stores.verdict == 'match' %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-900/30 text-emerald-400">Versions match</span>
-                {% elif app.stores.verdict == 'live' %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-900/30 text-emerald-400">Live</span>
-                {% elif app.stores.verdict == 'differ' %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-900/30 text-amber-400">Versions differ</span>
+                {% if row.status == 'live' %}
+                {% set tone = 'text-red-400' if app.stores.verdict == 'differ' else 'text-emerald-400' %}
+                {% set said = row.version or 'varies' %}
+                {% elif row.status == 'not_listed' %}
+                {% set tone = 'text-yellow-300' %}{% set said = 'not live' %}
                 {% else %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface-800 text-surface-400">Not live yet</span>
+                {% set tone = 'text-surface-500' %}{% set said = 'unchecked' if row.status == 'unknown' else 'unreachable' %}
+                {% endif %}
+                <span class="shrink-0 inline-flex items-center gap-1 whitespace-nowrap tabular-nums {{ tone }}"
+                      title="{{ label }}: {{ said }}" data-store="{{ row.status }}">
+                    {% if label == 'App Store' %}{{ app_store('w-3 h-3') }}{% else %}{{ google_play('w-3 h-3') }}{% endif %}
+                    <span class="sr-only">{{ label }}</span>{{ said }}
+                </span>
+                {% endfor %}
                 {% endif %}
             </div>
-            {% endif %}
-            {# What the repo says against what the stores say, read nightly
-               (store_ids_service.versions_from_files): a build waiting on
-               submission or review, shown rather than remembered. #}
-            {% if app.repo_line %}
-            <p class="mt-1 text-xs text-sky-300 break-words" data-repo-line>{{ app.repo_line }}</p>
-            {% endif %}
-            {# The nightly site check: two nights of no answer is down. #}
-            {% if site_down.get(app.id) %}
-            <p class="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-900/30 text-red-300" data-site-down>Not answering since {{ site_down[app.id] | format_date }}</p>
-            {% endif %}
         </div>
-
-        <a href="{{ url_for('apps.edit', id=app.id) }}"
-           aria-label="Edit {{ app.name }}"
-           class="absolute top-2 right-2 w-11 h-11 inline-flex items-center justify-center rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
-            {{ icon('edit', 'w-4 h-4') }}
-        </a>
     </div>
 
-    {# mt-auto so the buttons sit on the floor of every tile in a row,
-       however tall the description above them made it. #}
-    <div class="flex items-center gap-2 mt-auto">
+    {# mt-auto so the buttons sit on the floor of every tile in a row. #}
+    <div class="flex items-center gap-2 mt-auto" data-app-buttons>
         <a href="{{ app.url }}"
            {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
-           title="Open {{ app.name }}"
-           class="flex-1 inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+           title="Open {{ app.name }}" data-app-open
+           class="flex-1 min-w-[44px] inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 py-2 text-xs font-medium rounded-lg border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
             {{ launch("w-3.5 h-3.5 flex-shrink-0") }}
             Open
         </a>
 
-        {% if app.project %}
-        <a href="{{ url_for('pm.project_detail', id=app.project.id) }}"
-           title="{{ app.project.name }} project"
-           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors">
-            {{ icon('projects', 'w-4 h-4') }}
-            <span class="sr-only">{{ app.project.name }} project</span>
+        {% if app.stores %}
+        {% for label, row in app.stores.rows if row.status == 'live' and row.url %}
+        <a href="{{ row.url }}" target="_blank" rel="noopener"
+           title="{{ app.name }} on {{ 'the App Store' if label == 'App Store' else label }}"
+           class="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-3 py-2 rounded-lg border border-white/10 text-surface-300 hover:text-white hover:bg-white/5 transition-colors"
+           data-store-link>
+            {% if label == 'App Store' %}{{ app_store("w-4 h-4") }}{% else %}{{ google_play("w-4 h-4") }}{% endif %}
+            <span class="sr-only">{{ label }}</span>
         </a>
+        {% endfor %}
         {% endif %}
 
         {% if app.railway_url %}
@@ -161,6 +171,14 @@
     [data-apps-board] [data-group-section].is-target [data-group-grid] { outline-color: rgba(167,139,250,0.6); }
     [data-app-tile].is-lifted { z-index: 30; pointer-events: none; box-shadow: 0 18px 40px rgba(0,0,0,0.45); opacity: 0.95; cursor: grabbing; }
     [data-app-slot] { border: 2px dashed rgba(167,139,250,0.55); border-radius: 1rem; background: rgba(167,139,250,0.06); }
+    /* The narrowest phones: a tile with four square buttons lets Open go,
+       because its icon opens the app too, and keeps the rest on the right. */
+    @media (max-width: 359px) {
+        /* !important: base.html's phone rule makes every rounded link
+           inline-flex with a selector this one cannot outrank. */
+        [data-app-tile][data-crowded] [data-app-open] { display: none !important; }
+        [data-app-tile][data-crowded] [data-app-buttons] { justify-content: flex-end; }
+    }
 </style>
 <div class="space-y-8 stagger-in" data-apps-board data-order-url="{{ url_for('apps.order') }}">
 

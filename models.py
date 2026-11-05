@@ -3273,9 +3273,9 @@ class AppLink(db.Model):
     # one stuck for a day is (store_versions_service.refresh).
     store_differ_since = db.Column(db.DateTime, nullable=True)
     # The version written in the repo, per platform, read nightly beside the
-    # store ids ({"android": "1.4.0", "ios": "1.4.0"}), so the tile can say
-    # "1.4.0 in the repo, stores on 1.3.2": a build waiting on submission or
-    # review is shown, not remembered.
+    # store ids ({"android": "1.4.0", "ios": "1.4.0"}). The tile said "1.4.0 in
+    # the repo, stores on 1.3.2" until 2026-11-05, when Michael took the line
+    # off ("doesn't need to exist"); the reading stays for whatever asks next.
     repo_versions = db.Column(db.Text, nullable=True)
 
     # The engagement this app belongs to, where there is one. Nullable because
@@ -3328,12 +3328,6 @@ class AppLink(db.Model):
         tile with no store ids."""
         import store_versions_service  # local: models must not import services at load
         return store_versions_service.summary(self)
-
-    @property
-    def repo_line(self):
-        """"1.4.0 in the repo, stores on 1.3.2", or None."""
-        import store_versions_service
-        return store_versions_service.repo_line(self)
 
     @property
     def host(self):

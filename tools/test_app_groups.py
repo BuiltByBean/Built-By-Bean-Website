@@ -8,7 +8,8 @@ database and proves:
 
   1. A tile with no choice follows its project, as every tile did before.
   2. A choice on the tile wins over the project, both ways, on the page itself.
-  3. The edit form saves the choice, and a blank puts it back on the project.
+  3. A blank choice puts it back on the project; the edit form is gone
+     (2026-11-05, "nothing should be manual"), so the drag is the way.
   4. register_app re-attaching the project does not move the tile back.
   5. The migration picks the five by project or by name, leaves everything
      else alone, and leaves a choice already made untouched.
@@ -128,7 +129,7 @@ with c.session_transaction() as s:
 def halves():
     html = c.get("/admin/apps/").data.decode("utf-8", "replace")
     out, current = {}, None
-    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|aria-label=\"Edit ([^\"]+)\"", html):
+    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|data-app-name=\"([^\"]+)\"", html):
         if m.group(1):
             current = m.group(1)
         else:
@@ -143,23 +144,21 @@ check("Robinson & Co. shows under Personal projects", h.get("Robinson & Co.") ==
 check("EntertainHQ still shows under Client work", h.get("EntertainHQ") == "Makes money", h)
 check("Bible Study still shows under Mine", h.get("Bible Study") == "Personal projects", h)
 
-print("The edit form")
+print("No edit form")
 
 
-def save(name, group):
+def choose(name, group):
     with application.app_context():
-        link = db.session.get(AppLink, ids[name])
-        form = {"name": link.name, "url": link.url, "project_id": link.project_id or "",
-                "board_group": group}
-    return c.post(f"/admin/apps/{ids[name]}/edit", data=form)
+        db.session.get(AppLink, ids[name]).board_group = group
+        db.session.commit()
 
 
-r = save("EntertainHQ", "mine")
-check("choosing Mine saves", r.status_code in (302, 303) and halves().get("EntertainHQ") == "Personal projects", r.status_code)
-save("EntertainHQ", "")
+choose("EntertainHQ", "mine")
+check("a choice on the tile moves it", halves().get("EntertainHQ") == "Personal projects")
+choose("EntertainHQ", None)
 check("a blank puts it back on its project", halves().get("EntertainHQ") == "Makes money")
-form_html = c.get(f"/admin/apps/{ids['Robinson & Co.']}/edit").data.decode("utf-8", "replace")
-check("the form offers the choice", "Shows under" in form_html and "Follows the project" in form_html)
+check("the edit form is gone", c.get(f"/admin/apps/{ids['Robinson & Co.']}/edit").status_code == 404
+      and c.post(f"/admin/apps/{ids['Robinson & Co.']}/edit", data={"name": "x", "url": "https://x.test"}).status_code == 404)
 
 print("register_app")
 r = c.post("/api/guidance/apps", headers={"Authorization": "Bearer test-key"},
@@ -195,7 +194,7 @@ def order(half):
 def halves_in_order():
     html = c.get("/admin/apps/").data.decode("utf-8", "replace")
     out, current = [], None
-    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|aria-label=\"Edit ([^\"]+)\"", html):
+    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|data-app-name=\"([^\"]+)\"", html):
         if m.group(1):
             current = m.group(1)
         else:

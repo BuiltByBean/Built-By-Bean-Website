@@ -281,8 +281,8 @@ carry steps, and revert puts back the exact list that was there.
 Personal Trainer and Dom's Painting were deleted on Railway and their tiles
 stayed, because only a signed-in press could take a tile off and nothing a
 session could call did. By `url` (the tile's host), `name` (exactly) or
-`railway_project` (the id), with a `reason`: the tiles go as the page's own
-delete takes them (icon file too) with their site checks, the project's
+`railway_project` (the id), with a `reason`: the tiles go (icon file too,
+where the volume is) with their site checks, the project's
 hosting mappings are switched OFF rather than deleted so a billed month keeps
 its split, and its `RailwayService` rows go. A board project is never
 touched: it holds money and time. The answer is every removed tile whole,
@@ -290,7 +290,44 @@ enough to register it again. Two leaks closed beside it: the nightly site
 check now drops a `SiteCheck` no tile or surface points at (a deleted tile's
 "down" row would have stayed on Needs attention), and the Railway read skips a
 project whose `deletedAt` is set, because Railway keeps a deleted project in
-its answer for two days. `tools/test_retire_app.py`.
+its answer for two days. `tools/test_retire_app.py`. The work is
+`app_retire.retire`, which the nightly Railway read calls too (below).
+
+**A tile keeps itself** (Michael, 2026-11-05, of the pencil on every tile: "an
+edit button on these my apps should not even [be] there ... icons, links repos
+etc. should automatically update. nothing should be manual"). There is no edit
+form, no new-tile form and no delete press: `/admin/apps/<id>/edit`, `/new`,
+`/delete` and the refresh presses answer 404. What the form set is kept like
+this, and `pm/apps_routes.py`'s docstring is the list: name, address, repo,
+Railway link, store ids and project from `register_app`; the Railway link, the
+repo and a platform address FOLLOW the one production service a tile matches
+(`railway_watch.match_tiles`, nightly; a `*.railway.app` address moves to the
+service's shortest custom domain, never onto a host another tile has, and its
+icon is fetched again the same night); the icon from the app's own site
+(`tile_upkeep`); store ids from the repo; the half and the order from the drag
+edge; and a tile whose Railway project was there last night and is gone tonight
+is retired by the read itself (`railway_watch.retire_gone`), only when every
+workspace answered whole, because a project moved into a workspace that failed
+tonight looks exactly like a deleted one. The removed tile is printed whole in
+the night's log. `tools/test_live_apps.py` 7c.
+
+**Every tile is one height**, a plain web tile's (his: "the height of one like
+wedding planner ... should be the default height"). Nothing on a tile may add a
+line: the name truncates, a phone app's store versions sit on the host line
+(a small store mark and the version), and a site that is not answering turns
+the host red. The versions speak in colour alone: green where the live stores
+agree, red where two differ, yellow "not live". No pills, and no "1.4.0 in the
+repo" line ("doesn't need to exist"). The project folder button went for an App
+Store and a Google Play button, drawn only where the store's own answer gave a
+listing address. Five square presses are 14px wider than a 320px phone gives a
+tile, so the icon opens the app at every width and, below 360px, a tile with
+four square buttons lets Open go rather than wrap to a second row; that hide is
+`!important` because base.html's phone rule makes every rounded link
+inline-flex with a selector a page cannot outrank.
+`tools/test_apps_tiles_browser.py` measures every tile's height, spill, 44px
+and colours at 320, 375, 768, 1024 and 1600; a button outside its own row
+counts as spill, because the first version hung Open over the drag edge at 320
+and stayed inside the tile's outline.
 
 `register_app` keeps ONE card per app on My Apps: the same host edits the same
 card, and so does the same project, whatever the address is this week. On
@@ -307,8 +344,8 @@ migration that folded the pairs together keeps the oldest name, the real
 domain, and every link and icon the others carried.
 
 My Apps splits into Client work and Mine by the project a tile carries,
-unless the tile says otherwise (`AppLink.board_group`, "Shows under" on the
-edit form). The two came apart on 2026-11-01: Robinson & Co., Christ
+unless the tile says otherwise (`AppLink.board_group`, written by dragging it
+across). The two came apart on 2026-11-01: Robinson & Co., Christ
 Community Church, Lets Cook and Piped have projects and are not current
 client work, and Data Dungeon has no client and is. Never move a tile by
 detaching its project: the project page lists its app, and `register_app`
@@ -348,9 +385,9 @@ store page gave for the live version (`store_versions_service`: Apple's
 lookup endpoint by bundle id, the Play listing page's data blob by package;
 no store credentials on purpose, so an app in review reads "not live" until
 the store publishes it). The board asks again when the answer is older than
-six hours, on the way into `/admin/apps`, and the tile says "Versions match"
-or "Versions differ" - the whole point, asked for 2026-11-01: one product,
-one version on both stores. A store that errors keeps its previous answer;
+six hours, on the way into `/admin/apps`, and the tile shows both versions
+green when they match and red when they differ - the whole point, asked for
+2026-11-01: one product, one version on both stores. A store that errors keeps its previous answer;
 the Play parse is a regex on the page's About blob
 (`[[["1.2.3"]],[[[<targetSdk>]],[[[<minSdk>,`), so when Play changes its
 markup the tile reads "unreachable" rather than wrong. It shipped reading
@@ -387,8 +424,9 @@ Audit items 7, 9, 10, 18, 19, 20 and 4's store half (`docs/automation_gaps.md`),
   `RailwayService` is one row per service per environment. A `ServiceMapping` is
   written only when a Railway project points at exactly ONE board project (by
   `Project.repo`, or by a tile it serves), and only where none exists or the one
-  that does names no project; a tile's `railway_url` and `github_url` only into an
-  empty field from exactly one production service. Two candidates is a guess.
+  that does names no project; a tile's `railway_url`, `github_url` and platform
+  address follow exactly one production service (until 2026-11-05 only into an
+  empty field, while there was a form to type them). Two candidates is a guess.
   "Live on Railway, not on My Apps" is `/admin/apps/railway`, one row on Needs
   attention, with a one-press "Put it on My Apps" and a "Not an app" that sticks
   (`RailwayService.ignored`). Template databases (no repo, a template image) and
@@ -424,8 +462,8 @@ Audit items 7, 9, 10, 18, 19, 20 and 4's store half (`docs/automation_gaps.md`),
 - **Store versions** refresh nightly (`refresh_all`), and `store_differ_since`
   makes a difference older than a day a row. The repo's own version
   (`versions_from_files`: `versionName`, `MARKETING_VERSION`, `expo.version`) is
-  read every night into `AppLink.repo_versions`, and the tile says "1.4.0 in the
-  repo, stores on 1.3.2".
+  read every night into `AppLink.repo_versions`. The tile said "1.4.0 in the repo,
+  stores on 1.3.2" until 2026-11-05, when Michael took the line off.
 - **Tiles** (`tile_upkeep.py`): an empty description fills from the repo, else the
   site's meta description; a fetched icon is fetched again monthly, an uploaded
   one (`icon_file` with no `icon_source`) never.

@@ -19,8 +19,16 @@ What it writes, and the rule for each:
     mapping exists or the one that does names no project. Two candidates is
     a guess, and a cost confidently booked to the wrong client is worse than
     one left unallocated.
-  - AppLink.railway_url and github_url: only into an empty field, and only
-    from exactly one service.
+  - AppLink.railway_url, github_url and a platform address: they FOLLOW the
+    one production service a tile matches, whatever was there before, and
+    never on two candidates (`match_tiles`). They were filled only when empty
+    until 2026-11-05, when the tile lost its edit button (Michael: "nothing
+    should be manual"): with no form there is nothing typed left to protect,
+    and Railway is the truth about what serves an app.
+  - A tile whose Railway project was on the board last night and is gone
+    tonight is retired (`app_retire.retire`), only when every workspace
+    answered and none was held back, because a project that moved to a
+    workspace that did not answer looks exactly like one that was deleted.
 
 "Live on Railway, not on My Apps" is a production service people can reach
 (a domain, not a template database) that no tile matches by host or repo,
@@ -242,23 +250,79 @@ def _live(services):
     return [s for s in services if s.environment == "production" and not s.is_database]
 
 
+def _platform_host(host):
+    return host.endswith(".railway.app")
+
+
+def better_host(link, s, taken=()):
+    """The host this tile should be on, when Railway says it should move, else
+    None. Only a tile on Railway's own address moves: to the service's custom
+    domain (the shortest, so the apex over a subdomain, the rule register_app
+    keeps), or, with none, to the address Railway gives it now when the old
+    one is no longer the service's. A real domain is never moved: which of two
+    a client means is not a thing the board can read. Never onto a host
+    another tile already has."""
+    host = host_of(link.url)
+    if not host or not link.is_external or not _platform_host(host):
+        return None
+    custom = sorted(s.custom_domains, key=lambda d: (len(d), d))
+    if custom:
+        new = custom[0]
+    elif host not in s.domains and s.domains:
+        new = s.domains[0]
+    else:
+        return None
+    new = new.lower()
+    return None if host_of(new) in (host, *taken) else new
+
+
+def _moved(url, host):
+    parts = urlparse(url if "//" in url else "https://" + url)
+    return parts._replace(scheme="https", netloc=host).geturl()
+
+
 def match_tiles(links, services):
-    """Fill each tile's empty railway_url (and github_url) from exactly one
-    production service. Returns what was written."""
+    """Each tile's Railway link, repo and platform address, from the one
+    production service it matches. Returns what changed. A moved address has
+    its icon fetched again by tile upkeep, later the same night, unless the
+    icon was uploaded by hand."""
     notes = []
     prod = _live(services)
+    taken = {host_of(link.url) for link in links}
     for link in links:
         found = _tile_matches(link, prod)
         if len(found) != 1:
             continue
         s = found[0]
-        if not link.railway_url:
+        if link.railway_url != s.dashboard_url:
             link.railway_url = s.dashboard_url
             notes.append(f"{link.name}: Railway {s.project_name}/{s.service_name}")
-        if not link.github_url and s.repo:
+        if s.repo and norm_repo(link.github_url) != norm_repo(s.repo):
             link.github_url = f"https://github.com/{s.repo}"
             notes.append(f"{link.name}: repo {s.repo}")
+        new = better_host(link, s, taken)
+        if new:
+            old = host_of(link.url)
+            link.url = _moved(link.url, new)[:500]
+            taken.add(host_of(new))
+            if not (link.icon_file and link.icon_source is None):
+                link.icon_fetched_at = None
+            notes.append(f"{link.name}: {old} -> {new}")
     return notes
+
+
+def retire_gone(project_refs):
+    """Tiles and hosting mappings of Railway projects gone from Railway, taken
+    off the way retire_app takes them. Returns the names of the tiles."""
+    import app_retire
+    names = []
+    for ref in sorted(project_refs):
+        done = app_retire.retire(railway_project=ref)
+        names += [r["name"] for r in done["removed_apps"]]
+        for r in done["removed_apps"]:
+            print("railway: retired tile, project gone from Railway: "
+                  + json.dumps(r, default=str), flush=True)
+    return names
 
 
 def project_candidates(project_ref, services, projects, links):
@@ -383,9 +447,15 @@ def read_all(gql=None):
 
 def run(gql=None, get=None):
     from models import db, AppLink, Project, RailwayService
+    had = {s.project_ref for s in RailwayService.query.all()}
     read, errors, removed = read_all(gql)
     for name in removed:
         print(f"railway: gone from Railway, taken off: {name}", flush=True)
+    # A project is gone only when every workspace answered whole: one that
+    # moved into a workspace that failed tonight looks just like a deletion.
+    gone = (had - {s.project_ref for s in RailwayService.query.all()}) if not errors else set()
+    retired = retire_gone(gone)
+    db.session.commit()
     try:
         read_branch_heads(get)
     except Exception as err:  # noqa: BLE001
@@ -400,8 +470,9 @@ def run(gql=None, get=None):
         print(f"railway: {note}", flush=True)
     loose = unlisted(services, links)
     broken = deploy_problems(services)
-    note = (f"{read} services, {len(removed)} gone from Railway, {len(mapped)} mapped, "
-            f"{len(tiles)} tile links, {len(loose)} live with no tile, {len(broken)} deploy problems")
+    note = (f"{read} services, {len(removed)} gone from Railway, {len(retired)} tiles retired, "
+            f"{len(mapped)} mapped, {len(tiles)} tile changes, {len(loose)} live with no tile, "
+            f"{len(broken)} deploy problems")
     if errors:
         note += "; " + "; ".join(errors)
     return note

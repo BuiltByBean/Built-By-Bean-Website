@@ -5,15 +5,20 @@ docs/automation_gaps.md items 7, 9, 19, 4 (store versions) and the smaller
 ones (tile text and icons, Railway bills from mail). Proves:
 
   7.  The Railway read parses the answer Railway really gives (its shape was
-      read live on 2026-11-04), writes a ServiceMapping and a tile's
-      railway_url only on a single unambiguous match and only into an empty
-      field, and lists what is live with no tile, leaving out databases,
-      services marked "Not an app" and anything a tile already is.
+      read live on 2026-11-04), writes a ServiceMapping only on a single
+      unambiguous match, moves a tile's Railway link, repo and platform
+      address to the one service it matches (7c), retires a tile whose
+      project is gone from a read that answered whole, and lists what is
+      live with no tile, leaving out databases, services marked "Not an
+      app" and anything a tile already is.
   9.  A site down one night is not a row and two nights is; a certificate
       under 14 days, a domain under 30 days that does not renew itself, a
       crashed deploy and a deploy a day behind its branch are each a row.
   19. The version in the repo is read from gradle, the Xcode project and
-      Expo, and the tile says "1.4.0 in the repo, stores on 1.3.2".
+      Expo. The tile shows each store's live version in colour (green when
+      they agree, red when they differ, yellow "not live"), with a button to
+      each live listing, no pills, no repo line, no pencil and no project
+      folder button (Michael, 2026-11-05).
   4.  Store versions that differ for over a day are a row; for an hour, not.
   -   An empty tile description fills from the repo, a typed one never
       changes; a fetched icon is fetched again monthly, an uploaded one
@@ -188,8 +193,9 @@ with application.app_context():
     check("an empty railway_url is filled from the one service",
           kt.railway_url == "https://railway.com/project/p-kuper/service/s-kuper-web", kt.railway_url)
     check("and the empty repo with it", kt.github_url == "https://github.com/BuiltByBean/KuperPlumbing")
-    check("a typed railway_url is never overwritten",
-          db.session.get(AppLink, ids["rob_tile"]).railway_url == "https://typed.example/railway")
+    check("a railway_url that is not the service's follows Railway (no form is left to type one)",
+          db.session.get(AppLink, ids["rob_tile"]).railway_url
+          == "https://railway.com/project/p-rob/service/s-rob-web")
     check("EntertainHQ's tile matches production, not staging",
           "s-ehq-web" in (db.session.get(AppLink, ids["ehq_tile"]).railway_url or ""))
 
@@ -296,6 +302,46 @@ with application.app_context():
         pass
     check("a read that failed removes nothing", RailwayService.query.count() == after)
 
+print("\n7c. A TILE FOLLOWS RAILWAY, AND LEAVES WITH ITS PROJECT")
+# Michael, 2026-11-05: no edit button, "nothing should be manual".
+wed = project("p-wed", "Wedding Planner", [
+    ("s-wed", "web", [instance("env-prod", repo="BuiltByBean/Wedding-Planner",
+                               service=["web-production-89814.up.railway.app"],
+                               custom=["www.weddings.example", "weddings.example"])])])
+with_wed = {"projects": {"edges": without_twin["projects"]["edges"] + [wed]}}
+with application.app_context():
+    w = AppLink(name="Wedding Planner", url="https://web-production-89814.up.railway.app/",
+                github_url="https://github.com/someone/old-fork", railway_url="https://typed.example/wed",
+                icon_source="https://x.test/icon.png", icon_file="w.png", icon_fetched_at=datetime(2026, 11, 1))
+    given = AppLink(name="Kuper on Railway", url="https://web-production-8b56c.up.railway.app",
+                    icon_file="given.png", icon_source=None, icon_fetched_at=datetime(2026, 11, 1))
+    db.session.add_all([w, given])
+    db.session.add(ServiceMapping(provider_id=ids["rail"], resource_identifier="railway:p-wed",
+                                  resource_label="Wedding Planner", is_active=True))
+    db.session.commit()
+    wid, gid = w.id, given.id
+    note = railway_watch.run(gql=lambda token, q, v: {"workspace": with_wed}, get=HEADS)
+    w = db.session.get(AppLink, wid)
+    check("a tile on Railway's address moves to the service's own domain, the apex, keeping its path",
+          w.url == "https://weddings.example/", w.url)
+    check("its repo and Railway link follow the service", w.github_url == "https://github.com/BuiltByBean/Wedding-Planner"
+          and w.railway_url == "https://railway.com/project/p-wed/service/s-wed", (w.github_url, w.railway_url))
+    check("and its icon is fetched again tonight", w.icon_fetched_at is None and tile_upkeep.wants_icon(w))
+    g = db.session.get(AppLink, gid)
+    check("never onto a domain another tile already has",
+          g.url == "https://web-production-8b56c.up.railway.app" and g.icon_fetched_at is not None, g.url)
+    check("the night's note counts the changes", "tile changes" in note, note)
+    note = railway_watch.run(gql=lambda token, q, v: {"workspace": only_ideas}, get=HEADS)
+    check("a read that was held back retires nothing",
+          db.session.get(AppLink, wid) is not None and "0 tiles retired" in note, note)
+    note = railway_watch.run(gql=lambda token, q, v: {"workspace": without_twin}, get=HEADS)
+    check("a project gone from Railway takes its tile off My Apps", db.session.get(AppLink, wid) is None, note)
+    check("its hosting mapping is switched off, not deleted",
+          ServiceMapping.query.filter_by(resource_identifier="railway:p-wed").one().is_active is False)
+    check("and the night says so", "1 tiles retired" in note, note)
+    check("every other tile stays", db.session.get(AppLink, gid) is not None
+          and db.session.get(AppLink, ids["kuper_tile"]) is not None)
+
 print("\n9. SITES, CERTIFICATES, DOMAINS")
 
 
@@ -387,7 +433,7 @@ with application.app_context():
     check("and the badge counts them", counts["live"] == len(live_watch.attention_rows(force=True)) and counts["live"] >= 4,
           counts)
 
-print("\n19. THE REPO'S VERSION AGAINST THE STORES'")
+print("\n19. THE REPO'S VERSION, AND THE STORES ON THE TILE")
 FILES = {
     "android/app/build.gradle": 'android {\n  defaultConfig {\n    applicationId "com.acme.app"\n    versionName "1.4.0"\n  }\n}',
     "ios/App/App.xcodeproj/project.pbxproj": "MARKETING_VERSION = 1.4.0;\nMARKETING_VERSION = 1.4.0;\nMARKETING_VERSION = 2.0;\n",
@@ -400,22 +446,60 @@ check("Expo's app.json for both",
 check("a variable is not a version",
       store_ids_service.versions_from_files({"app/build.gradle": 'versionName "${v}"'})["android"] is None)
 
+APPLE = "https://apps.apple.com/us/app/phone/id6700000001?uo=4"
+PLAY = "https://play.google.com/store/apps/details?id=com.acme.app"
 with application.app_context():
     tile = AppLink(name="Phone", url="https://phone.test", app_store_bundle_id="com.acme.app", play_package="com.acme.app",
                    repo_versions=json.dumps({"android": "1.4.0", "ios": "1.4.0"}),
-                   store_versions=json.dumps({"app_store": {"status": "live", "version": "1.3.2"},
-                                              "play": {"status": "live", "version": "1.3.2"}}),
-                   store_checked_at=datetime.now(timezone.utc).replace(tzinfo=None))
+                   store_versions=json.dumps({"app_store": {"status": "live", "version": "1.3.2", "url": APPLE},
+                                              "play": {"status": "live", "version": "1.3.2", "url": PLAY}}),
+                   store_checked_at=datetime.now(timezone.utc).replace(tzinfo=None), project_id=ids["kuper_p"])
     db.session.add(tile)
     db.session.commit()
-    check("the tile says it", tile.repo_line == "1.4.0 in the repo, stores on 1.3.2", tile.repo_line)
-    tile.repo_versions = json.dumps({"android": "1.3.2"})
-    check("and says nothing when they agree", tile.repo_line is None)
-    tile.repo_versions = json.dumps({"android": "1.4.0"})
-    db.session.commit()
     tile_id = tile.id
+
+
+def tile_html(page, tid):
+    """One tile's markup, from its opening tag to the next tile's."""
+    at = page.index(f'data-app-id="{tid}"')
+    nxt = page.find("data-app-tile", at + 10)
+    return page[at:nxt if nxt > 0 else len(page)]
+
+
+def set_stores(**rows):
+    with application.app_context():
+        t = db.session.get(AppLink, tile_id)
+        t.store_versions = json.dumps(rows)
+        db.session.commit()
+
+
 board = c.get("/admin/apps/").data.decode("utf-8", "replace")
-check("My Apps draws the line", "1.4.0 in the repo, stores on 1.3.2" in board)
+one = tile_html(board, tile_id)
+check("the repo line is gone (Michael, 2026-11-05: it doesn't need to exist)", "in the repo" not in board)
+check("no pills: no Versions match, no Not live yet",
+      not any(w in board for w in ("Versions match", "Versions differ", "Not live yet"))
+      and "rounded-full" not in one, one[:600])
+check("agreeing stores are both green", one.count("text-emerald-400") == 2 and "text-red-400" not in one)
+links = re.findall(r'<a href="([^"]+)"[^>]*data-store-link', one, re.S)
+check("an App Store and a Google Play button, each to its live listing", links == [APPLE, PLAY], links)
+check("no project folder button", f"/projects/{ids['kuper_p']}" not in one, one)
+check("no pencil, and no way to edit a tile",
+      "/edit" not in one and c.get(f"/admin/apps/{tile_id}/edit").status_code == 404
+      and c.get("/admin/apps/new").status_code == 404
+      and c.post(f"/admin/apps/{tile_id}/delete").status_code in (404, 405))
+check("the name truncates and nothing else adds a line",
+      'class="text-base font-bold text-white truncate"' in one and one.count("data-app-line") == 1)
+set_stores(app_store={"status": "live", "version": "1.4.0", "url": APPLE},
+           play={"status": "live", "version": "1.3.2", "url": PLAY})
+one = tile_html(c.get("/admin/apps/").data.decode("utf-8", "replace"), tile_id)
+check("stores that disagree are both red", one.count("text-red-400") == 2 and "text-emerald-400" not in one, one[:900])
+set_stores(app_store={"status": "not_listed"}, play={"status": "live", "version": "1.3.2", "url": PLAY})
+one = tile_html(c.get("/admin/apps/").data.decode("utf-8", "replace"), tile_id)
+check("a store that does not list it says not live, in yellow",
+      "text-yellow-300" in one and "not live" in one and one.count("text-emerald-400") == 1, one[:900])
+check("and has no button", re.findall(r'<a href="([^"]+)"[^>]*data-store-link', one, re.S) == [PLAY])
+set_stores(app_store={"status": "live", "version": "1.3.2", "url": APPLE},
+           play={"status": "live", "version": "1.3.2", "url": PLAY})
 
 print("\n4. STORE VERSIONS, NIGHTLY")
 with application.app_context():

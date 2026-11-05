@@ -151,24 +151,6 @@ def repo_versions(link):
     return data if isinstance(data, dict) else {}
 
 
-def repo_line(link):
-    """"1.4.0 in the repo, stores on 1.3.2", or None when the repo and the
-    stores agree or either side has nothing to say. The point is a build
-    waiting on submission or review, shown rather than remembered."""
-    in_repo = sorted({v for v in repo_versions(link).values() if v})
-    data = info(link)
-    live = sorted({(data.get(k) or {}).get("version") for k in ("app_store", "play")
-                   if (data.get(k) or {}).get("status") == "live" and (data.get(k) or {}).get("version")})
-    if not in_repo:
-        return None
-    repo_text = " / ".join(in_repo)
-    if not live:
-        return f"{repo_text} in the repo, not live yet" if (link.app_store_bundle_id or link.play_package) else None
-    if set(in_repo) == set(live):
-        return None
-    return f"{repo_text} in the repo, stores on {' / '.join(live)}"
-
-
 def info(link):
     """The stored answer as a dict, {} when nothing has been asked yet."""
     try:
