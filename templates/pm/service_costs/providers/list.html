@@ -1,24 +1,25 @@
 {% extends "pm/base.html" %}
-{% from "pm/components/confirm_button.html" import confirm_button %}
 {% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
-{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
+{% from "pm/workspace/_tabs.html" import seg %}
 
 {#
-  The Vendors tab of Hosting: every account a cost comes from, whose card it
-  is on, and whether its sync is healthy. A vendor's report records what each
-  project cost and splits the bank's charge across them; the charge itself is
-  booked from the bank line (only Stripe's fees are booked from the vendor,
-  because they never cross a bank). The Books page's Connections tab links
-  here for each vendor, so this keeps its endpoint.
+  Vendors: its own Finances page since 2026-11-05 (Michael: "I want that on
+  its own page not buried in the hosting page"). One tile per vendor, and
+  under it every account with that vendor: who pays for it, what runs on it,
+  what it cost in the last year, and whether it is read by itself. Twilio is
+  why: his own EntertainHQ account, Kenali's for J&D and Cason's are three
+  accounts of one vendor. An account the night found on the bank or in the
+  code says so and has nothing to sync (vendor_discovery). In use and Not in
+  use is the account's own switch; a vendor is in use while any account is.
 #}
 
-{% block title %}Vendors - Hosting - Built By Bean{% endblock %}
-{% block page_title %}Hosting{% endblock %}
-{% block page_subtitle %}The accounts each cost comes from{% endblock %}
+{% block title %}Vendors - Built By Bean{% endblock %}
+{% block page_title %}Vendors{% endblock %}
+{% block page_subtitle %}Who you pay to run the apps and the businesses{% endblock %}
 
 {% block header_actions %}
 <form method="POST" data-live-action action="{{ url_for('service_costs.sync_all') }}">
-    <input type="hidden" name="next" value="{{ url_for('service_costs.providers_list') }}">
+    <input type="hidden" name="next" value="{{ url_for('vendors.index', view=view) }}">
     <button type="submit"
             class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
         {{ icon('refresh', 'w-4 h-4') }}
@@ -28,129 +29,116 @@
 <a href="{{ url_for('service_costs.provider_create') }}"
    class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
     {{ icon('add', 'w-4 h-4') }}
-    Add vendor
+    Add account
 </a>
 {% endblock %}
 
 {% block content %}
-{{ hosting_tabs('vendors') }}
-<div data-panel="hosting">
-<div data-live="results" class="space-y-6">
+{% include "pm/workspace/_js.html" %}
+<form method="GET" x-data="liveFilter()" @submit.prevent="apply()" data-live-filters class="mb-4">
+    {{ seg([('in_use', 'In use', counts.in_use), ('not_in_use', 'Not in use', counts.not_in_use)],
+           view, 'Which vendors', name='view', on_pick='$nextTick(() => apply())') }}
+</form>
 
-    {% if providers %}
-    <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-        {% for provider in providers %}
-        {% set note = trouble.get(provider.id) %}
-        <div class="glass-card p-5 sm:p-6 min-w-0" data-vendor="{{ provider.id }}">
-            <div class="flex items-start justify-between gap-3 mb-4">
+<div data-live="results">
+    {% if groups %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 items-start">
+        {% for g in groups %}
+        <section class="glass-card p-5 min-w-0" data-vendor="{{ g.key }}" aria-label="{{ g.name }}">
+            <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center
-                        {% if provider.name == 'aws' %}bg-amber-900/30
-                        {% elif provider.name == 'railway' %}bg-purple-900/30
-                        {% elif provider.name == 'twilio' %}bg-red-900/30
-                        {% elif provider.name == 'cloudflare' %}bg-orange-900/30
-                        {% else %}bg-surface-700{% endif %}">
-                        <span class="text-sm font-bold
-                            {% if provider.name == 'aws' %}text-amber-400
-                            {% elif provider.name == 'railway' %}text-purple-400
-                            {% elif provider.name == 'twilio' %}text-red-400
-                            {% elif provider.name == 'cloudflare' %}text-orange-400
-                            {% else %}text-surface-400{% endif %}">
-                            {% if provider.name == 'aws' %}AWS{% elif provider.name == 'railway' %}RW{% elif provider.name == 'twilio' %}TW{% elif provider.name == 'cloudflare' %}CF{% elif provider.name == 'stripe' %}ST{% else %}{{ (provider.display_name or '?')[:2] | upper }}{% endif %}
-                        </span>
-                    </div>
+                    <span class="w-10 h-10 shrink-0 rounded-xl bg-brand-500/15 inline-flex items-center justify-center text-xs font-bold text-brand-300">{{ g.name[:2] | upper }}</span>
                     <div class="min-w-0">
-                        <h3 class="text-sm font-bold text-white truncate">{{ provider.display_name }}</h3>
-                        <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
-                            <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full
-                                {% if provider.is_active %}bg-emerald-900/30 text-emerald-400
-                                {% else %}bg-surface-700 text-surface-400{% endif %}">
-                                {{ 'Active' if provider.is_active else 'Inactive' }}
-                            </span>
-                            {% if note %}
-                            <span data-trouble class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-amber-500/15 text-amber-300">{{ note[:1] | upper }}{{ note[1:] }}</span>
+                        <h2 class="text-base font-semibold text-white break-words">{{ g.name }}</h2>
+                        <p class="text-xs text-surface-400">{{ g.accounts | length }} account{{ '' if g.accounts | length == 1 else 's' }}{% if g.trouble %} <span class="text-amber-300">- {{ g.trouble }} not syncing</span>{% endif %}</p>
+                    </div>
+                </div>
+                {% if g.spend %}
+                <div class="text-right shrink-0">
+                    <p class="text-sm font-semibold text-white tabular-nums">{{ g.spend | format_currency }}</p>
+                    <p class="text-[11px] text-surface-500">last 12 months</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <ul class="mt-4 space-y-3">
+                {% for a in g.accounts %}
+                {% set p = a.provider %}
+                <li class="rounded-xl border border-white/10 bg-white/[0.02] p-3 min-w-0" data-account="{{ p.id }}">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-white break-words">
+                                {% if p.account_client %}{{ p.account_client.name }}'s card
+                                {% elif p.account_business %}{{ p.account_business.name }}
+                                {% else %}Built by Bean{% endif %}
+                            </p>
+                            {% if p.account_label or (p.display_name != g.name) %}
+                            <p class="text-xs text-surface-400 break-words">{{ p.account_label or p.display_name }}</p>
                             {% endif %}
                         </div>
+                        {% if a.spend %}
+                        <span class="shrink-0 text-sm tabular-nums text-surface-200">{{ a.spend | format_currency }}</span>
+                        {% endif %}
                     </div>
-                </div>
-            </div>
 
-            <div class="space-y-2 mb-4">
-                {# Whose card the money on this account comes off. First, and
-                   named, because a provider pointed at a client's account
-                   contributes nothing to what this business spent, and that is
-                   not something to have to open a form to find out. #}
-                <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400 shrink-0">Billed to</span>
-                    {% if provider.account_client %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 text-right min-w-0 truncate">
-                        {{ provider.account_client.name }}'s card
-                    </span>
-                    {% elif provider.account_business %}
-                    <span class="text-white text-right min-w-0 truncate">{{ provider.account_business.name }}</span>
-                    {% else %}
-                    <span class="text-white text-right">Built by Bean</span>
+                    <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                        {% if not p.is_active %}
+                        <span class="px-2 py-0.5 rounded-full bg-surface-700 text-surface-300">Not in use</span>
+                        {% endif %}
+                        {% if p.name == 'bank' %}
+                        <span class="px-2 py-0.5 rounded-full bg-white/5 text-surface-300">From the bank</span>
+                        {% elif p.name == 'code' %}
+                        <span class="px-2 py-0.5 rounded-full bg-white/5 text-surface-300">In the code, no account linked</span>
+                        {% elif a.error %}
+                        <span data-trouble class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Not syncing</span>
+                        {% elif p.last_sync_at %}
+                        <span class="px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400">Synced {{ p.last_sync_at | format_date }}</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 rounded-full bg-white/5 text-surface-300">Never synced</span>
+                        {% endif %}
+                        {% for name in a.used_by[:4] %}
+                        <span class="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300 break-words">{{ name }}</span>
+                        {% endfor %}
+                        {% if a.used_by | length > 4 %}
+                        <span class="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300">+{{ a.used_by | length - 4 }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if a.error %}
+                    <p class="mt-2 text-xs text-amber-200 break-words">{{ a.error }}</p>
+                    {% elif p.discovered_from and p.name == 'code' %}
+                    <p class="mt-2 text-xs text-surface-500 break-words">{{ p.discovered_from[6:] }}</p>
                     {% endif %}
-                </div>
-                {% if provider.account_label %}
-                <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400 shrink-0">Account</span>
-                    <span class="text-surface-300 text-right truncate min-w-0">{{ provider.account_label }}</span>
-                </div>
-                {% endif %}
-                <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400">Last sync</span>
-                    <span class="text-white">{{ provider.last_sync_at|format_date if provider.last_sync_at else 'Never' }}</span>
-                </div>
-                <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400">Cost entries</span>
-                    <span class="text-white tabular-nums">{{ provider.cost_entries.count() | commas }}</span>
-                </div>
-                <div class="flex items-center justify-between text-sm gap-3">
-                    <span class="text-surface-400">Mappings</span>
-                    <span class="text-white tabular-nums">{{ provider.mappings.count() | commas }}</span>
-                </div>
-                {% if provider.sync_error %}
-                <p class="mt-2 text-xs text-red-400 break-words">{{ provider.sync_error }}</p>
-                {% endif %}
-            </div>
 
-            <div class="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-surface-700">
-                {% if provider.name == 'railway' %}
-                {# A Railway account's months: pulled with an account token
-                   when it names its workspace, typed off the usage screen when
-                   it does not, corrected there either way. #}
-                <a href="{{ url_for('service_costs.railway_months', provider=provider.id) }}"
-                   class="inline-flex items-center px-4 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
-                    Months
-                </a>
-                {% endif %}
-                <form method="POST" data-live-action action="{{ url_for('service_costs.provider_sync', id=provider.id) }}">
-                    <button type="submit"
-                            class="inline-flex items-center px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
-                        Sync now
-                    </button>
-                </form>
-                {{ icon_button('edit', 'Edit ' ~ provider.display_name,
-                               href=url_for('service_costs.provider_edit', id=provider.id)) }}
-                <form method="POST" data-live-action action="{{ url_for('service_costs.provider_delete', id=provider.id) }}">
-                    {{ delete_icon('Delete it and its data?', 'Delete ' ~ provider.display_name) }}
-                </form>
-            </div>
-        </div>
+                    <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                        {% if p.name == 'railway' %}
+                        <a href="{{ url_for('service_costs.railway_months', provider=p.id) }}"
+                           class="inline-flex items-center px-3 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">Months</a>
+                        {% endif %}
+                        {% if p.syncs and p.is_active %}
+                        <form method="POST" data-live-action action="{{ url_for('service_costs.provider_sync', id=p.id) }}">
+                            <button type="submit"
+                                    class="inline-flex items-center px-3 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                                Sync now
+                            </button>
+                        </form>
+                        {% endif %}
+                        {{ icon_button('edit', 'Edit ' ~ p.display_name, href=url_for('service_costs.provider_edit', id=p.id)) }}
+                        <form method="POST" data-live-action action="{{ url_for('service_costs.provider_delete', id=p.id) }}">
+                            {{ delete_icon('Delete it and its data?', 'Delete ' ~ p.display_name) }}
+                        </form>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
         {% endfor %}
     </div>
     {% else %}
     <div class="glass-card p-8 sm:p-12 text-center empty">
         {{ icon('vendors', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
-        <p class="text-surface-400 mb-3">No vendors yet</p>
-        <a href="{{ url_for('service_costs.provider_create') }}" class="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-xl border border-brand-500/40 text-sm font-medium text-brand-300 hover:bg-brand-500/10 transition-colors">
-            {{ icon('add', 'w-4 h-4') }}
-            Add a vendor
-        </a>
+        <p class="text-surface-400">{{ 'Nothing you have stopped using' if view == 'not_in_use' else 'No vendors yet' }}</p>
     </div>
     {% endif %}
-
-</div>
 </div>
 {% endblock %}

@@ -23,14 +23,17 @@
 #}
 
 {% block title %}{{ (provider.display_name ~ ' months') if provider else 'Railway months' }} - Hosting - Built By Bean{% endblock %}
-{% block back %}{% if not railway %}{{ back_link(url_for('service_costs.providers_list'), 'Vendors') }}{% endif %}{% endblock %}
+{% block back %}{% if not railway %}{{ back_link(url_for('vendors.index'), 'Vendors') }}{% endif %}{% endblock %}
 {% block page_title %}{{ 'Hosting' if railway else provider.display_name ~ ' months' }}{% endblock %}
-{% block page_subtitle %}{{ 'What each Railway project cost, and the bill' if railway else 'Hosting' }}{% endblock %}
+{% block page_subtitle %}{{ 'What each Railway project cost, and the bill' if railway else 'Vendors' }}{% endblock %}
 
 {% block content %}
-{{ hosting_tabs('railway' if railway else 'vendors',
-                railway=(month_url(provider, month) if railway and provider else none)) }}
-<div data-panel="hosting" class="space-y-4">
+{# A Railway account's months are a Hosting tab; any other vendor's months
+   belong to the Vendors page, which has no tab row. #}
+{% if railway %}
+{{ hosting_tabs('railway', railway=(month_url(provider, month) if provider else none)) }}
+{% endif %}
+<div {% if railway %}data-panel="hosting" {% endif %}class="space-y-4">
 
 <script>
 function pasteFill() {

@@ -306,8 +306,9 @@ def create_app():
     app.register_blueprint(stripe_bp)
 
     # ── Service Costs ───────────────────────────────────────
-    from pm.service_costs_routes import service_costs_bp
+    from pm.service_costs_routes import service_costs_bp, vendors_bp
     app.register_blueprint(service_costs_bp)
+    app.register_blueprint(vendors_bp)
 
     # ── Hosting margin ──────────────────────────────────────
     from pm.hosting_routes import hosting_bp
@@ -646,7 +647,20 @@ def create_app():
                 support_waiting = support_service.waiting_count()
             except Exception:
                 db.session.rollback()
+        # The Vendors badge: accounts in use whose sync failed, the same
+        # reading the page marks (vendor_discovery.groups' trouble).
+        vendors_failing = 0
+        if current_user.is_authenticated and getattr(current_user, "is_ceo", False):
+            try:
+                from models import ServiceProvider
+                vendors_failing = ServiceProvider.query.filter(
+                    ServiceProvider.is_active.is_(True), ServiceProvider.sync_error.isnot(None),
+                    ServiceProvider.sync_error != "",
+                    ServiceProvider.name.notin_(ServiceProvider.FOUND_TYPES)).count()
+            except Exception:
+                db.session.rollback()
         return {
+            "vendors_failing": vendors_failing,
             "support_waiting": support_waiting,
             "attention_total": attention.get("total", 0),
             "hosting_due": attention.get("hosting", 0),

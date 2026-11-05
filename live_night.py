@@ -39,6 +39,8 @@ def steps(night):
     # that points at nothing.
     import volume_files
     night.step("files on the volume", ctx(volume_files.heal))
+    import vendor_discovery
+    night.step("vendors from the bank", ctx(vendor_discovery.run))
     night.step("map checks", ctx(map_checks.run))
     night.step("playbook step checks", ctx(step_checks.run))
     night.step("Railway bills from mail", ctx(railway_mail.run))

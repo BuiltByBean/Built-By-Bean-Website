@@ -2,20 +2,18 @@
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
-{% from "pm/hosting/_tabs.html" import hosting_tabs with context %}
 
-{# A vendor of the Vendors tab of Hosting, added or edited. Its report records
+{# A vendor account on the Vendors page, added or edited. Its report records
    what each project cost and splits the bank's charge; it books no expense of
    its own (Stripe's fees aside, which never cross a bank). #}
 
-{% block title %}{{ 'Edit' if editing else 'Add' }} vendor - Hosting - Built By Bean{% endblock %}
-{% block back %}{{ back_link(url_for('service_costs.providers_list'), 'Vendors') }}{% endblock %}
-{% block page_title %}{{ 'Edit ' ~ provider.display_name if editing else 'Add a vendor' }}{% endblock %}
-{% block page_subtitle %}Hosting{% endblock %}
+{% block title %}{{ 'Edit' if editing else 'Add' }} vendor account - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('vendors.index'), 'Vendors') }}{% endblock %}
+{% block page_title %}{{ 'Edit ' ~ provider.display_name if editing else 'Add a vendor account' }}{% endblock %}
+{% block page_subtitle %}Vendors{% endblock %}
 
 {% block content %}
-{{ hosting_tabs('vendors') }}
-<div data-panel="hosting" x-data="{ providerType: '{{ provider.name if editing else '' }}' }">
+<div x-data="{ providerType: '{{ provider.name if editing else '' }}' }">
     <form method="POST" class="space-y-6">
 
         <!-- Provider Type -->
@@ -94,6 +92,14 @@
         #}
         <div class="glass-card p-6 space-y-4">
             <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Whose account is this</h3>
+            {# The vendor this account is with: the Vendors page puts every
+               account with the same vendor under one tile. #}
+            <div>
+                <label for="vendor-name" class="block text-sm font-medium text-surface-300 mb-1.5">Vendor</label>
+                <input id="vendor-name" type="text" name="vendor" maxlength="100"
+                       value="{{ provider.vendor_name if editing else '' }}" placeholder="Twilio"
+                       class="input-ring w-full min-w-0 px-4 py-2.5 min-h-[44px] bg-surface-800/50 text-white text-sm rounded-xl">
+            </div>
             {% if provider and provider.account_label %}
             <p class="text-sm text-surface-300">
                 The vendor calls it
@@ -206,7 +212,7 @@
             {% endif %}
 
             {% if editing %}
-            {{ checkbox(name='is_active', checked=provider.is_active, label='Active') }}
+            {{ checkbox(name='is_active', checked=provider.is_active, label='In use') }}
             {% endif %}
         </div>
 
@@ -215,7 +221,7 @@
                     class="px-6 min-h-[44px] text-sm font-semibold rounded-xl btn-brand transition-all">
                 {{ 'Save' if editing else 'Add vendor' }}
             </button>
-            <a href="{{ url_for('service_costs.providers_list') }}" class="inline-flex items-center min-h-[44px] px-6 rounded-xl border border-white/10 text-sm font-medium text-surface-400 hover:text-white transition-colors">Cancel</a>
+            <a href="{{ url_for('vendors.index') }}" class="inline-flex items-center min-h-[44px] px-6 rounded-xl border border-white/10 text-sm font-medium text-surface-400 hover:text-white transition-colors">Cancel</a>
         </div>
 
     </form>

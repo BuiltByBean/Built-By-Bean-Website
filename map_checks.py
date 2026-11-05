@@ -209,7 +209,10 @@ def check_business(business, services, today, fetch=None):
     repos = business_repos(business)
     live = set()
 
+    import vendor_discovery
     for p, hits in vendors_in_repos(repos, fetch).items():
+        # The Vendors page lists what the code uses (Michael, 2026-11-05).
+        vendor_discovery.note_code(p, business, [repo for repo, _ in hits])
         if on_map(business, p):
             continue
         key = f"map-repo-{p.slug}"[:120]

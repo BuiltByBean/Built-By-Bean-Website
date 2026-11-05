@@ -802,6 +802,34 @@ listed under Books, Bank, Tagged, where Set aside takes it off.
 every parent ended in the migration, and every past row stays. A bank rule
 catches what they caught.
 
+## Vendors, a page of its own
+
+Michael, 2026-11-05: "I want that on its own page not buried in the hosting
+page"; AWS (stopped in July) sat beside the live ones, vendors he pays had no
+tile, Twilio's three accounts (his EntertainHQ one, Kenali's for J&D, Cason's)
+read as one, and a failed sync printed "401 Client Error: Unauthorized for url".
+His picks: Vendors, a Finances link after Hosting, Not in use as a tab, and
+what the board finds added on its own.
+
+`/admin/vendors` (`vendors_bp`, in `pm/service_costs_routes.py` because every
+account form and press is that blueprint's; `service_costs.providers_list`
+answers a 301 there with its query). One tile per vendor from
+`vendor_discovery.groups`, its accounts under it: who pays, what the vendor
+calls the account, the mapped projects, the last year's cost, and the sync in
+words (`plain_error`). `ServiceProvider.vendor` is the grouping, because `name`
+is how an account syncs (Claude is "flat"); the edit form's Vendor field
+merges or renames. The sidebar badge is in-use accounts whose sync failed.
+
+The night adds what it finds (`vendor_discovery`): "vendors from the bank" is
+every business-category `VendorRule` that has charged, one account per vendor
+per paying company, in use while it charged in the last 90 days and moved to
+Not in use on its own after; the map check notes a vendor the apps' code uses
+with no account (`note_code`). A found account is `name` "bank" or "code"
+(`FOUND_TYPES`): `sync_provider` returns at once, the cost door and the
+receipt check skip it, and `other_company_for` reads twins by sync type, so it
+can never move money. A Twilio account needs its key typed by Michael; the
+board can only say which one is missing or refused. `tools/test_vendors_page.py`.
+
 ## The books stand on the bank
 
 Michael, 2026-11-03: "I use an unbelievable amount of services ... I need my

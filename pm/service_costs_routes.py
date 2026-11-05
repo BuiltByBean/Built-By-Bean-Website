@@ -318,12 +318,31 @@ def _save_invoice(provider, month_start):
 @service_costs_bp.route("/providers")
 @ceo_required
 def providers_list():
-    providers = ServiceProvider.query.order_by(ServiceProvider.display_name).all()
+    """Vendors has its own page now (Michael, 2026-11-05: "it doesnt even
+    make sense to be there"). The old address lands on it."""
+    return redirect(url_for("vendors.index", **request.args), 301)
+
+
+# Vendors: its own Finances page, one tile per vendor with its accounts under
+# it (vendor_discovery.groups). The endpoint lives here because every form and
+# press for an account is this blueprint's.
+vendors_bp = Blueprint("vendors", __name__, url_prefix="/admin/vendors")
+VENDOR_VIEWS = (("in_use", "In use"), ("not_in_use", "Not in use"))
+
+
+@vendors_bp.route("/")
+@ceo_required
+def index():
+    import vendor_discovery
+    view = request.args.get("view") or "in_use"
+    view = view if view in dict(VENDOR_VIEWS) else "in_use"
+    every = vendor_discovery.groups(ServiceProvider.query.order_by(ServiceProvider.display_name).all())
+    counts = {"in_use": sum(1 for g in every if g["in_use"]),
+              "not_in_use": sum(1 for g in every if not g["in_use"])}
+    shown = [g for g in every if g["in_use"] == (view == "in_use")]
     return render_template("pm/service_costs/providers/list.html",
-        providers=providers,
-        provider_types=PROVIDER_TYPES,
-        trouble=sync_trouble(providers),
-    )
+        groups=shown, view=view, views=VENDOR_VIEWS, counts=counts,
+        provider_types=PROVIDER_TYPES)
 
 
 @service_costs_bp.route("/providers/new", methods=["GET", "POST"])
@@ -339,9 +358,11 @@ def provider_create():
 
         creds = _extract_credentials(name)
 
+        import vendor_discovery
         provider = ServiceProvider(
             name=name,
             display_name=display_name,
+            vendor=(request.form.get("vendor") or "").strip()[:100] or vendor_discovery.bare(display_name),
             credentials_json=json.dumps(creds),
             monthly_cost=_monthly_cost(name),
             billing_day=_billing_day(),
@@ -350,7 +371,7 @@ def provider_create():
         db.session.add(provider)
         db.session.commit()
         flash(f"{display_name} provider added.", "success")
-        return redirect(url_for("service_costs.providers_list"))
+        return redirect(url_for("vendors.index"))
 
     return render_template("pm/service_costs/providers/form.html",
         provider_types=PROVIDER_TYPES,
@@ -376,6 +397,7 @@ def provider_edit(id):
                 (request.form.get("display_name") or "").strip() or provider.display_name
             )
         provider.is_active = "is_active" in request.form
+        provider.vendor = (request.form.get("vendor") or "").strip()[:100] or provider.vendor
         was = provider.account_client_id
         provider.account_client_id = _account_client_id()
         db.session.commit()
@@ -398,7 +420,7 @@ def provider_edit(id):
             note += (f" Railway could not be read: {error}" if error
                      else f" Bills pulled from Railway, {count} project entr{'ies' if count != 1 else 'y'} written.")
         flash(f"{provider.display_name} updated.{note}", "success" if "could not" not in note else "warning")
-        return redirect(url_for("service_costs.providers_list"))
+        return redirect(url_for("vendors.index"))
 
     creds = json.loads(provider.credentials_json) if provider.credentials_json else {}
     return render_template("pm/service_costs/providers/form.html",
@@ -419,7 +441,7 @@ def provider_delete(id):
     db.session.delete(provider)
     db.session.commit()
     flash(f"{name} removed.", "success")
-    return redirect(url_for("service_costs.providers_list"))
+    return redirect(url_for("vendors.index"))
 
 
 @service_costs_bp.route("/providers/<int:id>/sync", methods=["POST"])
@@ -433,7 +455,7 @@ def provider_sync(id):
             flash(f"Synced {count} cost entries.", "success")
     except Exception as e:
         flash(f"Sync failed: {e}", "error")
-    return redirect(url_for("service_costs.providers_list"))
+    return redirect(url_for("vendors.index"))
 
 
 @service_costs_bp.route("/sync-all", methods=["POST"])
@@ -442,23 +464,34 @@ def sync_all():
     providers = ServiceProvider.query.filter_by(is_active=True).all()
     total = 0
     errors = []
+    import vendor_discovery
     for provider in providers:
         try:
             count, error = sync_provider(provider.id)
             if error:
-                errors.append(f"{provider.display_name}: {error}")
+                # In words a person can act on, as the page says it.
+                errors.append(vendor_discovery.plain_error(provider) or f"{provider.display_name}: {error}")
             else:
                 total += count
         except Exception as e:
             errors.append(f"{provider.display_name}: {e}")
 
+    # The night's bank half too, so a vendor the bank pays is on the page
+    # after the press rather than after tonight (vendor_discovery).
+    found = []
+    try:
+        found = [line for line in vendor_discovery.from_bank() if "found on the bank" in line]
+    except Exception as e:  # noqa: BLE001
+        db.session.rollback()
+        errors.append(f"Finding vendors on the bank failed: {e}")
+    more = f" Found {len(found)} new vendor account{'s' if len(found) != 1 else ''} on the bank." if found else ""
     if errors:
-        flash(f"Synced {total} entries with errors: {'; '.join(errors)}", "warning")
+        flash(f"Synced {total} entries.{more} {' '.join(errors)}", "warning")
     else:
-        flash(f"Synced {total} cost entries from {len(providers)} provider(s).", "success")
+        flash(f"Synced {total} cost entries from {len(providers)} account(s).{more}", "success")
     # Back to the page it was pressed on (the Vendors tab, or the Books page
     # that carries the vendors), never the retired Service costs address.
-    return redirect(_safe_next(url_for("service_costs.providers_list")))
+    return redirect(_safe_next(url_for("vendors.index")))
 
 
 # ── Mappings ────────────────────────────────────────────────
@@ -971,6 +1004,8 @@ def vendor_health(providers):
     now = datetime.now(timezone.utc)
 
     for p in providers:
+        if not p.syncs:
+            continue  # found on the bank or in the code: nothing to sync
         # 2026-11-03: the page still said "enter monthly" for both Railway
         # accounts a day after their bills began pulling themselves.
         if p.name in MANUAL_MONTHLY_PROVIDERS and not pulls_itself(p):
@@ -982,7 +1017,7 @@ def vendor_health(providers):
         if p.sync_error:
             attention.append({
                 "provider": p, "tone": "failed", "note": "sync failed",
-                "href": url_for("service_costs.providers_list"),
+                "href": url_for("vendors.index"),
             })
             continue
 
@@ -990,7 +1025,7 @@ def vendor_health(providers):
         if last is None:
             attention.append({
                 "provider": p, "tone": "stale", "note": "never synced",
-                "href": url_for("service_costs.providers_list"),
+                "href": url_for("vendors.index"),
             })
             continue
         # Stored through a column with no timezone, so it can come back naive
@@ -1001,7 +1036,7 @@ def vendor_health(providers):
             attention.append({
                 "provider": p, "tone": "stale",
                 "note": f"last synced {last:%b %d}",
-                "href": url_for("service_costs.providers_list"),
+                "href": url_for("vendors.index"),
             })
             continue
 

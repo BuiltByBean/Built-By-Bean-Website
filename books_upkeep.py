@@ -232,6 +232,8 @@ def known_vendor_names():
         if word:
             names.add(word)
     for p in ServiceProvider.query.filter_by(is_active=True).all():
+        if p.name == "code":
+            continue  # used in an app's code is not paid by this board
         word = next((w for w in re.findall(r"[a-z][a-z0-9]+", (p.display_name or "").lower()) if len(w) >= 4), None)
         if word:
             names.add(word)

@@ -208,6 +208,10 @@ def sync_provider(provider_id):
     provider = db.session.get(ServiceProvider, provider_id)
     if not provider or not provider.is_active:
         return 0, "Provider not found or inactive"
+    if not provider.syncs:
+        # Found by the night on the bank or in the code: nothing to ask, the
+        # bank line is the record (vendor_discovery).
+        return 0, None
 
     sync_funcs = {
         "aws": _sync_aws,

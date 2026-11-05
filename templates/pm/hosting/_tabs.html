@@ -2,7 +2,8 @@
 
 {#
   The Hosting section's tab row (docs/finances_plan.md item 9): Fees, the
-  vendor Mappings, Railway months and the Vendors themselves, which were
+  vendor Mappings and Railway months (Vendors left for a page of its own on
+  2026-11-05), which were
   three pages under Expenses with back links and no way between them.
 
   Every page in the section calls this once at the top of its content block
@@ -18,6 +19,5 @@
     ('fees', 'Fees', url_for('hosting.hosting_index'), c.fees),
     ('mappings', 'Mappings', url_for('service_costs.mappings_list'), none),
     ('railway', 'Railway months', railway or url_for('service_costs.railway_months'), c.bills),
-    ('vendors', 'Vendors', url_for('service_costs.providers_list'), c.vendors),
 ], 'Hosting') }}
 {% endmacro %}

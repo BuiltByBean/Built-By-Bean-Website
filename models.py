@@ -1940,9 +1940,36 @@ class ServiceProvider(db.Model):
                       name="fk_service_providers_account_business_id"),
         nullable=True, index=True)
 
+    # Which vendor this account is with, as the Vendors page groups it: one
+    # tile per vendor, its accounts under it (Michael, 2026-11-05: three
+    # Twilio accounts, his own, Kenali's and Cason's). `name` is how the
+    # account syncs ("flat" for Claude), never who the vendor is.
+    vendor = db.Column(db.String(100), nullable=True)
+    # Where the night found it, for an account nobody typed in: "bank: OPENAI"
+    # (a business charge a bank rule names) or "code: owner/repo" (a vendor's
+    # signature in an app's code). Such an account is `name` "bank" or "code":
+    # it never syncs and never books money, the bank line does that.
+    discovered_from = db.Column(db.String(200), nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
+
+    # The types the night writes: nothing to sync, the money is the bank's.
+    FOUND_TYPES = ("bank", "code")
+
+    @property
+    def vendor_name(self):
+        """The vendor as the page groups it: what was set, else the display
+        name without its account in brackets ("Railway (EntertainHQ)")."""
+        if (self.vendor or "").strip():
+            return self.vendor.strip()
+        import re as _re
+        return _re.sub(r"\s*\(.*\)\s*$", "", self.display_name or "").strip() or self.name
+
+    @property
+    def syncs(self):
+        return self.name not in self.FOUND_TYPES
 
     mappings = db.relationship("ServiceMapping", back_populates="provider",
                                cascade="all, delete-orphan", lazy="dynamic")

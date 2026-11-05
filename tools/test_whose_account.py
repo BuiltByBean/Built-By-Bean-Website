@@ -199,8 +199,8 @@ with application.app_context():
 check("and the total stays where the bank leaves it", ledger_total() == 0.0, ledger_total())
 
 print("\nTHE PAGE SAYS WHOSE IT IS:")
-page = c.get("/admin/service-costs/providers").data.decode("utf-8", "replace")
-check("the card names the payer", "Billed to" in page and "Built by Bean" in page)
+page = c.get("/admin/vendors/").data.decode("utf-8", "replace")
+check("the card names the payer", "Built by Bean" in page)
 check("and what the vendor calls the account", "Talent Booker - Kenali" in page)
 
 print("\n" + ("ALL PASS" if not FAIL else str(len(FAIL)) + " FAILED: " + ", ".join(FAIL)))

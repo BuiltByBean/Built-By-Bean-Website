@@ -463,6 +463,8 @@ def costs():
     out = []
     for provider in (ServiceProvider.query
                      .order_by(ServiceProvider.display_name).all()):
+        if not provider.syncs:
+            continue  # the night's finds report nothing; their money is the bank's
         invoices = (ProviderInvoice.query
                     .filter_by(provider_id=provider.id)
                     .order_by(ProviderInvoice.period_month).all())

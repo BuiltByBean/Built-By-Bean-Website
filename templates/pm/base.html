@@ -1152,7 +1152,8 @@
                do list, then taxes, invoicing and hosting. CEO only, every page of it (item 10),
                so the group is not drawn for anybody else rather than drawn
                and refused (a divider, no heading, like Michael's other groups); Hannah keeps her work pages. Expenses and the bank
-               list are tabs of Books, the vendor pages tabs of Hosting. #}
+               list are tabs of Books, Mappings and Railway months tabs of Hosting, and
+               Vendors a page of its own. #}
             {% if current_user.is_authenticated and (current_user.is_ceo | default(false)) %}
             {% set ep = request.endpoint or '' %}
             <div data-group="finances" class="my-2 border-t border-white/10"></div>
@@ -1171,14 +1172,25 @@
                 {{ icon('invoices') }}
                 Invoicing
             </a>
+            {% set vendor_eps = ('service_costs.provider_create', 'service_costs.provider_edit') %}
             <a href="{{ url_for('hosting.hosting_index') }}"
-               class="sidebar-link {% if ep.startswith(('hosting.', 'service_costs.')) %}active{% endif %}">
+               class="sidebar-link {% if ep.startswith(('hosting.', 'service_costs.')) and ep not in vendor_eps %}active{% endif %}">
                 {{ icon('hosting') }}
                 Hosting
                 {# How many fees have stopped clearing the floor: the Fees
                    tab's own count. #}
                 {% if hosting_due %}
                 <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ hosting_due | commas }}</span>
+                {% endif %}
+            </a>
+            {# Vendors, its own page since 2026-11-05 (Michael: "not buried in the
+               hosting page"). The badge is accounts whose sync failed. #}
+            <a href="{{ url_for('vendors.index') }}"
+               class="sidebar-link {% if ep.startswith('vendors.') or ep in vendor_eps %}active{% endif %}">
+                {{ icon('vendors') }}
+                Vendors
+                {% if vendors_failing %}
+                <span class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">{{ vendors_failing | commas }}</span>
                 {% endif %}
             </a>
             {% endif %}

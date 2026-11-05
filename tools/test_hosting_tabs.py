@@ -173,16 +173,12 @@ with application.test_request_context():
         ("mappings", url_for("service_costs.mapping_create")),
         ("mappings", url_for("service_costs.mapping_edit", id=MAPPING)),
         ("railway", url_for("service_costs.railway_months")),
-        ("vendors", url_for("service_costs.providers_list")),
-        ("vendors", url_for("service_costs.provider_create")),
-        ("vendors", url_for("service_costs.provider_edit", id=TYPED)),
-        ("vendors", url_for("service_costs.provider_monthly", id=FLAT)),
     ]
 for want, url in PAGES:
     r, html = page(ceo, url)
     active, ids = tabs_of(html)
     check(f"{url} draws, under the tab row, with {want} current",
-          r.status_code == 200 and active == want and ids == ["fees", "mappings", "railway", "vendors"],
+          r.status_code == 200 and active == want and ids == ["fees", "mappings", "railway"],
           (r.status_code, active, ids))
     check(f"{url} puts its content in the hosting panel", 'data-panel="hosting"' in html)
     check(f"{url} carries no back link to Expenses", "expenses" not in (re.search(
@@ -229,14 +225,14 @@ check("/admin/service-costs/ is a 301 to Hosting",
       r.status_code == 301 and r.headers["Location"].endswith("/admin/hosting/"),
       (r.status_code, r.headers.get("Location")))
 r = ceo.post("/admin/service-costs/sync-all")
-check("Sync all comes back to the Vendors tab",
-      r.status_code == 302 and r.headers["Location"].endswith("/admin/service-costs/providers"),
+check("Sync all comes back to the Vendors page",
+      r.status_code == 302 and r.headers["Location"].endswith("/admin/vendors/"),
       r.headers.get("Location"))
 r = ceo.post("/admin/service-costs/sync-all", data={"next": "/admin/expenses/"})
 check("or to the admin page it was pressed on", r.headers.get("Location", "").endswith("/admin/expenses/"),
       r.headers.get("Location"))
 r = ceo.post("/admin/service-costs/sync-all", data={"next": "https://example.com/"})
-check("never off the board", r.headers.get("Location", "").endswith("/admin/service-costs/providers"),
+check("never off the board", r.headers.get("Location", "").endswith("/admin/vendors/"),
       r.headers.get("Location"))
 with application.test_request_context():
     for endpoint, kw in (("service_costs.providers_list", {}), ("service_costs.provider_edit", {"id": 1}),
@@ -304,14 +300,14 @@ r, html = page(ceo, "/admin/service-costs/railway")
 count = re.search(r'data-count="railway"[^>]*>([^<]*)<', html)
 check("and the tab count with it (3)", count and count.group(1).strip() == "3", count and count.group(1))
 
-print("6. Vendors")
-r, html = page(ceo, "/admin/service-costs/providers")
-count = re.search(r'data-count="vendors"[^>]*>([^<]*)<', html)
-troubled = re.findall(r'data-vendor="(\d+)"(?:(?!data-vendor=).)*?data-trouble', html, re.S)
-check("the tab counts the one vendor whose sync failed", count and count.group(1).strip() == "1",
-      count and count.group(1))
-check("and that vendor's card is the one that says so", troubled == [str(BROKEN)], troubled)
-card = re.search(rf'data-vendor="{PULLED}".*?Billed to.*?</span>\s*<span[^>]*>([^<]+)<', html, re.S)
+print("6. Vendors (its own page since 2026-11-05, tools/test_vendors_page.py)")
+r = ceo.get("/admin/service-costs/providers")
+check("the old Vendors tab lands on the Vendors page", r.status_code == 301
+      and r.headers["Location"].endswith("/admin/vendors/"), r.headers.get("Location"))
+r, html = page(ceo, "/admin/vendors/")
+troubled = re.findall(r'data-account="(\d+)"(?:(?!data-account=).)*?data-trouble', html, re.S)
+check("the account whose sync failed is the one that says so", troubled == [str(BROKEN)], troubled)
+card = re.search(rf'data-account="{PULLED}".*?<p[^>]*>\s*([^<]+?)\s*</p>', html, re.S)
 check("an account of EntertainHQ's says so", card and card.group(1).strip() == "EntertainHQ LLC",
       card and card.group(1))
 check("a Railway account opens its months", f"/admin/service-costs/railway?provider={TYPED}" in html)
