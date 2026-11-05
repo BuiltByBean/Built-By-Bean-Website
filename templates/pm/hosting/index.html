@@ -217,7 +217,8 @@
             {% if r.bill and r.bill.state != 'ok' %}
             <div class="mt-3 flex flex-wrap items-center justify-between gap-2" data-bill-row>
                 <p class="text-xs {{ 'text-red-300' if r.bill.state == 'unbilled' else 'text-amber-300' }}">
-                    {% if r.bill.state == 'unbilled' %}Agreed {{ r.bill.agreed|format_currency }}/mo, no hosting subscription in Stripe
+                    {% if r.bill.state == 'unbilled' and r.bill.ended %}Agreed {{ r.bill.agreed|format_currency }}/mo, its Stripe subscription was canceled {{ r.bill.ended.on | format_date }}{% if r.bill.ended.after_failed_payment %} after a failed payment{% endif %}
+                    {% elif r.bill.state == 'unbilled' %}Agreed {{ r.bill.agreed|format_currency }}/mo, no hosting subscription in Stripe
                     {% else %}Billed {{ r.bill.billed|format_currency }}/mo, agreed {{ r.bill.agreed|format_currency }}/mo{% endif %}
                 </p>
                 {% if r.bill.changeable %}

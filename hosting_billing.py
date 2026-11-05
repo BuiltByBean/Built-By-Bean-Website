@@ -28,7 +28,7 @@ BILLING_STATUSES = ("active", "trialing", "past_due", "unpaid", "incomplete")
 STALE_SECONDS = 1800
 INTERVAL_MONTHS = {"month": 1, "year": 12, "week": 12 / 52, "day": 12 / 365}
 
-_CACHE = {"at": 0.0, "data": None, "busy": False}
+_CACHE = {"at": 0.0, "data": None, "busy": False, "ended": {}}
 _PRODUCTS = {}
 
 
@@ -54,11 +54,21 @@ def item_rows(stripe, subscriptions):
     """{customer_id: [hosting item]} from Stripe's subscriptions."""
     from stripe_service import HOSTING_LINE
     out = {}
+    ended = {}
     for sub in subscriptions:
-        if getattr(sub, "status", None) not in BILLING_STATUSES:
-            continue
         customer = getattr(sub, "customer", None)
         customer = customer if isinstance(customer, str) else getattr(customer, "id", None)
+        if getattr(sub, "status", None) not in BILLING_STATUSES:
+            # A hosting subscription that has stopped is the answer to "why
+            # is nothing billing them": both of Michael's $50 subscriptions
+            # were canceled on 2026-10-28 and the page said only "no hosting
+            # subscription", which read as the board not seeing them.
+            if getattr(sub, "status", None) == "canceled" and _is_hosting(stripe, sub, HOSTING_LINE):
+                when = getattr(sub, "ended_at", None) or getattr(sub, "canceled_at", None)
+                if when and when > (ended.get(customer) or {}).get("at", 0):
+                    details = getattr(sub, "cancellation_details", None)
+                    ended[customer] = {"at": when, "reason": getattr(details, "reason", None) if details else None}
+            continue
         for item in sub["items"].data:
             price = getattr(item, "price", None)
             recurring = getattr(price, "recurring", None)
@@ -79,7 +89,30 @@ def item_rows(stripe, subscriptions):
                 "product": product if isinstance(product, str) else getattr(product, "id", None),
                 "currency": getattr(price, "currency", "usd") or "usd",
             })
+    _CACHE["ended"] = ended
     return out
+
+
+def _is_hosting(stripe, sub, word):
+    for item in sub["items"].data:
+        price = getattr(item, "price", None)
+        if price is None or getattr(price, "recurring", None) is None:
+            continue
+        name = f"{_product_name(stripe, getattr(price, 'product', None))} {getattr(price, 'nickname', '') or ''}"
+        if word in name.lower():
+            return True
+    return False
+
+
+def ended_for(customer):
+    """The newest canceled hosting subscription for a customer that has no
+    live one: {"on": date, "after_failed_payment": bool}, or None."""
+    from datetime import datetime, timezone
+    row = _CACHE.get("ended", {}).get(customer or "")
+    if not row:
+        return None
+    return {"on": datetime.fromtimestamp(row["at"], timezone.utc).date(),
+            "after_failed_payment": row["reason"] == "payment_failed"}
 
 
 def read():
@@ -160,8 +193,11 @@ def by_client(projects, data):
     out = {}
     for client_id, agreed in agreed_by_client(projects).items():
         client = clients.get(client_id)
-        items = data.get((client.stripe_customer_id if client else None) or "", [])
+        customer = (client.stripe_customer_id if client else None) or ""
+        items = data.get(customer, [])
         out[client_id] = compare(client, agreed, items)
+        if out[client_id]["state"] == "unbilled":
+            out[client_id]["ended"] = ended_for(customer)
     return out
 
 

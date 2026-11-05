@@ -74,8 +74,8 @@ class Obj(dict):
             raise AttributeError(k)
 
 
-def sub(sid, customer, items, status="active"):
-    return Obj(id=sid, customer=customer, status=status,
+def sub(sid, customer, items, status="active", **extra):
+    return Obj(id=sid, customer=customer, status=status, **extra,
                items=Obj(data=[Obj(id=f"{sid}-item{i}", quantity=1,
                                    price=Obj(unit_amount=cents, currency="usd", nickname=None,
                                              product=product,
@@ -88,7 +88,10 @@ SUBS = [
     sub("sub_kuper", "cus_kuper", [(4000, "month", "prod_host")]),            # billed $40, agreed $50
     sub("sub_year", "cus_year", [(60000, "year", "prod_host")]),             # $600 a year: $50 a month
     sub("sub_dev", "cus_unbilled", [(150000, "month", "prod_dev")]),         # not hosting
-    sub("sub_gone", "cus_unbilled", [(5000, "month", "prod_host")], status="canceled"),
+    # Canceled 2026-10-28 16:11 UTC, as Michael's two $50 subscriptions were.
+    sub("sub_gone", "cus_unbilled", [(5000, "month", "prod_host")], status="canceled",
+        ended_at=1793204298, canceled_at=1793204298,
+        cancellation_details=Obj(reason="cancellation_requested")),
 ]
 MODIFIED = []
 fake = SimpleNamespace(
@@ -160,8 +163,9 @@ check("Kuper: billed $40.00, agreed $50.00", "Billed $40.00/mo, agreed $50.00/mo
 check("the Yearly client's two projects agree $75.00 against $50.00 billed",
       "Billed $50.00/mo, agreed $75.00/mo" in page)
 check("said once per client, not once per project", page.count("agreed $75.00/mo") == 1, page.count("agreed $75.00/mo"))
-check("an agreed fee with no hosting subscription is flagged",
-      "Agreed $50.00/mo, no hosting subscription in Stripe" in page)
+check("an agreed fee whose hosting subscription was canceled says when",
+      "Agreed $50.00/mo, its Stripe subscription was canceled" in page and "Oct 28, 2026" in page,
+      [l for l in page.splitlines() if "Agreed" in l][:2])
 check("and offers Stripe", "dashboard.stripe.com/customers/cus_unbilled" in page)
 check("a difference offers the press, which asks first",
       "Change the subscription?" in page and page.count("data-bill-press") == 3, page.count("data-bill-press"))
