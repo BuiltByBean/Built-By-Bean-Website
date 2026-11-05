@@ -1766,7 +1766,12 @@ prompt's line, the tab. `install.py` takes a SessionEnd entry of its own out of
 machine that still has it is told on its next session. The Time page and its
 timer stay, for a person's own tracking, behind `FEATURE_TIME_TRACKING` (off in
 production). `TimeEntry.session_ref` and `spans_json` stay as the mark of an
-entry a session made. Never offer to log hours, never write a figure for your
+entry a session made. The entries sessions had already made came off the same day (Michael:
+"Delete Claude's"): migration `d9a3c6e1b704` removed every entry with a
+`session_ref` or the door's "(logged from ...)" note, left any already on an
+invoice line, and kept each row whole, with any mirror expense, in
+`time_entry_removals`; its downgrade puts them back with their ids, and the
+deploy log says how many hours moved. `tools/test_claude_hours_removed.py`. Never offer to log hours, never write a figure for your
 own work anywhere, and never build anything that turns activity into time.
 
 **The issues board is in context too** (2026-11-05). A second
