@@ -260,6 +260,20 @@ with application.app_context():
     check("everything still on Railway stays",
           RailwayService.query.filter_by(service_ref="s-ideas").count() == 1
           and RailwayService.query.filter_by(service_ref="s-ehq-web").count() == 2)
+    # Deleted on Railway but still in its answer for two days, with deletedAt set.
+    doomed = project("p-doomed", "Personal Trainer", [
+        ("s-doomed", "web", [instance("env-prod", repo="BuiltByBean/Personal-Trainer",
+                                      service=["pt-production.up.railway.app"])])])
+    railway_watch.run(gql=lambda token, q, v: {"workspace": {"projects": {"edges":
+                      without_twin["projects"]["edges"] + [doomed]}}}, get=HEADS)
+    check("(a project Railway has not deleted is read in)",
+          RailwayService.query.filter_by(project_ref="p-doomed").count() == 1)
+    doomed["node"]["deletedAt"] = "2026-11-07T15:30:30.217Z"
+    railway_watch.run(gql=lambda token, q, v: {"workspace": {"projects": {"edges":
+                      without_twin["projects"]["edges"] + [doomed]}}}, get=HEADS)
+    check("one Railway has scheduled for deletion is off the board that night, not in two days",
+          RailwayService.query.filter_by(project_ref="p-doomed").count() == 0)
+    check("the query asks Railway for the deletion time", "deletedAt" in railway_watch.QUERY)
     after = RailwayService.query.count()
     try:
         railway_watch.run(gql=lambda token, q, v: {"workspace": {"projects": {"edges": []}}}, get=HEADS)

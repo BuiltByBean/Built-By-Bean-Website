@@ -37,7 +37,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 QUERY = """
-query($w: String!) { workspace(workspaceId: $w) { projects { edges { node { id name
+query($w: String!) { workspace(workspaceId: $w) { projects { edges { node { id name deletedAt
   environments { edges { node { id name } } }
   services { edges { node { id name
     serviceInstances { edges { node { environmentId
@@ -89,6 +89,12 @@ def parse_workspace(ws):
     out = []
     for pe in ((ws or {}).get("projects") or {}).get("edges") or []:
         p = pe.get("node") or {}
+        # A deleted project stays in the answer for two days with the time
+        # Railway will remove it (2026-11-05: Personal Trainer and Dom's
+        # Painting). It is gone from the moment it was deleted, so its rows
+        # are left out and `prune` takes them off tonight, not in two days.
+        if p.get("deletedAt"):
+            continue
         envs = {e["node"]["id"]: e["node"]["name"]
                 for e in (p.get("environments") or {}).get("edges") or []}
         for se in (p.get("services") or {}).get("edges") or []:

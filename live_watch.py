@@ -157,12 +157,21 @@ def urls_to_watch():
 
 
 def check_sites(get=None, cert=None):
-    from models import db
+    from models import db, SiteCheck
     up = down = 0
-    for url in urls_to_watch():
+    watched = urls_to_watch()
+    for url in watched:
         row = record(url, probe(url, get, cert))
         db.session.commit()
         up, down = (up + 1, down) if row.ok else (up, down + 1)
+    # An address nothing points at any more is not checked again, and its last
+    # answer goes with it: a deleted tile's "down two nights" row would
+    # otherwise sit on Needs attention for good (2026-11-05).
+    keep = {u[:500] for u in watched}
+    for stale in SiteCheck.query.all():
+        if stale.url not in keep:
+            db.session.delete(stale)
+    db.session.commit()
     return up, down
 
 

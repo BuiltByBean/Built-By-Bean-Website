@@ -1676,3 +1676,85 @@ def register_app():
     out["client"] = client.name
     out["mapping"] = mapping.id if mapping else None
     return jsonify(out)
+
+
+@guidance_bp.route("/apps/retire", methods=["POST"])
+def retire_app():
+    """The other half of register_app: something torn down comes off the board.
+
+    Michael, 2026-11-05: two Railway projects were deleted and their My Apps
+    tiles stayed, because only a signed-in press on the tile could take one off
+    and nothing a session could call did. By any of `url` (the tile's host),
+    `name` (exactly) or `railway_project` (the Railway project id): every tile
+    that matches is deleted as the page's own delete does it, icon file
+    included, with its nightly site check; every hosting mapping for that
+    Railway project is switched off, not deleted, so the months it was billed
+    for keep their split; and the board's rows for that project's services
+    go. A project on the board is never touched: it holds money and time.
+    The answer carries every removed tile whole, which is what it takes to
+    register it again.
+    """
+    import os
+    from models import RailwayService, ServiceMapping, SiteCheck
+    from pm.apps_routes import _icon_folder
+    body = request.get_json(silent=True) or {}
+    reason = _cap(body.get("reason"), 300)
+    url = _normalise_url(_cap(body.get("url"), 500)) if body.get("url") else ""
+    name = html.unescape(_cap(body.get("name") or body.get("app_name"), 120))
+    rail = _cap(body.get("railway_project"), 64).lower()
+    if not reason:
+        return jsonify({"error": "reason is required: say why it is coming off"}), 400
+    if not (url or name or rail):
+        return jsonify({"error": "give url, name or railway_project"}), 400
+    if rail and not _UUID.match(rail):
+        return jsonify({"error": "railway_project is the Railway project id, a UUID"}), 400
+
+    tiles = {}
+    if url:
+        host = _host(url)
+        for row in AppLink.query.filter(AppLink.url.ilike(f"%{host}%")).all():
+            if row.host.lower() == host:
+                tiles[row.id] = row
+    if name:
+        for row in AppLink.query.filter(db.func.lower(AppLink.name) == name.lower()).all():
+            tiles[row.id] = row
+    if rail:
+        for row in AppLink.query.filter(AppLink.railway_url.ilike(f"%{rail}%")).all():
+            tiles[row.id] = row
+    mappings = (ServiceMapping.query.filter(ServiceMapping.resource_identifier.in_(
+        [f"railway:{rail}", rail])).all() if rail else [])
+    services = RailwayService.query.filter_by(project_ref=rail).all() if rail else []
+    if not (tiles or mappings or services):
+        return jsonify({"error": "nothing on the board matches", "removed_apps": []}), 404
+
+    removed = []
+    for link in sorted(tiles.values(), key=lambda r: r.id):
+        removed.append({
+            "id": link.id, "name": link.name, "url": link.url, "github_url": link.github_url,
+            "railway_url": link.railway_url, "description": link.description,
+            "project": link.project.name if link.project else None,
+            "board_group": link.board_group, "app_store_bundle_id": link.app_store_bundle_id,
+            "play_package": link.play_package})
+        prefix = (link.url or "").rstrip("/")
+        if prefix:
+            for check in SiteCheck.query.filter(SiteCheck.url.ilike(prefix + "%")).all():
+                db.session.delete(check)
+        if link.icon_file:
+            try:
+                os.remove(os.path.join(_icon_folder(), link.icon_file))
+            except OSError:
+                pass
+        db.session.delete(link)
+    off = []
+    for m in mappings:
+        if m.is_active:
+            m.is_active = False
+            off.append({"id": m.id, "label": m.resource_label})
+    gone = [f"{s.project_name}/{s.service_name} ({s.environment})" for s in services]
+    for s in services:
+        db.session.delete(s)
+    db.session.commit()
+    current_app.logger.info("guidance: retired %s (%s); mappings off %s; railway rows %s",
+                            [r["name"] for r in removed], reason, [m["id"] for m in off], gone)
+    return jsonify({"removed_apps": removed, "mappings_switched_off": off,
+                    "railway_rows_removed": gone, "reason": reason})

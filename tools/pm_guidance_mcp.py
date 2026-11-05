@@ -517,6 +517,29 @@ TOOLS = [
             "required": ["name", "url", "client"],
         },
     },
+    {
+        "name": "retire_app",
+        "description": (
+            "Take something torn down off the board: the other half of "
+            "register_app. By url (the tile's host), name, or railway_project "
+            "(the Railway project id): its My Apps tile and site check are "
+            "deleted, its hosting mappings switched off (billed months keep "
+            "their split), and the board's rows for that Railway project's "
+            "services removed. A board project is never touched. Call it the "
+            "moment a deploy is deleted. The answer carries each removed tile "
+            "whole, enough to register it again."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The tile's public address"},
+                "name": {"type": "string", "description": "The tile's name, exactly"},
+                "railway_project": {"type": "string",
+                                    "description": "The Railway project id (a UUID)"},
+                "reason": {"type": "string", "description": "Why it is coming off"},
+            },
+            "required": ["reason"],
+        },
+    },
 ]
 
 
@@ -854,6 +877,20 @@ def tool_register_app(args):
     return line
 
 
+def tool_retire_app(args):
+    data, err = _post("/api/guidance/apps/retire", args)
+    if err:
+        return err
+    apps = data.get("removed_apps") or []
+    parts = [("Off My Apps: " + ", ".join(f"{a['name']} ({a['url']})" for a in apps))
+             if apps else "No tile matched"]
+    if data.get("mappings_switched_off"):
+        parts.append(f"{len(data['mappings_switched_off'])} hosting mapping(s) switched off")
+    if data.get("railway_rows_removed"):
+        parts.append("Railway rows removed: " + ", ".join(data["railway_rows_removed"]))
+    return ". ".join(parts) + ". Removed tiles, whole: " + json.dumps(apps)
+
+
 HANDLERS = {
     "get_rules": tool_get_rules,
     "get_feature_guidance": tool_get_feature_guidance,
@@ -877,6 +914,7 @@ HANDLERS = {
     "log_time": tool_log_time,
     "register_hosting_resource": tool_register_hosting_resource,
     "register_app": tool_register_app,
+    "retire_app": tool_retire_app,
 }
 
 

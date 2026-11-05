@@ -268,13 +268,29 @@ write those through the door, and a hand-typed one is never written
 properly. Features keep their quick-add, because a client names one on
 a call and it has to be caught in seconds.
 Sessions may also file operational records - `upsert_project`,
-`log_expense`, `log_time`, `register_hosting_resource`, `register_app` - and may NOT
+`log_expense`, `log_time`, `register_hosting_resource`, `register_app`,
+`retire_app` - and may NOT
 contact a client, resolve a ticket or send a contract: those are
 Michael's, and the API has no route for them on purpose. A playbook's
 checklist goes through the same door: `steps` is a structured field on
 kind playbook, a list in the payload rather than text. Append adds to
 the end and replace rewrites the list, both on arrival, a create may
 carry steps, and revert puts back the exact list that was there.
+
+**`retire_app` is its other half** (`/api/guidance/apps/retire`, 2026-11-05).
+Personal Trainer and Dom's Painting were deleted on Railway and their tiles
+stayed, because only a signed-in press could take a tile off and nothing a
+session could call did. By `url` (the tile's host), `name` (exactly) or
+`railway_project` (the id), with a `reason`: the tiles go as the page's own
+delete takes them (icon file too) with their site checks, the project's
+hosting mappings are switched OFF rather than deleted so a billed month keeps
+its split, and its `RailwayService` rows go. A board project is never
+touched: it holds money and time. The answer is every removed tile whole,
+enough to register it again. Two leaks closed beside it: the nightly site
+check now drops a `SiteCheck` no tile or surface points at (a deleted tile's
+"down" row would have stayed on Needs attention), and the Railway read skips a
+project whose `deletedAt` is set, because Railway keeps a deleted project in
+its answer for two days. `tools/test_retire_app.py`.
 
 `register_app` keeps ONE card per app on My Apps: the same host edits the same
 card, and so does the same project, whatever the address is this week. On

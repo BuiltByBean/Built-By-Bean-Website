@@ -9,7 +9,7 @@ of ~/.claude/CLAUDE.md is left alone) or `.\tools\bootstrap_guidance.ps1 -Key
 Every session on this machine carries the pm-guidance tools: get_rules,
 get_feature_guidance, get_playbook, get_blueprint, report_lesson, suggest_update,
 get_clients, upsert_project, log_expense, log_time,
-register_hosting_resource and register_app. They talk to the deployed board at
+register_hosting_resource, register_app and retire_app. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
 session agrees on. The bridge is registered at user scope and reads
 PM_GUIDANCE_KEY from the environment. The bootstrap also installs the
@@ -55,7 +55,9 @@ order, not a request.
   transcript and logs them against the repo's project, and a second entry
   bills the hour twice. log_time is for work done outside a session. A
   build is not stood up until it is on My Apps, and a green
-  register_hosting_resource without a url does NOT put it there.
+  register_hosting_resource without a url does NOT put it there. The
+  other way too: the moment a deploy is deleted, retire_app takes its
+  tile, mapping and Railway rows off the board.
 - If the tools are missing from a session, or answer 401, say so once and
   do not pretend the loop is working, but never stop and never hand Michael
   a command: he does no terminal work. The same door answers at
