@@ -6,7 +6,7 @@
 {% block title %}Create Invoice - Built By Bean{% endblock %}
 {% block back %}{{ back_link(url_for('stripe.invoices_list'), 'Invoicing') }}{% endblock %}
 {% block page_title %}Create Invoice{% endblock %}
-{% block page_subtitle %}Generate an invoice from time entries and expenses{% endblock %}
+{% block page_subtitle %}Generate an invoice from {{ 'time entries and ' if time_tracking }}expenses{% endblock %}
 
 {% block content %}
 <div x-data="invoiceGenerator()" class="space-y-6 stagger-in">
@@ -55,9 +55,12 @@
         <input type="hidden" name="period_end" :value="range.end || ''">
 
         <!-- Step 2: Time Entries -->
-        {# Shown whether or not FEATURE_TIME_TRACKING is on: time logs itself
-           from Claude sessions (session_time.py), and Time not yet billed
-           sends Michael here to bill it, so hiding the step hid the money. #}
+        {# Only with FEATURE_TIME_TRACKING on, where a person tracks their own
+           time on the Time page. It was forced on while sessions logged their
+           own hours and a Time not yet billed tab sent Michael here to bill
+           them; both are gone (2026-11-05): Claude never logs time, and no
+           invoice is built from hours a session made up. #}
+        {% if time_tracking %}
         <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">2. Select Time Entries</h3>
@@ -119,12 +122,13 @@
                 </div>
             </template>
         </div>
+        {% endif %}
 
         <!-- Step 3: Expenses -->
         <div class="glass-card p-6 mb-6" x-show="clientId" x-transition>
             <div class="flex items-center justify-between mb-4">
                 {# Renumbered when the time step is not there to be step 2. #}
-                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">3. Select Expenses</h3>
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">{{ 3 if time_tracking else 2 }}. Select Expenses</h3>
                 <template x-if="expenses.length > 0">
                     <button type="button" @click="toggleAllExpenses()" class="text-xs text-brand-500 hover:text-brand-600">
                         <span x-text="allExpensesSelected ? 'Deselect All' : 'Select All'"></span>
@@ -171,7 +175,7 @@
 
         <!-- Step 4: Invoice Settings & Preview -->
         <div class="glass-card p-6 mb-6" x-show="clientId && (selectedTimeIds.length > 0 || selectedExpenseIds.length > 0)" x-transition>
-            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">4. Invoice Settings</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-4">{{ 4 if time_tracking else 3 }}. Invoice Settings</h3>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
@@ -188,10 +192,12 @@
 
             <!-- Preview Total -->
             <div class="bg-surface-800/50 rounded-xl p-5">
+                {% if time_tracking %}
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-sm text-surface-400">Time entries</span>
                     <span class="text-sm font-medium text-white" x-text="selectedTimeIds.length + ' selected'"></span>
                 </div>
+                {% endif %}
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-sm text-surface-400">Expenses</span>
                     <span class="text-sm font-medium text-white" x-text="selectedExpenseIds.length + ' selected'"></span>
@@ -220,7 +226,8 @@
 
 <script>
 // Base API paths (blueprint-prefixed via url_for; trailing client-id placeholder stripped).
-const TIME_API_BASE = "{{ url_for('stripe.api_uninvoiced_entries', client_id=0)[:-1] }}";
+// Time is offered only where a person tracks it (FEATURE_TIME_TRACKING).
+const TIME_API_BASE = {{ (url_for('stripe.api_uninvoiced_entries', client_id=0)[:-1] if time_tracking else none) | tojson }};
 const EXPENSE_API_BASE = "{{ url_for('stripe.api_uninvoiced_expenses', client_id=0)[:-1] }}";
 
 function invoiceGenerator() {
@@ -248,7 +255,7 @@ function invoiceGenerator() {
         ],
 
         init() {
-            if (this.clientId) this.loadEntries({{ 'true' if take_all else 'false' }} ? 'time' : false);
+            if (this.clientId) this.loadEntries();
         },
 
         // Compute an inclusive {start,end} ISO range for the active period.
@@ -307,16 +314,14 @@ function invoiceGenerator() {
 
             try {
                 const [timeRes, expenseRes] = await Promise.all([
-                    fetch(`${TIME_API_BASE}${this.clientId}${qs}`),
+                    TIME_API_BASE ? fetch(`${TIME_API_BASE}${this.clientId}${qs}`) : null,
                     fetch(`${EXPENSE_API_BASE}${this.clientId}${qs}`),
                 ]);
-                this.timeEntries = await timeRes.json();
+                this.timeEntries = timeRes ? await timeRes.json() : [];
                 this.expenses = await expenseRes.json();
                 if (autoselect) {
                     this.selectedTimeIds = this.timeEntries.filter(e => !e.is_free && e.cost > 0).map(e => String(e.id));
-                    // From Time not yet billed only the time is ticked: an expense
-                    // on a client is not always one to bill them for.
-                    if (autoselect !== 'time') this.selectedExpenseIds = this.expenses.map(e => String(e.id));
+                    this.selectedExpenseIds = this.expenses.map(e => String(e.id));
                 }
             } catch (e) {
                 console.error('Failed to load entries:', e);

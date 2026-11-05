@@ -426,28 +426,6 @@ TOOLS = [
         },
     },
     {
-        "name": "log_time",
-        "description": (
-            "Record hours worked on a client's project OUTSIDE a Claude "
-            "session (a call, a site visit). Never for this session's own "
-            "hours: the SessionEnd hook measures and logs those, and a "
-            "second entry bills them twice. rate_type: maintenance "
-            "(default), new_feature, or mvp_build."),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "client": {"type": "string"},
-                "project": {"type": "string"},
-                "hours": {"type": "number"},
-                "description": {"type": "string"},
-                "rate_type": {"type": "string"},
-                "date": {"type": "string", "description": "YYYY-MM-DD"},
-                "source": SOURCE,
-            },
-            "required": ["client", "project", "hours", "source"],
-        },
-    },
-    {
         "name": "register_hosting_resource",
         "description": (
             "Tell the board about infrastructure just stood up for a client "
@@ -835,16 +813,6 @@ def tool_log_expense(args):
             "for this charge books the expense when it arrives.")
 
 
-def tool_log_time(args):
-    data, err = _post("/api/guidance/time", args)
-    if err:
-        return err
-    billable = data.get("billable") or 0
-    return (f"Logged {data['hours']}h on {data['project']} (entry {data['id']}"
-            + (f", ${billable:,.2f} billable" if billable else ", not billable")
-            + ").")
-
-
 def _app_line(app):
     icon = {"fetched": "icon fetched", "kept": "icon kept",
             "none": "no icon offered - it shows initials"}.get(app.get("icon"), "")
@@ -911,7 +879,6 @@ HANDLERS = {
     "get_costs": tool_get_costs,
     "upsert_project": tool_upsert_project,
     "log_expense": tool_log_expense,
-    "log_time": tool_log_time,
     "register_hosting_resource": tool_register_hosting_resource,
     "register_app": tool_register_app,
     "retire_app": tool_retire_app,

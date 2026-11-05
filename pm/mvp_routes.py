@@ -378,12 +378,14 @@ def build_package_prompt(package):
                "to copy, a rule that reads badly, or a product that now "
                "exists. Every change applies at once, and a nightly curator "
                "merges and prunes, so write for any project, not this one.")
-    # Time is not on the list: the SessionEnd hook logs a session's hours
-    # from its own transcript, and a log_time on top would bill them twice.
+    # Claude never logs time (Michael, 2026-11-05: made-up hours "would be
+    # lying to my customers"). The prompt says so in as many words, because a
+    # session that sees time tracking on a board will offer to fill it in.
     out.append("  File the work as it happens: upsert_project once, "
                "log_expense as it occurs, register_hosting_resource for "
-               "anything stood up. Do not log_time for this session: its "
-               "hours log themselves when it ends.")
+               "anything stood up. Never log, estimate or suggest hours for "
+               "your own work: time billed to a client is only what a person "
+               "tracked.")
     out.append("  Where the guidance above disagrees with what you find, say "
                "so plainly instead of quietly deviating - Best Practices gets "
                "corrected, not ignored.")

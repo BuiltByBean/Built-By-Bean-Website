@@ -38,8 +38,9 @@ four places over different periods. Michael decided each piece below.
    - The list, New invoice, and a thin Stripe balance strip.
    - Setup Products and Sync All Clients go.
    - The two different "Outstanding" figures get different names.
-   - The hidden Unbilled code comes back as "Time not yet billed", because
-     time now logs itself from sessions.
+   - The hidden Unbilled code came back as "Time not yet billed", because
+     time logged itself from sessions. Both went on 2026-11-05 (Michael: "It
+     doesn't need to exist at all"); Claude never logs time.
    - Fix the stale "currently none" comments, and make invoice detail
      reachable from the list.
 

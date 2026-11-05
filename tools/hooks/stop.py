@@ -11,11 +11,10 @@ beginning and it works.
 was never asked, or a vendor was used and its runbook never read, say so
 once.
 
-It used to ask for log_time too, after an audit of the Robinson & Co.
-build found log_time called ZERO times in two days. Since 2026-11-04 the
-SessionEnd hook logs a session's time itself from the transcript's own
-timestamps (session_end.py), so asking a session to guess its hours as
-well would bill the same hour twice.
+It used to ask for log_time, and then a SessionEnd hook logged every
+session's hours from its transcript. Both are gone (2026-11-05): Claude
+never logs time, because hours billed to a client are only ever what a
+person tracked.
 
 Both are refused at most twice, and never when stop_hook_active is set,
 so a session that genuinely has nothing to file is not held hostage. The

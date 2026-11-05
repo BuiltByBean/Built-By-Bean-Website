@@ -1673,15 +1673,13 @@ class TimeEntry(db.Model):
     hours = db.Column(db.Float, nullable=False)
     description = db.Column(db.Text, default="")
     rate_type = db.Column(db.String(20), nullable=False, default="maintenance")
-    # The Claude Code session this block of time was measured from, when the
-    # SessionEnd hook logged it (tools/hooks/session_end.py). Unique, so the
-    # hook running again for the same session corrects its entry rather than
-    # adding a second one.
+    # The Claude Code session a SessionEnd hook measured this entry from,
+    # 2026-11-04 to 11-05, and the stretches it counted. Nothing writes either
+    # now: Claude never logs time, and the hook and the door it posted to are
+    # gone. Kept because they are how an entry a session made is told apart
+    # from one a person tracked.
     session_ref = db.Column(db.String(80), nullable=True, unique=True,
                             index=True)
-    # The stretches of that session that were work, as [[start, end], ...] in
-    # UTC ISO. Kept so two sessions running side by side on one project are
-    # billed for the hour once, not twice (session_time.py).
     spans_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 

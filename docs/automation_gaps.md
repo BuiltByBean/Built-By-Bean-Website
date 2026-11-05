@@ -61,6 +61,13 @@ Line numbers are as of commit `ff217ac`.
 
 ### 3. Time logs itself from the sessions and the commits
 
+**Retired 2026-11-05.** Built on 11-04 and removed the next day: Michael will
+not bill customers on hours Claude made up or measured from a transcript ("That
+would be lying to my customers"). The hook, `session_time.py`, the door's
+`/time` route, the bridge's `log_time` and Invoicing's Time not yet billed tab
+are gone; catalogue rule "Claude never logs time". What follows is the
+original proposal, kept as the record of what was tried.
+
 - **By hand today:** every `TimeEntry` is typed on `/admin/time/new`, run on
   the timer (`app.py:3461`, `app.py:3553`), or estimated from memory by a
   session calling `log_time`. The Stop hook only nags when commits landed and

@@ -40,7 +40,7 @@ def _clip(text, limit=380):
     return (text[:limit].rstrip() + "…") if len(text) > limit else text
 
 
-# ── Time not yet billed ─────────────────────────────────────
+# ── Time already on an invoice ──────────────────────────────
 
 
 def _invoiced_time_ids():
@@ -59,64 +59,6 @@ def _for_client(client_id):
         and_(TimeEntry.client_id.is_(None),
              TimeEntry.project.has(Project.client_id == client_id)),
     )
-
-
-def unbilled_time():
-    """Logged time on no draft, open or paid invoice, per client.
-
-    Valued at `TimeEntry.cost`, so an MVP build hour and a maintenance hour
-    inside the free window count nothing and are left out: they are not
-    money waiting. Time logs itself from Claude sessions now
-    (session_time.py), so this is real money that nobody has to remember.
-    It came back from the Dashboard, where it had been computed and hidden
-    (finances plan item 3); the Dashboard's copy in app.py is the lead's to
-    delete.
-
-    Returns {"rows": [...], "total": dollars, "hours": hours}. A row is one
-    client: hours, value, entries, the oldest and newest day, and the hours
-    per project, biggest first; rows biggest value first.
-    """
-    entries = (TimeEntry.query
-               .options(joinedload(TimeEntry.project))
-               .filter(~TimeEntry.id.in_(_invoiced_time_ids()))
-               .all())
-    by_client = {}
-    for e in entries:
-        value = e.cost or 0.0
-        if value <= 0:
-            continue
-        cid = e.client_id or (e.project.client_id if e.project else None)
-        if cid is None:
-            continue
-        row = by_client.setdefault(cid, {
-            "client_id": cid, "hours": 0.0, "value": 0.0, "entries": 0,
-            "since": e.date, "latest": e.date, "projects": {},
-        })
-        row["hours"] += e.hours or 0.0
-        row["value"] += value
-        row["entries"] += 1
-        row["since"] = min(row["since"], e.date)
-        row["latest"] = max(row["latest"], e.date)
-        name = e.project.name if e.project else "No project"
-        row["projects"][name] = row["projects"].get(name, 0.0) + (e.hours or 0.0)
-
-    clients = ({c.id: c for c in Client.query.filter(Client.id.in_(list(by_client))).all()}
-               if by_client else {})
-    rows = []
-    for cid, row in by_client.items():
-        client = clients.get(cid)
-        if client is None:
-            continue
-        row["client"] = client
-        row["value"] = round(row["value"], 2)
-        row["projects"] = sorted(row["projects"].items(), key=lambda kv: -kv[1])
-        rows.append(row)
-    rows.sort(key=lambda r: (-r["value"], r["client"].name.lower()))
-    return {
-        "rows": rows,
-        "total": round(sum(r["value"] for r in rows), 2),
-        "hours": sum(r["hours"] for r in rows),
-    }
 
 
 # ── The Stripe strip ────────────────────────────────────────
@@ -238,12 +180,8 @@ def _account_overview():
 
 
 def _page_context(tab):
-    """What both tabs draw outside their panel: the strip, and the tab row's
-    count, which is the number of client rows the Time not yet billed tab
-    shows, so the count and the tab cannot disagree."""
-    waiting = unbilled_time()
-    return dict(_account_overview(), tab=tab, unbilled=waiting,
-                unbilled_count=len(waiting["rows"]))
+    """What the list draws outside its panel: the Stripe strip."""
+    return dict(_account_overview(), tab=tab)
 
 
 @stripe_bp.route("/")
@@ -358,12 +296,15 @@ def invoices_list():
     )
 
 
+# /invoices/unbilled was the Time not yet billed tab: hours on no invoice, per
+# client, with a press that started an invoice with all of them ticked. Nearly
+# every hour on it had been logged by Claude sessions, not tracked by a person,
+# and Michael, 2026-11-05: "get rid of this time not billed yet thing on the
+# invoice. It doesn't need to exist at all." It answers 301 to the list.
 @stripe_bp.route("/invoices/unbilled")
 @ceo_required
 def unbilled():
-    """The Time not yet billed tab: one row per client, and a press that
-    starts their invoice with every billable entry already ticked."""
-    return render_template("pm/stripe/invoices/list.html", **_page_context("unbilled"))
+    return redirect(url_for("stripe.invoices_list"), 301)
 
 
 @stripe_bp.route("/invoices/stripe/<stripe_id>")
@@ -555,16 +496,11 @@ def invoice_create():
     projects = Project.query.order_by(Project.name).all()
     preselect_client = request.args.get("client_id", type=int)
     preselect_project = request.args.get("project_id", type=int)
-    # From Time not yet billed: the client's billable time comes in ticked,
-    # because billing it is why the press was made.
-    take_all = request.args.get("take") == "all"
-
     return render_template("pm/stripe/invoices/generate.html",
         clients=clients,
         projects=projects,
         preselect_client=preselect_client,
         preselect_project=preselect_project,
-        take_all=take_all,
     )
 
 
@@ -668,8 +604,8 @@ def api_uninvoiced_entries(client_id):
     end = _parse_date_arg(request.args.get("end"))
     project_id = request.args.get("project_id", type=int)
 
-    # The same two questions Time not yet billed asks, so every entry that
-    # tab counts for a client is one this form offers for them.
+    # The client's own time, and none already on a live invoice. Only New
+    # invoice asks, and only with FEATURE_TIME_TRACKING on.
     query = TimeEntry.query.filter(
         _for_client(client_id),
         ~TimeEntry.id.in_(_invoiced_time_ids()),

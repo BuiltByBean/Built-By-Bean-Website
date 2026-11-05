@@ -1,6 +1,8 @@
-"""Put the five hooks into ~/.claude/settings.json, merging with whatever
-is there. Run by the bootstrap; safe to run again - it replaces its own
-entries and touches nothing else.
+"""Put the hooks into ~/.claude/settings.json, merging with whatever is
+there. Run by the bootstrap; safe to run again - it replaces its own
+entries and touches nothing else, and it takes out any of its own entries
+under an event in RETIRED, so a machine that had a retired hook loses it on
+the next run.
 
     python tools/hooks/install.py            install for this checkout
     python tools/hooks/install.py --remove   take them out
@@ -29,9 +31,14 @@ EVENTS = {
     # work is owed to the board, and it arrives as a shell command.
     "PostToolUse": [("Edit|Write|Bash|PowerShell", "post_tool.py", 10)],
     "Stop": [(None, "stop.py", 10)],
-    # The session's time logs itself as it ends (audit item 3, 2026-11-04).
-    "SessionEnd": [(None, "session_end.py", 15)],
 }
+
+# Events this installer once used and must clear. SessionEnd logged every
+# session's hours from its transcript, from 2026-11-04 until Michael, the next
+# day: "I'm not going to have Claude assign arbitrary time values to work ...
+# That would be lying to my customers ... purge that shit forever." Claude
+# never logs time (catalogue rule "Claude never logs time").
+RETIRED = ("SessionEnd",)
 
 
 def _command(script):
@@ -59,7 +66,7 @@ def main(remove=False):
             settings = json.load(fh)
     hooks = settings.setdefault("hooks", {})
 
-    for event, specs in EVENTS.items():
+    for event, specs in list(EVENTS.items()) + [(e, []) for e in RETIRED]:
         kept = [e for e in hooks.get(event, []) if not _ours(e)]
         for matcher, script, timeout in ([] if remove else specs):
             entry = {"hooks": [{"type": "command", "command": _command(script),

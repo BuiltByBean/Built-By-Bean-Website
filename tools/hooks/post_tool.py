@@ -6,8 +6,8 @@ reliable sign that something was learned. It is a good sign. It is also
 the only one, and an audit of the Robinson & Co. build (a whole new
 client, built end to end with the board live) showed what that misses:
 
-  - log_time and log_expense were called ZERO times across a multi-day
-    build for a paying client, because nothing watches a commit.
+  - the catalogue and the runbooks went unread across a multi-day build
+    for a paying client, because nothing watches a commit.
   - Two migration faults the catalogue already described in prose were
     hit twice each in one day, because nothing reads a generated file.
 
@@ -17,8 +17,10 @@ remember it later:
 
   1. **A CLAUDE.md written.** As before: a lesson is owed. Marked here,
      enforced at Stop.
-  2. **A commit.** Work happened, so time is owed. Marked here, nudged
-     once at Stop. Never blocks: an experiment is a commit too.
+  2. **A commit.** Work happened, so the catalogue and the runbooks were
+     owed a look. Marked here, nudged once at Stop. Never blocks: an
+     experiment is a commit too. It never asks for time: Claude never logs
+     time.
   3. **A migration generated.** Linted on the spot, because a migration
      is written by autogenerate rather than by anyone reading it, and
      the three faults below are all invisible until a deploy fails. This

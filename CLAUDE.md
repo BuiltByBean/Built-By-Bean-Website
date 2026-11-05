@@ -268,7 +268,7 @@ write those through the door, and a hand-typed one is never written
 properly. Features keep their quick-add, because a client names one on
 a call and it has to be caught in seconds.
 Sessions may also file operational records - `upsert_project`,
-`log_expense`, `log_time`, `register_hosting_resource`, `register_app`,
+`log_expense`, `register_hosting_resource`, `register_app`,
 `retire_app` - and may NOT
 contact a client, resolve a ticket or send a contract: those are
 Michael's, and the API has no route for them on purpose. A playbook's
@@ -677,9 +677,10 @@ periods. Now:
 - **Invoicing** (`pm/stripe_routes.py`, Invoices until Michael renamed it): the list, New invoice, a one-line Stripe
   strip ("open in Stripe" is the whole account; "Unpaid in this list" follows
   every filter, status included, so the two Outstandings no longer share a
-  name), and Time not yet billed (`unbilled_time`, per client, its tab counts
-  its rows, each row starting an invoice with that client's time ticked). New
-  invoice shows the time step whatever `FEATURE_TIME_TRACKING` says. Setup
+  name). No tab row: Time not yet billed went on 2026-11-05 (see "Claude never
+  logs time"), and `/invoices/unbilled` answers a 301 to the list. New
+  invoice offers time only with `FEATURE_TIME_TRACKING` on, and never ticks
+  it for you. Setup
   Products and Sync All Clients are gone (their old POSTs answer a 303 to the
   list and make nothing); `/admin/stripe/` answers a 301. CEO only except the
   webhook. `tools/test_invoices_page.py`.
@@ -1746,24 +1747,29 @@ after it in the transcript, at most twice, never when stop_hook_active.
 `tools/hooks/install.py` merges them into ~/.claude/settings.json without
 touching anything else; the bootstrap runs it.
 
-**Time logs itself** (audit item 3, 2026-11-04). The fourth hook, SessionEnd
-(`session_end.py`), reads the transcript's timestamps into stretches with no gap
-over 15 minutes, finds the repo with git (a worktree answers with its main
-repo), and posts the stretches to `/api/guidance/time` with the session id.
-`session_time.py` maps the repo to `Project.repo` or a tile's `github_url`,
-skips Michael's own (his own client row, a business, a tile under Personal
-projects), picks build or maintenance from the phase and go-live date, rewrites
-its own entry on a re-run (`TimeEntry.session_ref`, unique), never touches an
-invoiced one, and keeps the stretches (`spans_json`) so sessions open side by
-side on one project bill an hour once. It skips a session that called log_time
-itself, and the Stop hook no longer asks for time, because two entries for one
-session bill the hour twice. What each run did is in
-`~/.claude/pm-guidance/session-time.log`. `tools/test_session_time.py` runs the
-real script against a live server. Hooks print UTF-8 on
-purpose - Windows hands them cp1252 and one minus sign in a rule killed
-the injection after its header.
+Hooks print UTF-8 on purpose - Windows hands them cp1252 and one minus sign
+in a rule killed the injection after its header.
 
-**The issues board is in context too** (2026-11-05). The fifth hook, a second
+**Claude never logs time** (Michael, 2026-11-05: "I'm not going to have Claude
+assign arbitrary time values to work ... That would be lying to my customers
+... purge that shit forever. And get rid of this time not billed yet thing on
+the invoice"; catalogue rule "Claude never logs time"). For one day a SessionEnd
+hook measured every transcript into a `TimeEntry` (stretches with no gap over 15
+minutes, posted to `/api/guidance/time`), and before that sessions called
+`log_time` with round guesses, half an hour for three minutes of work.
+Invoicing's Time not yet billed tab then offered 171.8 such hours across four
+clients with one press to bill them. All of it is gone: the hook and
+`session_time.py`, the door's `/time` route (so an old bridge's `log_time`
+records nothing), the bridge's tool, the standing order's lines, the MVP
+prompt's line, the tab. `install.py` takes a SessionEnd entry of its own out of
+`~/.claude/settings.json` (`RETIRED`) and `ECOSYSTEM_VERSION` went to 7, so a
+machine that still has it is told on its next session. The Time page and its
+timer stay, for a person's own tracking, behind `FEATURE_TIME_TRACKING` (off in
+production). `TimeEntry.session_ref` and `spans_json` stay as the mark of an
+entry a session made. Never offer to log hours, never write a figure for your
+own work anywhere, and never build anything that turns activity into time.
+
+**The issues board is in context too** (2026-11-05). A second
 SessionStart (`session_issues.py`), prints the checkout's GitHub repo, the
 issues labelled `in progress` with who holds them, and the open count, so a
 session sees what is claimed before its first edit (the section at the top of

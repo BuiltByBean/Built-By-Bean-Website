@@ -1,13 +1,14 @@
 {% extends "pm/base.html" %}
-{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
+{% from "pm/finances/_kit.html" import fin_script %}
 
 {#
-  Invoices (docs/finances_plan.md item 3): the list, New invoice, a thin strip
-  of what sits in the Stripe balance, and Time not yet billed.
+  Invoices (docs/finances_plan.md item 3): the list, New invoice, and a thin
+  strip of what sits in the Stripe balance.
 
-  Two tabs on the Finances kit. The strip and the tab row sit outside the
-  panel, so a tab press swaps only the panel (base.html, data-panel) and the
-  strip, which reads the same on both, is never drawn again.
+  It had a second tab, Time not yet billed, until 2026-11-05: hours on no
+  invoice with a press to bill them all, nearly every one logged by a Claude
+  session rather than tracked by a person. Claude never logs time, and the tab
+  is gone with the hooks that fed it. One tab is no tab row, so there is none.
 
   The Stripe account half (four tiles, recent payments, recent payouts) and
   the Sync All Clients and Setup Products presses went on 2026-11-04: the
@@ -24,7 +25,7 @@
 
 {% block title %}Invoicing - Built By Bean{% endblock %}
 {% block page_title %}Invoicing{% endblock %}
-{% block page_subtitle %}Every invoice, and the time still to bill{% endblock %}
+{% block page_subtitle %}Every invoice{% endblock %}
 {% block main_class %}contained-scroll invoices-page{% endblock %}
 
 {% block header_actions %}
@@ -70,16 +71,7 @@
     <span class="whitespace-nowrap"><span class="font-semibold text-amber-300 tabular-nums">{{ account_outstanding | format_currency }}</span> <span class="text-surface-400">open in Stripe, {{ open_invoice_count | commas }} invoice{{ '' if open_invoice_count == 1 else 's' }}</span></span>
 </div>
 
-{{ fin_tabs('invoices', tab, [
-    ('invoices', 'Invoices', url_for('stripe.invoices_list'), none),
-    ('unbilled', 'Time not yet billed', url_for('stripe.unbilled'), unbilled_count),
-], 'Invoicing') }}
-
 <div data-panel="invoices" class="inv-fill flex-1 min-h-0 flex flex-col">
-    {% if tab == 'unbilled' %}
-    {% include "pm/stripe/_unbilled.html" %}
-    {% else %}
     {% include "pm/stripe/_invoices.html" %}
-    {% endif %}
 </div>
 {% endblock %}

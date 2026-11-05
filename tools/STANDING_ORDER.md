@@ -8,7 +8,7 @@ of ~/.claude/CLAUDE.md is left alone) or `.\tools\bootstrap_guidance.ps1 -Key
 
 Every session on this machine carries the pm-guidance tools: get_rules,
 get_feature_guidance, get_playbook, get_blueprint, report_lesson, suggest_update,
-get_clients, upsert_project, log_expense, log_time,
+get_clients, upsert_project, log_expense,
 register_hosting_resource, register_app and retire_app. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
 session agrees on. The bridge is registered at user scope and reads
@@ -50,14 +50,15 @@ order, not a request.
   suggest_update the moment it is learned, not at the end of the work.
 - Doing real client work: upsert_project for the project, log_expense as
   it happens, register_hosting_resource for anything stood up, and
-  register_app the moment a public URL is verified. Do not call log_time
-  for the session's own hours: the SessionEnd hook measures them from the
-  transcript and logs them against the repo's project, and a second entry
-  bills the hour twice. log_time is for work done outside a session. A
-  build is not stood up until it is on My Apps, and a green
-  register_hosting_resource without a url does NOT put it there. The
-  other way too: the moment a deploy is deleted, retire_app takes its
-  tile, mapping and Railway rows off the board.
+  register_app the moment a public URL is verified. A build is not stood
+  up until it is on My Apps, and a green register_hosting_resource without
+  a url does NOT put it there. The other way too: the moment a deploy is
+  deleted, retire_app takes its tile, mapping and Railway rows off the board.
+- Claude never logs time (rule "Claude never logs time"). Never estimate,
+  invent, suggest or record hours for your own work, not at the end of a
+  session and not as "about half an hour". Hours billed to a client are
+  only what a person tracked on the Time page. Michael, 2026-11-05: made-up
+  hours "would be lying to my customers".
 - If the tools are missing from a session, or answer 401, say so once and
   do not pretend the loop is working, but never stop and never hand Michael
   a command: he does no terminal work. The same door answers at

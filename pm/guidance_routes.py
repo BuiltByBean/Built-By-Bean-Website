@@ -35,7 +35,7 @@ from datetime import date, datetime, timedelta, timezone
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from models import (db, Feature, Playbook, PlaybookStep, Product,
-                    CatalogueProposal, Client, Project, Expense, TimeEntry,
+                    CatalogueProposal, Client, Project, Expense,
                     ServiceProvider, ServiceMapping, ServiceCostEntry,
                     ProviderInvoice)
 from models import AppLink  # the My Apps tile (register_app)
@@ -1387,42 +1387,12 @@ def log_expense():
                              "Waiting for the bank line: it books the expense when the charge arrives.")})
 
 
-@guidance_bp.route("/time", methods=["POST"])
-def log_time():
-    body = request.get_json(silent=True) or {}
-    # The SessionEnd hook: a session's own stretches of work, keyed on its id,
-    # and the board works out the project, the rate and whether it is his own
-    # (session_time.py). A session calling log_time by hand comes the old way.
-    if body.get("session_ref"):
-        import session_time
-        answer, status = session_time.log_session(body)
-        return jsonify(answer), status
-    client, err = _find_client(body.get("client"))
-    if err:
-        return jsonify({"error": err}), 400
-    project, err = _find_project(client, body.get("project"))
-    if err:
-        return jsonify({"error": err}), 400
-    hours = _number(body.get("hours"))
-    if hours is None or hours <= 0 or hours > 24:
-        return jsonify({"error": "hours must be between 0 and 24"}), 400
-    when = _parse_date(body.get("date"))
-    if when is None:
-        return jsonify({"error": "date must be YYYY-MM-DD"}), 400
-    rate_type = _cap(body.get("rate_type"), 20) or "maintenance"
-    if rate_type not in ("maintenance", "new_feature", "mvp_build"):
-        return jsonify({"error": "rate_type must be maintenance, new_feature "
-                                 "or mvp_build"}), 400
-    description = _cap(body.get("description"), 2000)
-    source = _cap(body.get("source"), 120)
-    if source:
-        description = f"{description} (logged from {source})".strip()
-    entry = TimeEntry(project_id=project.id, client_id=client.id, hours=hours,
-                      description=description, rate_type=rate_type, date=when)
-    db.session.add(entry)
-    db.session.commit()
-    return jsonify({"action": "logged", "id": entry.id, "hours": hours,
-                    "project": project.name, "billable": entry.cost})
+# There is no time door. /time took hours from sessions (log_time) and from the
+# SessionEnd hook, which measured a transcript, until Michael, 2026-11-05: "I'm
+# not going to have Claude assign arbitrary time values to work ... That would
+# be lying to my customers." Claude never logs time; a person tracks their own
+# on the Time page. Without a route the door answers 404, so an old bridge that
+# still offers log_time records nothing.
 
 
 def _upsert_mapping(body, client, project):

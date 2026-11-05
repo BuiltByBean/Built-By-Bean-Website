@@ -5,8 +5,10 @@ Michael, 2026-11-04: "the finances section as a whole could use some better
 processes top to bottom ... some feature creep cleanup." For Invoices he
 decided: the list, New invoice, and a thin Stripe balance strip; Setup
 Products and Sync All Clients go; the two "Outstanding" figures get names
-of their own; the hidden Unbilled figure comes back as Time not yet billed;
-the stale comments go; every row opens the invoice. And item 10: CEO only.
+of their own; the stale comments go; every row opens the invoice. And item
+10: CEO only. Time not yet billed came back for a day and went again on
+2026-11-05 with the hooks that had filled it with hours Claude sessions made
+up: "It doesn't need to exist at all."
 
 Proves, with Stripe faked:
 
@@ -22,17 +24,15 @@ Proves, with Stripe faked:
   5. Every row opens the board's record: straight to it when the import has
      written one, through invoice_open (which writes it) when not, and an
      orphan says so and comes back to the list.
-  6. Time not yet billed: per client, hours and value, leaving out time on a
-     draft/open/paid invoice, MVP build time and free maintenance, keeping
-     time a void invoice let go and an entry that names only its project;
-     the tab's count is its rows; each row's press starts that client's
-     invoice with the time ticked, and New invoice offers exactly the
-     entries the tab counted.
+  6. Time not yet billed is gone: its address lands on the list, the list
+     has no tab row and no such count, and New invoice offers no time and
+     ticks none unless FEATURE_TIME_TRACKING is on, where a person tracks
+     their own; then it offers the client's time on no live invoice, the
+     entry that names only its project included.
   7. The stale "currently none" comments are gone.
   8. In a real browser at 320, 375 and 1600: nothing scrolls sideways, the
-     window never scrolls, every control below 640px is at least 44px tall,
-     and a tab press swaps the panel while the strip and the tab row stay
-     the same elements.
+     window never scrolls, and every control below 640px is at least 44px
+     tall.
 
 Run: python tools/test_invoices_page.py
 """
@@ -290,61 +290,31 @@ check("an orphan comes back to the list and says why",
       res.status_code == 302 and res.headers["Location"].endswith("/admin/stripe/invoices")
       and "on no client" in said, (res.headers.get("Location"), said))
 
-# ── 6. Time not yet billed ──────────────────────────────────
-print("6. Time not yet billed")
-with application.app_context():
-    got = stripe_routes.unbilled_time()
-    rows = got["rows"]
-    check("one client row, Acme's", [r["client"].name for r in rows] == ["Acme Plumbing"], rows)
-    acme_row = rows[0] if rows else {}
-    check("the value is the waiting maintenance, the feature, the loose entry and the time a void let go",
-          acme_row.get("value") == 650.00 and got["total"] == 650.00, acme_row.get("value"))
-    check("and the hours are the billable ones only", acme_row.get("hours") == 5.0, acme_row.get("hours"))
-    check("four entries", acme_row.get("entries") == 4, acme_row.get("entries"))
-    check("from the oldest day to the newest",
-          acme_row.get("since") == TODAY - timedelta(days=9) and acme_row.get("latest") == TODAY - timedelta(days=2))
-
+# ── 6. Time not yet billed is gone ──────────────────────────
+print("6. Time not yet billed is gone")
 res = ceo.get("/admin/stripe/invoices/unbilled")
-html = res.get_data(as_text=True)
-page = flat(html)
-check("the tab renders", res.status_code == 200, res.status_code)
-check("the row shows the client, the value and the hours",
-      "Acme Plumbing" in page and "$650.00" in page and "5.0h" in page)
-check("its press starts Acme's invoice with the time ticked",
-      f'href="/admin/stripe/invoices/new?client_id={IDS["acme"]}&amp;take=all"' in html)
-tab_count = re.search(r'data-count="unbilled"[^>]*>([^<]*)<', html)
-check("the tab's count is the number of rows", tab_count and tab_count.group(1).strip() == "1",
-      tab_count.group(0) if tab_count else None)
+check("its address lands on the list", res.status_code == 301
+      and res.headers["Location"].endswith("/admin/stripe/invoices"), (res.status_code, res.headers.get("Location")))
 list_html = ceo.get("/admin/stripe/invoices").get_data(as_text=True)
-tab_count = re.search(r'data-count="unbilled"[^>]*>([^<]*)<', list_html)
-check("and the same on the Invoices tab", tab_count and tab_count.group(1).strip() == "1")
-check("both tabs share one panel and one kept tab row",
-      'data-panel="invoices"' in html and 'data-keep="invoices-tabs"' in html
-      and 'data-panel="invoices"' in list_html and 'data-keep="invoices-tabs"' in list_html)
+check("the list says nothing of it", "Time not yet billed" not in list_html and 'data-count="unbilled"' not in list_html
+      and "time still to bill" not in list_html)
+check("one tab is no tab row", 'data-keep="invoices-tabs"' not in list_html and 'data-panel="invoices"' in list_html)
+check("unbilled_time is gone", not hasattr(stripe_routes, "unbilled_time"))
 
+application.config["FEATURE_TIME_TRACKING"] = False
+gen = ceo.get(f"/admin/stripe/invoices/new?client_id={IDS['acme']}&take=all").get_data(as_text=True)
+check("New invoice offers no time with time tracking off",
+      "Select Time Entries" not in gen and "const TIME_API_BASE = null;" in gen and "2. Select Expenses" in gen)
+check("and take=all ticks nothing it used to", "? 'time' : false" not in gen and "this.loadEntries();" in gen)
+application.config["FEATURE_TIME_TRACKING"] = True
+gen = ceo.get(f"/admin/stripe/invoices/new?client_id={IDS['acme']}").get_data(as_text=True)
+check("with time tracking on, a person's own time is offered",
+      "2. Select Time Entries" in gen and "3. Select Expenses" in gen and "uninvoiced-entries" in gen)
 offered = {e["id"] for e in ceo.get(f"/admin/stripe/api/uninvoiced-entries/{IDS['acme']}").get_json()}
-counted = {IDS["waiting"], IDS["feature"], IDS["loose"], IDS["let_go"]}
-check("New invoice offers every entry the tab counted, the loose one included",
-      counted <= offered, (counted - offered))
+check("the client's time on no live invoice, the loose one included",
+      {IDS["waiting"], IDS["feature"], IDS["loose"], IDS["let_go"]} <= offered, offered)
 check("and nothing on a draft, open or paid invoice", not ({IDS["on_paid"], IDS["on_draft"]} & offered), offered)
-
-res = ceo.get(f"/admin/stripe/invoices/new?client_id={IDS['acme']}&take=all")
-gen = res.get_data(as_text=True)
-check("New invoice shows the time step whatever the time flag says",
-      "Select Time Entries" in gen and not application.config.get("FEATURE_TIME_TRACKING"))
-check("and loads the client's time ticked", "this.loadEntries(true ? 'time' : false)" in gen)
-
-with application.app_context():
-    for e in TimeEntry.query.all():
-        db.session.delete(e)
-    db.session.commit()
-html = ceo.get("/admin/stripe/invoices/unbilled").get_data(as_text=True)
-check("with nothing waiting the tab says so", 'class="empty' in html
-      and "Every billable hour is on an invoice" in flat(html))
-tab_count = re.search(r'data-count="unbilled"[^>]*class="([^"]*)"', html) or \
-    re.search(r'class="([^"]*)"[^>]*data-count="unbilled"', html)
-badge = re.search(r'<span data-count="unbilled"\s+class="([^"]*)"', html)
-check("and the tab's count is hidden", badge and "hidden" in badge.group(1), badge.group(1) if badge else None)
+application.config["FEATURE_TIME_TRACKING"] = False
 
 # ── 7. Stale words ──────────────────────────────────────────
 print("7. Stale comments")
@@ -446,7 +416,7 @@ if sync_playwright:
             page_.fill("[name=password]", "password")
             page_.click("button[type=submit]")
             page_.wait_for_load_state("networkidle")
-            for path in ("/admin/stripe/invoices", "/admin/stripe/invoices/unbilled"):
+            for path in ("/admin/stripe/invoices",):
                 page_.goto(BASE + path, wait_until="networkidle")
                 page_.wait_for_timeout(400)
                 if os.environ.get("INVOICES_SHOTS"):
@@ -457,23 +427,6 @@ if sync_playwright:
                 check(f"{width}px {path}: the window never scrolls", m["window"] <= 0, m["window"])
                 if width < 640:
                     check(f"{width}px {path}: every control is 44px", not m["small"], m["small"])
-
-            page_.goto(BASE + "/admin/stripe/invoices", wait_until="networkidle")
-            page_.wait_for_timeout(300)
-            page_.evaluate("""() => { document.querySelector('[data-invoices-strip]').__w = 'STRIP';
-                document.querySelector('[data-keep="invoices-tabs"]').__w = 'TABS';
-                document.getElementById('pm-main').__w = 'MAIN'; }""")
-            page_.evaluate("""() => document.querySelector('[data-keep="invoices-tabs"] [data-tab="unbilled"]').click()""")
-            page_.wait_for_function("() => location.pathname === '/admin/stripe/invoices/unbilled'", timeout=10000)
-            page_.wait_for_timeout(500)
-            kept = page_.evaluate("""() => ({ strip: document.querySelector('[data-invoices-strip]').__w || null,
-                tabs: document.querySelector('[data-keep="invoices-tabs"]').__w || null,
-                main: document.getElementById('pm-main').__w || null,
-                rows: document.querySelectorAll('[data-unbilled-client]').length,
-                lit: document.querySelector('[data-keep="invoices-tabs"] [aria-current="page"]')?.dataset.tab })""")
-            check(f"{width}px: a tab press keeps the strip, the tab row and the page",
-                  kept["strip"] == "STRIP" and kept["tabs"] == "TABS" and kept["main"] == "MAIN", kept)
-            check(f"{width}px: and the panel is the other tab's", kept["rows"] == 8 and kept["lit"] == "unbilled", kept)
 
             # A filter pick swaps the rows, not the bar.
             page_.goto(BASE + "/admin/stripe/invoices", wait_until="networkidle")
@@ -507,16 +460,6 @@ if sync_playwright:
                 pressed: [...document.querySelectorAll('#pm-main form[method=GET] button[aria-pressed=true]')].map(b => b.textContent.trim()) })""")
             check(f"{width}px: Last month applies itself and keeps the bar",
                   after["bar"] == "BAR" and "month=" in after["url"] and after["pressed"] == ["Last month"], after)
-            if width == 1600:
-                # The row's press, followed: New invoice with that client's time ticked.
-                page_.goto(BASE + "/admin/stripe/invoices/unbilled", wait_until="networkidle")
-                page_.evaluate(f"""() => document.querySelector('[data-unbilled-client="{LONG[0]}"] a').click()""")
-                page_.wait_for_function("() => location.pathname === '/admin/stripe/invoices/new'", timeout=10000)
-                page_.wait_for_timeout(1200)
-                ticked = page_.evaluate("""() => [...document.querySelectorAll('input[name=time_entries]')]
-                    .map(i => i.checked)""")
-                check("the row's press opens New invoice with the client's time ticked",
-                      ticked == [True], ticked)
             check(f"{width}px: no script errors", not errors, errors)
             page_.context.close()
         browser.close()
