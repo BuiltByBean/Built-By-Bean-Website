@@ -70,26 +70,68 @@ def item_rows(stripe, subscriptions):
                     ended[customer] = {"at": when, "reason": getattr(details, "reason", None) if details else None}
             continue
         for item in sub["items"].data:
-            price = getattr(item, "price", None)
-            recurring = getattr(price, "recurring", None)
-            if price is None or recurring is None:
-                continue
-            product = getattr(price, "product", None)
-            name = f"{_product_name(stripe, product)} {getattr(price, 'nickname', '') or ''}"
-            if HOSTING_LINE not in name.lower():
-                continue
-            interval = getattr(recurring, "interval", "month") or "month"
-            count = getattr(recurring, "interval_count", 1) or 1
-            months = INTERVAL_MONTHS.get(interval, 1) * count
-            cents = (getattr(price, "unit_amount", 0) or 0) * (getattr(item, "quantity", 1) or 1)
-            out.setdefault(customer, []).append({
-                "subscription_id": getattr(sub, "id", None), "item_id": getattr(item, "id", None),
-                "status": sub.status, "amount": cents / 100.0, "monthly": round(cents / 100.0 / months, 2),
-                "interval": interval, "interval_count": count,
-                "product": product if isinstance(product, str) else getattr(product, "id", None),
-                "currency": getattr(price, "currency", "usd") or "usd",
-            })
+            row = _hosting_item(stripe, getattr(item, "price", None), getattr(item, "quantity", 1), HOSTING_LINE)
+            if row:
+                row.update(subscription_id=getattr(sub, "id", None), item_id=getattr(item, "id", None),
+                           status=sub.status)
+                out.setdefault(customer, []).append(row)
     _CACHE["ended"] = ended
+    return out
+
+
+def _hosting_item(stripe, price, quantity, word):
+    """One recurring hosting price as a row, or None when it is not hosting."""
+    recurring = getattr(price, "recurring", None)
+    if price is None or isinstance(price, str) or recurring is None:
+        return None
+    product = getattr(price, "product", None)
+    name = f"{_product_name(stripe, product)} {getattr(price, 'nickname', '') or ''}"
+    if word not in name.lower():
+        return None
+    interval = getattr(recurring, "interval", "month") or "month"
+    count = getattr(recurring, "interval_count", 1) or 1
+    months = INTERVAL_MONTHS.get(interval, 1) * count
+    cents = (getattr(price, "unit_amount", 0) or 0) * (quantity or 1)
+    return {"subscription_id": None, "item_id": None, "status": None,
+            "amount": cents / 100.0, "monthly": round(cents / 100.0 / months, 2),
+            "interval": interval, "interval_count": count,
+            "product": product if isinstance(product, str) else getattr(product, "id", None),
+            "currency": getattr(price, "currency", "usd") or "usd"}
+
+
+def schedule_rows(stripe, schedules, out):
+    """Add each hosting price a schedule that has not started yet will bill.
+
+    Michael, 2026-11-05: Kenali's new hosting starts on the 11th, set up as a
+    schedule, and until the first day there is no subscription at all, so the
+    page read "no hosting subscription in Stripe" about a client who is set up
+    to be billed. A row from a schedule carries `starts` and no subscription
+    id, so nothing offers to change it: there is nothing to modify yet.
+    """
+    from datetime import datetime, timezone
+    from stripe_service import HOSTING_LINE
+    for sched in schedules:
+        if getattr(sched, "status", None) != "not_started":
+            continue
+        customer = getattr(sched, "customer", None)
+        customer = customer if isinstance(customer, str) else getattr(customer, "id", None)
+        phases = getattr(sched, "phases", None) or []
+        if not phases:
+            continue
+        first = phases[0]
+        start = getattr(first, "start_date", None)
+        # first["items"], never first.items: a Stripe object is a dict, and
+        # .items is the dict's own method.
+        try:
+            items = first["items"] or []
+        except (KeyError, TypeError):
+            items = []
+        for item in items:
+            row = _hosting_item(stripe, getattr(item, "price", None), getattr(item, "quantity", 1), HOSTING_LINE)
+            if row:
+                row.update(status="scheduled", schedule_id=getattr(sched, "id", None),
+                           starts=datetime.fromtimestamp(start, timezone.utc).date() if start else None)
+                out.setdefault(customer, []).append(row)
     return out
 
 
@@ -122,6 +164,9 @@ def read():
         return None
     subs = list(stripe.Subscription.list(status="all", limit=100).auto_paging_iter())
     data = item_rows(stripe, subs)
+    schedules = list(stripe.SubscriptionSchedule.list(
+        limit=100, expand=["data.phases.items.price"]).auto_paging_iter())
+    schedule_rows(stripe, schedules, data)
     _CACHE.update(at=time.monotonic(), data=data)
     return data
 
@@ -172,7 +217,9 @@ def compare(client, agreed_monthly, items):
     else:
         state = "ok"
     return {"state": state, "billed": billed, "agreed": agreed, "items": items or [],
-            "changeable": state == "differs" and len(items or []) == 1}
+            "starts": min((i["starts"] for i in items or [] if i.get("starts")), default=None),
+            "changeable": state == "differs" and len(items or []) == 1
+            and bool((items or [{}])[0].get("subscription_id"))}
 
 
 def agreed_by_client(projects):

@@ -93,8 +93,25 @@ SUBS = [
         ended_at=1793204298, canceled_at=1793204298,
         cancellation_details=Obj(reason="cancellation_requested")),
 ]
+# Kenali's new hosting, 2026-11-05: a schedule that starts on the 11th, so no
+# subscription exists yet. A retainer schedule beside it is not hosting.
+def phase_item(cents, product):
+    return Obj(quantity=1, price=Obj(unit_amount=cents, currency="usd", nickname=None, product=product,
+                                     recurring=Obj(interval="month", interval_count=1)))
+
+
+SCHEDULES = [
+    Obj(id="sub_sched_host", customer="cus_sched", status="not_started",
+        phases=[Obj(start_date=1794355200, items=[phase_item(5000, "prod_host")])]),
+    Obj(id="sub_sched_dev", customer="cus_sched", status="not_started",
+        phases=[Obj(start_date=1794355200, items=[phase_item(90000, "prod_dev")])]),
+    Obj(id="sub_sched_old", customer="cus_unbilled", status="canceled",
+        phases=[Obj(start_date=1790000000, items=[phase_item(5000, "prod_host")])]),
+]
 MODIFIED = []
 fake = SimpleNamespace(
+    SubscriptionSchedule=SimpleNamespace(
+        list=lambda **kw: SimpleNamespace(auto_paging_iter=lambda: iter(SCHEDULES))),
     api_key="sk_test",
     Product=SimpleNamespace(retrieve=lambda pid: Obj(name=PRODUCTS[pid])),
     Subscription=SimpleNamespace(
@@ -108,6 +125,10 @@ check("the monthly item is $40 a month", data["cus_kuper"][0]["monthly"] == 40.0
 check("a $600 year is $50 a month", data["cus_year"][0]["monthly"] == 50.0, data.get("cus_year"))
 check("a development retainer is not hosting, and a canceled sub bills nothing",
       "cus_unbilled" not in data, data.get("cus_unbilled"))
+sched = data.get("cus_sched") or []
+check("a schedule that has not started yet bills its hosting, from its first day",
+      len(sched) == 1 and sched[0]["monthly"] == 50.0 and sched[0]["status"] == "scheduled"
+      and str(sched[0]["starts"]) == "2026-11-11" and sched[0]["subscription_id"] is None, sched)
 
 with application.app_context():
     db.create_all()
@@ -118,7 +139,8 @@ with application.app_context():
     db.session.add(rail)
     made = {}
     for name, customer, fee in (("Kuper", "cus_kuper", 50.0), ("Yearly", "cus_year", 50.0),
-                                ("Unbilled", "cus_unbilled", 50.0), ("Unmapped", "cus_year", None)):
+                                ("Unbilled", "cus_unbilled", 50.0), ("Unmapped", "cus_year", None),
+                                ("Scheduled", "cus_sched", 50.0)):
         client = Client.query.filter_by(stripe_customer_id=customer).first()
         if client is None:
             client = Client(name=name + " Co", email=f"{name}@example.test", stripe_customer_id=customer)
@@ -134,13 +156,14 @@ with application.app_context():
     # are mapped; Unmapped is not.
     made["Unmapped"].hosting_fee = 25.0
     made["Yearly"].hosting_fee = 50.0
-    for name in ("Kuper", "Yearly", "Unbilled"):
+    for name in ("Kuper", "Yearly", "Unbilled", "Scheduled"):
         db.session.add(ServiceMapping(provider_id=rail.id, resource_identifier=f"railway:{name}",
                                       project_id=made[name].id, client_id=made[name].client_id))
     db.session.commit()
     ids = {k: v.id for k, v in made.items()}
     boss_id = boss.id
-COSTS.update({ids["Kuper"]: 10.0, ids["Yearly"]: 0.0, ids["Unbilled"]: 0.0, ids["Unmapped"]: 0.0})
+COSTS.update({ids["Kuper"]: 10.0, ids["Yearly"]: 0.0, ids["Unbilled"]: 0.0, ids["Unmapped"]: 0.0,
+              ids["Scheduled"]: 0.0})
 
 print("\n1-2. NOT MAPPED IS ITS OWN BAND")
 check("priced, no mapping, no cost: Not mapped", hosting._status(50.0, 0.0, mapped=False) == ("unmapped", "Not mapped"))
@@ -167,6 +190,8 @@ check("an agreed fee whose hosting subscription was canceled says when",
       "Agreed $50.00/mo, its Stripe subscription was canceled" in page and "Oct 28, 2026" in page,
       [l for l in page.splitlines() if "Agreed" in l][:2])
 check("and offers Stripe", "dashboard.stripe.com/customers/cus_unbilled" in page)
+check("a client whose hosting is scheduled is not called unbilled",
+      "Scheduled Co" in page and "dashboard.stripe.com/customers/cus_sched" not in page)
 check("a difference offers the press, which asks first",
       "Change the subscription?" in page and page.count("data-bill-press") == 3, page.count("data-bill-press"))
 
