@@ -128,9 +128,15 @@ def _billing_snapshot():
 COUNTED = ("loss", "raise", "unmapped")
 
 
+# A project nobody has signed for has no hosting agreement, whatever fee it
+# carries: Robinson & Co. sat on the page as "Hosted free" (Michael,
+# 2026-11-05: "should not even show up").
+UNDER_CONTRACT = db.or_(Project.phase.is_(None), Project.phase != "not_contracted")
+
+
 def _priced_projects():
     return (Project.query.join(Client, Project.client_id == Client.id)
-            .filter(Project.hosting_fee.isnot(None))
+            .filter(Project.hosting_fee.isnot(None), UNDER_CONTRACT)
             .order_by(Client.name, Project.name, Project.id).all())
 
 
@@ -571,7 +577,7 @@ def billing_change(client_id):
     from the next cycle. The page asked first; this is the doing."""
     client = db.session.get(Client, client_id) or abort(404)
     projects = Project.query.filter(Project.client_id == client.id,
-                                    Project.hosting_fee.isnot(None)).all()
+                                    Project.hosting_fee.isnot(None), UNDER_CONTRACT).all()
     bill = hosting_billing.by_client(projects, hosting_billing.current(ttl=0)).get(client.id)
     if not bill or not bill["changeable"]:
         flash(f"Nothing to change for {client.name}: Stripe already bills what was agreed, "

@@ -146,7 +146,8 @@ with application.app_context():
             client = Client(name=name + " Co", email=f"{name}@example.test", stripe_customer_id=customer)
             db.session.add(client)
             db.session.flush()
-        p = Project(name=name, client_id=client.id, hosting_fee=fee if fee is not None else 0.0,
+        p = Project(name=name, client_id=client.id, phase="in_production",
+                    hosting_fee=fee if fee is not None else 0.0,
                     hosting_cycle="monthly")
         db.session.add(p)
         db.session.flush()
@@ -155,6 +156,9 @@ with application.app_context():
     # agreed total is $75 against $50 billed. Kuper, Yearly and Unbilled
     # are mapped; Unmapped is not.
     made["Unmapped"].hosting_fee = 25.0
+    # Robinson & Co., 2026-11-05: a free fee on a project nobody signed for.
+    db.session.add(Project(name="Unsigned free", client_id=made["Kuper"].client_id, hosting_fee=0.0,
+                           phase="not_contracted"))
     made["Yearly"].hosting_fee = 50.0
     for name in ("Kuper", "Yearly", "Unbilled", "Scheduled"):
         db.session.add(ServiceMapping(provider_id=rail.id, resource_identifier=f"railway:{name}",
@@ -178,6 +182,7 @@ with c.session_transaction() as s:
 
 page = c.get("/admin/hosting/").data.decode("utf-8", "replace")
 check("the page draws", "Not mapped" in page)
+check("a project not under contract is not on the page", "Unsigned free" not in page)
 check("the unmapped row offers the mapping form with its project chosen",
       f"/admin/service-costs/mappings/new?project_id={ids['Unmapped']}" in page, re.findall(r"mappings/new[^\"]*", page))
 

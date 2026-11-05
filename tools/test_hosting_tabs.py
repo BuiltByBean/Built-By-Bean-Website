@@ -117,7 +117,7 @@ with application.app_context():
     client = Client(name="Tabs Client", email="tabs@example.test")
     db.session.add_all([boss, hannah, ehq, client])
     db.session.flush()
-    project = Project(name="Tabs Site", client_id=client.id, hosting_fee=50.0,
+    project = Project(name="Tabs Site", client_id=client.id, hosting_fee=50.0, phase="in_production",
                       hosting_cycle="monthly", created_at=datetime.now(timezone.utc))
     db.session.add(project)
     typed = ServiceProvider(name="railway", display_name="Railway",

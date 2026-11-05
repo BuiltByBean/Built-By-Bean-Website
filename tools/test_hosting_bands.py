@@ -104,7 +104,7 @@ with application.app_context():
         client = Client(name=name + " Ltd", email=f"{len(made)}@example.test")
         db.session.add(client)
         db.session.flush()
-        project = Project(name=name, client_id=client.id,
+        project = Project(name=name, client_id=client.id, phase="in_production",
                           hosting_fee=fee, hosting_cycle="monthly",
                           created_at=datetime.now(timezone.utc))
         db.session.add(project)
