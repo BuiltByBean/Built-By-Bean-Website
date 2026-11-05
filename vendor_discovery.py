@@ -20,6 +20,9 @@ use while its vendor charged in the last `IN_USE_DAYS`; it moves to Not in use
 on its own when the charges stop and back when they start.
 
 `plain_error` is a failed sync said for a person, and `groups` is the page.
+Every vendor knows its playbook (`playbook_for`): the tile wears the
+playbook's mark and opens it, names the business maps it is a service on,
+and the playbook's page lists the vendor's accounts (`accounts_for`).
 """
 import re
 from datetime import date, timedelta
@@ -190,6 +193,48 @@ def spend(provider, today=None):
     return round(-(total or 0.0), 2) if total else None
 
 
+def playbook_for(name, accounts, playbooks=None):
+    """The playbook (one vendor's runbook) this vendor is: the one pointed at
+    one of its accounts, else the one its name names (map_checks' words, the
+    same reading the night uses on the code and the books). None when the
+    board has no runbook for it. Michael, 2026-11-05: "ensure something knows
+    that a vendor will connect to a service that we have a blueprint for"."""
+    import map_checks
+    from models import Playbook
+    if playbooks is None:
+        playbooks = Playbook.query.filter_by(is_active=True).order_by(Playbook.sort_order, Playbook.id).all()
+    ids = {a.id for a in accounts}
+    hit = next((p for p in playbooks if p.service_provider_id in ids), None)
+    if hit is not None:
+        return hit
+    named = [p for p in playbooks if key(p.display_name) == key(name)]
+    if named:
+        return named[0]
+    words = [p for p in playbooks if map_checks.names_vendor(name, p)]
+    return words[0] if len(words) == 1 else None
+
+
+def accounts_for(playbook):
+    """Every account of the vendor a playbook is, for the playbook's page."""
+    from models import ServiceProvider
+    by_vendor = _accounts_by_vendor()
+    playbooks = [playbook]
+    out = []
+    for vkey, accounts in by_vendor.items():
+        if playbook_for(accounts[0].vendor_name, accounts, playbooks) is playbook:
+            out.extend(accounts)
+    return sorted(out, key=lambda a: (not a.is_active, a.display_name or ""))
+
+
+def maps_for(playbook):
+    """The businesses whose map has this vendor as a service."""
+    from models import Business, BusinessNode
+    if playbook is None:
+        return []
+    ids = {n.business_id for n in BusinessNode.query.filter_by(kind="service", playbook_id=playbook.id).all()}
+    return Business.query.filter(Business.id.in_(ids)).order_by(Business.name).all() if ids else []
+
+
 def groups(providers, today=None):
     """One entry per vendor, its accounts under it, in name order:
     {"name", "key", "accounts": [...], "in_use", "spend", "trouble"}."""
@@ -205,7 +250,11 @@ def groups(providers, today=None):
         g["in_use"] = g["in_use"] or bool(p.is_active)
         g["spend"] += cost or 0.0
         g["trouble"] += 1 if (p.is_active and p.syncs and p.sync_error) else 0
+    from models import Playbook
+    playbooks = Playbook.query.filter_by(is_active=True).order_by(Playbook.sort_order, Playbook.id).all()
     for g in out.values():
         g["accounts"].sort(key=lambda a: (not a["provider"].is_active, a["provider"].display_name or ""))
         g["spend"] = round(g["spend"], 2)
+        g["playbook"] = playbook_for(g["name"], [a["provider"] for a in g["accounts"]], playbooks)
+        g["maps"] = maps_for(g["playbook"])
     return sorted(out.values(), key=lambda g: g["name"].lower())

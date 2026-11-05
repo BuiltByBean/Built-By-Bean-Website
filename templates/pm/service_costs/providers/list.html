@@ -44,10 +44,19 @@
     {% if groups %}
     <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 items-start">
         {% for g in groups %}
-        <section class="glass-card p-5 min-w-0" data-vendor="{{ g.key }}" aria-label="{{ g.name }}">
+        <section id="vendor-{{ g.key | replace(' ', '-') }}" class="glass-card p-5 min-w-0 scroll-mt-4" data-vendor="{{ g.key }}" aria-label="{{ g.name }}">
             <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
+                    {# The vendor's own mark, from its playbook: a chosen SVG,
+                       then the one fetched off its site, then its letters. #}
+                    {% set pb = g.playbook %}
+                    {% if pb and pb.logo_path %}
+                    <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt="" aria-hidden="true" class="w-10 h-10 shrink-0 rounded-xl object-contain">
+                    {% elif pb and pb.icon_file %}
+                    <img src="{{ url_for('playbooks.icon', slug=pb.slug) }}" alt="" aria-hidden="true" class="w-10 h-10 shrink-0 rounded-xl object-contain">
+                    {% else %}
                     <span class="w-10 h-10 shrink-0 rounded-xl bg-brand-500/15 inline-flex items-center justify-center text-xs font-bold text-brand-300">{{ g.name[:2] | upper }}</span>
+                    {% endif %}
                     <div class="min-w-0">
                         <h2 class="text-base font-semibold text-white break-words">{{ g.name }}</h2>
                         <p class="text-xs text-surface-400">{{ g.accounts | length }} account{{ '' if g.accounts | length == 1 else 's' }}{% if g.trouble %} <span class="text-amber-300">- {{ g.trouble }} not syncing</span>{% endif %}</p>
@@ -59,6 +68,25 @@
                     <p class="text-[11px] text-surface-500">last 12 months</p>
                 </div>
                 {% endif %}
+            </div>
+
+            {# Where else on the board this vendor is: its runbook and the
+               business maps it is a service on. #}
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                {% if pb %}
+                <a href="{{ url_for('playbooks.playbook_detail', slug=pb.slug) }}" data-playbook="{{ pb.slug }}"
+                   class="inline-flex items-center gap-1.5 px-3 min-h-[44px] rounded-lg border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                    {{ icon('handbook', 'w-3.5 h-3.5') }} Playbook
+                </a>
+                {% else %}
+                <span class="px-2 py-1 rounded-lg bg-white/5 text-surface-400">No playbook yet</span>
+                {% endif %}
+                {% for b in g.maps %}
+                <a href="{{ url_for('businesses.map_page', id=b.id) }}"
+                   class="inline-flex items-center gap-1.5 px-3 min-h-[44px] rounded-lg border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                    {{ icon('business-map', 'w-3.5 h-3.5') }} {{ b.short_name or b.name }} map
+                </a>
+                {% endfor %}
             </div>
 
             <ul class="mt-4 space-y-3">

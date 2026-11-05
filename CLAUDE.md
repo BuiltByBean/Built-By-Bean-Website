@@ -828,7 +828,17 @@ with no account (`note_code`). A found account is `name` "bank" or "code"
 (`FOUND_TYPES`): `sync_provider` returns at once, the cost door and the
 receipt check skip it, and `other_company_for` reads twins by sync type, so it
 can never move money. A Twilio account needs its key typed by Michael; the
-board can only say which one is missing or refused. `tools/test_vendors_page.py`.
+board can only say which one is missing or refused.
+
+**A vendor knows its playbook** (Michael, the same evening: "ensure the
+vendors page uses the service icons I know we already have ... a vendor will
+connect to a service that we have a blueprint for"). `playbook_for` is the
+playbook pointed at one of its accounts (`Playbook.service_provider_id`),
+else the one its name is, else the one `map_checks.names_vendor` names, the
+words the night already reads the code and the books by. The tile wears that
+playbook's mark (`logo_path`, then its fetched icon), opens it, and names each
+business map with it as a service; the playbook's page links back to the
+vendor's accounts (`accounts_for`). `tools/test_vendors_page.py`.
 
 ## The books stand on the bank
 

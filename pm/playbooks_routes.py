@@ -15,7 +15,7 @@ from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, abort,
     current_app, send_from_directory,
 )
-from flask_login import login_required
+from flask_login import current_user, login_required
 from markupsafe import Markup
 
 import app_icon_service
@@ -325,7 +325,13 @@ def playbook_detail(slug):
     playbook = Playbook.query.filter_by(slug=slug).first()
     if playbook is None:
         abort(404)
-    return render_template("pm/playbooks/detail.html", playbook=playbook)
+    # The vendor's accounts, so the runbook and what is set up for it are one
+    # click apart both ways (vendor_discovery.playbook_for). Money is the
+    # CEO's, so only the CEO sees them.
+    import vendor_discovery
+    accounts = vendor_discovery.accounts_for(playbook) if getattr(current_user, "is_ceo", False) else []
+    return render_template("pm/playbooks/detail.html", playbook=playbook, accounts=accounts,
+                           vendor_key=vendor_discovery.key(accounts[0].vendor_name) if accounts else "")
 
 
 @playbooks_bp.route("/<slug>/edit", methods=["GET", "POST"])

@@ -67,7 +67,13 @@
                 <p class="text-sm text-surface-400">
                     Updated {{ playbook.updated_at|format_date if playbook.updated_at else 'never' }}
                 </p>
-                {% if playbook.service_provider %}
+                {% if accounts %}
+                <a href="{{ url_for('vendors.index', view='in_use' if accounts | selectattr('is_active') | list else 'not_in_use') }}#vendor-{{ vendor_key | replace(' ', '-') }}"
+                   class="mt-1 inline-flex items-center gap-1.5 px-3 min-h-[44px] rounded-lg border border-white/10 text-xs text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                    {{ icon('vendors', 'w-3.5 h-3.5') }}
+                    {{ accounts | length }} account{{ '' if accounts | length == 1 else 's' }} on Vendors
+                </a>
+                {% elif playbook.service_provider %}
                 <p class="text-xs text-surface-500 truncate">
                     Cost sync: {{ playbook.service_provider.display_name }}
                 </p>

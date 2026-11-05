@@ -29,7 +29,7 @@ except Exception:
 
 from app import create_app  # noqa: E402
 from models import (db, User, Client, Business, ServiceProvider, VendorRule,  # noqa: E402
-                    BankConnection, BankTransaction, ServiceCostEntry)
+                    BankConnection, BankTransaction, ServiceCostEntry, Playbook, BusinessNode)
 import vendor_discovery  # noqa: E402
 import service_costs_service  # noqa: E402
 
@@ -66,6 +66,15 @@ with app.app_context():
     aws = ServiceProvider(name="aws", display_name="Amazon Web Services", credentials_json="{}", is_active=False)
     db.session.add_all([twilio_jd, railway, railway_ehq, claude, aws])
     db.session.flush()
+    # Michael, the same day: "ensure the vendors page uses the service icons
+    # I know we already have ... a vendor will connect to a service that we
+    # have a blueprint for". A playbook is one vendor's runbook and mark.
+    pb_twilio = Playbook(slug="twilio", display_name="Twilio", logo_path="img/vendors/twilio.svg")
+    pb_llm = Playbook(slug="llm-apis", display_name="LLM APIs")
+    pb_railway = Playbook(slug="railway", display_name="Railway hosting", service_provider_id=railway.id)
+    db.session.add_all([pb_twilio, pb_llm, pb_railway])
+    db.session.flush()
+    db.session.add(BusinessNode(business_id=ehq.id, kind="service", name="Texting", playbook_id=pb_twilio.id))
     db.session.add(ServiceCostEntry(provider_id=railway.id, resource_identifier="railway:x",
                                     period_start=date(2026, 10, 1), period_end=date(2026, 10, 31),
                                     raw_amount=52.38, allocated_amount=52.38))
@@ -185,6 +194,22 @@ with app.app_context():
     check("Sync all finds vendors on the bank too", "Found 1 new vendor account on the bank" in r
           and ServiceProvider.query.filter_by(name="bank", vendor="OpenAI ChatGPT").count() == 1)
     routes.sync_provider = scs_sync
+    print("4. a vendor knows its playbook, its mark and its maps")
+    page = c.get("/admin/vendors/").get_data(as_text=True)
+    import re as _re
+    def tile(k):
+        m = _re.search(rf'data-vendor="{k}"(.*?)(?=<section |\Z)', page, _re.S)
+        return m.group(1) if m else ""
+    check("Twilio wears its playbook's mark and opens it",
+          "img/vendors/twilio.svg" in tile("twilio") and 'data-playbook="twilio"' in tile("twilio"), tile("twilio")[:400])
+    check("and names the map it is a service on", "EntertainHQ LLC map" in tile("twilio"))
+    check("a playbook pointed at an account finds it whatever its name",
+          'data-playbook="railway"' in tile("railway"))
+    check("OpenAI finds the LLM playbook by the words the night uses", 'data-playbook="llm-apis"' in tile("openai chatgpt"))
+    check("a vendor with no runbook says so", "No playbook yet" in tile("google workspace"), tile("google workspace")[:300])
+    pb_page = c.get("/admin/playbooks/twilio").get_data(as_text=True)
+    check("the playbook's page lists the vendor's accounts and opens them",
+          "2 accounts on Vendors" in pb_page and "#vendor-twilio" in pb_page)
     edit = c.get(f"/admin/service-costs/providers/{ids.twilio_jd}/edit").get_data(as_text=True)
     check("the edit form names the vendor and says In use", 'name="vendor"' in edit and "In use" in edit)
 
