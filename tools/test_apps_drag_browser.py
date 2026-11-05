@@ -13,7 +13,9 @@ Chromium:
      second. One POST saves it and a reload draws the same order.
   2. At 375 (one column), a FINGER (real touch events, not a mouse) drags the
      last tile to the top, and it stays there after a reload.
-  3. A tile dragged into the other half lands where it was dropped there.
+  3. A tile dragged into another section lands where it was dropped there,
+     the empty Building to earn included, and Enter sends a tile to the next
+     section, the last wrapping to the first.
   4. A tap on the grip moves nothing; the arrow keys move a tile one place.
 
 Run: python tools/test_apps_drag_browser.py
@@ -196,7 +198,42 @@ with sync_playwright() as p:
     check("it landed between Golf and Hotel", order(page)["mine"] == ["Golf", "Delta", "Hotel"], order(page))
     open_board(page)
     check("and stays there after a reload", order(page) == {
-        "client": ["Alpha", "Echo", "Bravo", "Charlie", "Foxtrot"], "mine": ["Golf", "Delta", "Hotel"]}, order(page))
+        "client": ["Alpha", "Echo", "Bravo", "Charlie", "Foxtrot"], "building": [],
+        "mine": ["Golf", "Delta", "Hotel"]}, order(page))
+
+    print("2b. Desktop: into Building to earn, empty and drawn before any drag")
+    drop = page.locator('[data-group-section][data-group="building"] [data-group-grid]').bounding_box()
+    check("the empty section is on the page at rest, tall enough to drop on",
+          drop is not None and drop["height"] >= 100, drop)
+    gx, gy, _ = centre(page, '[data-app-tile][data-app-name="Foxtrot"] [data-app-grip]')
+    tx, ty = drop["x"] + drop["width"] * 0.3, drop["y"] + drop["height"] / 2
+    page.mouse.move(gx, gy)
+    page.mouse.down()
+    for i in range(1, 25):
+        page.mouse.move(gx + (tx - gx) * i / 24, gy + (ty - gy) * i / 24)
+        page.wait_for_timeout(16)
+    page.wait_for_timeout(400)
+    with page.expect_response(lambda r: r.url.endswith("/admin/apps/order")):
+        page.mouse.up()
+    page.wait_for_timeout(300)
+    check("it landed in Building to earn", order(page)["building"] == ["Foxtrot"], order(page))
+    open_board(page)
+    check("and stays there after a reload", order(page)["building"] == ["Foxtrot"]
+          and "Foxtrot" not in order(page)["client"], order(page))
+    grip_of(page, "Foxtrot").focus()
+    with page.expect_response(lambda r: r.url.endswith("/admin/apps/order")):
+        page.keyboard.press("Enter")
+    page.wait_for_timeout(300)
+    check("Enter sends it on to the next section, Personal projects",
+          order(page)["mine"][-1] == "Foxtrot" and order(page)["building"] == [], order(page))
+    grip_of(page, "Foxtrot").focus()
+    with page.expect_response(lambda r: r.url.endswith("/admin/apps/order")):
+        page.keyboard.press("Enter")
+    page.wait_for_timeout(300)
+    check("and from the last section back round to the first",
+          order(page)["client"][-1] == "Foxtrot", order(page))
+    open_board(page)
+    check("which a reload keeps", order(page)["client"][-1] == "Foxtrot", order(page))
 
     print("3. A tap moves nothing; the arrows move one place")
     before = order(page)

@@ -304,8 +304,8 @@ repo and a platform address FOLLOW the one production service a tile matches
 (`railway_watch.match_tiles`, nightly; a `*.railway.app` address moves to the
 service's shortest custom domain, never onto a host another tile has, and its
 icon is fetched again the same night); the icon from the app's own site
-(`tile_upkeep`); store ids from the repo; the half and the order from the drag
-edge; and a tile whose Railway project was there last night and is gone tonight
+(`tile_upkeep`); store ids from the repo; the section and the order from the
+drag edge; and a tile whose Railway project was there last night and is gone tonight
 is retired by the read itself (`railway_watch.retire_gone`), only when every
 workspace answered whole, because a project moved into a workspace that failed
 tonight looks exactly like a deleted one. The removed tile is printed whole in
@@ -343,21 +343,31 @@ because one arrived as "Robinson &amp; Co." and was shown that way. The
 migration that folded the pairs together keeps the oldest name, the real
 domain, and every link and icon the others carried.
 
-My Apps splits into Client work and Mine by the project a tile carries,
-unless the tile says otherwise (`AppLink.board_group`, written by dragging it
-across). The two came apart on 2026-11-01: Robinson & Co., Christ
+My Apps splits into sections by the project a tile carries, unless the tile
+says otherwise (`AppLink.board_group`, written by dragging it across;
+`AppLink.section` is the answer, attached reading `client`). The two came apart on 2026-11-01: Robinson & Co., Christ
 Community Church, Lets Cook and Piped have projects and are not current
 client work, and Data Dungeon has no client and is. Never move a tile by
 detaching its project: the project page lists its app, and `register_app`
 re-attaches the project on the next call. `tools/test_app_groups.py`.
 
-On 2026-11-04 the halves were renamed for what they mean to him: "the top
+On 2026-11-04 the halves were renamed for what they mean to him ("the top
 section is products that make me money. bottom section is my personal
-projects." The screen says Makes money and Personal projects
-(`apps_routes.GROUP_LABELS`); the stored values stay `client` and `mine`, so
-no row moved. Each tile has a drag edge down its left side, the whole height
+projects"), and on 2026-11-05 they became three: "1. the makes money or live
+products 2. ... the apps I plan to work hard and want to release a version
+that will make money 3. Personal Projects. Make me good names for these and
+make sure the sections are clearly separated." The screen says **Live and
+earning**, **Building to earn** and **Personal projects**
+(`apps_routes.GROUP_LABELS`, with each one's bar colour); the stored values
+are `client`, `building` (new) and `mine`, so no row moved, and only a drag
+puts a tile in Building to earn. Each section opens on a band of its own (a
+coloured bar, the name, the count, a rule to the edge) with more room above
+it than between tiles, and all three are drawn at rest, an empty one as a
+dashed place to drop: Building to earn started empty, and a section that only
+appears mid-drag is one nobody finds. `tools/test_apps_tiles_browser.py`
+measures the bands. Each tile has a drag edge down its left side, the whole height
 of the tile (his pick, from a screenshot of another app: "I prefer a drag edge
-like this"). It drags a tile to ANY place, in its own half or the other
+like this"). It drags a tile to ANY place, in any section
 (2026-11-05: "move it up a row into the middle to where everything shifts";
 until then it only knew which half it was dropped in and re-filed the tile by
 id). While carried, the tile is fixed to the pointer, a dashed gap stands
@@ -365,15 +375,18 @@ where it will land, and the other tiles slide there (first, last, invert,
 play); the place under the pointer is hit-tested against where each tile WILL
 sit, measured with its slide taken off, never with elementFromPoint, which
 would catch a tile mid-slide and send the gap back and forth. Letting go
-fills the gap and one POST to `apps.order` saves that half's order
+fills the gap and one POST to `apps.order` saves that section's order
 (`AppLink.position`, drawn position first, then id) and writes `board_group`
-only on the tile that crossed, so the rest keep following their projects. A
-tap on the edge moves nothing, so a stray thumb cannot move a tile; Enter
-sends it to the other half and the arrows move it one place, for the
-keyboard. `tools/test_apps_drag_browser.py` drags with a mouse at 1600 and a
+only on the tile that crossed, so the rest keep following their projects.
+Whether anything moved is each section's list compared, never one list of
+the whole board: the last tile of a section dropped into the empty section
+right below it leaves that list unchanged, and the move was never saved
+(the drag test caught it the day the empty middle section came). A tap on
+the edge moves nothing, so a stray thumb cannot move a tile; Enter sends it
+to the next section (the last wraps to the first) and the arrows move it one
+place, for the keyboard. `tools/test_apps_drag_browser.py` drags with a mouse at 1600 and a
 real touch at 375 and reloads after each drop. It is pointer events on the edge with `touch-action: none`, because
-HTML5 drag and drop does nothing on a phone; the empty half is drawn only
-while dragging, as somewhere to drop; the drop target is read at release, not
+HTML5 drag and drop does nothing on a phone; the drop target is read at release, not
 from the last frame, so a quick flick lands; and the edge auto-scroll runs on
 a timer, because a finger held still sends no moves and animation frames do
 not run in a throttled tab (they never fired in the preview pane at all).

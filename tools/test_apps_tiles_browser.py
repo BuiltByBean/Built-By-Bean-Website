@@ -17,7 +17,11 @@ long platform address, every button at once) beside a plain web tile, and at
      sideways; every button keeps its 44px; the icon opens the app at every
      width, and Open is there wherever five buttons fit (from 360);
   3. a version reads green where the stores agree, red where they differ,
-     yellow "not live"; and it is on screen, not cut off by the host.
+     yellow "not live"; and it is on screen, not cut off by the host;
+  4. three sections, Live and earning, Building to earn, Personal projects,
+     in that order, each heading on one line with its rule across, and more
+     room above a section than between two tiles (2026-11-05: "make sure the
+     sections are clearly separated").
 
 Run: python tools/test_apps_tiles_browser.py   (screenshots: --shots <dir>)
 """
@@ -121,7 +125,7 @@ with application.app_context():
     db.session.add(boss)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for i, (name, url, extra) in enumerate(TILES):
-        db.session.add(AppLink(name=name, url=url, board_group="client" if i < 6 else "mine",
+        db.session.add(AppLink(name=name, url=url, board_group="client" if i < 6 else ("building" if i == 6 else "mine"),
                                store_checked_at=now if extra.get("store_versions") else None, **extra))
     db.session.add(SiteCheck(url="https://down.example.test", fail_nights=3, down_since=now))
     db.session.commit()
@@ -162,7 +166,16 @@ MEASURE = """() => {
     return {name: t.dataset.appName, h: Math.round(r.height * 10) / 10, spill, small, versions, fit, opens,
             stores: [...t.querySelectorAll('[data-store-link]')].map(a => a.href)};
   });
-  return {tiles, sideways: sc.scrollWidth - sc.clientWidth,
+  const sections = [...document.querySelectorAll('[data-group-section]')].map(sec => {
+    const head = sec.querySelector('[data-group-head]').getBoundingClientRect();
+    const grid = sec.querySelector('[data-group-grid]').getBoundingClientRect();
+    const kids = [...sec.querySelector('[data-group-head]').children].map(k => k.getBoundingClientRect());
+    return {key: sec.dataset.group, label: sec.querySelector('h2').textContent.trim(),
+            top: head.top, headH: head.height, gridTop: grid.top, gridBottom: grid.bottom,
+            headFits: kids.every(k => k.right <= head.right + 0.5), rule: kids[kids.length - 1].width};
+  });
+  const gaps = [...document.querySelectorAll('[data-group-grid]')].map(g => parseFloat(getComputedStyle(g).rowGap));
+  return {tiles, sections, gaps, sideways: sc.scrollWidth - sc.clientWidth,
           window: document.documentElement.scrollHeight - innerHeight};
 }"""
 
@@ -199,6 +212,15 @@ with sync_playwright() as p:
         check(f"{width}: every version is on screen inside its line",
               all(v["inside"] for t in got["tiles"] for v in t["versions"]),
               {t["name"]: t["versions"] for t in got["tiles"]})
+        secs = got["sections"]
+        check(f"{width}: three sections in order, each with its name",
+              [(x["key"], x["label"]) for x in secs] == [("client", "Live and earning"), ("building", "Building to earn"),
+                                                         ("mine", "Personal projects")], secs)
+        room = [secs[i]["top"] - secs[i - 1]["gridBottom"] for i in range(1, len(secs))]
+        check(f"{width}: clearly apart: more room above a section than between two tiles",
+              all(r >= 2 * max(got["gaps"]) for r in room), (room, got["gaps"]))
+        check(f"{width}: each heading fits on its line, with its rule drawn across",
+              all(x["headFits"] and x["rule"] > 20 for x in secs), secs)
         if width == 1600:
             ehq, dd, dif, rob = by["EntertainHQ"], by["Data Dungeon"], by["Differing Stores"], by[TILES[5][0]]
             check("stores that agree are green", [v["colour"] for v in ehq["versions"]] == [GREEN, GREEN], ehq["versions"])

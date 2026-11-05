@@ -13,8 +13,10 @@ database and proves:
   4. register_app re-attaching the project does not move the tile back.
   5. The migration picks the five by project or by name, leaves everything
      else alone, and leaves a choice already made untouched.
-  6. The halves are named "Makes money" and "Personal projects" (2026-11-04),
-     a tile dragged across is saved by one POST, and a bad group is refused.
+  6. The sections are Live and earning, Building to earn and Personal
+     projects (2026-11-05, three where there were two halves), in that order,
+     all drawn even when empty; a tile dragged across is saved by one POST,
+     and a bad group is refused.
   7. A tile dropped anywhere (2026-11-05, "move it up a row into the middle"):
      apps.order saves the half's order and the page draws it that way; a tile
      that crossed has its half written and no other tile does; bad ids and an
@@ -129,7 +131,7 @@ with c.session_transaction() as s:
 def halves():
     html = c.get("/admin/apps/").data.decode("utf-8", "replace")
     out, current = {}, None
-    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|data-app-name=\"([^\"]+)\"", html):
+    for m in re.finditer(r"data-label=\"([^\"]+)\"|data-app-name=\"([^\"]+)\"", html):
         if m.group(1):
             current = m.group(1)
         else:
@@ -139,9 +141,9 @@ def halves():
 
 print("The page")
 h = halves()
-check("Data Dungeon shows under Makes money", h.get("Data Dungeon") == "Makes money", h)
+check("Data Dungeon shows under Makes money", h.get("Data Dungeon") == "Live and earning", h)
 check("Robinson & Co. shows under Personal projects", h.get("Robinson & Co.") == "Personal projects", h)
-check("EntertainHQ still shows under Client work", h.get("EntertainHQ") == "Makes money", h)
+check("EntertainHQ still shows under Client work", h.get("EntertainHQ") == "Live and earning", h)
 check("Bible Study still shows under Mine", h.get("Bible Study") == "Personal projects", h)
 
 print("No edit form")
@@ -156,7 +158,7 @@ def choose(name, group):
 choose("EntertainHQ", "mine")
 check("a choice on the tile moves it", halves().get("EntertainHQ") == "Personal projects")
 choose("EntertainHQ", None)
-check("a blank puts it back on its project", halves().get("EntertainHQ") == "Makes money")
+check("a blank puts it back on its project", halves().get("EntertainHQ") == "Live and earning")
 check("the edit form is gone", c.get(f"/admin/apps/{ids['Robinson & Co.']}/edit").status_code == 404
       and c.post(f"/admin/apps/{ids['Robinson & Co.']}/edit", data={"name": "x", "url": "https://x.test"}).status_code == 404)
 
@@ -172,17 +174,51 @@ r = c.post(f"/admin/apps/{ids['Data Dungeon']}/group", data={"group": "mine"})
 check("the move answers ok", r.status_code == 200 and r.get_json() == {"ok": True, "group": "mine"}, r.data)
 check("and the tile is under Personal projects", halves().get("Data Dungeon") == "Personal projects", halves())
 r = c.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "client"})
-check("and back the other way", halves().get("Bible Study") == "Makes money", halves())
+check("and back the other way", halves().get("Bible Study") == "Live and earning", halves())
 r = c.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "elsewhere"})
-check("a group that does not exist is refused", r.status_code == 400 and halves().get("Bible Study") == "Makes money")
+check("a group that does not exist is refused", r.status_code == 400 and halves().get("Bible Study") == "Live and earning")
 page = c.get("/admin/apps/").data.decode("utf-8", "replace")
-check("each tile has a grip that says where Enter sends it",
-      'aria-label="Move Data Dungeon, or press Enter to move it to Makes money"' in page
-      and 'aria-label="Move Bible Study, or press Enter to move it to Personal projects"' in page)
+check("each tile has a grip that says where Enter sends it: the next section, the last wrapping",
+      'aria-label="Move Data Dungeon, or press Enter to move it to Live and earning"' in page
+      and 'aria-label="Move Bible Study, or press Enter to move it to Building to earn"' in page, page[:0])
 check("the board posts its order to apps.order", 'data-order-url="/admin/apps/order"' in page)
 check("no em dash", chr(0x2014) not in page)
 c2 = application.test_client()
 check("signed out, nothing moves", c2.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "mine"}).status_code in (302, 401))
+
+print("Three sections")
+page = c.get("/admin/apps/").data.decode("utf-8", "replace")
+labels = re.findall(r'data-group-section data-group="([^"]+)" data-label="([^"]+)"', page)
+check("three sections, in order", labels == [("client", "Live and earning"), ("building", "Building to earn"),
+                                             ("mine", "Personal projects")], labels)
+check("an empty Building to earn is still drawn, as somewhere to drop",
+      'data-group="building" data-label="Building to earn" data-empty' in page)
+r = c.post(f"/admin/apps/{ids['Piped Dev']}/group", data={"group": "building"})
+check("a tile sent to Building to earn is there", r.status_code == 200 and halves().get("Piped Dev") == "Building to earn", halves())
+r = c.post("/admin/apps/order", data={"group": "building", "moved": ids["Let's Cook"],
+                                      "ids": f"{ids['Let' + chr(39) + 's Cook']},{ids['Piped Dev']}"})
+
+
+def in_section(label):
+    html = c.get("/admin/apps/").data.decode("utf-8", "replace")
+    out, current = [], None
+    for m in re.finditer(r'data-label="([^"]+)"|data-app-name="([^"]+)"', html):
+        if m.group(1):
+            current = m.group(1)
+        elif current == label:
+            out.append(m.group(2).replace("&amp;", "&").replace("&#39;", "'"))
+    return out
+
+
+check("a tile dropped into it lands first, and the one there stays",
+      r.status_code == 200 and in_section("Building to earn") == ["Let's Cook", "Piped Dev"],
+      in_section("Building to earn"))
+with application.app_context():
+    check("and is stored as building, a value the column holds",
+          db.session.get(AppLink, ids["Let's Cook"]).board_group == "building"
+          and db.session.get(AppLink, ids["Let's Cook"]).section == "building")
+for n in ("Let's Cook", "Piped Dev"):
+    c.post(f"/admin/apps/{ids[n]}/group", data={"group": "mine"})
 
 print("Dropping a tile anywhere")
 
@@ -194,7 +230,7 @@ def order(half):
 def halves_in_order():
     html = c.get("/admin/apps/").data.decode("utf-8", "replace")
     out, current = [], None
-    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|data-app-name=\"([^\"]+)\"", html):
+    for m in re.finditer(r"data-label=\"([^\"]+)\"|data-app-name=\"([^\"]+)\"", html):
         if m.group(1):
             current = m.group(1)
         else:
@@ -202,13 +238,13 @@ def halves_in_order():
     return out
 
 
-money = order("Makes money")
+money = order("Live and earning")
 check("there is a half to reorder", len(money) >= 2, money)
 wanted = [money[-1]] + money[:-1]
 r = c.post("/admin/apps/order", data={"group": "client", "moved": ids[wanted[0]],
                                       "ids": ",".join(str(ids[n]) for n in wanted)})
 check("the order answers ok", r.status_code == 200 and r.get_json() == {"ok": True}, r.data)
-check("and the page draws that order", order("Makes money") == wanted, (order("Makes money"), wanted))
+check("and the page draws that order", order("Live and earning") == wanted, (order("Live and earning"), wanted))
 with application.app_context():
     before = {a.name: a.board_group for a in AppLink.query.all()}
 mine = order("Personal projects")
@@ -223,7 +259,7 @@ with application.app_context():
 check("only the tile that crossed has its half written",
       after[moving] == "mine" and all(after[n] == before[n] for n in after if n != moving),
       {n: (before[n], after[n]) for n in after if before[n] != after[n]})
-check("the half it left keeps its order", order("Makes money") == [n for n in wanted if n != moving])
+check("the half it left keeps its order", order("Live and earning") == [n for n in wanted if n != moving])
 bad = [{"group": "client", "ids": "999999"}, {"group": "client", "ids": "a,b"},
        {"group": "nowhere", "ids": str(ids[moving])}, {"group": "client", "ids": ""},
        {"group": "client", "ids": f"{ids[moving]},{ids[moving]}"}]

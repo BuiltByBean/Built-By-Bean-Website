@@ -77,14 +77,12 @@ def _refresh_icon(link):
 @apps_bp.route("/")
 @login_required
 def index():
-    """The board, split by whose work it is.
+    """The board, in three sections (GROUP_LABELS).
 
-    Client work first, because that is the half with somebody waiting on it.
-    Which half a tile is in is the project it carries unless the tile says
-    otherwise (AppLink.board_group): a project is a record of who paid for a
-    build, not a promise that it is current work. Ordering inside each group
-    stays by id, so a tile does not move under the cursor when it changes
-    halves.
+    Which section a tile is in is the project it carries unless the tile says
+    otherwise (AppLink.section): a project is a record of who paid for a
+    build, not a promise that it is current work. Inside a section the order
+    is the one a drag saved, then id.
     """
     apps = AppLink.query.order_by(AppLink.position.is_(None), AppLink.position, AppLink.id).all()
     # A phone app's store versions are asked for on the way in when the last
@@ -99,9 +97,9 @@ def index():
     return render_template(
         "pm/apps/index.html",
         site_down=_site_down(apps),
-        groups=[{"key": key, "label": label,
-                 "apps": [a for a in apps if a.is_client_work == (key == "client")]}
-                for key, label in GROUP_LABELS],
+        groups=[{"key": key, "label": label, "mark": mark,
+                 "apps": [a for a in apps if a.section == key]}
+                for key, label, mark in GROUP_LABELS],
         total=len(apps))
 
 
@@ -180,16 +178,23 @@ def railway_ignore(id):
     return redirect(url_for("apps.railway_unlisted"))
 
 
-# The halves of the board (Michael, 2026-11-04): "the top section is products
-# that make me money. bottom section is my personal projects." The stored
-# values stay "client" and "mine" so no row moves; only the names changed.
-GROUP_LABELS = (("client", "Makes money"), ("mine", "Personal projects"))
+# The sections of the board, top to bottom: (stored value, name, the colour
+# of the bar beside its name: green earning, the brand's violet for what is
+# being built, grey for his own). Two halves on 2026-11-04 ("the top section is products that make me
+# money. bottom section is my personal projects"), three on 2026-11-05: "1.
+# the makes money or live products 2. ... the apps I plan to work hard and
+# want to release a version that will make money 3. Personal Projects. Make
+# me good names for these". The stored values stay "client" and "mine", so no
+# row moved; "building" is new.
+GROUP_LABELS = (("client", "Live and earning", "bg-emerald-400"),
+                ("building", "Building to earn", "bg-brand-400"),
+                ("mine", "Personal projects", "bg-surface-500"))
 
 
 @apps_bp.route("/<int:id>/group", methods=["POST"])
 @login_required
 def move_group(id):
-    """A tile dragged to the other half of the board. Answers JSON, because
+    """A tile sent to another section of the board. Answers JSON, because
     the page has already moved the tile and only needs to know it held."""
     link = db.session.get(AppLink, id) or abort(404)
     group = request.form.get("group") or ""
@@ -203,11 +208,11 @@ def move_group(id):
 @apps_bp.route("/order", methods=["POST"])
 @login_required
 def order():
-    """A tile dropped somewhere on the board: the half it landed in and that
-    half's tiles in their new order, top left to bottom right. Only the tile
-    that crossed halves has its half written; the rest only take positions,
-    so a tile that follows its project keeps following it. Answers JSON,
-    because the page has already moved the tiles."""
+    """A tile dropped somewhere on the board: the section it landed in and
+    that section's tiles in their new order, top left to bottom right. Only
+    the tile that crossed sections has its section written; the rest only
+    take positions, so a tile that follows its project keeps following it.
+    Answers JSON, because the page has already moved the tiles."""
     group = request.form.get("group") or ""
     moved = request.form.get("moved", type=int)
     try:
@@ -221,7 +226,7 @@ def order():
         return {"ok": False}, 400
     for n, i in enumerate(ids):
         links[i].position = n
-    if moved in links and links[moved].is_client_work != (group == "client"):
+    if moved in links and links[moved].section != group:
         links[moved].board_group = group
     db.session.commit()
     return {"ok": True}

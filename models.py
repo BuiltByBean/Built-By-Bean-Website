@@ -3301,21 +3301,31 @@ class AppLink(db.Model):
     # Data Dungeon has none and is (Michael). A column of its own rather than
     # detaching the project, because the project page still lists its app and
     # register_app re-attaches the project on its next call.
+    #
+    # "building" is the third section (Michael, 2026-11-05: "the apps I plan
+    # to work hard and want to release a version that will make money"). Only
+    # a drag puts a tile there; nothing follows into it by default.
     board_group = db.Column(db.String(10), nullable=True)
-    BOARD_GROUPS = ("client", "mine")
-    # Where the tile sits in its half, from a drag (Michael, 2026-11-05: "move
-    # it up a row into the middle to where everything shifts"). NULL is a tile
-    # nobody has placed: it follows the placed ones, oldest first.
+    BOARD_GROUPS = ("client", "building", "mine")
+    # Where the tile sits in its section, from a drag (Michael, 2026-11-05:
+    # "move it up a row into the middle to where everything shifts"). NULL is
+    # a tile nobody has placed: it follows the placed ones, oldest first.
     position = db.Column(db.Integer, nullable=True)
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     @property
-    def is_client_work(self):
-        """Which half of My Apps: the choice made on the tile, else the project."""
+    def section(self):
+        """Which section of My Apps: the choice made on the tile, else the
+        project (attached is "client", which reads Live and earning)."""
         if self.board_group in self.BOARD_GROUPS:
-            return self.board_group == "client"
-        return self.project_id is not None
+            return self.board_group
+        return "client" if self.project_id is not None else "mine"
+
+    @property
+    def is_client_work(self):
+        """Whether the tile is in the first section, Live and earning."""
+        return self.section == "client"
 
     @property
     def is_external(self):

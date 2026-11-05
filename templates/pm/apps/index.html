@@ -26,21 +26,26 @@
   own public answer gave (store_versions_service), so a button is never drawn
   for a listing that does not exist.
 
-  It is in two groups: what makes money (client builds and his own products
-  that earn), then personal projects (Michael, 2026-11-04). A group with
-  nothing in it is drawn only while a tile is being dragged, as somewhere to
-  drop it: an empty heading at rest would be a claim about the business, not
-  a state of the board.
+  It is in three sections (Michael, 2026-11-05: "1. the makes money or live
+  products 2. ... the apps I plan to work hard and want to release a version
+  that will make money 3. Personal Projects ... make sure the sections are
+  clearly separated"): Live and earning, Building to earn, Personal projects
+  (apps_routes.GROUP_LABELS). Each opens on a band of its own: a coloured
+  bar, the name, the count and a rule running to the edge, with more room
+  above it than between tiles. All three are drawn at rest, an empty one as a
+  dashed place to drop, because Building to earn starts empty and a section
+  that only appears mid-drag is one nobody finds.
 
   The edge down the left of each tile drags it to any place on the board, in
-  its own half or the other (Michael, 2026-11-05: "move it up a row into the
-  middle to where everything shifts"). While it is carried a gap stands where
+  any section (Michael, 2026-11-05: "move it up a row into the middle to
+  where everything shifts"). While it is carried a gap stands where
   it will land and the other tiles slide out of the way; letting go puts it in
-  the gap, and one POST to apps.order saves that half's order (AppLink.position)
-  and, if it crossed, its half. The page order is position, then id, so a
-  reload draws what was dropped. A tap on the edge moves nothing, so a stray
-  thumb cannot move a tile; for the keyboard, Enter sends it to the other half
-  and the arrows move it one place. Dragging is pointer events on the grip, not
+  the gap, and one POST to apps.order saves that section's order
+  (AppLink.position) and, if it crossed, its section. The page order is
+  position, then id, so a reload draws what was dropped. A tap on the edge
+  moves nothing, so a stray thumb cannot move a tile; for the keyboard, Enter
+  sends it to the next section (the last wraps to the first) and the arrows
+  move it one place. Dragging is pointer events on the grip, not
   HTML5 drag and drop, which a phone does not do; touch-action none on the
   grip keeps a finger's drag from being taken as a scroll.
 
@@ -166,7 +171,7 @@
 
 {% block content %}
 <style>
-    [data-apps-board]:not(.is-dragging) [data-group-section][data-empty] { display: none; }
+    [data-apps-board] [data-group-section][data-empty] [data-group-grid] { min-height: 7rem; border-radius: 1rem; outline: 2px dashed rgba(255,255,255,0.08); }
     [data-apps-board].is-dragging [data-group-grid] { min-height: 7rem; border-radius: 1rem; outline: 2px dashed rgba(255,255,255,0.08); outline-offset: 4px; }
     [data-apps-board] [data-group-section].is-target [data-group-grid] { outline-color: rgba(167,139,250,0.6); }
     [data-app-tile].is-lifted { z-index: 30; pointer-events: none; box-shadow: 0 18px 40px rgba(0,0,0,0.45); opacity: 0.95; cursor: grabbing; }
@@ -180,18 +185,20 @@
         [data-app-tile][data-crowded] [data-app-buttons] { justify-content: flex-end; }
     }
 </style>
-<div class="space-y-8 stagger-in" data-apps-board data-order-url="{{ url_for('apps.order') }}">
+<div class="space-y-10 stagger-in" data-apps-board data-order-url="{{ url_for('apps.order') }}">
 
     {% if total %}
         {% for group in groups %}
-        {% set other = (groups | rejectattr('key', 'equalto', group.key) | first).label %}
-        <section class="space-y-3" data-group-section data-group="{{ group.key }}" data-label="{{ group.label }}"{% if not group.apps %} data-empty{% endif %}>
-            <div class="flex items-baseline gap-2 px-1">
-                <h2 class="text-[11px] font-semibold uppercase tracking-wider text-white/40">{{ group.label }}</h2>
-                <span class="text-[11px] text-white/25 tabular-nums" data-group-count>{{ group.apps|length | commas }}</span>
+        {% set next = groups[(loop.index0 + 1) % (groups | length)].label %}
+        <section class="space-y-4" data-group-section data-group="{{ group.key }}" data-label="{{ group.label }}"{% if not group.apps %} data-empty{% endif %}>
+            <div class="flex items-center gap-3 min-w-0" data-group-head>
+                <span class="w-1 h-6 shrink-0 rounded-full {{ group.mark }}" aria-hidden="true"></span>
+                <h2 class="text-base sm:text-lg font-semibold text-white whitespace-nowrap">{{ group.label }}</h2>
+                <span class="text-sm text-white/40 tabular-nums" data-group-count>{{ group.apps|length | commas }}</span>
+                <span class="flex-1 min-w-0 h-px bg-white/10" aria-hidden="true"></span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" data-group-grid>
-                {% for app in group.apps %}{{ tile(app, other) }}{% endfor %}
+                {% for app in group.apps %}{{ tile(app, next) }}{% endfor %}
             </div>
         </section>
         {% endfor %}
@@ -234,9 +241,10 @@
     function columns(grid) {
         return getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
     }
-    function otherSection(sec) {
-        return Array.prototype.find.call(board().querySelectorAll('[data-group-section]'),
-            function (s) { return s !== sec; });
+    // The section after this one, the last wrapping to the first.
+    function nextSection(sec) {
+        var all = Array.prototype.slice.call(board().querySelectorAll('[data-group-section]'));
+        return all.length > 1 ? all[(all.indexOf(sec) + 1) % all.length] : null;
     }
 
     function refresh() {
@@ -245,10 +253,10 @@
             var n = sec.querySelectorAll('[data-app-tile]').length;
             sec.querySelector('[data-group-count]').textContent = n.toLocaleString();
             if (n) sec.removeAttribute('data-empty'); else sec.setAttribute('data-empty', '');
-            var other = otherSection(sec);
+            var next = nextSection(sec);
             sec.querySelectorAll('[data-app-tile]').forEach(function (t) {
                 t.querySelector('[data-app-grip]').setAttribute('aria-label',
-                    'Move ' + t.dataset.appName + ', or press Enter to move it to ' + (other ? other.dataset.label : ''));
+                    'Move ' + t.dataset.appName + ', or press Enter to move it to ' + (next ? next.dataset.label : ''));
             });
         });
     }
@@ -361,13 +369,22 @@
     function snapshot() {
         return grids().map(function (g) { return {grid: g, tiles: tilesIn(g)}; });
     }
+    // Every section's tiles in order, section by section. Not one list of
+    // the whole board: the last tile of one section dropped into an empty
+    // section right below it leaves that list exactly as it was, and the
+    // move was never saved (found the day the empty middle section came).
+    function layout() {
+        return grids().map(function (g) {
+            return tilesIn(g).map(function (x) { return x.dataset.appId; }).join(',');
+        }).join('|');
+    }
     function restore(snap) {
         snap.forEach(function (s) { s.tiles.forEach(function (t) { s.grid.appendChild(t); }); });
         refresh();
     }
 
-    // One POST for the half the tile ended up in: its tiles in order, and
-    // which one moved, so only that one has its half written.
+    // One POST for the section the tile ended up in: its tiles in order, and
+    // which one moved, so only that one has its section written.
     function save(tile, snap) {
         var sec = tile.closest('[data-group-section]');
         var grid = sec.querySelector('[data-group-grid]');
@@ -384,7 +401,7 @@
         var t = drag.tile;
         var r = t.getBoundingClientRect();
         drag.snap = snapshot();
-        drag.start = tilesIn(board()).map(function (x) { return x.dataset.appId; }).join(',');
+        drag.start = layout();
         var slot = document.createElement('div');
         slot.setAttribute('data-app-slot', '');
         slot.setAttribute('aria-hidden', 'true');
@@ -462,20 +479,19 @@
         d.tile.style.transform = '';
         setTimeout(function () { d.tile.style.transition = ''; }, SHIFT_MS + 40);
         refresh();
-        var now = tilesIn(b).map(function (x) { return x.dataset.appId; }).join(',');
-        if (!cancelled && now !== d.start) save(d.tile, d.snap);
+        if (!cancelled && layout() !== d.start) save(d.tile, d.snap);
     }
     document.addEventListener('pointerup', function (e) { end(e, false); });
     document.addEventListener('pointercancel', function (e) { end(e, true); });
 
-    // The keyboard: Enter sends the tile to the end of the other half, the
+    // The keyboard: Enter sends the tile to the end of the next section, the
     // arrows move it one place within its own. A pointer press is handled
     // above, so only clicks with no pointer behind them (detail 0) count.
     document.addEventListener('click', function (e) {
         var grip = e.target.closest && e.target.closest('[data-app-grip]');
         if (!grip || e.detail !== 0) return;
         var tile = grip.closest('[data-app-tile]');
-        var to = otherSection(tile.closest('[data-group-section]'));
+        var to = nextSection(tile.closest('[data-group-section]'));
         if (!to) return;
         var snap = snapshot();
         shift(function () { to.querySelector('[data-group-grid]').appendChild(tile); });

@@ -460,10 +460,10 @@ with application.app_context():
 
 
 def tile_html(page, tid):
-    """One tile's markup, from its opening tag to the next tile's."""
+    """One tile's markup, from its opening tag to the next tile or section."""
     at = page.index(f'data-app-id="{tid}"')
-    nxt = page.find("data-app-tile", at + 10)
-    return page[at:nxt if nxt > 0 else len(page)]
+    ends = [i for i in (page.find("data-app-tile", at + 10), page.find("data-group-section", at)) if i > 0]
+    return page[at:min(ends) if ends else len(page)]
 
 
 def set_stores(**rows):
