@@ -35,6 +35,8 @@ import os
 import re
 import sys
 import uuid
+
+import volume_files
 from datetime import date, datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
@@ -232,12 +234,11 @@ def fetch(mailbox, since):
 
 def _store(data, ext):
     from flask import current_app
+    import volume_files
     folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "receipts")
-    os.makedirs(folder, exist_ok=True)
-    name = f"{uuid.uuid4().hex}.{ext}"
-    with open(os.path.join(folder, name), "wb") as fh:
-        fh.write(data)
-    return name
+    # The nightly read runs on a service with no volume: volume_files hands
+    # the file to the web service's.
+    return volume_files.write(folder, f"{uuid.uuid4().hex}.{ext}", data)
 
 
 _TOTAL_WORD = re.compile(r"\b(total|amount paid|amount charged|charged|paid|amount due|grand total)\b",
@@ -397,15 +398,15 @@ def attach_filings():
             if src and os.path.exists(src):
                 ext = os.path.splitext(files[0].stored_name)[1] or ".pdf"
                 name = f"{uuid.uuid4().hex}{ext}"
-                shutil.copyfile(src, os.path.join(_receipts_dir(), name))
+                with open(src, "rb") as fh:
+                    volume_files.write(_receipts_dir(), name, fh.read())
                 original = files[0].original_name
             else:
                 # No confirmation uploaded: the board's own record of the
                 # return, with WebFile's reference numbers, until one is.
                 from pm.business_routes import filing_record_pdf
-                name = f"{uuid.uuid4().hex}.pdf"
-                with open(os.path.join(_receipts_dir(), name), "wb") as fh:
-                    fh.write(bytes(filing_record_pdf(filing)))
+                name = volume_files.write(_receipts_dir(), f"{uuid.uuid4().hex}.pdf",
+                                          bytes(filing_record_pdf(filing)))
                 original = f"Sales tax return {filing.year} Q{filing.quarter} (board record).pdf"
             _attach(e, name, original)
             done += 1

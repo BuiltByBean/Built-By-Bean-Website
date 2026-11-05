@@ -371,6 +371,9 @@ def create_app():
     # The mailbox is read every five minutes whether or not a page is open.
     from pm.mail_service import start_background as start_mail_sync
     start_mail_sync(app)
+    # Files the nightly service made, moved onto the volume (volume_files.py).
+    import volume_files
+    volume_files.start_background(app)
 
     # ── Every client held against the catalogue ───────────
     from pm.cerebro_routes import cerebro_bp

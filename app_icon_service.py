@@ -255,8 +255,7 @@ def fetch(page_url):
 
 def store(data, ext, folder):
     """Write the icon and return the filename it was stored under."""
-    os.makedirs(folder, exist_ok=True)
-    name = f"{uuid.uuid4().hex}.{ext}"
-    with open(os.path.join(folder, name), "wb") as fh:
-        fh.write(data)
-    return name
+    import volume_files
+    # Through volume_files: the nightly service re-fetches icons and has no
+    # volume of its own, so its writes go to the web service's.
+    return volume_files.write(folder, f"{uuid.uuid4().hex}.{ext}", data)

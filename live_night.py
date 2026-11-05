@@ -34,6 +34,11 @@ def steps(night):
     night.step("site checks", ctx(sites))
     night.step("store versions", ctx(store_versions_service.refresh_all))
     night.step("tile text and icons", ctx(tile_upkeep.run))
+    # After every step that writes a file: what the board points at must be on
+    # the web service's volume (volume_files.py), and the web repairs any name
+    # that points at nothing.
+    import volume_files
+    night.step("files on the volume", ctx(volume_files.heal))
     night.step("map checks", ctx(map_checks.run))
     night.step("playbook step checks", ctx(step_checks.run))
     night.step("Railway bills from mail", ctx(railway_mail.run))

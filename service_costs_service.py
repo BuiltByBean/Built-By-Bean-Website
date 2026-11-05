@@ -360,10 +360,10 @@ def _stripe_fee_statement(provider, resource_id, p_start, label, rows):
             f"<tr><th>Date</th><th>Type</th><th>Description</th><th>Stripe id</th><th>Amount</th><th>Fee</th></tr>"
             f"{body}<tr><td colspan='5'><b>Total fees</b></td>"
             f"<td style='text-align:right'><b>${total:,.2f}</b></td></tr></table></body>")
-    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "receipts")
-    os.makedirs(folder, exist_ok=True)
-    with open(os.path.join(folder, name), "w", encoding="utf-8") as fh:
-        fh.write(page)
+    import volume_files
+    # Written by the nightly Stripe sync, which has no volume: volume_files
+    # hands it to the web service's.
+    volume_files.write(os.path.join(current_app.config["UPLOAD_FOLDER"], "receipts"), name, page)
     for e in expenses:
         e.receipt_filename = name
         e.receipt_original_name = f"Stripe fees {p_start:%B %Y}.html"

@@ -2236,6 +2236,25 @@ only pass if those very elements survived. Catalogue rule "Only the part that
 changed is allowed to change", which carries the five reasons this keeps
 getting missed.
 
+## The night has no volume
+
+Railway mounts a volume on ONE service, and `/data` is the web service's.
+cost-sync runs every nightly step with no volume at all, so until 2026-11-05
+whatever it wrote (icons re-fetched by tile upkeep, receipts from the
+mailboxes, Stripe fee statements) went onto its own throwaway disk while the
+database took the new names, and the website answered 404: ten My Apps icons
+blank the morning after tile upkeep first ran, and two receipts gone. Every file
+write goes through `volume_files.write`: local where `RAILWAY_VOLUME_MOUNT_PATH`
+is set (or off Railway), otherwise a `VolumeInbox` row in the same transaction
+as the name it stands for, which the web's timer (`start_background`, web only)
+moves onto the volume within a minute. The same timer runs `heal_here`
+(`pm/files_door_routes.py`, also `POST /api/guidance/files/heal`) at boot and
+daily: a fetched icon whose file is gone is fetched again, an uploaded one
+clears to its letter, a receipt row pointing at nothing is let go so the next
+mail read takes it in again, and its expense goes back on Missing. A new
+`open(..., "wb")` under UPLOAD_FOLDER anywhere a nightly step can reach is the
+regression. `tools/test_volume_files.py`.
+
 ## House rules
 
 - **Nothing behind the login is cached.** Cloudflare caches by what a URL ends in

@@ -4667,6 +4667,23 @@ class CuratorRun(db.Model):
         return f"<CuratorRun {self.started_at} {self.status}>"
 
 
+class VolumeInbox(db.Model):
+    """A file the nightly service made, waiting for the web service to put it
+    on the volume (volume_files.py). cost-sync has no volume and no way to
+    reach the web's door without a key it does not hold, but it has the
+    database, so it leaves the bytes here and the web moves them within a
+    minute. A row lives only until then."""
+
+    __tablename__ = "volume_inbox"
+    __table_args__ = (db.UniqueConstraint("folder", "name", name="uq_volume_inbox_folder_name"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    folder = db.Column(db.String(40), nullable=False)
+    name = db.Column(db.String(160), nullable=False)
+    data = db.Column(db.LargeBinary, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class NightRun(db.Model):
     """One run of the nightly cost-sync job, with a result per step
     (night_log.py). Needs attention reads the newest: a failed step, or no run
