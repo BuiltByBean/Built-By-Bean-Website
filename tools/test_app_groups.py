@@ -14,6 +14,10 @@ database and proves:
      else alone, and leaves a choice already made untouched.
   6. The halves are named "Makes money" and "Personal projects" (2026-11-04),
      a tile dragged across is saved by one POST, and a bad group is refused.
+  7. A tile dropped anywhere (2026-11-05, "move it up a row into the middle"):
+     apps.order saves the half's order and the page draws it that way; a tile
+     that crossed has its half written and no other tile does; bad ids and an
+     unknown half are refused; signed out, nothing moves.
 
 Run: python tools/test_app_groups.py
 """
@@ -173,11 +177,61 @@ check("and back the other way", halves().get("Bible Study") == "Makes money", ha
 r = c.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "elsewhere"})
 check("a group that does not exist is refused", r.status_code == 400 and halves().get("Bible Study") == "Makes money")
 page = c.get("/admin/apps/").data.decode("utf-8", "replace")
-check("each tile has a grip that says where it goes",
-      'aria-label="Move Data Dungeon to Makes money"' in page and 'aria-label="Move Bible Study to Personal projects"' in page)
+check("each tile has a grip that says where Enter sends it",
+      'aria-label="Move Data Dungeon, or press Enter to move it to Makes money"' in page
+      and 'aria-label="Move Bible Study, or press Enter to move it to Personal projects"' in page)
+check("the board posts its order to apps.order", 'data-order-url="/admin/apps/order"' in page)
 check("no em dash", chr(0x2014) not in page)
 c2 = application.test_client()
 check("signed out, nothing moves", c2.post(f"/admin/apps/{ids['Bible Study']}/group", data={"group": "mine"}).status_code in (302, 401))
+
+print("Dropping a tile anywhere")
+
+
+def order(half):
+    return [n for n, h in halves_in_order() if h == half]
+
+
+def halves_in_order():
+    html = c.get("/admin/apps/").data.decode("utf-8", "replace")
+    out, current = [], None
+    for m in re.finditer(r"uppercase tracking-wider text-white/40\">([^<]+)<|aria-label=\"Edit ([^\"]+)\"", html):
+        if m.group(1):
+            current = m.group(1)
+        else:
+            out.append((m.group(2).replace("&amp;", "&").replace("&#39;", "'"), current))
+    return out
+
+
+money = order("Makes money")
+check("there is a half to reorder", len(money) >= 2, money)
+wanted = [money[-1]] + money[:-1]
+r = c.post("/admin/apps/order", data={"group": "client", "moved": ids[wanted[0]],
+                                      "ids": ",".join(str(ids[n]) for n in wanted)})
+check("the order answers ok", r.status_code == 200 and r.get_json() == {"ok": True}, r.data)
+check("and the page draws that order", order("Makes money") == wanted, (order("Makes money"), wanted))
+with application.app_context():
+    before = {a.name: a.board_group for a in AppLink.query.all()}
+mine = order("Personal projects")
+moving = wanted[1]
+across = mine[:1] + [moving] + mine[1:]
+r = c.post("/admin/apps/order", data={"group": "mine", "moved": ids[moving],
+                                      "ids": ",".join(str(ids[n]) for n in across)})
+check("a tile dropped in the other half lands where it was dropped",
+      r.status_code == 200 and order("Personal projects") == across, (order("Personal projects"), across))
+with application.app_context():
+    after = {a.name: a.board_group for a in AppLink.query.all()}
+check("only the tile that crossed has its half written",
+      after[moving] == "mine" and all(after[n] == before[n] for n in after if n != moving),
+      {n: (before[n], after[n]) for n in after if before[n] != after[n]})
+check("the half it left keeps its order", order("Makes money") == [n for n in wanted if n != moving])
+bad = [{"group": "client", "ids": "999999"}, {"group": "client", "ids": "a,b"},
+       {"group": "nowhere", "ids": str(ids[moving])}, {"group": "client", "ids": ""},
+       {"group": "client", "ids": f"{ids[moving]},{ids[moving]}"}]
+check("bad ids, an unknown half or a repeat are refused",
+      all(c.post("/admin/apps/order", data=b).status_code == 400 for b in bad))
+check("signed out, no order is saved",
+      application.test_client().post("/admin/apps/order", data={"group": "mine", "ids": str(ids[moving])}).status_code in (302, 401))
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All passed.")

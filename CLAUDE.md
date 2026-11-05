@@ -320,10 +320,21 @@ projects." The screen says Makes money and Personal projects
 (`apps_routes.GROUP_LABELS`); the stored values stay `client` and `mine`, so
 no row moved. Each tile has a drag edge down its left side, the whole height
 of the tile (his pick, from a screenshot of another app: "I prefer a drag edge
-like this"): drag it to the other half and one POST to `apps.move_group`
-records the choice while the tile moves in place. A tap on the edge moves
-nothing, so a stray thumb cannot send a tile across; Enter on it does, for the
-keyboard. It is pointer events on the edge with `touch-action: none`, because
+like this"). It drags a tile to ANY place, in its own half or the other
+(2026-11-05: "move it up a row into the middle to where everything shifts";
+until then it only knew which half it was dropped in and re-filed the tile by
+id). While carried, the tile is fixed to the pointer, a dashed gap stands
+where it will land, and the other tiles slide there (first, last, invert,
+play); the place under the pointer is hit-tested against where each tile WILL
+sit, measured with its slide taken off, never with elementFromPoint, which
+would catch a tile mid-slide and send the gap back and forth. Letting go
+fills the gap and one POST to `apps.order` saves that half's order
+(`AppLink.position`, drawn position first, then id) and writes `board_group`
+only on the tile that crossed, so the rest keep following their projects. A
+tap on the edge moves nothing, so a stray thumb cannot move a tile; Enter
+sends it to the other half and the arrows move it one place, for the
+keyboard. `tools/test_apps_drag_browser.py` drags with a mouse at 1600 and a
+real touch at 375 and reloads after each drop. It is pointer events on the edge with `touch-action: none`, because
 HTML5 drag and drop does nothing on a phone; the empty half is drawn only
 while dragging, as somewhere to drop; the drop target is read at release, not
 from the last frame, so a quick flick lands; and the edge auto-scroll runs on

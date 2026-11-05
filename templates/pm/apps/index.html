@@ -12,13 +12,17 @@
   drop it: an empty heading at rest would be a claim about the business, not
   a state of the board.
 
-  The edge down the left of each tile drags it to the other half. A tap on it
-  moves nothing, so a stray thumb on a phone cannot send a tile across; Enter
-  on it does, for the keyboard.
-  The tile moves in place and one small POST records it, so nothing else on
-  the page is rebuilt. Dragging is pointer events on the grip, not HTML5
-  drag and drop, which a phone does not do; `touch-action: none` on the grip
-  keeps a finger's drag from being taken as a scroll.
+  The edge down the left of each tile drags it to any place on the board, in
+  its own half or the other (Michael, 2026-11-05: "move it up a row into the
+  middle to where everything shifts"). While it is carried a gap stands where
+  it will land and the other tiles slide out of the way; letting go puts it in
+  the gap, and one POST to apps.order saves that half's order (AppLink.position)
+  and, if it crossed, its half. The page order is position, then id, so a
+  reload draws what was dropped. A tap on the edge moves nothing, so a stray
+  thumb cannot move a tile; for the keyboard, Enter sends it to the other half
+  and the arrows move it one place. Dragging is pointer events on the grip, not
+  HTML5 drag and drop, which a phone does not do; `touch-action: none` on the
+  grip keeps a finger's drag from being taken as a scroll.
 
   The tile is no longer one big anchor. It holds three separate links now, and
   a link inside a link is invalid and behaves differently in every browser -
@@ -44,7 +48,7 @@
        than the 44px rule asks of a press, and on purpose: the rule is about a
        small square a thumb can miss, and this is a strip as tall as the tile,
        so the thumb has well over 44px of it in every direction it moves. #}
-    <button type="button" data-app-grip aria-label="Move {{ app.name }} to {{ other }}" title="Drag to move"
+    <button type="button" data-app-grip aria-label="Move {{ app.name }}, or press Enter to move it to {{ other }}" title="Drag to move"
             class="w-7 shrink-0 self-stretch flex items-center justify-center bg-white/[0.06] border-r border-white/5 text-surface-400 hover:text-white hover:bg-white/[0.1] transition-colors cursor-grab select-none"
             style="touch-action: none">
         {{ icon('drag', 'w-4 h-4 pointer-events-none') }}
@@ -154,11 +158,11 @@
 <style>
     [data-apps-board]:not(.is-dragging) [data-group-section][data-empty] { display: none; }
     [data-apps-board].is-dragging [data-group-grid] { min-height: 7rem; border-radius: 1rem; outline: 2px dashed rgba(255,255,255,0.08); outline-offset: 4px; }
-    [data-apps-board] [data-group-section].is-target [data-group-grid] { outline-color: rgba(167,139,250,0.6); background: rgba(167,139,250,0.05); }
-    [data-app-tile].is-lifted { position: relative; z-index: 30; pointer-events: none; box-shadow: 0 18px 40px rgba(0,0,0,0.45); opacity: 0.95; }
-    [data-app-tile].is-settling { transition: transform 160ms ease; }
+    [data-apps-board] [data-group-section].is-target [data-group-grid] { outline-color: rgba(167,139,250,0.6); }
+    [data-app-tile].is-lifted { z-index: 30; pointer-events: none; box-shadow: 0 18px 40px rgba(0,0,0,0.45); opacity: 0.95; cursor: grabbing; }
+    [data-app-slot] { border: 2px dashed rgba(167,139,250,0.55); border-radius: 1rem; background: rgba(167,139,250,0.06); }
 </style>
-<div class="space-y-8 stagger-in" data-apps-board data-move-url="{{ url_for('apps.move_group', id=0) }}">
+<div class="space-y-8 stagger-in" data-apps-board data-order-url="{{ url_for('apps.order') }}">
 
     {% if total %}
         {% for group in groups %}
@@ -184,61 +188,146 @@
 
 </div>
 <script>
-// Moving a tile between the two halves. Listeners go on the document once,
-// because bbbNavigate re-runs this script on every visit to the page.
+// Dragging a tile to any place on the board (Michael, 2026-11-05: "take one up
+// and move it up a row into the middle to where everything shifts"). Listeners
+// go on the document once, because bbbNavigate re-runs this script on every
+// visit to the page.
 (function () {
     if (window.__appsGroupDrag) return;
     window.__appsGroupDrag = true;
     var drag = null;
     var EDGE = 64;
+    var SHIFT_MS = 180;
 
     function board() { return document.querySelector('[data-apps-board]'); }
     function scroller() { return document.getElementById('pm-scroll') || document.scrollingElement; }
-    function sectionAt(x, y) {
-        var el = document.elementFromPoint(x, y);
-        return el && el.closest('[data-group-section]');
+    function grids() { return Array.prototype.slice.call(board().querySelectorAll('[data-group-grid]')); }
+    // The tiles in the flow: never the one being carried, which is fixed to
+    // the pointer and only stands in the DOM where it started.
+    function tilesIn(root) {
+        return Array.prototype.filter.call(root.querySelectorAll('[data-app-tile]'),
+            function (t) { return !t.classList.contains('is-lifted'); });
+    }
+    function inFlow(root) {
+        return Array.prototype.filter.call(root.children, function (el) {
+            return !el.classList.contains('is-lifted') && (el.hasAttribute('data-app-tile') || el.hasAttribute('data-app-slot'));
+        });
+    }
+    function columns(grid) {
+        return getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+    }
+    function otherSection(sec) {
+        return Array.prototype.find.call(board().querySelectorAll('[data-group-section]'),
+            function (s) { return s !== sec; });
     }
 
-    function refresh(b) {
+    function refresh() {
+        var b = board();
         b.querySelectorAll('[data-group-section]').forEach(function (sec) {
             var n = sec.querySelectorAll('[data-app-tile]').length;
             sec.querySelector('[data-group-count]').textContent = n.toLocaleString();
             if (n) sec.removeAttribute('data-empty'); else sec.setAttribute('data-empty', '');
+            var other = otherSection(sec);
+            sec.querySelectorAll('[data-app-tile]').forEach(function (t) {
+                t.querySelector('[data-app-grip]').setAttribute('aria-label',
+                    'Move ' + t.dataset.appName + ', or press Enter to move it to ' + (other ? other.dataset.label : ''));
+            });
         });
     }
 
-    // Tiles keep their order by id inside a half, so a moved tile lands
-    // where it will be on the next load rather than wherever it was dropped.
-    function place(tile, sec) {
-        var grid = sec.querySelector('[data-group-grid]');
-        var id = +tile.dataset.appId;
-        var after = Array.prototype.find.call(grid.querySelectorAll('[data-app-tile]'),
-            function (t) { return +t.dataset.appId > id; });
-        grid.insertBefore(tile, after || null);
-        var other = Array.prototype.find.call(board().querySelectorAll('[data-group-section]'),
-            function (s) { return s !== sec; });
-        tile.querySelector('[data-app-grip]').setAttribute('aria-label',
-            'Move ' + tile.dataset.appName + ' to ' + (other ? other.dataset.label : ''));
+    // Where every tile in the flow will sit, in the scroller's own
+    // coordinates, read with any shift still playing taken off. Hit-testing
+    // these rather than elementFromPoint keeps a tile that is sliding out of
+    // the way from being mistaken for the place the pointer is over.
+    function measure() {
+        var st = scroller().scrollTop;
+        var homes = new Map();
+        grids().forEach(function (g) {
+            inFlow(g).forEach(function (el) {
+                var r = el.getBoundingClientRect();
+                homes.set(el, {l: r.left, t: r.top + st, r: r.right, b: r.bottom + st, w: r.width, h: r.height});
+            });
+        });
+        return homes;
     }
 
-    function move(tile, to) {
-        var b = board();
-        var from = tile.closest('[data-group-section]');
-        if (!to || to === from) return;
-        place(tile, to);
-        refresh(b);
-        var body = new FormData();
-        body.append('group', to.dataset.group);
-        fetch(b.dataset.moveUrl.replace('/0/group', '/' + tile.dataset.appId + '/group'),
-              {method: 'POST', body: body, credentials: 'same-origin'})
-            .then(function (r) { if (!r.ok) throw new Error(r.status); })
-            .catch(function () { place(tile, from); refresh(b); });
+    // Move something in the DOM and let every other tile slide to its new
+    // place (first, last, invert, play), rather than jump.
+    function shift(change) {
+        var first = new Map();
+        grids().forEach(function (g) {
+            tilesIn(g).forEach(function (t) { first.set(t, t.getBoundingClientRect()); });
+        });
+        change();
+        var all = [];
+        grids().forEach(function (g) { all = all.concat(tilesIn(g)); });
+        all.forEach(function (t) { t.style.transition = 'none'; t.style.transform = ''; });
+        var homes = measure();
+        all.forEach(function (t) {
+            var a = first.get(t);
+            var r = t.getBoundingClientRect();
+            if (a && (a.left !== r.left || a.top !== r.top)) {
+                t.style.transform = 'translate(' + (a.left - r.left) + 'px,' + (a.top - r.top) + 'px)';
+            }
+        });
+        void document.body.offsetWidth;
+        all.forEach(function (t) {
+            if (!t.style.transform) { t.style.transition = ''; return; }
+            t.style.transition = 'transform ' + SHIFT_MS + 'ms ease';
+            t.style.transform = '';
+            clearTimeout(t.__settle);
+            t.__settle = setTimeout(function () { t.style.transition = ''; }, SHIFT_MS + 40);
+        });
+        return homes;
     }
 
-    function other(tile) {
-        var mine = tile.closest('[data-group-section]');
-        return Array.prototype.find.call(board().querySelectorAll('[data-group-section]'),
-            function (s) { return s !== mine; });
+    function gridAt(x, y) {
+        return grids().find(function (g) {
+            var r = g.getBoundingClientRect();
+            return x >= r.left - 12 && x <= r.right + 12 && y >= r.top - 12 && y <= r.bottom + 12;
+        });
+    }
+
+    // Where the gap goes for a pointer at (x, y): before or after the tile it
+    // is over, by which side of that tile's middle it is on (left and right
+    // on a grid of columns, above and below on a phone's single column), or
+    // at the end when it is past the last tile or over an empty half.
+    function aim(x, y) {
+        var grid = gridAt(x, y);
+        if (!grid) return;
+        var cy = y + scroller().scrollTop;
+        var items = inFlow(grid);
+        var slot = drag.slot;
+        var over = items.find(function (el) {
+            var h = drag.homes.get(el);
+            return h && x >= h.l && x <= h.r && cy >= h.t && cy <= h.b;
+        });
+        if (over === slot) return;
+        var before;
+        if (over) {
+            var h = drag.homes.get(over);
+            before = columns(grid) > 1 ? x < h.l + h.w / 2 : cy < h.t + h.h / 2;
+            var i = items.indexOf(over);
+            if (before && items[i - 1] === slot) return;
+            if (!before && items[i + 1] === slot) return;
+        } else {
+            var last = items.filter(function (el) { return el !== slot; }).pop();
+            if (last) {
+                var lh = drag.homes.get(last);
+                var past = cy > lh.b || (cy >= lh.t && x > lh.r);
+                if (!past || items[items.length - 1] === slot) return;
+            } else if (slot.parentNode === grid) {
+                return;
+            }
+        }
+        drag.homes = shift(function () {
+            if (!over) grid.appendChild(slot);
+            else if (before) grid.insertBefore(slot, over);
+            else grid.insertBefore(slot, over.nextSibling);
+        });
+        board().querySelectorAll('[data-group-section]').forEach(function (s) {
+            s.classList.toggle('is-target', s.contains(slot));
+        });
     }
 
     function follow() {
@@ -247,24 +336,75 @@
         var r = sc.getBoundingClientRect ? sc.getBoundingClientRect() : {top: 0, bottom: innerHeight};
         var step = drag.y < r.top + EDGE ? -12 : drag.y > r.bottom - EDGE ? 12 : 0;
         if (step) sc.scrollTop += step;
-        var dy = drag.y - drag.y0 + (sc.scrollTop - drag.s0);
-        drag.tile.style.transform = 'translate(' + (drag.x - drag.x0) + 'px,' + dy + 'px)';
-        var sec = sectionAt(drag.x, drag.y);
-        board().querySelectorAll('[data-group-section]').forEach(function (s) {
-            s.classList.toggle('is-target', s === sec && s !== drag.home);
-        });
-        drag.target = sec;
+        drag.tile.style.transform = 'translate(' + (drag.x - drag.x0) + 'px,' + (drag.y - drag.y0) + 'px)';
+        aim(drag.x, drag.y);
+    }
+
+    function snapshot() {
+        return grids().map(function (g) { return {grid: g, tiles: tilesIn(g)}; });
+    }
+    function restore(snap) {
+        snap.forEach(function (s) { s.tiles.forEach(function (t) { s.grid.appendChild(t); }); });
+        refresh();
+    }
+
+    // One POST for the half the tile ended up in: its tiles in order, and
+    // which one moved, so only that one has its half written.
+    function save(tile, snap) {
+        var sec = tile.closest('[data-group-section]');
+        var grid = sec.querySelector('[data-group-grid]');
+        var body = new FormData();
+        body.append('group', sec.dataset.group);
+        body.append('moved', tile.dataset.appId);
+        body.append('ids', tilesIn(grid).map(function (t) { return t.dataset.appId; }).join(','));
+        fetch(board().dataset.orderUrl, {method: 'POST', body: body, credentials: 'same-origin'})
+            .then(function (r) { if (!r.ok) throw new Error(r.status); })
+            .catch(function () { restore(snap); });
+    }
+
+    function lift() {
+        var t = drag.tile;
+        var r = t.getBoundingClientRect();
+        drag.snap = snapshot();
+        drag.start = tilesIn(board()).map(function (x) { return x.dataset.appId; }).join(',');
+        var slot = document.createElement('div');
+        slot.setAttribute('data-app-slot', '');
+        slot.setAttribute('aria-hidden', 'true');
+        slot.style.height = r.height + 'px';
+        drag.slot = slot;
+        board().classList.add('is-dragging');
+        t.parentNode.insertBefore(slot, t);
+        t.classList.add('is-lifted');
+        t.style.transition = 'none';
+        t.style.position = 'fixed';
+        t.style.left = r.left + 'px';
+        t.style.top = r.top + 'px';
+        t.style.width = r.width + 'px';
+        t.style.height = r.height + 'px';
+        // A fixed box is placed against the nearest ancestor that makes a
+        // containing block, which is not always the window: correct by what
+        // was measured rather than trusting the arithmetic.
+        var got = t.getBoundingClientRect();
+        t.style.left = (r.left + (r.left - got.left)) + 'px';
+        t.style.top = (r.top + (r.top - got.top)) + 'px';
+        drag.homes = measure();
+        // A timer, not animation frames: a finger held still at the edge
+        // sends no moves, and frames do not run in a throttled tab.
+        drag.timer = setInterval(follow, 16);
+    }
+
+    function settle(t) {
+        ['position', 'left', 'top', 'width', 'height', 'transform', 'transition', 'zIndex'].forEach(function (p) { t.style[p] = ''; });
+        t.classList.remove('is-lifted');
     }
 
     document.addEventListener('pointerdown', function (e) {
         var grip = e.target.closest && e.target.closest('[data-app-grip]');
-        if (!grip || e.button > 0) return;
-        var tile = grip.closest('[data-app-tile]');
+        if (!grip || e.button > 0 || drag) return;
         e.preventDefault();
         try { grip.setPointerCapture(e.pointerId); } catch (err) { /* the document listeners still follow it */ }
-        drag = {grip: grip, tile: tile, id: e.pointerId, x0: e.clientX, y0: e.clientY,
-                x: e.clientX, y: e.clientY, s0: scroller().scrollTop, lifted: false,
-                home: tile.closest('[data-group-section]'), target: null};
+        drag = {grip: grip, tile: grip.closest('[data-app-tile]'), id: e.pointerId,
+                x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, lifted: false};
     });
 
     document.addEventListener('pointermove', function (e) {
@@ -272,11 +412,7 @@
         drag.x = e.clientX; drag.y = e.clientY;
         if (!drag.lifted && Math.hypot(drag.x - drag.x0, drag.y - drag.y0) > 6) {
             drag.lifted = true;
-            drag.tile.classList.add('is-lifted');
-            board().classList.add('is-dragging');
-            // A timer, not animation frames: a finger held still at the edge
-            // sends no moves, and frames do not run in a throttled tab.
-            drag.timer = setInterval(follow, 16);
+            lift();
         }
         follow();
     });
@@ -286,29 +422,66 @@
         var d = drag;
         drag = null;
         clearInterval(d.timer);
-        var b = board();
         if (!d.lifted) return;  // an edge is for dragging; a stray tap moves nothing
+        var b = board();
         b.querySelectorAll('.is-target').forEach(function (s) { s.classList.remove('is-target'); });
-        // Where the finger let go, read now: a quick flick can end before
-        // the next frame has worked out the target.
-        var dropped = sectionAt(e.clientX, e.clientY) || d.target;
-        d.tile.classList.remove('is-lifted');
-        d.tile.style.transform = '';
+        if (!cancelled) {
+            // Where the finger let go, read now: a quick flick can end before
+            // the timer has caught up with it.
+            d.x = e.clientX; d.y = e.clientY;
+            drag = d; aim(d.x, d.y); drag = null;
+        }
+        var from = d.tile.getBoundingClientRect();
+        if (cancelled) d.slot.remove(); else d.slot.replaceWith(d.tile);
+        settle(d.tile);
         b.classList.remove('is-dragging');
-        if (!cancelled) move(d.tile, dropped);
-        refresh(b);
+        // The carried tile glides into its place from where it was let go.
+        var to = d.tile.getBoundingClientRect();
+        d.tile.style.transition = 'none';
+        d.tile.style.transform = 'translate(' + (from.left - to.left) + 'px,' + (from.top - to.top) + 'px)';
+        void d.tile.offsetWidth;
+        d.tile.style.transition = 'transform ' + SHIFT_MS + 'ms ease';
+        d.tile.style.transform = '';
+        setTimeout(function () { d.tile.style.transition = ''; }, SHIFT_MS + 40);
+        refresh();
+        var now = tilesIn(b).map(function (x) { return x.dataset.appId; }).join(',');
+        if (!cancelled && now !== d.start) save(d.tile, d.snap);
     }
     document.addEventListener('pointerup', function (e) { end(e, false); });
     document.addEventListener('pointercancel', function (e) { end(e, true); });
-    // A keyboard press on the grip moves it too; a pointer press is handled
-    // above, so only clicks with no pointer behind them (detail 0) count here.
+
+    // The keyboard: Enter sends the tile to the end of the other half, the
+    // arrows move it one place within its own. A pointer press is handled
+    // above, so only clicks with no pointer behind them (detail 0) count.
     document.addEventListener('click', function (e) {
         var grip = e.target.closest && e.target.closest('[data-app-grip]');
-        if (grip && e.detail === 0) {
-            var tile = grip.closest('[data-app-tile]');
-            move(tile, other(tile));
-            grip.focus();
-        }
+        if (!grip || e.detail !== 0) return;
+        var tile = grip.closest('[data-app-tile]');
+        var to = otherSection(tile.closest('[data-group-section]'));
+        if (!to) return;
+        var snap = snapshot();
+        shift(function () { to.querySelector('[data-group-grid]').appendChild(tile); });
+        refresh();
+        save(tile, snap);
+        grip.focus();
+    });
+    document.addEventListener('keydown', function (e) {
+        var grip = e.target.closest && e.target.closest('[data-app-grip]');
+        if (!grip || drag) return;
+        var back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+        var on = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+        if (!back && !on) return;
+        e.preventDefault();
+        var tile = grip.closest('[data-app-tile]');
+        var grid = tile.parentNode;
+        var list = tilesIn(grid);
+        var i = list.indexOf(tile);
+        var j = back ? i - 1 : i + 1;
+        if (j < 0 || j >= list.length) return;
+        var snap = snapshot();
+        shift(function () { grid.insertBefore(tile, back ? list[j] : list[j].nextSibling); });
+        save(tile, snap);
+        grip.focus();
     });
 })();
 </script>

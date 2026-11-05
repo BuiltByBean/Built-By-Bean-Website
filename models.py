@@ -3299,6 +3299,10 @@ class AppLink(db.Model):
     # register_app re-attaches the project on its next call.
     board_group = db.Column(db.String(10), nullable=True)
     BOARD_GROUPS = ("client", "mine")
+    # Where the tile sits in its half, from a drag (Michael, 2026-11-05: "move
+    # it up a row into the middle to where everything shifts"). NULL is a tile
+    # nobody has placed: it follows the placed ones, oldest first.
+    position = db.Column(db.Integer, nullable=True)
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 

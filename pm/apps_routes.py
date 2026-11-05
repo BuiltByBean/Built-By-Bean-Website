@@ -84,7 +84,7 @@ def index():
     stays by id, so a tile does not move under the cursor when it changes
     halves.
     """
-    apps = AppLink.query.order_by(AppLink.id).all()
+    apps = AppLink.query.order_by(AppLink.position.is_(None), AppLink.position, AppLink.id).all()
     # A phone app's store versions are asked for on the way in when the last
     # answer is older than FRESH_FOR - two short requests per such tile, so
     # the board is never more than a few hours behind the store pages, and a
@@ -196,6 +196,33 @@ def move_group(id):
     link.board_group = group
     db.session.commit()
     return {"ok": True, "group": group}
+
+
+@apps_bp.route("/order", methods=["POST"])
+@login_required
+def order():
+    """A tile dropped somewhere on the board: the half it landed in and that
+    half's tiles in their new order, top left to bottom right. Only the tile
+    that crossed halves has its half written; the rest only take positions,
+    so a tile that follows its project keeps following it. Answers JSON,
+    because the page has already moved the tiles."""
+    group = request.form.get("group") or ""
+    moved = request.form.get("moved", type=int)
+    try:
+        ids = [int(x) for x in (request.form.get("ids") or "").split(",") if x.strip()]
+    except ValueError:
+        return {"ok": False}, 400
+    if group not in AppLink.BOARD_GROUPS or not ids or len(ids) != len(set(ids)):
+        return {"ok": False}, 400
+    links = {a.id: a for a in AppLink.query.filter(AppLink.id.in_(ids)).all()}
+    if len(links) != len(ids):
+        return {"ok": False}, 400
+    for n, i in enumerate(ids):
+        links[i].position = n
+    if moved in links and links[moved].is_client_work != (group == "client"):
+        links[moved].board_group = group
+    db.session.commit()
+    return {"ok": True}
 
 
 def _store_upload(link, upload):
