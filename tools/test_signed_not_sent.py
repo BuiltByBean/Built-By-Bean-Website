@@ -188,6 +188,7 @@ with application.app_context():
         check("with the fee", project.hosting_fee == 60.0, project.hosting_fee)
         check("the budget", project.budget == 4500.0, project.budget)
         check("the delivery date", str(project.mvp_date) == "2026-12-15", project.mvp_date)
+        check("the signature puts it under contract", project.phase == "contracted", project.phase)
         check("and the request points at it", req.project_id == project.id)
         books = {pp.playbook.slug for pp in ProjectPlaybook.query.filter_by(project_id=project.id)}
         check("default and product runbooks are on it", books == {"github", "twilio"}, books)

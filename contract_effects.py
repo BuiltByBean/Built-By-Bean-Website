@@ -301,6 +301,10 @@ def _apply(row, effects):
         project = db.session.get(Project, effects.get("project_id") or 0)
     if project is not None:
         _set_project(project, effects.get("project") or {}, signed)
+        if effects.get("kind") == "sow" and project.phase in (None, "", "not_contracted"):
+            # The signature is what puts a build under contract, and only it.
+            signed["project"]["before"]["phase"] = project.phase
+            project.phase = "contracted"
         if row.project_id is None:
             row.project_id = project.id
         done.append(f"{project.name} updated")
@@ -392,6 +396,11 @@ def put_back(row):
         project = db.session.get(Project, saved.get("id") or 0)
         if project is not None:
             for field, value in (saved.get("before") or {}).items():
+                if field == "phase":
+                    # Only while nothing has moved it on since the signature.
+                    if project.phase == "contracted":
+                        project.phase = value or "not_contracted"
+                    continue
                 setattr(project, field, _date(value) if field == "mvp_date" else value)
             if signed.get("project_created"):
                 # Never deleted: time or tickets may hang on it by now. It is

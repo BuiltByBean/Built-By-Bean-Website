@@ -40,7 +40,7 @@
                     </div>
                     <div x-show="kind === 'client'">
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Phase</label>
-                        {{ select_dropdown(form.phase.name, form.phase.choices, form.phase.data or 'contracted', "Select Phase...", full_width=true) }}
+                        {{ select_dropdown(form.phase.name, form.phase.choices, form.phase.data or 'not_contracted', "Select Phase...", full_width=true) }}
                     </div>
                     <div x-show="kind !== 'client'" x-cloak>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Stage</label>

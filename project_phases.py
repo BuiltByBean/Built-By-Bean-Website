@@ -36,6 +36,9 @@ PHASE_LABELS = dict(PHASE_CHOICES)
 
 # Phases nothing advances out of automatically, because no date implies them.
 MANUAL_ONLY = ("contracted", "mvp")
+# Before the contract no date means anything: a delivery date on a project
+# nobody has signed for is a hope, and must never march it to Delivered.
+BEFORE_CONTRACT = ("not_contracted",)
 
 # A project nobody is working on should not be marching through phases in the
 # background; the board would fill with movement that means nothing.
@@ -93,6 +96,8 @@ def pending_moves(projects=None, today=None):
         # no phases (2026-11-04); a date must never march one through them.
         if not project.is_client_build:
             continue
+        if project.phase in BEFORE_CONTRACT:
+            continue
         due = due_phase(project, today)
         if due and rank(due) > rank(project.phase):
             moves.append((project, project.phase, due))
@@ -115,6 +120,8 @@ def explain(project, today=None):
 
     if project.phase_locked:
         return "Held where you put it. Dates will not move it."
+    if project.phase in BEFORE_CONTRACT:
+        return "Not under contract. Moves to Contracted when its statement of work is signed."
     if project.phase in MANUAL_ONLY and not due_phase(project, today):
         if project.phase == "contracted":
             if project.repo:

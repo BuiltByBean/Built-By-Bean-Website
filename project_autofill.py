@@ -10,16 +10,19 @@ one turns billable hours into free ones.
   Whichever is empty is filled from the other; failing both, from a repo
   whose `homepage` is the tile's host. The nightly store-id read skips a tile
   without `github_url`, which is why this runs before it.
-- **Contracted to MVP** on the first commit after the contract date (the
-  earliest signed contract on the project, else the day the project was put on
-  the board, since nothing reaches this board before it is under contract).
+- **Contracted to MVP** on the first commit after the earliest signed
+  contract on the project. With nothing signed there is no contract date and
+  nothing moves.
   `build_started_on` records the commit's day.
 - **The My Apps tile.** A project with no tile is put on the one unattached
   tile with its repo, its name or a domain spelled like its name, so its card
   carries the tile's icon and picks up a new one by itself.
 - **Go-live** is filled in by itself (Michael's pick, 2026-11-04, over a
-  suggestion to accept) on the first night the project's real domain answers,
-  for a project whose build has started. A platform's temporary address
+  suggestion to accept) on the first night the project's real domain answers
+  after a night it did not (`not_live_on`), for a project whose build has
+  started. A site already answering the first night it is looked at went live
+  on a day nobody saw, so it is left for a person: stamping that night gave
+  two builds live since the autumn a fresh free maintenance window. A platform's temporary address
   (railway.app and the like) never counts. `go_live_source` says where the
   date came from, so the page can say so.
 
@@ -142,7 +145,9 @@ def homepages(fetch=_github):
 
 def contract_date(project):
     """The day the project went under contract: its earliest signed
-    contract, else the day it was put on the board."""
+    contract, or None. It fell back to the day the project was put on the
+    board until 2026-11-05, which moved Deed in Hand to MVP on its first
+    commit with nothing signed."""
     from models import SignatureRequest
     signed = [s.completed_at for s in SignatureRequest.query.filter(
         SignatureRequest.project_id == project.id,
@@ -153,9 +158,7 @@ def contract_date(project):
             SignatureRequest.project_id.is_(None),
             SignatureRequest.kind.in_(("sow", "engagement_letter")),
             SignatureRequest.completed_at.isnot(None)).all()]
-    if signed:
-        return min(signed).date()
-    return project.created_at.date() if project.created_at else None
+    return min(signed).date() if signed else None
 
 
 def movable(project):
@@ -239,9 +242,15 @@ def plan(project, links, first_commit=None, live=None, today=None):
         if not project.build_started_on:
             out.append(("build_started_on", first_commit, "first commit"))
     phase_after = "mvp" if any(f == "phase" for f, _, _ in out) else project.phase
-    if not project.go_live_date and phase_after in LIVE_FROM and live:
-        # The domain whose first answer set the date; the page shows it as a fact.
-        out.append(("go_live_date", today, host_of(live)))
+    if not project.go_live_date and phase_after in LIVE_FROM:
+        if not live:
+            # Remembered so that the night it does answer is a real go-live.
+            out.append(("not_live_on", today, "no live site"))
+        elif project.not_live_on and project.not_live_on < today:
+            # The domain whose first answer set the date; the page shows it as a fact.
+            out.append(("go_live_date", today, host_of(live)))
+        # Answering the first night the board looked: it went live on a day
+        # nobody saw, and tonight is not that day. Left for a person to type.
     return out
 
 
@@ -291,7 +300,8 @@ def run(fetch=_github, probe=answers, today=None):
 
         moves = plan(p, links, first, live, today)
         apply(p, moves)
-        changed += [f"{f} {v}" for f, v, _ in moves]
+        # A night with no live site is bookkeeping, not news for the record.
+        changed += [f"{f} {v}" for f, v, _ in moves if f != "not_live_on"]
         if changed:
             lines.append(f"{p.name}: {', '.join(str(c) for c in changed)}")
     db.session.commit()

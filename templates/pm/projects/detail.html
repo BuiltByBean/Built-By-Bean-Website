@@ -89,9 +89,11 @@
 {% else %}
 <!-- Phase Progress Bar -->
 {# From PHASE_CHOICES, so this page and the project list cannot drift. #}
-{% set phases = phase_choices %}
+{# Not contracted is where a project waits, not a step of the build: the bar
+   starts at Contracted and stays grey until a signature lights it. #}
+{% set phases = phase_choices[1:] %}
 {% set phase_keys = phases | map(attribute='0') | list %}
-{% set current_idx = phase_keys.index(project.phase) if project.phase in phase_keys else 0 %}
+{% set current_idx = phase_keys.index(project.phase) if project.phase in phase_keys else -1 %}
 {# The phase bar and the note under it are one region: pressing a phase
    changes both and nothing else on the page. #}
 <div data-live="phase" class="glass-card p-6 mb-6">

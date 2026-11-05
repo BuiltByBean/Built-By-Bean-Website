@@ -3,14 +3,17 @@ from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, SelectField, FloatField, DateField, PasswordField, DecimalField, BooleanField
 from wtforms.validators import DataRequired, Email, Optional, NumberRange, Length
 
-# Where a build has got to. Nothing reaches this board before it is under
-# contract, so the old lead-chasing phases - discovery, proposal - were
-# describing a stage of the client relationship, which the client stages
-# now cover properly.
+# Where a build has got to. A project can be on the board before anything is
+# signed (a session files it with upsert_project, a Railway service needs it
+# to carry its costs), so it starts at Not contracted, and only a signed
+# statement of work moves it to Contracted (contract_effects). Michael,
+# 2026-11-05, of three cards that read Contracted with nothing signed: "I
+# don't know where you're getting all this stuff."
 #
 # In order, and the order is load-bearing: phases only ever advance on
 # their own, never go backwards, and 'later' means further down this list.
 PHASE_CHOICES = [
+    ("not_contracted", "Not contracted"),
     ("contracted", "Contracted"),
     ("mvp", "MVP"),
     ("delivered", "Delivered"),
@@ -149,7 +152,7 @@ class ProjectForm(FlaskForm):
     name = StringField("Project Name", validators=[DataRequired()])
     client_id = SelectField("Client", coerce=int, validators=[DataRequired()])
     description = TextAreaField("Description", validators=[Optional()])
-    phase = SelectField("Phase", choices=PHASE_CHOICES, default="contracted")
+    phase = SelectField("Phase", choices=PHASE_CHOICES, default="not_contracted")
     # Client build, his own product, or a personal project. A product walks
     # its own stages instead of the client phases.
     kind = SelectField("Kind", choices=[("client", "Client build"), ("product", "My product"),

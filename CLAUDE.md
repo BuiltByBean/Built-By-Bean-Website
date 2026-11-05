@@ -537,10 +537,29 @@ Contracted moves to MVP on the first commit after the contract (the earliest
 signed contract on the project, else the day it was put on the board), and
 `build_started_on` is that commit's day: GitHub lists newest first, so with one
 per page the Link header's last page is the oldest. Go-live is FILLED, not
-proposed (his pick), the first night the project's real domain answers, for a
-project in MVP or Delivered; a platform address never counts, and
-`go_live_source` says where the date came from on the project page. Only empty
-fields, never past `phase_locked`, never an archived project.
+proposed (his pick), the first night the project's real domain answers AFTER a
+night it did not (`Project.not_live_on`), for a project in MVP or Delivered; a
+platform address never counts, and `go_live_source` says where the date came
+from on the project page. Only empty fields, never past `phase_locked`, never
+an archived project.
+
+**Not contracted is a phase, and only a signature leaves it** (Michael,
+2026-11-05: Robinson & Co., Deed in Hand and Christ Community Church read
+Contracted or MVP with nothing signed, "I don't know where you're getting all
+this stuff"). A project is on the board before any contract: a session files
+it with `upsert_project`, a Railway service needs one to carry its cost. It
+starts at `not_contracted`, which no date moves (`BEFORE_CONTRACT`); a signed
+SOW moves it to Contracted (`contract_effects._apply`, put back by a void only
+while it still reads Contracted), and the contract date has no fallback, so
+commits on an unsigned build move nothing. It fell back to the day the project
+was put on the board, which is how Deed in Hand reached MVP. The bars start at
+Contracted, so an unsigned build reads all grey. And the go-live rule above
+replaced "the first night it answers": every site already live when the step
+began was given that night, so Kuper Plumbing, live since Oct 1, got a fresh
+free window to Dec 5. A date that means "when it happened" can only be read
+off a change the board saw happen. Migration `e2b7d4f8a1c6` put the five
+projects right and keeps each row it changed in `project_phase_corrections`.
+`tools/test_not_contracted.py`.
 
 ## Needs attention
 

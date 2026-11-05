@@ -273,7 +273,8 @@ def product_sell():
     if project is None:
         name = (request.form.get("new_project_name") or "").strip() \
                or f"{product.name} - {client.name}"
-        project = Project(client_id=client.id, name=name)
+        # A sale is an agreement, so the build starts under contract.
+        project = Project(client_id=client.id, name=name, phase="contracted")
         db.session.add(project)
         db.session.flush()
 

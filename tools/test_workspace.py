@@ -337,7 +337,12 @@ with application.app_context():
     live_set = Project(name="Live one", client_id=kuper.id, status="active", phase="mvp", repo="mb/live",
                        go_live_date=date(2026, 3, 1))
     on_railway = Project(name="Railway only", client_id=kuper.id, status="active", phase="mvp", repo="mb/rw")
-    db.session.add_all([contracted, held, archived, live_set, on_railway])
+    # Live long before the night looked: never stamped with tonight.
+    already = Project(name="Already live", client_id=kuper.id, status="active", phase="mvp", repo="mb/already")
+    # On the board with commits and nothing signed (Deed in Hand, 2026-11-05).
+    unsigned = Project(name="Unsigned", client_id=kuper.id, status="active", phase="contracted",
+                       repo="mb/unsigned", created_at=datetime(2026, 9, 1, tzinfo=timezone.utc))
+    db.session.add_all([contracted, held, archived, live_set, on_railway, already, unsigned])
     db.session.flush()
     db.session.add(SignatureRequest(envelope_id="env-1", title="SOW", kind="sow", client_id=kuper.id,
                                     project_id=contracted.id, signer_name="K", signer_email="k@example.test",
@@ -346,7 +351,8 @@ with application.app_context():
                      github_url="https://github.com/mb/talent"),
              AppLink(name="Held", url="https://held.example.com", project_id=held.id),
              AppLink(name="Live", url="https://live.example.com", project_id=live_set.id),
-             AppLink(name="RW", url="https://rw-production.up.railway.app", project_id=on_railway.id)]
+             AppLink(name="RW", url="https://rw-production.up.railway.app", project_id=on_railway.id),
+             AppLink(name="Already", url="https://already.example.com", project_id=already.id)]
     db.session.add_all(tiles)
     db.session.commit()
 
@@ -363,10 +369,11 @@ with application.app_context():
         return [{"commit": {"committer": {"date": "2026-10-01T00:00:00Z"}}}], {}
 
     probed = []
+    up = {"https://already.example.com", "https://held.example.com", "https://live.example.com"}
 
     def probe(url):
         probed.append(url)
-        return True
+        return url in up
 
     lines = pa.run(fetch=fetch, probe=probe, today=today)
     db.session.expire_all()
@@ -374,8 +381,24 @@ with application.app_context():
     check("repo filled from the tile", p.repo == "mb/talent", p.repo)
     check("Contracted -> MVP on the first commit after the contract", p.phase == "mvp")
     check("build_started_on is the OLDEST commit (Link last page)", p.build_started_on == date(2026, 9, 12), p.build_started_on)
-    check("go-live filled from the answering domain", p.go_live_date == today and "talent.example.com" in (p.go_live_source or ""),
+    check("a site not answering yet is remembered, not stamped",
+          p.not_live_on == today and p.go_live_date is None, (p.not_live_on, p.go_live_date))
+    a = db.session.get(Project, already.id)
+    check("a site answering the first night it is looked at is never given tonight as go-live",
+          a.go_live_date is None and a.not_live_on is None, (a.go_live_date, a.not_live_on))
+    u = db.session.get(Project, unsigned.id)
+    check("nothing signed: commits never move a project to MVP", u.phase == "contracted" and not u.build_started_on)
+    check("nothing signed: no commits are even asked for", not any("/mb/unsigned/" in x for x in calls), calls)
+    check("the night's record does not list a night with no site",
+          not any("not_live_on" in line for line in lines), lines)
+    up.add("https://talent.example.com")
+    pa.run(fetch=fetch, probe=probe, today=today + timedelta(days=1))
+    db.session.expire_all()
+    p = db.session.get(Project, contracted.id)
+    check("go-live filled the night the domain first answers",
+          p.go_live_date == today + timedelta(days=1) and "talent.example.com" in (p.go_live_source or ""),
           (p.go_live_date, p.go_live_source))
+    check("and still not for the one that was up all along", db.session.get(Project, already.id).go_live_date is None)
     hp = db.session.get(Project, held.id)
     check("a held phase is never moved", hp.phase == "contracted" and not hp.go_live_date)
     check("the held project's tile still gets its GitHub address",
@@ -391,14 +414,38 @@ with application.app_context():
     pa.run(fetch=fetch, probe=probe, today=today + timedelta(days=3))
     db.session.expire_all()
     p = db.session.get(Project, contracted.id)
-    check("a second night changes nothing", (p.phase, p.build_started_on, p.go_live_date) == before)
-    check("pure plan: delivered + live fills go-live",
-          pa.plan(Project(phase="delivered", status="active", phase_locked=False, kind="client"), [], None, "https://x.com", today)
+    check("a later night changes nothing", (p.phase, p.build_started_on, p.go_live_date) == before)
+    check("pure plan: delivered + live after a night down fills go-live",
+          pa.plan(Project(phase="delivered", status="active", phase_locked=False, kind="client",
+                          not_live_on=today - timedelta(days=1)), [], None, "https://x.com", today)
           == [("go_live_date", today, "x.com")])
+    check("pure plan: delivered + live with no night down fills nothing",
+          pa.plan(Project(phase="delivered", status="active", phase_locked=False, kind="client"),
+                  [], None, "https://x.com", today) == [])
     check("pure plan: contracted + live but no commit fills nothing",
           pa.plan(Project(phase="contracted", status="active", phase_locked=False, kind="client"), [], None, "https://x.com", today) == [])
     check("repo_of / url_of round trip", pa.repo_of(pa.url_of("mb/a.b-c")) == "mb/a.b-c" and pa.repo_of("https://github.com/mb/x.git") == "mb/x")
     check("www is the same host", pa.host_of("https://www.Kuper.com/x") == "kuper.com")
+
+    # ---------------------------------------------------------------- 7b
+    print("7b. Not contracted (Michael, 2026-11-05)")
+    from project_phases import sync_project_phases, explain
+    hope = Project(name="Unsigned build", client_id=kuper.id, status="active",
+                   mvp_date=date(2026, 6, 1), go_live_date=date(2026, 7, 1))
+    db.session.add(hope)
+    db.session.commit()
+    HOPE = hope.id
+    check("a new project starts Not contracted", db.session.get(Project, HOPE).phase == "not_contracted")
+    with application.test_request_context():
+        sync_project_phases(today=date(2026, 11, 5))
+    check("dates never march a project nobody signed for",
+          db.session.get(Project, HOPE).phase == "not_contracted")
+    check("its page says why", "Not under contract" in explain(db.session.get(Project, HOPE)))
+    page = c.get("/admin/workspace/projects").get_data(as_text=True)
+    check("its card reads Not contracted", "Not contracted" in page)
+    detail = c.get(f"/admin/workspace/projects/{HOPE}").get_data(as_text=True)
+    check("its phase bar starts at Contracted with nothing lit",
+          "Not under contract" in detail and detail.count('name="phase" value="not_contracted"') == 0)
 
 
     # ---------------------------------------------------------------- 8

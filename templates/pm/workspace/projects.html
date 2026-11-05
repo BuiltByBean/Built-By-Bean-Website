@@ -81,12 +81,15 @@
                         </div>
                     </div>
                     <div>
+                        {# A build's bar starts at Contracted, so one not under
+                           contract reads all grey. #}
+                        {% set skip = 1 if build else 0 %}
                         <div class="flex items-center gap-1" aria-hidden="true">
-                            {% for k in keys %}
-                            <span class="h-1.5 flex-1 rounded-full {{ 'bg-brand-500' if loop.index0 <= cidx else 'bg-surface-700' }}"></span>
+                            {% for k in keys[skip:] %}
+                            <span class="h-1.5 flex-1 rounded-full {{ 'bg-brand-500' if loop.index0 + skip <= cidx else 'bg-surface-700' }}"></span>
                             {% endfor %}
                         </div>
-                        <p class="mt-1.5 text-xs font-medium text-brand-300">{{ labels[cidx] }}{% if build and p.phase_locked %} <span class="text-amber-300">held</span>{% endif %}</p>
+                        <p class="mt-1.5 text-xs font-medium {{ 'text-surface-400' if build and current == 'not_contracted' else 'text-brand-300' }}">{{ labels[cidx] }}{% if build and p.phase_locked %} <span class="text-amber-300">held</span>{% endif %}</p>
                     </div>
                     <div class="flex flex-wrap gap-2 text-xs">
                         <span class="px-2 py-1 rounded-lg bg-white/5 text-surface-300">{{ open_tasks.get(p.id, 0) | commas }} open task{{ '' if open_tasks.get(p.id, 0) == 1 else 's' }}</span>

@@ -335,9 +335,9 @@ class Project(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
-    # Nothing reaches this board before it is under contract, so that is
-    # where a project starts.
-    phase = db.Column(db.String(30), default="contracted")
+    # Nothing is signed when a project is put on the board; a signed SOW is
+    # what moves it to Contracted (contract_effects).
+    phase = db.Column(db.String(30), default="not_contracted")
     budget = db.Column(db.Float, nullable=True)
     # What the contract promised, and what actually happened. The first
     # comes from the SOW; the second is set when it goes live, and is what
@@ -364,6 +364,12 @@ class Project(db.Model):
     # say so. Both only ever written into empty fields.
     build_started_on = db.Column(db.Date, nullable=True)
     go_live_source = db.Column(db.String(200), nullable=True)
+    # The last night the board looked for this build's live site and found
+    # none. Go-live is filled only when a site answers AFTER a night like that,
+    # because a site already answering the first night it was looked at went
+    # live on a day nobody saw: stamping that night gave Kuper Plumbing and
+    # Talent Booker a fresh free maintenance window months after go-live.
+    not_live_on = db.Column(db.Date, nullable=True)
     # What kind of project it is (Michael, 2026-11-04: "EntertainHQ, Ideas,
     # Piped those are my products they wouldnt even follow the same phases").
     # "client" is a build for a client and walks PHASE_CHOICES; "product" is
