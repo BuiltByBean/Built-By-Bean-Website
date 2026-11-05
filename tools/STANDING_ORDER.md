@@ -12,11 +12,20 @@ get_clients, upsert_project, log_expense, log_time,
 register_hosting_resource and register_app. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
 session agrees on. The bridge is registered at user scope and reads
-PM_GUIDANCE_KEY from the environment. The bootstrap also installs three
-hooks: the rules brief is in context at session start, and a session
-cannot end a turn in which it wrote to a CLAUDE.md without filing the
-lesson. That is the harness enforcing this order, not a request.
+PM_GUIDANCE_KEY from the environment. The bootstrap also installs the
+hooks: the rules brief and the repo's claimed issues are in context at
+session start, and a session cannot end a turn in which it wrote to a
+CLAUDE.md without filing the lesson. That is the harness enforcing this
+order, not a request.
 
+- Work in any repo starts from a GitHub issue claimed before the first
+  edit (rule "Work is tracked on the repo's GitHub issues"). See what is
+  `in progress` and read each one's Where; claim yours with the assignee,
+  the label and a comment naming the session; work in your own worktree;
+  say `Part of #N` in every commit; close it only when every Done when box
+  is ticked. Asked for something with no issue, file it first. Work you
+  find and were not asked to do becomes an issue. No gh: the GitHub API
+  does the same. GitHub unreachable: say so once and carry on.
 - Before building anything, call get_rules and follow the brief. When a
   feature is in play, call get_feature_guidance for it. Setting up a
   vendor: get_playbook. Starting a new app that resembles one already

@@ -331,6 +331,16 @@ def build_package_prompt(package):
                "first table.")
     out.append("  Work feature by feature. Finish one, prove it works, then "
                "start the next.")
+    # Michael, 2026-11-05: EntertainHQ's issues board is the standard on every
+    # project, so a build starts on one rather than adopting it later.
+    out.append("  Run the build on the repo's GitHub issues from the first hour: "
+               "the standard labels, the issue forms and the \"Work from the "
+               "issues board\" section of CLAUDE.md, copied from any BuiltByBean "
+               "repo. One issue per feature with Why, Where, Do, Done when and "
+               "How to test; claim it before its first edit, name it in every "
+               "commit (Part of #N), and close it only when every Done when box "
+               "is ticked. get_feature_guidance "
+               "work-is-tracked-on-the-repo-s-github-issues has the routine.")
     out.append("  Stop and tell me the moment a step needs me: anything in a "
                "browser I have to click, any credential only I can hand "
                "over, anything waiting on the client.")

@@ -1,4 +1,4 @@
-"""Put the four hooks into ~/.claude/settings.json, merging with whatever
+"""Put the five hooks into ~/.claude/settings.json, merging with whatever
 is there. Run by the bootstrap; safe to run again - it replaces its own
 entries and touches nothing else.
 
@@ -18,13 +18,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MARK = "tools/hooks/"  # every command we install carries this; nothing else does
 
 EVENTS = {
-    "SessionStart": (None, "session_start.py", 20),
+    "SessionStart": [
+        (None, "session_start.py", 20),
+        # The repo's claimed issues (2026-11-05), as a hook of its own: Claude
+        # Code keeps about 10,000 characters of each hook's output, and the
+        # brief is held just under that.
+        (None, "session_issues.py", 15),
+    ],
     # Bash and PowerShell too, since 2026-09-05: a commit is the moment
     # work is owed to the board, and it arrives as a shell command.
-    "PostToolUse": ("Edit|Write|Bash|PowerShell", "post_tool.py", 10),
-    "Stop": (None, "stop.py", 10),
+    "PostToolUse": [("Edit|Write|Bash|PowerShell", "post_tool.py", 10)],
+    "Stop": [(None, "stop.py", 10)],
     # The session's time logs itself as it ends (audit item 3, 2026-11-04).
-    "SessionEnd": (None, "session_end.py", 15),
+    "SessionEnd": [(None, "session_end.py", 15)],
 }
 
 
@@ -53,9 +59,9 @@ def main(remove=False):
             settings = json.load(fh)
     hooks = settings.setdefault("hooks", {})
 
-    for event, (matcher, script, timeout) in EVENTS.items():
+    for event, specs in EVENTS.items():
         kept = [e for e in hooks.get(event, []) if not _ours(e)]
-        if not remove:
+        for matcher, script, timeout in ([] if remove else specs):
             entry = {"hooks": [{"type": "command", "command": _command(script),
                                 "timeout": timeout}]}
             if matcher:
@@ -73,8 +79,9 @@ def main(remove=False):
     verb = "removed from" if remove else "installed in"
     print(f"hooks {verb} {settings_path}")
     if not remove:
-        for event, (matcher, script, _) in EVENTS.items():
-            print(f"  {event:13} {('on ' + matcher + ' ') if matcher else ''}-> {script}")
+        for event, specs in EVENTS.items():
+            for matcher, script, _ in specs:
+                print(f"  {event:13} {('on ' + matcher + ' ') if matcher else ''}-> {script}")
 
     # The stamp is what tells the NEXT session this machine is current. Written
     # only here: the installer is the one thing that actually applies a

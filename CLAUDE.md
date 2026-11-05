@@ -81,6 +81,31 @@ had briefed them. `/api/guidance/brief` is now the one-line index
 and the curator's target of about 120 rules is the size at which the index
 carries every summary.
 
+## Work from the issues board
+
+Every piece of work here starts from a GitHub issue that you claim before the
+first edit (Michael, 2026-11-05; catalogue rule "Work is tracked on the repo's
+GitHub issues"). It keeps sessions running at the same time out of each other's
+files, and the open issues are where a cold session finds out where things stand.
+
+1. See what is taken and read each one's Where:
+   `gh issue list -R BuiltByBean/Built-By-Bean-Website --label "in progress"`
+2. Pick an open, unassigned issue (P1 first) or file one with the task, bug or
+   decision form's headings, then claim it:
+   `gh issue edit N -R BuiltByBean/Built-By-Bean-Website --add-assignee @me --add-label "in progress"`,
+   plus a comment naming the session and its worktree. An earlier claim wins.
+3. One issue, one session, one worktree:
+   `git worktree add ../Built-By-Bean-Website-N -b N-short-slug origin/main`
+4. Every commit says `Part of #N`. `Closes #N` goes only in the commit that
+   ticks the last Done when box; never close with a box unticked.
+5. Before stopping, tick what is true and comment what is left. Work you find
+   and were not asked to do becomes an issue, not a side quest.
+
+Labels: one type (`bug`, `feature`, `chore`, `docs`, `ops`, `decision`), one
+priority (`P1`, `P2`, `P3`), and `in progress`, `blocked`, `needs decision`,
+`needs human`, `triage` as they apply. `idea` issues come from the Ideas app
+and are triage until written up.
+
 ## The MVP Builder
 
 `pm/mvp_routes.py`, `/admin/mvp`. Michael, 2026-11-03: "when i get new client I
@@ -340,7 +365,12 @@ Audit items 7, 9, 10, 18, 19, 20 and 4's store half (`docs/automation_gaps.md`),
   "Live on Railway, not on My Apps" is `/admin/apps/railway`, one row on Needs
   attention, with a one-press "Put it on My Apps" and a "Not an app" that sticks
   (`RailwayService.ignored`). Template databases (no repo, a template image) and
-  crons with no address are never listed.
+  crons with no address are never listed. A service the workspace no longer has
+  comes off (`prune`, 2026-11-05): `store` only ever upserted, so Personal Trainer
+  and Dom's Painting, deleted on Railway that day, would have read "live, not on My
+  Apps" for good. Only after a read that answered, and never when the answer is
+  empty or lacks more than half the workspace's services: that is a bad read, and
+  the night's step says what it held back.
 - **Hosting** has a **Not mapped** band: a priced project with no cost and no
   active mapping read "Fine" and sat out of the badge. It counts now and offers the
   mapping form with the project chosen. `_status(fee, cost, mapped=True)`.
@@ -1705,6 +1735,16 @@ session bill the hour twice. What each run did is in
 real script against a live server. Hooks print UTF-8 on
 purpose - Windows hands them cp1252 and one minus sign in a rule killed
 the injection after its header.
+
+**The issues board is in context too** (2026-11-05). The fifth hook, a second
+SessionStart (`session_issues.py`), prints the checkout's GitHub repo, the
+issues labelled `in progress` with who holds them, and the open count, so a
+session sees what is claimed before its first edit (the section at the top of
+this file, and the catalogue rule). It is its own hook rather than more lines
+under the brief because Claude Code keeps about 10,000 characters of each
+hook's output and the brief is held just under that; `install.py`'s EVENTS
+takes a list per event for that reason. It prints nothing outside a GitHub
+checkout and one line when gh is missing or the board does not answer.
 
 ## The sweeper
 
