@@ -352,3 +352,111 @@ def mail_when(dt, full=False):
     if local.date() == now.date():
         return clock
     return day if local.year == now.year else f"{day}, {local.year}"
+
+
+# ── Email templates (issue #41) ───────────────────────────
+#
+# A saved email with blanks: he fills in who it goes to, sees it exactly as it
+# will go, and it sends from his Gmail through send_mail, so it lands in the
+# inbox's sent mail like anything else. The intro carries a catalog link made
+# for that one person (catalog_service.make_link, the catalog's own way).
+
+def _until(days):
+    from datetime import timedelta
+    d = datetime.now(timezone.utc) + timedelta(days=days)
+    return f"{d.strftime('%B')} {d.day}"
+
+
+@messages_bp.route("/templates")
+@ceo_required
+def templates():
+    import email_templates
+    return redirect(url_for("messages.template", slug=email_templates.all_templates()[0]["slug"]))
+
+
+@messages_bp.route("/templates/<slug>")
+@ceo_required
+def template(slug):
+    import catalog_service as cs
+    import email_templates
+    tpl = email_templates.get(slug) or abort(404)
+    return render_template("pm/messages/template.html", tpl=tpl, templates=email_templates.all_templates(),
+                           fields=email_templates.FIELDS, until=_until(cs.LINK_DAYS),
+                           send_key=uuid.uuid4().hex, configured=mail_service.configured(),
+                           original=email_templates.DEFAULTS.get(slug))
+
+
+@messages_bp.route("/templates/<slug>/save", methods=["POST"])
+@ceo_required
+def template_save(slug):
+    import email_templates
+    email_templates.get(slug) or abort(404)
+    subject = (request.form.get("subject") or "").strip()
+    body = (request.form.get("body") or "").strip()
+    if not subject or not body:
+        flash("A template needs a subject and a body.", "warning")
+    else:
+        email_templates.save(slug, subject, body)
+        flash("Template saved.", "success")
+    return redirect(url_for("messages.template", slug=slug))
+
+
+@messages_bp.route("/templates/<slug>/reset", methods=["POST"])
+@ceo_required
+def template_reset(slug):
+    import email_templates
+    if slug not in email_templates.DEFAULTS:
+        abort(404)
+    email_templates.reset(slug)
+    flash("Back to the original wording.", "success")
+    return redirect(url_for("messages.template", slug=slug))
+
+
+@messages_bp.route("/templates/<slug>/send", methods=["POST"])
+@ceo_required
+def template_send(slug):
+    """Make this person's catalog link and send them the email as the page
+    showed it (the subject and body come from the page, so a tweak for one
+    person goes as seen without changing the template)."""
+    import catalog_service as cs
+    import email_templates
+    from flask_login import current_user
+    from models import CatalogLink
+    tpl = email_templates.get(slug) or abort(404)
+    key = request.form.get("send_key") or None
+    if key:
+        done = Message.query.filter_by(send_key=key).first()
+        if done:
+            return redirect(url_for("messages.detail", id=done.thread_id or done.id))
+    name = " ".join((request.form.get("name") or "").split())
+    to = (request.form.get("email") or "").strip().lower()
+    company = " ".join((request.form.get("company") or "").split())
+    line = (request.form.get("personal_line") or "").strip()
+    if not name or not company or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", to):
+        flash("It needs their name, their email and their company.", "warning")
+        return redirect(url_for("messages.template", slug=slug))
+    used = {"subject": (request.form.get("subject") or tpl["subject"]),
+            "body": (request.form.get("body") or tpl["body"])}
+    link = None
+    if "{catalog_link}" in used["body"]:
+        link = cs.make_link(f"{name}, {company}"[:120], None, days=cs.LINK_DAYS, user=current_user)
+        link.email = to[:200]
+        client = mail_service.match_client(to)
+        link.client_id = client.id if client else None
+        db.session.commit()
+    url = ("https://" + request.host + url_for("showcase.showcase", token=link.token)) if link else ""
+    subject, text, html = email_templates.render(used, {
+        "first_name": name.split()[0], "company": company, "personal_line": line,
+        "catalog_link": url, "link_until": link.expires_at.strftime("%B ") + str(link.expires_at.day) if link else ""})
+    try:
+        row, _ = mail_service.send_mail([(name, to)], subject, text, html_body=html, send_key=key)
+    except Exception as err:  # noqa: BLE001 - said on the page
+        flash(f"It did not go: {str(err)[:200]}." + (" The link is made; it is on the Catalog page." if link else ""),
+              "warning")
+        return redirect(url_for("messages.template", slug=slug))
+    if link is not None:
+        link = db.session.get(CatalogLink, link.id)
+        link.sent_at = cs.now()
+        db.session.commit()
+    flash(f"Sent to {name} at {to}.", "success")
+    return redirect(url_for("messages.detail", id=row.thread_id or row.id))

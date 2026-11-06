@@ -4697,6 +4697,20 @@ class Message(db.Model):
         return f"<Message {self.direction} {self.from_email} {self.status}>"
 
 
+class EmailTemplate(db.Model):
+    """A saved email he has edited on the board (email_templates.py holds the
+    defaults; a template with no row follows the code). Issue #41."""
+
+    __tablename__ = "email_templates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(60), nullable=False, unique=True)
+    name = db.Column(db.String(120), nullable=False, default="")
+    subject = db.Column(db.String(300), nullable=False, default="")
+    body = db.Column(db.Text, nullable=False, default="")
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class RuleAudit(db.Model):
     """One repository held against one rule, as of the last nightly audit.
 

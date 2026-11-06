@@ -1,0 +1,140 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+
+{#
+  An email template (issue #41): who it goes to on the left, the email exactly
+  as it will go on the right, the template's own words below. The preview is
+  drawn in the browser from the same rules as email_templates.render (an empty
+  blank takes its paragraph with it), so what is on screen is what is sent:
+  Send posts the subject and body as they stand, so a change made for one
+  person goes as seen, and Save keeps it for every one after.
+#}
+
+{% block title %}{{ tpl.name }} - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('messages.index'), 'Inbox') }}{% endblock %}
+{% block page_title %}Email templates{% endblock %}
+
+{% block content %}
+<script>
+    window.tplPage = function (init) {
+        const BLANK = /\{(first_name|company|personal_line|catalog_link|link_until)\}/g;
+        const LINK = '\u0000LINK\u0000';
+        const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+        return {
+            name: '', email: '', company: '', line: '', sure: false,
+            subject: init.subject, body: init.body, until: init.until,
+            get first() { return (this.name.trim().split(/\s+/)[0]) || ''; },
+            get ready() { return !!(this.first && this.company.trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(this.email.trim())); },
+            vals(show) {
+                return {
+                    first_name: this.first || (show ? '[first name]' : ''),
+                    company: this.company.trim() || (show ? '[company]' : ''),
+                    personal_line: this.line.trim(),
+                    catalog_link: LINK,
+                    link_until: this.until,
+                };
+            },
+            get subjectOut() { const v = this.vals(true); return this.subject.replace(BLANK, (m, k) => v[k] || '').replace(/\s+/g, ' ').trim(); },
+            get bodyHtml() {
+                const v = this.vals(true);
+                return this.body.replace(/\r\n/g, '\n').split(/\n{2,}/).filter(p => {
+                    const blanks = [...p.matchAll(BLANK)].map(x => x[1]);
+                    if (!blanks.length) return true;
+                    return p.replace(BLANK, '').trim() || blanks.some(k => v[k]);
+                }).map(p => '<p>' + esc(p.replace(BLANK, (m, k) => v[k] || '')).replace(/\n/g, '<br>')
+                    .replace(LINK, '<span class="inline-block mt-1 px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-semibold">See the work</span>')
+                    + '</p>').join('');
+            },
+        };
+    };
+</script>
+
+<div x-data='tplPage({{ {"subject": tpl.subject, "body": tpl.body, "until": until} | tojson }})' class="space-y-4">
+
+    {% if templates | length > 1 %}
+    <nav class="flex flex-wrap gap-2" aria-label="Templates">
+        {% for t in templates %}
+        <a href="{{ url_for('messages.template', slug=t.slug) }}"
+           class="inline-flex items-center min-h-[44px] px-4 py-2 text-sm rounded-xl border {{ 'border-brand-500/50 text-white bg-brand-500/10' if t.slug == tpl.slug else 'border-white/10 text-surface-300 hover:text-white' }}">{{ t.name }}</a>
+        {% endfor %}
+    </nav>
+    {% endif %}
+
+    <div class="grid gap-4 lg:grid-cols-2 items-start">
+        <form method="POST" action="{{ url_for('messages.template_send', slug=tpl.slug) }}"
+              class="glass-card p-4 sm:p-5 space-y-3" @click.outside="sure = false">
+            <h2 class="text-sm font-semibold text-white">{{ tpl.name }}: who it goes to</h2>
+            <input type="hidden" name="send_key" value="{{ send_key }}">
+            <input type="hidden" name="subject" :value="subject">
+            <input type="hidden" name="body" :value="body">
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">Their name</span>
+                <input type="text" name="name" x-model="name" required autocomplete="off" maxlength="120"
+                       class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </label>
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">Their email</span>
+                <input type="email" name="email" x-model="email" required autocomplete="off" maxlength="200"
+                       class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </label>
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">Company</span>
+                <input type="text" name="company" x-model="company" required autocomplete="off" maxlength="160"
+                       class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </label>
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">A line of your own (optional)</span>
+                <textarea name="personal_line" x-model="line" rows="3" maxlength="1000"
+                          class="input-ring w-full min-w-0 px-4 py-3 text-sm bg-surface-800/50 text-white rounded-xl resize-y"></textarea>
+            </label>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                {% if not configured %}<span class="mr-auto text-xs text-amber-400">Mail is not connected on this server.</span>{% endif %}
+                <button type="button" x-show="!sure" @click="ready && (sure = true)" :disabled="!ready" {% if not configured %}disabled{% endif %}
+                        class="min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-xl btn-brand text-white disabled:opacity-40">
+                    Send</button>
+                <button type="button" x-show="sure" x-cloak @click="sure = false"
+                        class="min-h-[44px] px-4 py-2 text-sm rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                    Cancel</button>
+                <button type="submit" x-show="sure" x-cloak :disabled="!sure"
+                        class="min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-xl btn-brand text-white"
+                        x-text="'Send to ' + email.trim() + '?'">Send</button>
+            </div>
+        </form>
+
+        <section class="glass-card p-4 sm:p-5 min-w-0" aria-label="The email as it will go">
+            <p class="text-xs text-surface-500 break-words">To <span x-text="email.trim() || '[their email]'"></span></p>
+            <p class="mt-1 text-sm font-semibold text-white break-words" x-text="subjectOut"></p>
+            <div class="mt-3 pt-3 border-t border-white/10 text-sm text-surface-200 leading-relaxed space-y-3 break-words [&_p]:whitespace-normal"
+                 x-html="bodyHtml"></div>
+        </section>
+    </div>
+
+    <form method="POST" action="{{ url_for('messages.template_save', slug=tpl.slug) }}" class="glass-card p-4 sm:p-5 space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-sm font-semibold text-white mr-auto">The wording</h2>
+            {% for f in fields %}<code class="text-[11px] px-2 py-1 rounded-md bg-white/5 text-surface-300">{{ '{' ~ f ~ '}' }}</code>{% endfor %}
+        </div>
+        <label class="block">
+            <span class="block text-xs font-medium text-surface-400 mb-1">Subject</span>
+            <input type="text" name="subject" x-model="subject" required maxlength="300"
+                   class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+        </label>
+        <label class="block">
+            <span class="block text-xs font-medium text-surface-400 mb-1">Body</span>
+            <textarea name="body" x-model="body" rows="16" required
+                      class="input-ring w-full min-w-0 px-4 py-3 text-sm bg-surface-800/50 text-white rounded-xl resize-y font-mono"></textarea>
+        </label>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-xl btn-brand text-white">
+                {{ icon('done', 'w-4 h-4') }} Save the template</button>
+        </div>
+    </form>
+    {% if tpl.edited and original %}
+    <form method="POST" action="{{ url_for('messages.template_reset', slug=tpl.slug) }}" class="flex justify-end">
+        {{ confirm_button('Put back the original wording', 'Lose your changes?') }}
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

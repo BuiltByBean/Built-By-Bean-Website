@@ -109,7 +109,7 @@ class FakeSMTP:
     def send_message(self, mime, from_addr=None, to_addrs=None):
         SENT.append({"to": mime["To"], "cc": mime["Cc"], "subject": mime["Subject"],
                      "irt": mime["In-Reply-To"], "refs": mime["References"], "rcpt": to_addrs,
-                     "mid": mime["Message-ID"]})
+                     "mid": mime["Message-ID"], "raw": mime})
 
 
 mail_service.fetch_primary = fake_fetch
@@ -294,6 +294,55 @@ check("comments and double-escaped spaces go",
       mail_service._strip_html("<!--[if mso]><x><![endif]--><p>ok&amp;nbsp;</p>") == "ok")
 check("the board's pages tell Cloudflare not to hide addresses",
       "<!--email_off-->" in c.get("/admin/messages/").get_data(as_text=True))
+
+print("7. Email templates: the intro")
+import email_templates  # noqa: E402
+from models import CatalogLink  # noqa: E402
+r = c.get("/admin/messages/templates")
+check("Templates opens the first one", r.status_code in (301, 302) and "/templates/intro" in r.headers["Location"])
+page = c.get("/admin/messages/templates/intro").get_data(as_text=True)
+check("the intro draws with its facts", "Higginbotham" in page and "4,500" in page and "senior data analyst" in page)
+check("no em dash in it", "—" not in email_templates.DEFAULTS["intro"]["body"])
+check("only the CEO opens it", other.get("/admin/messages/templates/intro").status_code in (302, 403))
+before = len(SENT)
+data = {"name": "Dana Ortiz", "email": "Dana@OrtizFarms.test", "company": "Ortiz Farms",
+        "personal_line": "We met at the Paris chamber lunch.", "send_key": "tpl-1",
+        "subject": email_templates.DEFAULTS["intro"]["subject"], "body": email_templates.DEFAULTS["intro"]["body"]}
+r = c.post("/admin/messages/templates/intro/send", data=data)
+check("it sends", r.status_code in (302, 303) and len(SENT) == before + 1, (r.status_code, len(SENT) - before))
+sent = SENT[-1]
+whole = sent["raw"].as_string()
+plain = next(part.get_payload(decode=True).decode() for part in sent["raw"].walk() if part.get_content_type() == "text/plain")
+check("to them, with their company in the subject", "dana@ortizfarms.test" in sent["to"] and sent["subject"] == "Custom software for Ortiz Farms", sent)
+check("their first name and your line", plain.startswith("Hi Dana,") and "Paris chamber lunch" in plain, plain[:200])
+with application.app_context():
+    links = CatalogLink.query.filter_by(email="dana@ortizfarms.test").all()
+    check("one catalog link made for them, marked sent", len(links) == 1 and links[0].sent_at is not None
+          and links[0].label == "Dana Ortiz, Ortiz Farms", [(l.label, l.sent_at) for l in links])
+    token = links[0].token
+    until = f"{links[0].expires_at.strftime('%B')} {links[0].expires_at.day}"
+check("the link in the mail is theirs", f"/work/{token}" in plain and f"/work/{token}" in whole)
+check("and says how long it lasts", f"until {until}" in plain, until)
+check("the HTML carries it as a button", "See the work" in whole)
+c.post("/admin/messages/templates/intro/send", data=data)
+with application.app_context():
+    check("a double press sends once and makes one link", len(SENT) == before + 1
+          and CatalogLink.query.filter_by(email="dana@ortizfarms.test").count() == 1)
+    row = Message.query.filter_by(send_key="tpl-1").first()
+    check("it is in the inbox's sent mail", row is not None and row.direction == "out")
+r = c.post("/admin/messages/templates/intro/send", data={**data, "company": "", "send_key": "tpl-2"})
+check("no company, nothing sent", len(SENT) == before + 1)
+s, text_out, html_out = email_templates.render(email_templates.DEFAULTS["intro"], {
+    "first_name": "Pat", "company": "<Acme & Co>", "personal_line": "", "catalog_link": "https://x/work/t",
+    "link_until": "December 6"})
+check("no line of your own leaves no gap", "\n\n\n" not in text_out and "Hi Pat,\n\nMy name" in text_out)
+check("the HTML escapes what was typed", "&lt;Acme &amp; Co&gt;" in html_out and "<Acme" not in html_out)
+c.post("/admin/messages/templates/intro/save", data={"subject": "Hello {company}", "body": "Hi {first_name}.\n\n{catalog_link}"})
+with application.app_context():
+    check("an edit is kept", email_templates.get("intro")["subject"] == "Hello {company}" and email_templates.get("intro")["edited"])
+c.post("/admin/messages/templates/intro/reset")
+with application.app_context():
+    check("and the original comes back", email_templates.get("intro")["subject"] == "Custom software for {company}")
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All passed.")
