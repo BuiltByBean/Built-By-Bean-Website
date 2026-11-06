@@ -98,6 +98,22 @@
                        text-decoration: none; font-size: 14px; font-weight: 500; transition: border-color 0.2s, color 0.2s; }
         .sc-link-btn:hover { border-color: rgba(var(--primary-rgb), 0.5); color: var(--primary); }
         .sc-link-btn svg, .sc-store-icon { width: 17px; height: 17px; flex-shrink: 0; }
+        .sc-talk { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .sc-talk[hidden] { display: none; }
+        .sc-talk-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.7); }
+        .sc-talk-panel { position: relative; width: 100%; max-width: 480px; max-height: calc(100vh - 32px); overflow-y: auto; }
+        .sc-talk-sub { color: var(--text-muted); font-size: 14.5px; margin-bottom: 16px; }
+        .sc-talk-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 12px; }
+        .sc-talk-input { display: block; width: 100%; margin-top: 6px; padding: 11px 14px; border-radius: var(--radius-sm);
+                         border: 1px solid var(--border); background: var(--bg-alt); color: var(--text); font: inherit; font-size: 15px; }
+        .sc-talk-input:focus { outline: none; border-color: rgba(var(--primary-rgb), 0.6); }
+        textarea.sc-talk-input { resize: vertical; }
+        .sc-talk-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+        .sc-talk-actions .btn { min-height: 44px; padding: 0 22px; }
+        .sc-talk-error { color: var(--error); font-size: 14px; margin-bottom: 8px; }
+        .sc-talk-note { color: var(--primary); font-size: 13px; margin-top: 10px; text-align: right; }
+        .sc-talk-direct { color: var(--text-muted); font-size: 13px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
+                          user-select: all; }
         .sc-back-btn:hover { border-color: rgba(var(--primary-rgb), 0.5); color: var(--primary); }
         .sc-back-btn svg { width: 18px; height: 18px; }
         .sc-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); text-decoration: none; font-size: 14px;
@@ -178,9 +194,14 @@
                 <img src="{{ url_for('static', filename='images/logo.png') }}" alt="">
                 Built By Beans
             </a>
-            <a href="mailto:mbean@builtbybeans.com?subject=About%20a%20project" class="btn btn-primary btn-sm">
+            {# A form on the page, not a mailto: a mailto does nothing on a
+               computer with no mail program set up, which is most Windows
+               machines (Michael, 2026-11-06: "it doesn't do anything"). It
+               posts to the site's own contact door, which files it on the
+               board before it emails Michael. #}
+            <button type="button" class="btn btn-primary btn-sm" data-talk-open>
                 <span>Let's talk<span class="sc-wide"> about yours</span></span>
-            </a>
+            </button>
         </div>
     </nav>
     <main class="sc-main">
@@ -188,6 +209,79 @@
             {% block content %}{% endblock %}
         </div>
     </main>
+
+    <div class="sc-talk" data-talk hidden>
+        <div class="sc-talk-backdrop" data-talk-close></div>
+        <form class="sc-card sc-talk-panel" role="dialog" aria-modal="true" aria-labelledby="sc-talk-title"
+              data-talk-form data-from="{{ ('Catalog: ' ~ link.label) if link else 'Catalog' }}"
+              {% if preview %}data-preview{% endif %}>
+            <h2 id="sc-talk-title" class="sc-h2" style="margin-bottom:4px">Let's talk</h2>
+            <p class="sc-talk-sub">Tell me what slows you down. I'll get back to you, usually the same day.</p>
+            <div data-talk-fields>
+                <label class="sc-talk-label">Your name
+                    <input type="text" name="name" required maxlength="120" value="{{ link.label if link else '' }}" class="sc-talk-input">
+                </label>
+                <label class="sc-talk-label">Your email
+                    <input type="email" name="email" required maxlength="200" value="{{ (link.email or '') if link else '' }}" class="sc-talk-input">
+                </label>
+                <label class="sc-talk-label">What do you need?
+                    <textarea name="message" required rows="4" maxlength="4000" class="sc-talk-input"></textarea>
+                </label>
+                <p class="sc-talk-error" data-talk-error hidden></p>
+                <div class="sc-talk-actions">
+                    <button type="button" class="btn btn-outline" data-talk-close><span>Cancel</span></button>
+                    <button type="submit" class="btn btn-primary" data-talk-send><span>Send</span></button>
+                </div>
+                {% if preview %}
+                <p class="sc-talk-note">Preview: Send is off here. From a prospect's link it reaches you.</p>
+                {% endif %}
+            </div>
+            <div data-talk-done hidden>
+                <p class="sc-talk-sub" style="margin-top:8px">Sent. I'll get back to you soon.</p>
+                <div class="sc-talk-actions"><button type="button" class="btn btn-primary" data-talk-close><span>Close</span></button></div>
+            </div>
+            <p class="sc-talk-direct">Or reach me directly: mbean@builtbybeans.com &middot; (903) 491-2095</p>
+        </form>
+    </div>
+
+    <script>
+    (function () {
+        var box = document.querySelector('[data-talk]');
+        var form = box.querySelector('[data-talk-form]');
+        var err = form.querySelector('[data-talk-error]');
+        function open() {
+            box.hidden = false;
+            var first = form.querySelector('[name=name]').value ? form.querySelector('[name=message]') : form.querySelector('[name=name]');
+            setTimeout(function () { first.focus(); }, 30);
+        }
+        function close() { box.hidden = true; }
+        function field(n) { return form.querySelector('[name=' + n + ']').value.trim(); }
+        document.querySelectorAll('[data-talk-open]').forEach(function (b) { b.addEventListener('click', open); });
+        box.addEventListener('click', function (e) { if (e.target.closest('[data-talk-close]')) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden) close(); });
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (form.hasAttribute('data-preview')) return;
+            var send = form.querySelector('[data-talk-send]');
+            send.disabled = true; send.querySelector('span').textContent = 'Sending...';
+            err.hidden = true;
+            fetch('/api/contact', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: field('name'), email: field('email'),
+                                      message: field('message'), project_type: form.dataset.from})
+            }).then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
+              .then(function (res) {
+                  if (!res[0]) throw new Error(res[1].error || 'Something went wrong.');
+                  form.querySelector('[data-talk-fields]').hidden = true;
+                  form.querySelector('[data-talk-done]').hidden = false;
+              })
+              .catch(function (e2) {
+                  err.textContent = e2.message || 'Something went wrong.'; err.hidden = false;
+                  send.disabled = false; send.querySelector('span').textContent = 'Send';
+              });
+        });
+    })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

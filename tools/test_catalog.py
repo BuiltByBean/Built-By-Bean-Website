@@ -138,6 +138,18 @@ check("back is a bordered button, never bare text", 'class="sc-back-btn"' in app
       and "&larr; All products" not in app_page)
 check("the tour has no arrows", "sc-nav-btn" not in app_page)
 check("a product page has no More products list", "More products" not in app_page)
+check("Let's talk opens a form on the page, not a mailto", "data-talk-open" in page and "data-talk-form" in page
+      and 'href="mailto:' not in page)
+check("the form says which link it came from", 'data-from="Catalog: Louis Lucas"' in page)
+_prev = c.get("/admin/catalog/preview").get_data(as_text=True)
+check("in the preview, Send is off", "data-preview>" in _prev and "data-preview>" not in page)
+r = anon.post("/api/contact", json={"name": "Louis Lucas", "email": "louie@example.test",
+                                    "message": "Can you build me one?", "project_type": "Catalog: Louis Lucas"})
+with application.app_context():
+    from models import Message
+    m_ = Message.query.filter_by(from_email="louie@example.test", direction="in").first()
+    check("a message from the form is filed on the board", r.status_code == 200 and m_ is not None
+          and "Catalog: Louis Lucas" in (m_.subject or ""), (r.status_code, m_ and m_.subject))
 with application.app_context():
     e_ = db.session.get(AppLink, ehq_id)
     e_.catalog = True
