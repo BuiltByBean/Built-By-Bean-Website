@@ -242,7 +242,7 @@ for url in list(PAGES.values()) + [RETURN, "/admin/taxes/?year=2025"]:
 h = application.test_client()
 login(h, IDS["hannah"])
 GETS = list(PAGES.values()) + [RETURN, "/admin/taxes/sales/filings/1/record.pdf", "/admin/taxes/sales/files/1"]
-POSTS = ["/admin/taxes/", "/admin/taxes/sales/settings", "/admin/taxes/sales/clients/1/exempt",
+POSTS = ["/admin/taxes/", "/admin/taxes/sales/clients/1/exempt",
          "/admin/taxes/sales/invoices/1/project", "/admin/taxes/sales/invoices/1/taxable",
          "/admin/taxes/sales/invoices/1/back-tax", "/admin/taxes/sales/clients/1/catchup",
          "/admin/taxes/sales/clients/1/drafts", "/admin/taxes/sales/clients/1/subscriptions",

@@ -79,6 +79,7 @@ def invoice_row(inv, settings, client, project, *, client_exempt):
         "due": due / 100.0,
         "charged": charged / 100.0,
         "short": short / 100.0,
+        "billed_back": 0.0,
         # A draft about to go out with no tax on it: the hole, still open.
         "draft_missing_tax": ((inv.status or "") == "draft" and excluded is None
                               and charged == 0 and base > 0),
@@ -86,15 +87,40 @@ def invoice_row(inv, settings, client, project, *, client_exempt):
 
 
 def _money_totals():
-    return {"sales": 0.0, "due": 0.0, "charged": 0.0, "short": 0.0, "count": 0}
+    return {"sales": 0.0, "due": 0.0, "charged": 0.0, "short": 0.0, "count": 0,
+            "on_invoices": 0.0, "billed_back": 0.0, "left": 0.0}
 
 
 def _add(bucket, row):
+    """`charged` is every dollar of tax the client was asked for: on the
+    invoice itself, and billed back afterwards on a catch-up. It counted the
+    invoice alone until 2026-11-06, so the $1,102.20 billed back to Kenali and
+    Cason read as tax never charged (issue #19). `short` stays what the
+    invoice left off, `left` is what is still not billed after the catch-ups."""
     bucket["sales"] += row["base"]
     bucket["due"] += row["due"]
-    bucket["charged"] += row["charged"]
+    bucket["charged"] += row["charged"] + row["billed_back"]
+    bucket["on_invoices"] += row["charged"]
+    bucket["billed_back"] += row["billed_back"]
     bucket["short"] += row["short"]
+    bucket["left"] += max(0.0, row["short"] - row["billed_back"])
     bucket["count"] += 1
+
+
+def _allocate(rows, amount):
+    """Spread what a client's catch-ups billed back over the invoices it was
+    for, oldest first, each up to what it left off, so a quarter and a project
+    carry the tax that was billed back for their own sales. Anything over
+    (rounding, or a catch-up for more than the gap) sits on the newest."""
+    left = _cents(amount)
+    epoch = date.min
+    ordered = sorted(rows, key=lambda r: (r["invoice"].issued_on or epoch, r["invoice"].id))
+    for r in ordered:
+        take = min(left, _cents(r["short"]))
+        r["billed_back"] = take / 100.0
+        left -= take
+    if left > 0 and ordered:
+        ordered[-1]["billed_back"] = (_cents(ordered[-1]["billed_back"]) + left) / 100.0
 
 
 def _round_all(bucket):
@@ -141,7 +167,7 @@ def build(settings, clients, invoices, projects, subscriptions=(), rate_id=None)
         own_projects = sorted(projects_by_client.get(client.id, []), key=lambda p: p.name.lower())
         only = own_projects[0] if len(own_projects) == 1 else None
 
-        rows, catchups = [], []
+        rows, catchups, counted = [], [], []
         groups = {}
         money = _money_totals()
         for inv in mine:
@@ -155,14 +181,22 @@ def build(settings, clients, invoices, projects, subscriptions=(), rate_id=None)
                     catchups.append(inv)
                 continue
             rows.append(row)
-            if not row["counted"]:
-                continue
+            if row["counted"]:
+                counted.append(row)
+
+        # What the catch-ups sent asked for: the whole of a sent one, what
+        # stayed of a paid one. A draft has asked nobody for anything yet.
+        sent_back = sum(_cents(c.total) for c in catchups if c.status == "open")             + sum(_cents(c.amount_paid) - _cents(c.amount_refunded) for c in catchups if c.status == "paid")
+        if sent_back and not exempt:
+            _allocate(counted, sent_back / 100.0)
+        for row in counted:
             _add(money, row)
+            project = row["project"]
             key = project.id if project else None
             group = groups.setdefault(key, dict(_money_totals(), project=project))
             _add(group, row)
-            if inv.issued_on:
-                q = quarters.setdefault(_quarter_key(inv.issued_on), _money_totals())
+            if row["invoice"].issued_on:
+                q = quarters.setdefault(_quarter_key(row["invoice"].issued_on), _money_totals())
                 _add(q, row)
 
         drafted = sum(_cents(c.total) for c in catchups if c.status == "draft") / 100.0
@@ -203,7 +237,7 @@ def build(settings, clients, invoices, projects, subscriptions=(), rate_id=None)
         }
         report.append(entry)
         if not exempt:
-            for k in ("sales", "due", "charged", "short", "count"):
+            for k in ("sales", "due", "charged", "short", "count", "on_invoices", "billed_back", "left"):
                 totals[k] += money[k]
             totals["drafted"] += drafted
             totals["billed"] += billed

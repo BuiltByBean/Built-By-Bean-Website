@@ -670,6 +670,39 @@ def search_mail(today=None):
     return f"{seen} Comptroller emails since {since:%b %d}, {filled} returns filled from them"
 
 
+def follow_rate(business=None):
+    """The rate every invoice is held to is the state's: its 6.25% plus the
+    local rate the city file gives the board company's open locations, on the
+    company's taxable share. It was a form on the sales tax page until
+    2026-11-06 (Michael: "I don't set the rate. The state of Texas does"), and
+    one slip there would have changed every figure and every return. Written
+    only when every open location agrees; two different rates cannot be one
+    figure per dollar, so that is flagged and the rate is left. A change is
+    flagged too, because the Stripe tax rate follows it from the next invoice."""
+    import books_service
+    from models import SalesTaxSetting
+    business = business or books_service.board_business()
+    if business is None:
+        return ["no board company, rate left"]
+    open_ = [l for l in business.locations if not l.closed_on]
+    if not open_:
+        return ["no open location, rate left"]
+    rates = {round(l.total_rate, 4) for l in open_}
+    if len(rates) > 1:
+        _flag(business, "rate", f"{business.label}: locations have different rates",
+              "", ", ".join(f"{l.label} {l.total_rate:g}%" for l in open_))
+        return [f"locations disagree ({', '.join(f'{r:g}%' for r in sorted(rates))}), rate left"]
+    rate = rates.pop()
+    share = business.taxable_share if business.taxable_share is not None else 80.0
+    s = SalesTaxSetting.get()
+    if abs((s.rate_percent or 0) - rate) < 0.00001 and abs((s.taxable_share or 0) - share) < 0.00001:
+        return [f"rate {rate:g}% on {share:g}% holds"]
+    before = f"{s.rate_percent:g}% on {s.taxable_share:g}%"
+    s.rate_percent, s.taxable_share = rate, share
+    _flag(business, "rate", f"{business.label}: sales tax rate changed", before, f"{rate:g}% on {share:g}%")
+    return [f"sales tax rate {before} to {rate:g}% on {share:g}%"]
+
+
 # ── The night ────────────────────────────────────────────────
 
 def run_all(today=None, franchise_get=None, permits_get=None, rates_get=None, sales_for=None,
@@ -691,6 +724,7 @@ def run_all(today=None, franchise_get=None, permits_get=None, rates_get=None, sa
     steps = [("rates", lambda: read_rates(
                  BusinessLocation.query.join(Business).filter(Business.is_active.is_(True)).all(),
                  today, rates_get)),
+             ("rate", lambda: follow_rate()),
              ("drafts", lambda: draft_filings(today, sales_for))]
     if mail:
         steps.append(("mail", lambda: [search_mail(today)]))

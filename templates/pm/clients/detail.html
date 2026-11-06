@@ -129,7 +129,7 @@
                 <p class="text-xs font-medium text-amber-400 mb-1">Sales tax</p>
                 <p class="text-sm text-white break-words">
                     {% if sales_tax.to_bill %}{{ sales_tax.to_bill | format_currency }} to bill
-                    {%- elif sales_tax.short %}{{ sales_tax.short | format_currency }} never charged, billed back
+                    {%- elif sales_tax.billed_back %}{{ sales_tax.billed_back | format_currency }} billed back
                     {%- else %}Square{% endif %}
                     {%- if sales_tax.drafts_missing_tax %}
                     <span class="text-surface-400">&middot; {{ sales_tax.drafts_missing_tax | length }} draft{{ '' if sales_tax.drafts_missing_tax|length == 1 else 's' }} untaxed</span>

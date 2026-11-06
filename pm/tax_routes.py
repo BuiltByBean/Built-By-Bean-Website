@@ -171,33 +171,17 @@ def sales_tax_index():
         current_app.logger.error(f"Sales tax import error: {e}")
     settings = SalesTaxSetting.get()
     ledger = _ledger(settings)
+    import books_service
+    board = books_service.board_business()
     return render_template(
         "pm/taxes/sales.html",
         settings=settings,
+        rate_locations=[l for l in (board.locations if board else []) if not l.closed_on],
         ledger=ledger,
         totals=ledger["totals"],
         orphans=orphans or [],
         open_id=request.args.get("open", type=int),
     )
-
-
-@tax_bp.route("/sales/settings", methods=["POST"])
-@ceo_required
-def sales_tax_settings():
-    settings = SalesTaxSetting.get()
-    settings.rate_percent = _percent("rate_percent", settings.rate_percent)
-    settings.taxable_share = _percent("taxable_share", settings.taxable_share)
-    raw = (request.form.get("count_from") or "").strip()
-    if not raw:
-        settings.count_from = None
-    else:
-        try:
-            settings.count_from = date.fromisoformat(raw)
-        except ValueError:
-            pass  # keep what was there rather than silently counting everything
-    db.session.commit()
-    flash(f"Saved. {settings.effective_percent:g}% of every dollar.", "success")
-    return _back()
 
 
 @tax_bp.route("/sales/clients/<int:id>/exempt", methods=["POST"])

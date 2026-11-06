@@ -148,6 +148,31 @@ part = invoices + [inv(20, 201.30, status="open", catchup=True, paid=100.0)]
 e = sales_tax.build(st, [CLIENT], part, [P1, P2])["clients"][0]
 check("a part-paid catch-up is billed in full, not offered again", e["to_bill"] == 0.0, e["to_bill"])
 
+print("\nBILLED BACK IS CHARGED (issue #19):")
+# Kenali's and Cason's back tax went out on its own invoice and was paid; the
+# page read that tax as never charged.
+early = inv(30, 1500.0, project_id=11, issued=date(2026, 4, 10))   # Q2, owes 99.00
+late = inv(31, 1500.0, project_id=12, issued=date(2026, 8, 3))     # Q3, owes 99.00
+taxed = inv(32, 1066.0, tax=66.0, project_id=11, issued=date(2026, 8, 20))  # charged 66.00
+back = inv(33, 150.0, catchup=True, issued=date(2026, 10, 27))      # billed back, paid
+led = sales_tax.build(st, [CLIENT], [early, late, taxed, back], [P1, P2])
+e = led["clients"][0]
+check("charged is the invoices' tax and the billed-back tax", e["charged"] == 216.0, e["charged"])
+check("split into on invoices and billed back", e["on_invoices"] == 66.0 and e["billed_back"] == 150.0,
+      (e["on_invoices"], e["billed_back"]))
+check("what neither covered is left", e["left"] == 48.0 and e["to_bill"] == 48.0, (e["left"], e["to_bill"]))
+qs = {q["label"]: q["charged"] for q in led["quarters"]}
+check("billed back goes to the oldest quarter first", qs == {"2026 Q2": 99.0, "2026 Q3": 117.0}, qs)
+g = {gr["project"].name: (gr["charged"], gr["left"]) for gr in e["groups"]}
+check("and to the projects it was for", g == {"Talent Booker": (165.0, 0.0), "Workforce": (51.0, 48.0)}, g)
+check("the totals carry it", led["totals"]["charged"] == 216.0 and led["totals"]["billed_back"] == 150.0,
+      led["totals"])
+e = sales_tax.build(st, [CLIENT], [early, inv(34, 150.0, catchup=True, status="draft")], [P1])["clients"][0]
+check("a drafted catch-up has charged nobody yet", e["charged"] == 0.0 and e["to_bill"] == 0.0,
+      (e["charged"], e["to_bill"]))
+e = sales_tax.build(st, [CLIENT], [early, inv(35, 100.0, catchup=True)], [P1])["clients"][0]
+check("more billed back than was short still counts, on the newest", e["charged"] == 100.0, e["charged"])
+
 e = sales_tax.build(st, [CLIENT], [inv(1, 1500.0)], [P1])["clients"][0]
 check("with one project, an unassigned invoice is that project's", e["groups"][0]["project"] is P1)
 
@@ -311,11 +336,43 @@ c.post(f"/admin/taxes/sales/clients/{k_id}/exempt")
 with application.app_context():
     check("and put back", not db.session.get(Client, k_id).sales_tax_exempt)
 
-c.post("/admin/taxes/sales/settings", data={"rate_percent": "8.25", "taxable_share": "80",
-                                           "count_from": "2026-01-01"})
+r = c.post("/admin/taxes/sales/settings", data={"rate_percent": "9", "taxable_share": "100"})
+check("the rate cannot be typed: the settings press is gone", r.status_code in (404, 405), r.status_code)
+r = c.get("/admin/taxes/sales")
+page = r.get_data(as_text=True)
+check("the rate card has no input", 'name="rate_percent"' not in page and 'name="taxable_share"' not in page)
+
+print("\nTHE RATE FOLLOWS THE STATE:")
+import comptroller  # noqa: E402
+from models import Business, BusinessLocation, ComptrollerFlag  # noqa: E402
 with application.app_context():
+    biz = Business(name="Rate Test LLC", slug="rate-test", sales_source="board")
+    db.session.add(biz)
+    db.session.flush()
+    paris = BusinessLocation(business_id=biz.id, label="Paris", local_rate=2.0)
+    fw = BusinessLocation(business_id=biz.id, label="Fort Worth", local_rate=2.0)
+    db.session.add_all([paris, fw])
+    db.session.commit()
+    said = comptroller.follow_rate(biz)
+    check("8.25% everywhere holds and flags nothing", "holds" in said[0] and not ComptrollerFlag.query.count(), said)
+    fw.local_rate = 2.25
+    db.session.commit()
+    db.session.refresh(biz)
+    said = comptroller.follow_rate(biz)
+    check("two rates are flagged and the rate is left",
+          SalesTaxSetting.get().rate_percent == 8.25 and ComptrollerFlag.query.count() == 1, said)
+    paris.local_rate = 2.25
+    db.session.commit()
+    db.session.refresh(biz)
+    said = comptroller.follow_rate(biz)
     s = SalesTaxSetting.get()
-    check("the settings save", s.count_from == date(2026, 1, 1) and s.effective_percent == 6.6)
+    check("a new state rate is taken and flagged", s.rate_percent == 8.5 and ComptrollerFlag.query.count() == 2,
+          (s.rate_percent, said))
+    s.rate_percent = 8.25
+    for l in (paris, fw):
+        l.local_rate = 2.0
+    ComptrollerFlag.query.delete()
+    db.session.commit()
 
 
 print("\nA BACK-TAX INVOICE WRITTEN BY HAND IN STRIPE:")
