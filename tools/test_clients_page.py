@@ -71,7 +71,10 @@ def mail(frm, subject, body="Hello", msg_id=None, reply_to=None):
     m["From"] = frm
     m["To"] = "michael@builtbybean.com"
     m["Subject"] = subject
-    m["Date"] = "Tue, 03 Nov 2026 10:00:00 +0000"
+    # Mail that has just arrived: since the inbox (issue #40) a mail more
+    # than three days old when first read is history and moves nobody.
+    from email.utils import formatdate
+    m["Date"] = formatdate(usegmt=True)
     if msg_id:
         m["Message-ID"] = msg_id
     if reply_to:

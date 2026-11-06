@@ -152,6 +152,36 @@ with application.app_context():
     from pm.attention_routes import attention_counts
     check("Needs attention shows neither", attention_counts().get("total", 0) == 0, attention_counts())
 
+print("1b. A later pass reading old mail: still history (2026-11-06)")
+with application.app_context():
+    from models import Lead, LeadTouch
+    early = Client(name="Early Co", email="boss@early.test", stage="lead")
+    shop = Lead(name="Cable Co", dedupe_key="cable|1", website="https://cable.test", stage="lead")
+    db.session.add_all([early, shop])
+    db.session.commit()
+    early_id, shop_id = early.id, shop.id
+GMAIL["10"] = (mail("Boss <boss@early.test>", "michael@builtbybean.test", "From weeks ago",
+                    "Old words", "<e1@early>", ago(days=25)), "T10", False)
+GMAIL["11"] = (mail("Billing <bills@cable.test>", "michael@builtbybean.test", "Your bill is ready",
+                    "Pay it", "<c1@cable>", ago(hours=2)), "T11", False)
+with application.app_context():
+    mail_service.sync(force=True)
+    e1 = Message.query.filter_by(external_id="<e1@early>").first()
+    check("old mail on a later pass is history", e1.status == "archived" and e1.client_id == early_id)
+    check("and moves no client", db.session.get(Client, early_id).stage == "lead")
+    c1 = Message.query.filter_by(external_id="<c1@cable>").first()
+    check("a lead is never matched by its website's domain", c1.watched is False)
+    check("so it logs no contact and moves no lead",
+          LeadTouch.query.filter_by(lead_id=shop_id).count() == 0 and db.session.get(Lead, shop_id).stage == "lead")
+    from pm.attention_routes import attention_counts
+    check("Needs attention still shows nothing", attention_counts().get("total", 0) == 0, attention_counts())
+for k in ("10", "11"):
+    del GMAIL[k]
+with application.app_context():
+    for ext in ("<e1@early>", "<c1@cable>"):
+        db.session.delete(Message.query.filter_by(external_id=ext).first())
+    db.session.commit()
+
 print("2. Later passes: threads, sent mail, attachments")
 GMAIL["3"] = (mail("Kenali <kkendrick@jdentertain.test>", "michael@builtbybean.test", "Re: Old question",
                    "Also, here is the quote.\n\nOn Tue, Nov 3, 2026 at 9:00 AM Michael wrote:\n> earlier",

@@ -248,6 +248,8 @@ def _fingerprint(msg, addr):
 PRIMARY_DAYS = 60
 PRIMARY_QUERY = "(in:inbox OR in:sent) -category:promotions -category:social -category:forums"
 MAX_NEW_PER_PASS = 400
+# Mail older than this when it is first read is history (see `ingest`).
+HISTORY_DAYS = 3
 _META = re.compile(rb"(X-GM-MSGID|X-GM-THRID|UID) (\d+)")
 _FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
 
@@ -509,12 +511,16 @@ def ingest(msg, meta=None, quiet=False):
                 break
         row.watched = bool(row.client_id) or bool(root and root.watched)
         _mark_replied(row)
-    elif quiet:
+    elif quiet or _naive(when) < _naive(datetime.now(timezone.utc)) - timedelta(days=HISTORY_DAYS):
+        # History, not news: filed to its client, but it moves no stage, logs
+        # no lead contact and does not wait on Needs attention. Decided by the
+        # mail's age, not by which pass reads it: the first pass is capped, so
+        # the rest of the sixty days arrived in later passes and, until this,
+        # walked into Needs attention as new (2026-11-06).
         client = match_client(addr)
         row.client_id = client.id if client else None
-        row.watched = bool(client) or bool(match_lead(addr)) or bool(root and root.watched)
-        # Old mail is history, not a wait: only the last three days ask.
-        if _naive(when) < _naive(datetime.now(timezone.utc)) - timedelta(days=3):
+        row.watched = bool(client) or bool(match_lead(addr, exact=True)) or bool(root and root.watched)
+        if _naive(when) < _naive(datetime.now(timezone.utc)) - timedelta(days=HISTORY_DAYS):
             row.status = "archived"
     else:
         # A client's mail is contact: it files the row and moves their stage.

@@ -113,21 +113,29 @@ def _host(url):
     return url[4:] if url.startswith("www.") else url
 
 
-def match_lead(address):
+def match_lead(address, exact=False):
     """The lead somebody writes from, or None. Leads already converted are
-    left out: their mail is the client's."""
+    left out: their mail is the client's.
+
+    `exact` matches the lead's own address or a lead person's, never their
+    domain. Mail from the inbox (issue #40) is all of Primary, and a domain
+    match tied an Amazon receipt and a cable bill to whichever lead had that
+    website on file; the domain is for the contact form, where a stranger
+    has asked to be heard."""
     address = (address or "").strip().lower()
     if not address:
         return None
     open_leads = Lead.query.filter(Lead.client_id.is_(None))
-    exact = open_leads.filter(db.func.lower(Lead.email) == address).first()
-    if exact:
-        return exact
+    exact_lead = open_leads.filter(db.func.lower(Lead.email) == address).first()
+    if exact_lead:
+        return exact_lead
     person = (LeadPerson.query.join(Lead)
               .filter(Lead.client_id.is_(None),
                       db.func.lower(LeadPerson.email) == address).first())
     if person:
         return person.lead
+    if exact:
+        return None
     dom = business_domain(address)
     if not dom:
         return None
@@ -187,7 +195,7 @@ def file_inbound(message):
         return client
     if message.source == "contact_form":
         return lead_for_enquiry(message)
-    lead = match_lead(message.from_email)
+    lead = match_lead(message.from_email, exact=True)
     if lead:
         log_lead_mail(lead, message)
     return lead
