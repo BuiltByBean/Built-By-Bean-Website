@@ -137,6 +137,8 @@ check("with its tour", f"/work/{t_all}/shot/{shot_id}" in app_page)
 check("back is a bordered button, never bare text", 'class="sc-back-btn"' in app_page
       and "&larr; All products" not in app_page)
 check("the tour has no arrows", "sc-nav-btn" not in app_page)
+check("a product page has no More products list", "More products" not in app_page)
+check("and no platform pills", "class=\"sc-chip" not in app_page)
 
 import re as _re  # noqa: E402
 # Text alone is never a button (Handbook). Each kind below draws a border or a

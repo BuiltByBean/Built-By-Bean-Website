@@ -32,7 +32,7 @@
         .sc-brand img { width: 32px; height: 32px; border-radius: 8px; }
         .sc-preview { background: rgba(var(--primary-rgb), 0.12); border-bottom: 1px solid rgba(var(--primary-rgb), 0.35);
                       color: var(--primary); font-size: 13px; text-align: center; padding: 8px 16px; }
-        .sc-main { padding: 40px 0 64px; }
+        .sc-main { padding: 32px 0 40px; }
         .sc-eyebrow { color: var(--primary); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
         .sc-h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin: 10px 0 14px; }
         .sc-lead { color: var(--text-muted); font-size: 1.1rem; max-width: 780px; }
@@ -121,12 +121,35 @@
         .sc-other:hover { border-color: rgba(var(--primary-rgb), 0.5); }
         .sc-other .sc-app-icon { width: 34px; height: 34px; border-radius: 9px; }
         .sc-gone { min-height: 70vh; display: flex; align-items: center; justify-content: center; text-align: center; }
+        /* The product page on one screen: words left, screenshot right. */
+        .sc-product-page { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; align-items: start; }
+        .sc-pp-head { display: flex; align-items: center; gap: 16px; min-width: 0; }
+        .sc-app-icon.sc-md { width: 64px; height: 64px; border-radius: 16px; }
+        .sc-pp-name { font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }
+        .sc-pp-where { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+        .sc-pp-pitch { color: var(--text-muted); font-size: 1.02rem; line-height: 1.55; margin-top: 14px; }
+        .sc-pp-h { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+                   margin: 20px 0 8px; }
+        .sc-pp-points { gap: 6px; }
+        .sc-pp-points li { font-size: 14.5px; line-height: 1.45; }
+        .sc-pp-points li::before { margin-top: 7px; }
+        .sc-pp-services { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .sc-pp-service { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: var(--radius);
+                         background: var(--bg-alt); border: 1px solid var(--border); min-width: 0; }
+        .sc-pp-service .sc-name { font-weight: 600; font-size: 13.5px; }
+        .sc-pp-service .sc-service-line { font-size: 12px; }
+        .sc-pp-visual { position: sticky; top: 88px; display: grid; gap: 12px; min-width: 0; }
+        @media (min-width: 1400px) { .sc-pp-services { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        .sc-pp-bar { display: flex; justify-content: flex-end; }
         @media (max-width: 900px) {
             .sc-layout { grid-template-columns: minmax(0, 1fr); }
+            .sc-product-page { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+            .sc-pp-visual { position: static; order: -1; }
 
             .sc-glance { grid-template-columns: minmax(0, 1fr); }
         }
         @media (max-width: 520px) {
+            .sc-pp-services { grid-template-columns: minmax(0, 1fr); }
             .container { padding: 0 16px; }
             .sc-main { padding-top: 32px; }
             .sc-built { grid-template-columns: minmax(0, 1fr); }

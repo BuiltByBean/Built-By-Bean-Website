@@ -11,36 +11,66 @@
 {% block title %}{{ app.showcase_name }} - Built By Beans{% endblock %}
 
 {% block content %}
-<div class="sc-hero-app">
-    {{ m.app_icon(app, 'sc-lg') }}
-    <div style="min-width:0; flex:1">
-        <h1 class="sc-h1" style="margin-top:0">{{ app.showcase_name }}</h1>
-        {% if app.catalog_pitch %}<p class="sc-lead">{{ app.catalog_pitch }}</p>{% endif %}
-        <div class="sc-chips" style="margin-top:14px">
-            {% for p in cs.platforms(app) %}<span class="sc-chip">{{ m.platform_icon(p) }}{{ m.platform_label(p) }}</span>{% endfor %}
-        </div>
-        {% if app.demo_url %}
-        <div class="sc-actions">
-            <a href="{{ app.demo_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg"><span>Try it live</span></a>
-        </div>
-        {% endif %}
-    </div>
-    <a href="{{ base_url }}" class="sc-back-btn" title="All products">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
-        <span>All products</span>
-    </a>
-</div>
-
-{# Michael, 2026-11-06: "you built this so skinny making it an unnecessary
-   long scroll". The tour beside what it does, then what it is built with
-   across the whole width, three or four to a row. #}
+{#
+  One screen (Michael, 2026-11-06): "all the text to be on the left side ...
+  the preview over on the right ... I don't want the more products thing ...
+  I don't like all the tiny little pills ... You could have it all fit really
+  nicely on one screen." So: the words in one column on the left (name,
+  pitch, where it runs as a plain line, what it does, what it is built
+  with), the screenshot on the right, and Back on the trailing edge above it.
+#}
 {% set shots = app.catalog_shots %}
 {% set points = cs.points(app) %}
 {% set services = cs.services(app, book) %}
-{% set caps = cs.capabilities(app, book) %}
-{% set others = apps | rejectattr("id", "equalto", app.id) | list %}
-<div class="sc-layout">
-    <div style="min-width:0">
+{% set plats = cs.platforms(app) %}
+<div class="sc-product-page">
+    <div class="sc-pp-text">
+        <div class="sc-pp-head">
+            {{ m.app_icon(app, 'sc-md') }}
+            <div style="min-width:0">
+                <h1 class="sc-pp-name">{{ app.showcase_name }}</h1>
+                {% if plats %}
+                <p class="sc-pp-where">{% for p in plats %}{{ m.platform_label(p) }}{{ ' · ' if not loop.last }}{% endfor %}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% if app.catalog_scale %}<p class="sc-scale" style="margin-top:12px">{{ app.catalog_scale }}</p>{% endif %}
+        {% if app.catalog_pitch %}<p class="sc-pp-pitch">{{ app.catalog_pitch }}</p>{% endif %}
+        {% if app.demo_url %}
+        <div class="sc-actions" style="margin-top:16px">
+            <a href="{{ app.demo_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><span>Try it live</span></a>
+        </div>
+        {% endif %}
+
+        {% if points %}
+        <h2 class="sc-pp-h">What it does</h2>
+        <ul class="sc-points sc-pp-points">{% for p in points %}<li>{{ p }}</li>{% endfor %}</ul>
+        {% endif %}
+
+        {% if services %}
+        <h2 class="sc-pp-h">Built with</h2>
+        <div class="sc-pp-services">
+            {% for s in services %}
+            {% set i = cs.info(s, book) %}
+            <div class="sc-pp-service" title="{{ i[2] }}">
+                {{ m.mark(s) }}
+                <div style="min-width:0">
+                    <div class="sc-name">{{ i[1] }}</div>
+                    {% if i[2] %}<div class="sc-service-line">{{ i[2] }}</div>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="sc-pp-visual">
+        <div class="sc-pp-bar">
+            <a href="{{ base_url }}" class="sc-back-btn" title="All products">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
+                <span>All products</span>
+            </a>
+        </div>
         {% if shots %}
         <div class="sc-card sc-viewer" id="tour">
             <div class="sc-stage">
@@ -49,7 +79,9 @@
                      {% if not loop.first %}hidden loading="lazy"{% endif %}>
                 {% endfor %}
             </div>
+            {% if shots[0].caption or shots | length > 1 %}
             <div class="sc-caption" aria-live="polite">{{ shots[0].caption }}</div>
+            {% endif %}
             {% if shots | length > 1 %}
             <div class="sc-thumbs">
                 {% for s in shots %}
@@ -61,54 +93,9 @@
             </div>
             {% endif %}
         </div>
-        {% elif points %}
-        <div class="sc-card">
-            <h2 class="sc-h2">What it does</h2>
-            <ul class="sc-points">{% for p in points %}<li>{{ p }}</li>{% endfor %}</ul>
-        </div>
         {% endif %}
     </div>
-
-    <aside class="sc-side">
-        {% if shots and points %}
-        <div class="sc-card">
-            <h3>What it does</h3>
-            <ul class="sc-points">{% for p in points %}<li>{{ p }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-        {% if others %}
-        <div class="sc-card">
-            <h3>More products</h3>
-            {% for o in others %}
-            <a href="{{ app_href(o) }}" class="sc-other">{{ m.app_icon(o) }}<span>{{ o.showcase_name }}</span></a>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </aside>
 </div>
-
-{% if services %}
-<section class="sc-section">
-    <h2 class="sc-h2">Built with <span class="sc-count">{{ services | length }}</span></h2>
-    {% if caps %}
-    <div class="sc-chips" style="margin-bottom:16px">
-        {% for c in caps %}<span class="sc-chip sc-chip-cap">{{ c }}</span>{% endfor %}
-    </div>
-    {% endif %}
-    <div class="sc-service-list">
-        {% for s in services %}
-        {% set i = cs.info(s, book) %}
-        <div class="sc-service sc-service-lg">
-            {{ m.mark(s) }}
-            <div style="min-width:0">
-                <div class="sc-name">{{ i[1] }}</div>
-                {% if i[2] %}<div class="sc-service-line">{{ i[2] }}</div>{% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</section>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -124,7 +111,7 @@
         at = (i + imgs.length) % imgs.length;
         imgs.forEach(function (img, n) { img.hidden = n !== at; });
         thumbs.forEach(function (t, n) { t.setAttribute('aria-current', n === at ? 'true' : 'false'); });
-        caption.textContent = thumbs.length ? thumbs[at].dataset.caption : caption.textContent;
+        if (caption && thumbs.length) caption.textContent = thumbs[at].dataset.caption;
         if (thumbs[at]) thumbs[at].scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     tour.addEventListener('click', function (e) {
