@@ -3491,6 +3491,13 @@ class CatalogLink(db.Model):
     created_by_id = db.Column(
         db.Integer, db.ForeignKey("users.id", ondelete="SET NULL", name="fk_catalog_links_created_by_id"),
         nullable=True, index=True)
+    # Who it was emailed to, and when (issue #26): a client on the board, or
+    # any name and address typed in. Null sent_at is a link only copied.
+    email = db.Column(db.String(200), nullable=True)
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL", name="fk_catalog_links_client_id"),
+        nullable=True, index=True)
+    sent_at = db.Column(db.DateTime, nullable=True)
 
     @property
     def app_ids(self):

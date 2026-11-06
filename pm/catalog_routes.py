@@ -14,6 +14,7 @@ The logic is catalog_service.py.
 """
 import json
 import os
+import re
 from datetime import timedelta
 
 from flask import (Blueprint, abort, flash, redirect, render_template, request,
@@ -39,14 +40,19 @@ def _back():
 def index():
     apps = cs.approved()
     others = (AppLink.query.filter(AppLink.catalog.is_(False))
-              .order_by(AppLink.name).all())
+              .order_by(AppLink.name, AppLink.id).all())
+    from models import Client
+    clients = Client.query.order_by(Client.name, Client.id).all()
+    client_options = [("", "Not on the board")] + [(str(c.id), c.name) for c in clients]
+    client_lookup = {str(c.id): {"name": c.name, "email": (c.email or "").strip()} for c in clients}
     links = CatalogLink.query.order_by(CatalogLink.created_at.desc(), CatalogLink.id.desc()).all()
     names = {a.id: a.showcase_name for a in apps}
     book = cs.marks()
     no_logo = cs.missing_logos(cs.overview(apps, book)["services"], book) if apps else []
     return render_template("pm/catalog/index.html", apps=apps, others=others, links=links,
                            names=names, live=cs.live, now=cs.now(), cs=cs,
-                           book=book, no_logo=no_logo)
+                           book=book, no_logo=no_logo, client_options=client_options,
+                           client_lookup=client_lookup)
 
 
 @catalog_bp.route("/apps/add", methods=["POST"])
@@ -61,6 +67,22 @@ def add():
     app.catalog_position = last + 1
     db.session.commit()
     flash(f"{app.name} is in the catalog.", "success")
+    return _back()
+
+
+@catalog_bp.route("/apps/<int:id>/toggle", methods=["POST"])
+@login_required
+def toggle(id):
+    """In the catalog or not, from the switch on its row (issue #26). Off
+    keeps its words, icon and tour, so on again is as it was."""
+    app = db.session.get(AppLink, id) or abort(404)
+    if app.catalog:
+        app.catalog = False
+    else:
+        app.catalog = True
+        last = max([a.catalog_position or 0 for a in cs.approved()] or [0])
+        app.catalog_position = last + 1
+    db.session.commit()
     return _back()
 
 
@@ -200,12 +222,51 @@ def shot_file(id):
     return _send_shot(shot)
 
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def invitation(link, url):
+    """The email a link goes out in: plain, from Michael, in his voice."""
+    first = (link.label or "").split()[0] if link.label else ""
+    until = link.expires_at.strftime("%B %d").replace(" 0", " ")
+    text = (f"Hi {first},\n\n" if first else "Hi,\n\n") + (
+        "Here's a private look at some of the software I've built and run for real "
+        "businesses. Open any of them to see the screens and what each one does.\n\n"
+        f"{url}\n\n"
+        f"The link is just for you and works until {until}.\n\n"
+        "Michael Bean\nBuilt By Beans\n(903) 491-2095\n")
+    from markupsafe import escape
+    html = (
+        f"<p>{'Hi ' + str(escape(first)) + ',' if first else 'Hi,'}</p>"
+        "<p>Here's a private look at some of the software I've built and run for real businesses. "
+        "Open any of them to see the screens and what each one does.</p>"
+        f'<p><a href="{escape(url)}" style="display:inline-block;padding:12px 22px;border-radius:10px;'
+        'background:#a855f7;color:#ffffff;text-decoration:none;font-weight:600">See the work</a></p>'
+        f"<p style=\"color:#666\">The link is just for you and works until {until}.</p>"
+        "<p>Michael Bean<br>Built By Beans<br>(903) 491-2095</p>")
+    return "Some of the software I've built", text, html
+
+
 @catalog_bp.route("/links", methods=["POST"])
 @login_required
 def make_link():
-    label = (request.form.get("label") or "").strip()
+    """Make a link, and send it when asked (issue #26): to a client on the
+    board, whose name and email fill in, or to any name and address typed."""
+    from models import Client
+    from pm import mail_service
+    label = " ".join((request.form.get("label") or "").split())
+    email = (request.form.get("email") or "").strip()
+    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    # "Just make the link" names itself; the armed Send is the confirm
+    # button's own submit, which carries no name.
+    sending = request.form.get("action") != "link"
+    if not label and client is not None:
+        label = client.name
     if not label:
         flash("Say who the link is for.", "warning")
+        return _back()
+    if sending and not EMAIL_RE.match(email):
+        flash("An email address is needed to send it.", "warning")
         return _back()
     approved = {a.id for a in cs.approved()}
     picked = [int(v) for v in request.form.getlist("app_ids") if v.isdigit() and int(v) in approved]
@@ -214,7 +275,25 @@ def make_link():
     ids = picked if picked and set(picked) != approved else None
     days = request.form.get("days", type=int) or cs.LINK_DAYS
     link = cs.make_link(label, ids, days=max(1, min(days, 365)), user=current_user)
-    flash(f"Link made for {link.label}. Copy it from the list.", "success")
+    link.email = email[:200] or None
+    link.client_id = client.id if client is not None else None
+    db.session.commit()
+    if not sending:
+        flash(f"Link made for {link.label}. Copy it from the list.", "success")
+        return _back()
+    url = "https://" + request.host + url_for("showcase.showcase", token=link.token)
+    subject, text, html = invitation(link, url)
+    try:
+        mail_service.send_new(email, label, subject, text, html_body=html, client=client)
+    except Exception as err:  # noqa: BLE001 - the link stands; say what failed
+        db.session.rollback()
+        flash(f"The link is made, but the email did not go: {str(err)[:160]}. Copy it from the list.",
+              "warning")
+        return _back()
+    link = db.session.get(CatalogLink, link.id)
+    link.sent_at = cs.now()
+    db.session.commit()
+    flash(f"Sent to {label} at {email}.", "success")
     return _back()
 
 

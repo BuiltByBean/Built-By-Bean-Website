@@ -80,8 +80,8 @@ r = c.get("/admin/catalog/")
 check("it draws", r.status_code == 200, r.status_code)
 check("the sidebar links it", b'href="/admin/catalog/"' in r.data)
 check("it is not out on the web", anon.get("/admin/catalog/").status_code in (302, 401))
-c.post("/admin/catalog/apps/add", data={"app_id": ehq_id})
-c.post("/admin/catalog/apps/add", data={"app_id": rob_id})
+c.post(f"/admin/catalog/apps/{ehq_id}/toggle")
+c.post(f"/admin/catalog/apps/{rob_id}/toggle")
 with application.app_context():
     check("two apps are in, in the order added", [a.id for a in cs.approved()] == [ehq_id, rob_id])
 c.post(f"/admin/catalog/apps/{rob_id}/save", data={
@@ -107,8 +107,9 @@ with application.app_context():
     check("and it is on the volume", os.path.exists(os.path.join(TMP, "catalog", shots[0].file)))
 
 print("\nA LINK IS THE ONLY WAY IN:")
-c.post("/admin/catalog/links", data={"label": "Louis Lucas", "days": "30"})
-c.post("/admin/catalog/links", data={"label": "Only Vignette", "app_ids": [str(rob_id)], "days": "7"})
+c.post("/admin/catalog/links", data={"label": "Louis Lucas", "days": "30", "action": "link"})
+c.post("/admin/catalog/links", data={"label": "Only Vignette", "app_ids": [str(rob_id)], "days": "7",
+                                     "action": "link"})
 r = c.get("/admin/catalog/")
 check("the page draws with apps, a tour and links on it", r.status_code == 200
       and b"Vignette" in r.data and b"Only Vignette" in r.data, r.status_code)
@@ -227,7 +228,35 @@ with application.app_context():
     n = cs.record_repo_services("BuiltByBean/EntertainHQ", ["Twilio"])
     check("the nightly audit writes onto the tile its repo is", n == 1 and db.session.get(AppLink, ehq_id).services == ["Twilio"])
 
-c.post(f"/admin/catalog/apps/{rob_id}/remove")
+print("\nSENDING IT:")
+import pm.mail_service as mail_service  # noqa: E402
+SENT = []
+mail_service.send_new = lambda to, name, subject, text, html_body=None, client=None, app=None: SENT.append(
+    (to, name, subject, text, client.id if client else None))
+with application.app_context():
+    from models import Client
+    cl = Client(name="Louis Lucas", email="louie@example.test")
+    db.session.add(cl)
+    db.session.commit()
+    cl_id = cl.id
+r = c.post("/admin/catalog/links", data={"client_id": str(cl_id), "label": "Louis Lucas",
+                                         "email": "louie@example.test", "days": "30"})
+check("the armed Send emails the link", len(SENT) == 1 and SENT[0][0] == "louie@example.test", SENT)
+check("with the link in it, addressed by first name",
+      SENT and "/work/" in SENT[0][3] and SENT[0][3].startswith("Hi Louis,"), SENT and SENT[0][3][:60])
+check("filed against the client", SENT and SENT[0][4] == cl_id)
+with application.app_context():
+    sent = CatalogLink.query.filter(CatalogLink.sent_at.isnot(None)).first()
+    check("and the link says when it went and to whom", sent is not None and sent.email == "louie@example.test"
+          and sent.client_id == cl_id)
+c.post("/admin/catalog/links", data={"label": "Typed In", "email": "", "days": "30"})
+check("no email, nothing is sent", len(SENT) == 1)
+c.post("/admin/catalog/links", data={"label": "Just A Link", "email": "x@example.test", "days": "30", "action": "link"})
+check("Just make the link sends nothing", len(SENT) == 1)
+r = c.get("/admin/catalog/")
+check("every app is on the page with a switch", b'role="switch"' in r.data and b"Not For Prospects" in r.data)
+
+c.post(f"/admin/catalog/apps/{rob_id}/toggle")
 with application.app_context():
     r_ = db.session.get(AppLink, rob_id)
     check("taking an app out keeps its words and tour", not r_.catalog and r_.catalog_name == "Vignette"

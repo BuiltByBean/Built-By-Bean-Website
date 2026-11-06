@@ -448,6 +448,45 @@ def send_reply(original, text, app=None):
     return row
 
 
+def send_new(to_email, to_name, subject, text, html_body=None, client=None, app=None):
+    """A new message from Michael's own address (not a reply), filed in the
+    board's mail like one, so the client's page shows it went. Returns the
+    outbound row. Raises when mail is not configured or the server refuses."""
+    from email.mime.multipart import MIMEMultipart
+    app = app or current_app
+    if not configured(app):
+        raise RuntimeError("mail is not configured")
+    username = app.config["MAIL_USERNAME"]
+    if html_body:
+        mime = MIMEMultipart("alternative")
+        mime.attach(MIMEText(text, "plain", "utf-8"))
+        mime.attach(MIMEText(html_body, "html", "utf-8"))
+    else:
+        mime = MIMEText(text, "plain", "utf-8")
+    mime["From"] = f"Michael Bean <{username}>"
+    mime["To"] = f"{to_name} <{to_email}>" if to_name else to_email
+    mime["Subject"] = subject
+    mime["Date"] = formatdate(localtime=False)
+    message_id = make_msgid(domain="builtbybeans.com")
+    mime["Message-ID"] = message_id
+    with smtplib.SMTP(app.config.get("MAIL_SERVER", "smtp.gmail.com"),
+                      int(app.config.get("MAIL_PORT", 587))) as server:
+        server.starttls()
+        server.login(username, app.config["MAIL_PASSWORD"])
+        server.send_message(mime)
+    row = Message(
+        source="board", direction="out", from_name="Michael Bean", from_email=username,
+        to_email=to_email, subject=subject[:300], body=text, external_id=message_id,
+        client_id=client.id if client is not None else None, status="sent",
+        received_at=datetime.now(timezone.utc),
+    )
+    db.session.add(row)
+    db.session.flush()
+    row.thread_id = row.id
+    db.session.commit()
+    return row
+
+
 def record_contact(name, address, project_type, body):
     """The site's form, written straight to the board."""
     address = (address or "").strip().lower()

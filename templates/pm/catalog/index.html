@@ -25,6 +25,18 @@
     {{ icon('view', 'w-4 h-4') }}<span>See it as a client would</span></a>
 {% endblock %}
 
+{% macro switch(app, on) %}
+<form method="POST" action="{{ url_for('catalog.toggle', id=app.id) }}" data-live-action class="flex-shrink-0">
+    <button type="submit" role="switch" aria-checked="{{ 'true' if on else 'false' }}"
+            aria-label="{{ app.showcase_name }} in the catalog"
+            class="inline-flex items-center justify-center min-h-[44px] min-w-[52px] rounded-xl">
+        <span class="relative inline-flex h-6 w-11 rounded-full transition-colors {{ 'bg-brand-500' if on else 'bg-surface-700' }}">
+            <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform {{ 'translate-x-[22px]' if on else 'translate-x-0.5' }}"></span>
+        </span>
+    </button>
+</form>
+{% endmacro %}
+
 {% block content %}
 {% set PLAT = {'web': 'Web', 'ios': 'iPhone', 'android': 'Android'} %}
 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start"
@@ -40,18 +52,6 @@
                 <span class="text-amber-300">{{ no_logo | join(', ') }}</span></p>
         </div>
         {% endif %}
-        <form method="POST" action="{{ url_for('catalog.add') }}" data-live-action
-              class="glass-card relative z-30 p-4 flex flex-wrap items-end gap-3">
-            <div class="min-w-0 flex-1 sm:min-w-[260px]">
-                <label class="block text-xs font-medium text-surface-400 mb-1.5">Add an app to the catalog</label>
-                {% set other_options = [] %}
-                {% for o in others %}{% set _ = other_options.append((o.id | string, o.name)) %}{% endfor %}
-                {{ select_dropdown('app_id', other_options, '', 'Pick one of your apps', full_width=true) }}
-            </div>
-            <button type="submit"
-                    class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
-                {{ icon('add', 'w-4 h-4') }}<span>Add</span></button>
-        </form>
 
         {% for app in apps %}
         {% set shots = app.catalog_shots %}
@@ -76,6 +76,7 @@
                     </span>
                 </button>
                 <div class="flex items-center gap-1.5 flex-shrink-0">
+                    {{ switch(app, true) }}
                     <form method="POST" action="{{ url_for('catalog.move', id=app.id) }}" data-live-action>
                         <input type="hidden" name="dir" value="up">
                         {{ icon_button('promote', 'Move ' ~ app.showcase_name ~ ' up', type='submit', attrs=('disabled' if loop.first else '')) }}
@@ -213,29 +214,59 @@
                     </div>
                 </div>
 
-                <form method="POST" action="{{ url_for('catalog.remove', id=app.id) }}" data-live-action
-                      class="flex justify-end pt-3 border-t border-white/5">
-                    {{ confirm_button(label='Take it out of the catalog', question='Take it out?',
-                        btn_class='min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
-                </form>
             </div>
         </div>
         {% else %}
         <div class="glass-card p-8 text-center">
-            <p class="text-surface-300">Nothing is in the catalog yet. Add an app above.</p>
+            <p class="text-surface-300">Nothing is in the catalog yet. Switch an app on below.</p>
         </div>
         {% endfor %}
+
+        {% if others %}
+        <div class="glass-card p-2 min-w-0">
+            <h3 class="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-surface-400">Not in the catalog</h3>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-x-2">
+                {% for o in others %}
+                <div class="flex items-center gap-3 px-3 py-1.5 min-w-0 rounded-xl hover:bg-white/5">
+                    {% if o.showcase_has_icon %}
+                    <img src="{{ url_for('catalog.icon_file', id=o.id) }}" alt="" class="w-8 h-8 rounded-lg object-cover flex-shrink-0">
+                    {% else %}
+                    <span class="w-8 h-8 rounded-lg bg-surface-800 text-surface-400 text-[11px] font-bold flex items-center justify-center flex-shrink-0">{{ o.showcase_initials }}</span>
+                    {% endif %}
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm text-surface-200 truncate">{{ o.showcase_name }}</p>
+                        <p class="text-xs text-surface-500 truncate">{{ o.host }}</p>
+                    </div>
+                    {{ switch(o, false) }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {# ── The links ── #}
     <div data-live="catalog-links" class="space-y-4 min-w-0 lg:sticky lg:top-0">
         <form method="POST" action="{{ url_for('catalog.make_link') }}" data-live-action
+              x-data='{ clientId: "", clients: {{ client_lookup | tojson }}, name: "", email: "" }'
+              x-effect="if (clients[clientId]) { name = clients[clientId].name; email = clients[clientId].email }"
               class="glass-card relative z-30 p-4 space-y-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">Send someone a link</h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">Send someone the catalog</h3>
             <div>
-                <label class="block text-xs font-medium text-surface-400 mb-1.5">Who it's for</label>
-                <input type="text" name="label" required maxlength="120" placeholder="Name or business"
-                       class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                <label class="block text-xs font-medium text-surface-400 mb-1.5">A client on the board</label>
+                {{ select_dropdown('client_id', client_options, '', 'Pick a client, or type below', full_width=true, model='clientId') }}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                <div class="min-w-0">
+                    <label class="block text-xs font-medium text-surface-400 mb-1.5">Name</label>
+                    <input type="text" name="label" x-model="name" maxlength="120" placeholder="Their name or business"
+                           class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
+                <div class="min-w-0">
+                    <label class="block text-xs font-medium text-surface-400 mb-1.5">Email</label>
+                    <input type="email" name="email" x-model="email" maxlength="200" placeholder="name@example.com"
+                           class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                </div>
             </div>
             {% if apps %}
             <div>
@@ -247,13 +278,20 @@
                 </div>
             </div>
             {% endif %}
-            <div class="flex items-end gap-3">
-                <div class="flex-1 min-w-0">
-                    <label class="block text-xs font-medium text-surface-400 mb-1.5">Good for</label>
-                    {{ select_dropdown('days', [('7', '7 days'), ('30', '30 days'), ('90', '90 days')], '30', '30 days', full_width=true) }}
-                </div>
-                <button type="submit" class="min-h-[44px] px-5 text-sm font-medium rounded-xl btn-brand text-white">Make link</button>
+            <div>
+                <label class="block text-xs font-medium text-surface-400 mb-1.5">Good for</label>
+                {{ select_dropdown('days', [('7', '7 days'), ('30', '30 days'), ('90', '90 days')], '30', '30 days', full_width=true) }}
             </div>
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+                <button type="submit" name="action" value="link"
+                        class="min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                    Just make the link</button>
+                <template x-if="email">
+                    <div>{{ confirm_button(label='Send it', question='Email it now?', tone='brand',
+                        btn_class='min-h-[44px] px-5 text-sm font-semibold rounded-xl btn-brand text-white') }}</div>
+                </template>
+            </div>
+            <p x-show="email" x-cloak class="text-xs text-surface-500 text-right">From your address, to <span class="text-surface-300" x-text="email"></span></p>
         </form>
 
         <div class="glass-card p-2">
@@ -272,6 +310,9 @@
                             &middot; opened {{ link.open_count | commas }} time{{ '' if link.open_count == 1 else 's' }}
                             {%- if link.last_opened_at %}, last {{ link.last_opened_at | format_date }}{% endif %}
                         </p>
+                        {% if link.sent_at %}
+                        <p class="text-xs text-surface-400 truncate">Emailed {{ link.sent_at | format_date }} to {{ link.email }}</p>
+                        {% endif %}
                         <p class="text-xs text-surface-500 truncate">
                             {% if link.app_ids %}{% for i in link.app_ids if names.get(i) %}{{ names[i] }}{{ ', ' if not loop.last }}{% endfor %}{% else %}Every app in the catalog{% endif %}
                         </p>
