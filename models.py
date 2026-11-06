@@ -3358,6 +3358,18 @@ class AppLink(db.Model):
     # tile renamed for the catalog never falls back to the tile's icon, which
     # is the client's (Robinson & Co.'s logo must not sit on Vignette).
     catalog_icon = db.Column(db.String(120), nullable=True)
+    # Services the code reading misses (YouTube, a store Michael ships to by
+    # hand) and ones it finds that the app no longer uses (EntertainHQ's
+    # retired texting), one per line or comma. The night rewrites only
+    # services_json, so these stay put.
+    catalog_services_extra = db.Column(db.Text, nullable=True)
+    # The front of the showcase (Michael, 2026-11-06: "he also has an app that
+    # works with 400 talent and staff ... wow"): how big it runs, in his
+    # words, and the short list of what is built into it (texting, invoicing,
+    # payments), comma between. With no list, it is read from its services.
+    catalog_scale = db.Column(db.String(160), nullable=True)
+    catalog_highlights = db.Column(db.Text, nullable=True)
+    catalog_services_hidden = db.Column(db.Text, nullable=True)
     # The services its code uses, read off the repo by the nightly audit
     # (vendor_discovery.vendors_in_files) or filed through the door
     # (/api/guidance/apps/services): a JSON list of vendor names.

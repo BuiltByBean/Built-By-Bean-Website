@@ -11,7 +11,7 @@
 {% macro platform_label(p) -%}{{ {'web': 'Web app', 'ios': 'iPhone', 'android': 'Android'}[p] }}{%- endmacro %}
 
 {% macro mark(name) -%}
-{%- set pb = cs.playbook_for(name, book) -%}
+{%- set pb = cs.resolve(name, book)[1] -%}
 {%- if pb and pb.logo_path -%}
 <img src="{{ url_for('static', filename=pb.logo_path) }}" alt="" class="sc-mark-img" loading="lazy">
 {%- elif pb and pb.icon_file -%}

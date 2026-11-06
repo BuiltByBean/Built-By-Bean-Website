@@ -26,32 +26,141 @@ from datetime import datetime, timedelta, timezone
 
 LINK_DAYS = 30
 
-# A vendor, as the capability a prospect would name. Only vendors whose
-# purpose is plain; the rest show as a logo and say nothing more.
+# What a service does, as a prospect would name it, keyed by the service's
+# playbook slug or by its name. Only services whose purpose is plain; the
+# rest show as a logo and say nothing more.
 CAPABILITIES = {
-    "Twilio": "Automated texting",
-    "Stripe": "Online payments",
-    "RevenueCat": "In-app subscriptions",
-    "Resend": "Automated email",
-    "Postmark": "Automated email",
-    "SendGrid": "Automated email",
-    "Mailgun": "Automated email",
-    "OneSignal": "Push notifications",
-    "Firebase": "Push notifications",
-    "OpenAI API": "AI features",
-    "Anthropic API": "AI features",
-    "Deepgram": "Speech to text",
-    "ElevenLabs": "AI voice",
-    "Mapbox": "Maps",
-    "PostHog": "Product analytics",
-    "Sentry": "Error monitoring",
+    "twilio": "Automated texting",
+    "stripe": "Online payments",
+    "venmo-zelle-cash-app": "Online payments",
+    "revenuecat": "In-app subscriptions",
+    "resend": "Automated email",
+    "postmark": "Automated email",
+    "gmail-smtp": "Automated email",
+    "sendgrid": "Automated email",
+    "mailgun": "Automated email",
+    "onesignal": "Push notifications",
+    "firebase": "Push notifications",
+    "apns": "Push notifications",
+    "claude": "AI features",
+    "llm-apis": "AI features",
+    "openai api": "AI features",
+    "anthropic api": "AI features",
+    "deepgram": "Speech to text",
+    "elevenlabs": "AI voice",
+    "mapbox": "Maps",
+    "google-maps-platform-places-api-new": "Maps",
+    "openstreetmap": "Maps",
+    "posthog": "Product analytics",
+    "sentry": "Error monitoring",
+    "signadoc": "E-signatures",
+    "quickbooks-online": "Accounting sync",
+    "youtube-api": "Video",
+    "google-business-profile": "Google reviews and listings",
+    "tripleseat": "Event booking sync",
 }
 
-# Not shown as a service: where the code lives, and the store accounts, which
-# show as platforms instead.
-NOT_SHOWN = {"github", "apple developer program", "google play", "expo"}
+# The name the code reader or the stores use, as the playbook it is. The App
+# Store's paid account is the Apple Developer Program; a store id on a tile is
+# the listing itself.
+ALIASES = {
+    "apple developer program": "app-store",
+    "app store": "app-store",
+    "google play": "google-play",
+    "anthropic api": "claude",
+    "openai api": "llm-apis",
+}
+
+# Built by Bean's own accounts, not services a client's app is built with
+# (Michael's bank, his card, his formation and his sales tax). Never shown.
+INTERNAL_PLAYBOOKS = {"texas-sales-tax", "mercury", "legalzoom", "chase"}
 
 PLATFORMS = [("web", "Web app"), ("ios", "iPhone app"), ("android", "Android app")]
+
+# Every service as a prospect reads it (Michael, 2026-11-06: "organize by most
+# valuable / recognizable to the layman's person ... with each a one liner
+# explaining what that service is used for"). In this order: the names
+# anybody knows first, the plumbing last. Keyed by playbook slug, or by name
+# for a service the code reader knows with no playbook. A service not listed
+# here shows after these, by name, with no line.
+SERVICE_INFO = [
+    ("app-store", "App Store", "Puts the app on iPhones and iPads"),
+    ("google-play", "Google Play", "Puts the app on Android phones"),
+    ("stripe", "Stripe", "Takes card payments and sends invoices"),
+    ("venmo-zelle-cash-app", "Venmo, Zelle and Cash App", "Lets customers pay the way they already do"),
+    ("google-maps-platform-places-api-new", "Google Maps", "Finds addresses, places and directions"),
+    ("google-business-profile", "Google Business Profile", "Keeps the business on Google Search and Maps, reviews included"),
+    ("youtube-api", "YouTube", "Brings a channel's videos onto the site"),
+    ("spotify", "Spotify", "Brings the podcast onto the site"),
+    ("quickbooks-online", "QuickBooks", "Keeps the books in step with the app"),
+    ("google-workspace-the-client-s-business-mailbox", "Google Workspace", "Business email and calendars"),
+    ("twilio", "Twilio", "Sends and receives text messages"),
+    ("claude", "Claude", "AI that reads, writes and answers inside the app"),
+    ("llm-apis", "AI models", "The AI behind smart features, like drafting and summing up"),
+    ("anthropic api", "Claude", "AI that reads, writes and answers inside the app"),
+    ("openai api", "OpenAI", "AI that reads, writes and answers inside the app"),
+    ("squarespace", "Squarespace", "Website builder and domain names"),
+    ("godaddy", "GoDaddy", "Domain names"),
+    ("aws", "Amazon Web Services", "Amazon's cloud for storage and computing"),
+    ("cloudflare", "Cloudflare", "Keeps the site fast and protected from attacks"),
+    ("signadoc", "Signadoc", "Contracts signed online, from any phone"),
+    ("firebase", "Firebase", "Sends notifications to phones"),
+    ("apns", "Apple Push Notifications", "Sends notifications to iPhones"),
+    ("onesignal", "OneSignal", "Sends notifications to phones"),
+    ("revenuecat", "RevenueCat", "Runs subscriptions inside phone apps"),
+    ("resend", "Resend", "Sends the app's emails"),
+    ("postmark", "Postmark", "Sends the app's emails, fast and reliably"),
+    ("gmail-smtp", "Gmail", "Sends email from the business's own address"),
+    ("sendgrid", "SendGrid", "Sends the app's emails"),
+    ("mailgun", "Mailgun", "Sends the app's emails"),
+    ("tripleseat", "Tripleseat", "Event booking software, kept in sync"),
+    ("mydoma-studio", "Mydoma Studio", "Interior design software, kept in sync"),
+    ("openstreetmap", "OpenStreetMap", "Free maps"),
+    ("mapbox", "Mapbox", "Custom maps"),
+    ("esv-api", "ESV Bible", "Shows Bible passages"),
+    ("open-states", "Open States", "Public data on state bills and lawmakers"),
+    ("u-s-congress-public-data", "U.S. Congress data", "Public data on federal bills and lawmakers"),
+    ("texas-legislature-online", "Texas Legislature Online", "Public data on Texas bills"),
+    ("deepgram", "Deepgram", "Turns speech into text"),
+    ("elevenlabs", "ElevenLabs", "Turns text into natural speech"),
+    ("posthog", "PostHog", "Shows how people use the app"),
+    ("sentry", "Sentry", "Catches errors before customers report them"),
+    ("pwned-passwords", "Pwned Passwords", "Stops people using passwords already leaked"),
+    ("railway", "Railway", "Hosts the app and its database"),
+    ("postgres", "PostgreSQL", "The database"),
+    ("github", "GitHub", "Where the code is kept, with every change saved"),
+    ("capacitor", "Capacitor", "Turns a web app into phone apps"),
+    ("expo", "Expo", "Builds the phone apps"),
+    ("supabase", "Supabase", "Database and sign-in"),
+    ("google cloud", "Google Cloud", "Google's cloud services"),
+]
+_INFO = {k: (i, name, line) for i, (k, name, line) in enumerate(SERVICE_INFO)}
+# The same entries by the name they show, for a name that has already been
+# turned into its plain form ("AI models").
+_BY_NAME = {}
+for _i, (_k, _name, _line) in enumerate(SERVICE_INFO):
+    _BY_NAME.setdefault(" ".join("".join(ch if ch.isalnum() else " " for ch in _name.lower()).split()),
+                        (_i, _name, _line))
+
+
+def info(name, book=None):
+    """(rank, name to show, one line) for a service. The rank puts the names a
+    prospect knows first; an unknown service ranks last with no line."""
+    import vendor_discovery
+    show, pb = resolve(name, book)
+    k0 = vendor_discovery.key(name)
+    for k in ((pb.slug if pb is not None else None), ALIASES.get(k0), k0, k0.replace(" ", "-"),
+              vendor_discovery.key(show), vendor_discovery.key(show).replace(" ", "-")):
+        if k and k in _INFO:
+            return _INFO[k]
+    return _BY_NAME.get(vendor_discovery.key(show)) or _BY_NAME.get(k0) or (len(SERVICE_INFO), show, "")
+
+
+def ordered(names, book=None):
+    """Service names in the order a prospect should read them."""
+    return sorted(names, key=lambda n: (info(n, book)[0], n.lower()))
+
+
 
 
 def now():
@@ -69,28 +178,96 @@ def platforms(tile):
     return out
 
 
-def services(tile):
-    """Vendor names, for showing: the code's, plus Railway where it deploys."""
+def _lines(text):
+    import re
+    return [p.strip() for p in re.split(r"[,\n]", text or "") if p.strip()]
+
+
+def resolve(name, book=None):
+    """(the name to show, its playbook or None) for one service name: the
+    playbook's own name without its bracketed note, where the Handbook has
+    one, else the name as given."""
     import vendor_discovery
-    names = [n for n in tile.services if vendor_discovery.key(n) not in NOT_SHOWN]
-    if tile.railway_url and "Railway" not in names:
-        names.append("Railway")
+    book = book if book is not None else marks()
+    k = vendor_discovery.key(name)
+    pb = book.get("slug:" + ALIASES[k]) if k in ALIASES else None
+    pb = pb or playbook_for(name, book)
+    if pb is not None and pb.slug in _INFO:
+        return _INFO[pb.slug][1], pb
+    if pb is not None:
+        return vendor_discovery.bare(pb.display_name) or name, pb
+    for cand in (ALIASES.get(k), k, k.replace(" ", "-")):
+        if cand and cand in _INFO:
+            return _INFO[cand][1], None
+    return name, None
+
+
+def services(tile, book=None):
+    """What one app is built with, as names to show: what its code uses, the
+    stores it ships to, Railway and GitHub where it has them, and what
+    Michael added by hand, less what he hid. The night rewrites only the
+    code's reading, so an addition or a hide stays put."""
+    import vendor_discovery
+    book = book if book is not None else marks()
+    raw = list(tile.services)
+    if (tile.app_store_bundle_id or "").strip():
+        raw.append("App Store")
+    if (tile.play_package or "").strip():
+        raw.append("Google Play")
+    if tile.railway_url:
+        raw.append("Railway")
+    if tile.github_url:
+        raw.append("GitHub")
+    raw += _lines(getattr(tile, "catalog_services_extra", ""))
+    hidden = {vendor_discovery.key(h) for h in _lines(getattr(tile, "catalog_services_hidden", ""))}
     seen, out = set(), []
-    for n in names:
-        k = vendor_discovery.key(n)
-        if k not in seen:
+    for n in raw:
+        show, pb = resolve(n, book)
+        if pb is not None and pb.slug in INTERNAL_PLAYBOOKS:
+            continue
+        if vendor_discovery.key(n) in hidden or vendor_discovery.key(show) in hidden:
+            continue
+        k = vendor_discovery.key(show)
+        if k and k not in seen:
             seen.add(k)
-            out.append(n)
-    return sorted(out, key=str.lower)
+            out.append(show)
+    return ordered(out, book)
 
 
-def capabilities(tile):
+def capability(name, book=None):
+    import vendor_discovery
+    show, pb = resolve(name, book)
+    if pb is not None and pb.slug in CAPABILITIES:
+        return CAPABILITIES[pb.slug]
+    return CAPABILITIES.get(vendor_discovery.key(name).replace(" ", "-")) or CAPABILITIES.get(vendor_discovery.key(name))
+
+
+def capabilities(tile, book=None):
+    book = book if book is not None else marks()
     found = []
-    for n in services(tile):
-        cap = CAPABILITIES.get(n)
+    for n in services(tile, book):
+        cap = capability(n, book)
         if cap and cap not in found:
             found.append(cap)
     return found
+
+
+def highlights(tile, book=None):
+    """The short list of what is built into one app, for the front of the
+    showcase: Michael's own (catalog_highlights), else what its services and
+    stores say it does."""
+    own = _lines(tile.catalog_highlights)
+    if own:
+        return own
+    plats = platforms(tile)
+    out = []
+    if "ios" in plats and "android" in plats:
+        out.append("iPhone and Android apps")
+    elif "ios" in plats:
+        out.append("iPhone app")
+    elif "android" in plats:
+        out.append("Android app")
+    return out + capabilities(tile, book)
 
 
 def points(tile):
@@ -107,14 +284,17 @@ def approved(ids=None):
 
 
 def marks():
-    """{vendor key: playbook} for every active playbook, by the words the
+    """{vendor key: playbook} for every active playbook, by its name, its name
+    without the bracketed note, its slug ("slug:<slug>") and the words the
     night already reads vendors by."""
     import map_checks
     import vendor_discovery
     from models import Playbook
     out = {}
     for pb in Playbook.query.filter_by(is_active=True).all():
-        out[vendor_discovery.key(pb.display_name)] = pb
+        out["slug:" + pb.slug] = pb
+        out.setdefault(vendor_discovery.key(pb.display_name), pb)
+        out.setdefault(vendor_discovery.key(vendor_discovery.bare(pb.display_name)), pb)
         for w in map_checks.vendor_words(pb):
             out.setdefault(vendor_discovery.key(w), pb)
     return out
@@ -127,25 +307,57 @@ def playbook_for(name, book=None):
     return book.get(k) or book.get(vendor_discovery.key(name.replace(" API", "")))
 
 
-def overview(apps):
+def worked_with(book=None):
+    """Every service Michael has a playbook for, as names to show, less his
+    own business accounts: the services he has worked with across all his
+    work, not only the apps in this catalog."""
+    import vendor_discovery
+    book = book if book is not None else marks()
+    seen, out = set(), []
+    for key_, pb in book.items():
+        if not key_.startswith("slug:") or pb.slug in INTERNAL_PLAYBOOKS:
+            continue
+        show = _INFO[pb.slug][1] if pb.slug in _INFO else (vendor_discovery.bare(pb.display_name) or pb.display_name)
+        if vendor_discovery.key(show) not in seen:
+            seen.add(vendor_discovery.key(show))
+            out.append(show)
+    return out
+
+
+def overview(apps, book=None):
     """What the whole set says at a glance: how many products, which
-    platforms, what he can build, and every service, most used first."""
+    platforms, what he can build, and every service he has worked with: the
+    ones these apps use first (most used first), then the rest of the
+    Handbook's."""
+    import vendor_discovery
+    book = book if book is not None else marks()
     plats, caps, counts = [], [], {}
     for app in apps:
         for p in platforms(app):
             if p not in plats:
                 plats.append(p)
-        for c in capabilities(app):
-            if c not in caps:
-                caps.append(c)
-        for s in services(app):
+        for s in services(app, book):
             counts[s] = counts.get(s, 0) + 1
+    seen, every = set(), []
+    for s in list(counts) + worked_with(book):
+        if vendor_discovery.key(s) not in seen:
+            seen.add(vendor_discovery.key(s))
+            every.append(s)
+    every = ordered(every, book)
+    for s in every:
+        cap = capability(s, book)
+        if cap and cap not in caps:
+            caps.append(cap)
     order = [p for p, _ in PLATFORMS if p in plats]
+    labels = {"web": "web", "ios": "iPhone", "android": "Android"}
+    named = [labels[p] for p in order]
+    where = (", ".join(named[:-1]) + " and " + named[-1]) if len(named) > 1 else (named[0] if named else "")
     return {
         "count": len(apps),
         "platforms": order,
+        "where": where,
         "capabilities": caps,
-        "services": sorted(counts, key=lambda s: (-counts[s], s.lower())),
+        "services": every,
     }
 
 

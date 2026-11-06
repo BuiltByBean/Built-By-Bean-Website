@@ -192,10 +192,27 @@ check("and refuses without the key", door.post("/api/guidance/apps/services",
 with application.app_context():
     e = db.session.get(AppLink, ehq_id)
     check("platforms come from the store ids", cs.platforms(e) == ["web", "ios", "android"])
-    check("GitHub is not shown as a service; Railway is, from the deploy",
-          cs.services(e) == ["Railway", "Resend", "Stripe", "Twilio"], cs.services(e))
+    check("the stores, Railway and GitHub are services too, the names anybody knows first",
+          cs.services(e) == ["App Store", "Google Play", "Stripe", "Twilio", "Resend", "Railway", "GitHub"],
+          cs.services(e))
+    check("each with what it is for", cs.info("Twilio")[2] == "Sends and receives text messages")
+    check("found by its plain name too", cs.info("AI models")[2] != "" and cs.info("YouTube")[2] != "")
     check("capabilities are in plain words",
-          cs.capabilities(e) == ["Automated email", "Online payments", "Automated texting"], cs.capabilities(e))
+          cs.capabilities(e) == ["Online payments", "Automated texting", "Automated email"], cs.capabilities(e))
+    check("the card's feature list leads with the phones",
+          cs.highlights(e)[:2] == ["iPhone and Android apps", "Online payments"], cs.highlights(e))
+    e.catalog_services_extra = "YouTube"
+    e.catalog_services_hidden = "Twilio"
+    db.session.commit()
+    check("a service can be added and one hidden by hand",
+          "YouTube" in cs.services(e) and "Twilio" not in cs.services(e), cs.services(e))
+    cs.record_repo_services("BuiltByBean/EntertainHQ", ["Twilio", "Stripe"])
+    check("and the night does not undo either", "Twilio" not in cs.services(e) and "YouTube" in cs.services(e))
+    e.catalog_highlights = "Texting, Invoicing, Online payments"
+    db.session.commit()
+    check("a feature list written by hand wins", cs.highlights(e) == ["Texting", "Invoicing", "Online payments"])
+    e.catalog_services_extra = e.catalog_services_hidden = e.catalog_highlights = None
+    db.session.commit()
     glance = cs.overview(cs.approved())
     check("the glance gathers every app", glance["count"] == 2 and glance["platforms"] == ["web", "ios", "android"])
     n = cs.record_repo_services("BuiltByBean/EntertainHQ", ["Twilio"])

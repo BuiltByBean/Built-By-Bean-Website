@@ -79,6 +79,12 @@ def save(id):
     app.catalog_name = (request.form.get("catalog_name") or "").strip()[:120] or None
     app.catalog_pitch = (request.form.get("catalog_pitch") or "").strip()[:600] or None
     app.catalog_points = (request.form.get("catalog_points") or "").strip()[:2000] or None
+    if "catalog_scale" in request.form:
+        app.catalog_scale = (request.form.get("catalog_scale") or "").strip()[:160] or None
+        app.catalog_highlights = (request.form.get("catalog_highlights") or "").strip()[:600] or None
+    if "catalog_services_extra" in request.form:
+        app.catalog_services_extra = (request.form.get("catalog_services_extra") or "").strip()[:1000] or None
+        app.catalog_services_hidden = (request.form.get("catalog_services_hidden") or "").strip()[:1000] or None
     demo = (request.form.get("demo_url") or "").strip()
     if demo and not demo.startswith(("https://", "http://")):
         flash("A live demo address starts with https://", "warning")
@@ -281,9 +287,10 @@ def _addresses(link):
 
 def _showcase(apps, link=None, preview=False):
     from flask import make_response
+    book = cs.marks()
     return _private(make_response(render_template(
-        "showcase/index.html", apps=apps, glance=cs.overview(apps), link=link, preview=preview,
-        cs=cs, book=cs.marks(), **_addresses(link))))
+        "showcase/index.html", apps=apps, glance=cs.overview(apps, book), link=link, preview=preview,
+        cs=cs, book=book, **_addresses(link))))
 
 
 def _app_page(app, apps, link=None, preview=False):

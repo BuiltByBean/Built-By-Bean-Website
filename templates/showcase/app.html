@@ -31,8 +31,8 @@
 
 {% set shots = app.catalog_shots %}
 {% set points = cs.points(app) %}
-{% set services = cs.services(app) %}
-{% set caps = cs.capabilities(app) %}
+{% set services = cs.services(app, book) %}
+{% set caps = cs.capabilities(app, book) %}
 <div class="sc-layout">
     <div style="min-width:0; display:grid; gap:24px">
         {% if shots %}
@@ -80,7 +80,14 @@
             <h3>Built with</h3>
             <div style="display:grid; gap:8px">
                 {% for s in services %}
-                <div class="sc-service">{{ m.mark(s) }}<span class="sc-name">{{ s }}</span></div>
+                {% set i = cs.info(s, book) %}
+                <div class="sc-service sc-service-lg">
+                    {{ m.mark(s) }}
+                    <div style="min-width:0">
+                        <div class="sc-name">{{ i[1] }}</div>
+                        {% if i[2] %}<div class="sc-service-line">{{ i[2] }}</div>{% endif %}
+                    </div>
+                </div>
                 {% endfor %}
             </div>
             {% if caps %}

@@ -62,7 +62,7 @@
                     <span class="block text-xs text-surface-400 truncate">
                         {% for p in cs.platforms(app) %}{{ PLAT[p] }}{{ ', ' if not loop.last }}{% endfor %}
                         &middot; {{ shots | length }} screen{{ '' if shots | length == 1 else 's' }}
-                        &middot; {{ cs.services(app) | length }} service{{ '' if cs.services(app) | length == 1 else 's' }}
+                        {% set n_svc = cs.services(app, book) | length %}&middot; {{ n_svc }} service{{ '' if n_svc == 1 else 's' }}
                         {%- if not app.catalog_pitch %} &middot; <span class="text-amber-300">no pitch yet</span>{% endif %}
                         {%- if app.demo_url %} &middot; <span class="text-emerald-300">live demo</span>{% endif %}
                     </span>
@@ -94,6 +94,18 @@
                                        class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
                             </div>
                             <div>
+                                <label class="block text-xs font-medium text-surface-400 mb-1.5">How big it runs <span class="text-surface-500">shown in color on its card</span></label>
+                                <input type="text" name="catalog_scale" value="{{ app.catalog_scale or '' }}" maxlength="160"
+                                       placeholder="Used by 400 talent and staff"
+                                       class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-surface-400 mb-1.5">Built in <span class="text-surface-500">the short list on its card, comma between</span></label>
+                                <input type="text" name="catalog_highlights" value="{{ app.catalog_highlights or '' }}" maxlength="600"
+                                       placeholder="{{ cs.highlights(app, book) | join(', ') }}"
+                                       class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                            </div>
+                            <div>
                                 <label class="block text-xs font-medium text-surface-400 mb-1.5">The pitch, in a prospect's words</label>
                                 <textarea name="catalog_pitch" rows="3" maxlength="600"
                                           class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
@@ -112,9 +124,23 @@
                                       placeholder="Customers book online and get a text reminder">{{ app.catalog_points or '' }}</textarea>
                         </div>
                     </div>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="min-w-0">
+                            <label class="block text-xs font-medium text-surface-400 mb-1.5">Also built with <span class="text-surface-500">what its code doesn't show, comma between</span></label>
+                            <input type="text" name="catalog_services_extra" value="{{ app.catalog_services_extra or '' }}" maxlength="1000"
+                                   placeholder="YouTube, Spotify"
+                                   class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                        </div>
+                        <div class="min-w-0">
+                            <label class="block text-xs font-medium text-surface-400 mb-1.5">Hide <span class="text-surface-500">in its code but not in use</span></label>
+                            <input type="text" name="catalog_services_hidden" value="{{ app.catalog_services_hidden or '' }}" maxlength="1000"
+                                   placeholder="Twilio"
+                                   class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                        </div>
+                    </div>
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div class="flex flex-wrap gap-1.5 min-w-0">
-                            {% for s in cs.services(app) %}
+                            {% for s in cs.services(app, book) %}
                             <span class="px-2 py-0.5 text-[11px] rounded-md bg-surface-800 text-surface-300">{{ s }}</span>
                             {% else %}
                             <span class="text-xs text-surface-500">Services are read from its code each night.</span>
