@@ -860,11 +860,18 @@ is Vignette in the catalog, and the tile's icon is the client firm's logo
 (`showcase_has_icon`, `catalog_icon`). Copy names no client firm, and a renamed
 app's tour must not show the client's name.
 
-Platforms come from the store ids, services from the code
-(`AppLink.services_json`: the nightly audit's `vendors_in_files` per repo, or
-`/api/guidance/apps/services`), capabilities from `CAPABILITIES` (a vendor as a
-prospect would name it). Code is evidence, not a feature list: Twilio is still
-in EntertainHQ's code though its texting is retired. Tours to start are each
+The front is read at a glance (Michael, the same day, of the first version's
+number boxes: "a mess"): one quiet line (products, services, where they run),
+then each product with its scale in colour (`catalog_scale`, his words) and a
+short list of what is built in (`catalog_highlights`, else read from its
+services by `CAPABILITIES`). "Services I've worked with" is every Handbook
+playbook less his own bank, legal and tax accounts (`INTERNAL_PLAYBOOKS`), in
+`SERVICE_INFO` order, the names a layman knows first, each with one line of what
+it is for. An app's own list is its code (`services_json`: the nightly audit's
+`vendors_in_files`, or `/api/guidance/apps/services`), its stores, Railway and
+GitHub, plus `catalog_services_extra`, less `catalog_services_hidden`; the night
+rewrites only the code's reading. Code is evidence, not a feature list: Twilio
+is still in EntertainHQ's code though its texting is retired, so it is hidden. Tours to start are each
 public site's home at desktop and phone; screens from inside an app need its
 demo mode, which is each app's own work. `tools/test_catalog.py`.
 
