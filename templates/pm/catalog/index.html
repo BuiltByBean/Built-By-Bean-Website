@@ -32,6 +32,14 @@
 
     {# ── The apps ── #}
     <div data-live="catalog-apps" class="space-y-4 min-w-0">
+        {% if no_logo %}
+        <div class="glass-card p-4 border-amber-500/30 flex items-start gap-3">
+            {{ icon('warning', 'w-5 h-5 text-amber-300 flex-shrink-0') }}
+            <p class="text-sm text-surface-200 min-w-0 break-words">
+                {{ no_logo | length }} service{{ '' if no_logo | length == 1 else 's' }} would show a letter, not a logo:
+                <span class="text-amber-300">{{ no_logo | join(', ') }}</span></p>
+        </div>
+        {% endif %}
         <form method="POST" action="{{ url_for('catalog.add') }}" data-live-action
               class="glass-card relative z-30 p-4 flex flex-wrap items-end gap-3">
             <div class="min-w-0 flex-1 sm:min-w-[260px]">

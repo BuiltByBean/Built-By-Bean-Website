@@ -143,6 +143,58 @@ for _i, (_k, _name, _line) in enumerate(SERVICE_INFO):
                         (_i, _name, _line))
 
 
+# Logos shipped with the site (static/images/services), for the services whose
+# playbook had none or the wrong one (Michael, 2026-11-06, of a strip with
+# eleven letters where logos belonged: "if you ever fail me again on not
+# showing logos"). Simple Icons marks in each brand's colour, each site's own
+# icon where Simple Icons has none, and Signadoc's own mark from its code. The
+# migration b2d4f6a8c013 puts the same files on the playbooks, so the Handbook
+# shows them too; this is what covers a service with no playbook (Spotify).
+LOGOS = {
+    "youtube-api": "images/services/youtube.svg",
+    "spotify": "images/services/spotify.svg",
+    "quickbooks-online": "images/services/quickbooks.svg",
+    "firebase": "images/services/firebase.svg",
+    "apns": "images/services/apple.svg",
+    "gmail-smtp": "images/services/gmail.svg",
+    "llm-apis": "images/services/openai.svg",
+    "openai api": "images/services/openai.svg",
+    "mydoma-studio": "images/services/mydoma.png",
+    "esv-api": "images/services/esv.png",
+    "u-s-congress-public-data": "images/services/congress.png",
+    "pwned-passwords": "images/services/pwned.png",
+    "signadoc": "images/services/signadoc.svg",
+}
+
+
+def static_logo(name, book=None):
+    """A logo shipped with the site for this service, or None."""
+    import vendor_discovery
+    show, pb = resolve(name, book)
+    k0 = vendor_discovery.key(name)
+    for k in ((pb.slug if pb is not None else None), ALIASES.get(k0), k0, k0.replace(" ", "-"),
+              vendor_discovery.key(show), vendor_discovery.key(show).replace(" ", "-")):
+        if k and k in LOGOS:
+            return LOGOS[k]
+    entry = _BY_NAME.get(vendor_discovery.key(show))
+    if entry is not None:
+        slug = SERVICE_INFO[entry[0]][0]
+        return LOGOS.get(slug)
+    return None
+
+
+def missing_logos(names, book=None):
+    """The services that would show a letter instead of a logo. The Catalog
+    page names them, so a gap is seen on the board before a prospect sees it."""
+    out = []
+    for n in names:
+        pb = resolve(n, book)[1]
+        if static_logo(n, book) or (pb is not None and (pb.logo_path or pb.icon_file)):
+            continue
+        out.append(n)
+    return out
+
+
 def info(name, book=None):
     """(rank, name to show, one line) for a service. The rank puts the names a
     prospect knows first; an unknown service ranks last with no line."""

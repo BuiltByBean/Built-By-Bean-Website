@@ -169,6 +169,15 @@ c.post(f"/admin/catalog/apps/{rob_id}/icon", data={"icon": (io.BytesIO(PNG), "v.
        content_type="multipart/form-data")
 check("its own catalog icon is served instead", anon.get(f"/work/{t_all}/icon/{rob_id}").status_code == 200)
 
+print("\nLOGOS:")
+for key_, path in cs.LOGOS.items():
+    check(f"the shipped logo for {key_} is on disk", (ROOT / "static" / path).exists(), path)
+with application.app_context():
+    check("YouTube, Spotify and AI models find a shipped logo",
+          all(cs.static_logo(n) for n in ("YouTube", "Spotify", "AI models", "Signadoc")))
+    check("a service with no logo anywhere is named on the board",
+          cs.missing_logos(["Nobody Heard Of It", "YouTube"]) == ["Nobody Heard Of It"])
+
 print("\nMICHAEL'S PREVIEW:")
 r = c.get("/admin/catalog/preview")
 check("it shows the showcase", r.status_code == 200 and b"Vignette" in r.data and b"Preview" in r.data)

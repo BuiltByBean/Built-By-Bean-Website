@@ -12,7 +12,10 @@
 
 {% macro mark(name) -%}
 {%- set pb = cs.resolve(name, book)[1] -%}
-{%- if pb and pb.logo_path -%}
+{%- set shipped = cs.static_logo(name, book) -%}
+{%- if shipped -%}
+<img src="{{ url_for('static', filename=shipped) }}" alt="" class="sc-mark-img" loading="lazy">
+{%- elif pb and pb.logo_path -%}
 <img src="{{ url_for('static', filename=pb.logo_path) }}" alt="" class="sc-mark-img" loading="lazy">
 {%- elif pb and pb.icon_file -%}
 <img src="{{ url_for('showcase.showcase_mark', token=icon_token, slug=pb.slug) }}" alt="" class="sc-mark-img" loading="lazy">

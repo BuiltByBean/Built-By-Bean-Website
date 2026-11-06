@@ -42,9 +42,11 @@ def index():
               .order_by(AppLink.name).all())
     links = CatalogLink.query.order_by(CatalogLink.created_at.desc(), CatalogLink.id.desc()).all()
     names = {a.id: a.showcase_name for a in apps}
+    book = cs.marks()
+    no_logo = cs.missing_logos(cs.overview(apps, book)["services"], book) if apps else []
     return render_template("pm/catalog/index.html", apps=apps, others=others, links=links,
                            names=names, live=cs.live, now=cs.now(), cs=cs,
-                           book=cs.marks())
+                           book=book, no_logo=no_logo)
 
 
 @catalog_bp.route("/apps/add", methods=["POST"])
