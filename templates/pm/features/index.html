@@ -19,6 +19,7 @@
    the scroller (LM-4). #}
 {% block main_class %}contained-scroll{% endblock %}
 
+{% block tab_row %}{{ practices_tabs('rule' if page_kind == 'rule' else 'howto') }}{% endblock %}
 {% block content %}
 {# Every row is on the page; the bar filters them in place. The keystroke
    is the apply and the pick is the apply: there is no Filter button, and
@@ -54,7 +55,6 @@
      }'
      x-effect="filter()">
 
-    {{ practices_tabs('rule' if page_kind == 'rule' else 'howto') }}
 
     {# Standing still because the page stands still; relative z-30 per LM-1
        so its panels paint over the list card. Enter is swallowed: the state

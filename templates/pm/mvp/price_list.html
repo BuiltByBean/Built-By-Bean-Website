@@ -32,6 +32,7 @@
   "star": "star", "clock": "time", "users": "clients", "document": "document"
 } %}
 
+{% block tab_row %}{{ mvp_tabs('prices') }}{% endblock %}
 {% block content %}
 <div class="space-y-6 stagger-in"
      x-data='{
@@ -88,7 +89,6 @@
        }
      }'>
 
-    {{ mvp_tabs('prices') }}
 
     {# One card per category, in the order a sale is discussed, each with
        its count. A category with nothing to sell in it does not appear. #}

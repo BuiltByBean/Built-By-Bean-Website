@@ -15,33 +15,20 @@
 (function () {
     /* Measured by a timer, never an animation frame: a tab in the
        background paints nothing and its frames never fire. */
+    /* The board's one glide (base.html bbbGlide), kept across a press and
+       told what the new page said (its counts). */
     window.wsTabs = function (active) {
-        return {
-            active: active,
-            markStyle: 'opacity:0',
-            init() {
-                setTimeout(() => this.place(), 0);
-                if (window.ResizeObserver) new ResizeObserver(() => this.place()).observe(this.$el);
-            },
-            place() {
-                const tab = this.$el.querySelector('[data-tab="' + this.active + '"]');
-                if (!tab) return;
-                // The first placement lands; only a change slides.
-                const glide = this.placed ? ';transition:transform 300ms cubic-bezier(0.22,0.75,0.2,1),width 300ms cubic-bezier(0.22,0.75,0.2,1)' : '';
-                this.markStyle = 'width:' + tab.offsetWidth + 'px;transform:translateX(' + tab.offsetLeft + 'px)' + glide;
-                if (tab.offsetWidth && !this.placed) { this.placed = true; if (window.bbbHandOff) window.bbbHandOff(this.$el); }
-            },
-            pick(key) { this.active = key; this.place(); },
+        return Object.assign(window.bbbGlide(active), {
             kept(fresh) {
-                this.active = fresh.getAttribute('data-active') || this.active;
-                this.$el.setAttribute('data-active', this.active);
+                this.value = fresh.getAttribute('data-active') || this.value;
+                this.$el.setAttribute('data-active', this.value);
                 fresh.querySelectorAll('[data-count]').forEach((n) => {
                     const mine = this.$el.querySelector('[data-count="' + n.getAttribute('data-count') + '"]');
                     if (mine) { mine.textContent = n.textContent; mine.className = n.className; }
                 });
                 this.place();
             },
-        };
+        });
     };
 
     /* A chat's people, saved without a reload. The same chat answers: its
@@ -77,25 +64,7 @@
     /* A segmented switch: one mark slides to the option picked. Its state is
        its own and it sits in no swapped region, so a pick never redraws it;
        a filter's pick then asks for the rows (liveFilter) and only those move. */
-    window.wsSeg = function (value) {
-        return {
-            value: value,
-            markStyle: 'opacity:0',
-            placed: false,
-            init() {
-                setTimeout(() => this.place(), 0);
-                if (window.ResizeObserver) new ResizeObserver(() => this.place()).observe(this.$el);
-            },
-            place() {
-                const b = this.$el.querySelector('[data-seg="' + this.value + '"]');
-                if (!b) return;
-                const glide = this.placed ? ';transition:transform 300ms cubic-bezier(0.22,0.75,0.2,1),width 300ms cubic-bezier(0.22,0.75,0.2,1)' : '';
-                this.markStyle = 'width:' + b.offsetWidth + 'px;transform:translateX(' + b.offsetLeft + 'px)' + glide;
-                if (b.offsetWidth && !this.placed) { this.placed = true; if (window.bbbHandOff) window.bbbHandOff(this.$el); }
-            },
-            pick(v) { this.value = v; this.place(); },
-        };
-    };
+    window.wsSeg = function (value) { return window.bbbGlide(value); };
 
     /* The sidebar's badge and the tab counts, from a counts answer. */
     window.wsCounts = function (c) {

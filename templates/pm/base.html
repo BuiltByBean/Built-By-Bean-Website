@@ -431,6 +431,54 @@
            fades in. Opacity only, and fill-mode backwards, so nothing is left
            holding a transform (LM-1). */
         .pm-navigating.pm-tabbing #pm-main { opacity: 1; }
+
+        /* Tab rows and switches are EntertainHQ's glide (Michael, 2026-11-05,
+           with its Workspace beside ours: "a highlighted pill and the other
+           ones are grayed out. And then it's a smooth transition"). Plain
+           chips side by side, no bar behind them; one mark slides to the
+           chosen chip. Before a script has measured, the chosen chip lights
+           itself (data-on) and the mark is hidden with no transition; once
+           placed (data-ready, 80ms later, by timer), the chip goes clear and
+           the mark carries the fill. Position is CSS variables on the row,
+           moved with transform, never left. */
+        /* The banner's button group, when a page has no buttons, takes no
+           place: empty, it still wrapped to a second line under a long
+           subtitle on a phone and added the row gap, so the tab row under
+           the banner sat 12px lower on one tab than the next. */
+        [data-head-actions]:not(:has(a, button, input, form, [x-data])) { display: none; }
+        .pm-glide { position: relative; display: flex; flex-wrap: nowrap; gap: 0.5rem;
+                    width: fit-content; max-width: 100%; overflow-x: auto; overflow-y: hidden;
+                    scrollbar-width: none; overscroll-behavior-x: none; }
+        .pm-glide::-webkit-scrollbar { display: none; }
+        .pm-glide > .pm-glide-mark { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none;
+                    opacity: 0; border-radius: 0.75rem; width: var(--gw, 0px); height: var(--gh, 0px);
+                    transform: translate(var(--gx, 0px), var(--gy, 0px)); }
+        .pm-glide[data-ready] > .pm-glide-mark { opacity: 1;
+                    transition: transform 300ms cubic-bezier(0.22, 0.75, 0.2, 1),
+                                width 300ms cubic-bezier(0.22, 0.75, 0.2, 1),
+                                height 300ms cubic-bezier(0.22, 0.75, 0.2, 1); }
+        .pm-glide[data-empty] > .pm-glide-mark { opacity: 0; }
+        .pm-chip { position: relative; z-index: 1; flex: 0 0 auto; display: inline-flex; align-items: center;
+                   justify-content: center; gap: 0.5rem; min-height: 44px; padding: 0 0.875rem;
+                   border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1);
+                   background-color: rgba(255, 255, 255, 0.05); color: rgb(203, 213, 225);
+                   font-size: 0.875rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+                   transition: color 300ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out; }
+        @media (min-width: 640px) { .pm-chip { min-height: 40px; } }
+        .pm-chip:hover { border-color: rgba(255, 255, 255, 0.2); background-color: rgba(255, 255, 255, 0.1); color: #fff; }
+        .pm-chip[data-on], .pm-chip[data-on]:hover { color: #fff; border-color: transparent;
+                   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, var(--accent) 140%); }
+        .pm-glide[data-ready] > .pm-chip[data-on], .pm-glide[data-ready] > .pm-chip[data-on]:hover {
+                   background: transparent; border-color: transparent; }
+        .pm-glide-full { width: 100%; }
+        .pm-glide-full > .pm-chip { flex: 1 1 0%; }
+        @media (min-width: 640px) { .pm-glide-full { width: fit-content; } .pm-glide-full > .pm-chip { flex: 0 0 auto; } }
+        /* What a tab press brings in only fades: its own entry slide is the
+           motion that read as the page jumping. */
+        .pm-swapped.stagger-in > *, .pm-swapped .stagger-in > * { animation: none !important; }
+        @media (prefers-reduced-motion: reduce) {
+            .pm-glide[data-ready] > .pm-glide-mark, .pm-chip { transition: none; }
+        }
         .pm-tabbing .pm-dim { opacity: 0.55; transition: opacity 120ms ease 140ms; }
         @keyframes pmFadeIn { from { opacity: 0; } to { opacity: 1; } }
         .pm-fade-in { animation: pmFadeIn 150ms ease-out backwards; }
@@ -1247,7 +1295,7 @@
                            arrival without putting the heading in the tab order. #}
                         <h2 id="pm-page-title" tabindex="-1"
                             class="text-lg font-bold text-white outline-none">{% block page_title %}Dashboard{% endblock %}</h2>
-                        <p id="pm-page-subtitle" class="text-sm text-surface-400">{% block page_subtitle %}{% endblock %}</p>
+                        <p id="pm-page-subtitle" class="text-sm text-surface-400 truncate">{% block page_subtitle %}{% endblock %}</p>
                     </div>
                 </div>
                 {#
@@ -1272,7 +1320,7 @@
                    exactly the width where wrapping begins, which is every
                    phone. The auto margin pushes the group right on its own
                    line as well as on a shared one. #}
-                <div class="flex items-center gap-3 flex-wrap justify-end ml-auto">
+                <div data-head-actions class="flex items-center gap-3 flex-wrap justify-end ml-auto">
                     {# display:contents, so these wrappers carry an id for the
                        swap without taking part in the layout: back and the page
                        actions stay direct flex items of this row. #}
@@ -1325,6 +1373,10 @@
            scroll inside their own container with the scrollbar starting
            below the bar. See CLAUDE.md LM-4. #}
         <main id="pm-main" class="p-6 animate-fade-in {% block main_class %}{% endblock %}">
+            {# A page's tab row, in the same place on every page that wears it,
+               so a press never moves it (it did, 4 to 24px, while each page
+               drew it inside its own wrapper). #}
+            {% block tab_row %}{% endblock %}
             {% block content %}{% endblock %}
         </main>
 
@@ -1566,13 +1618,70 @@
        it; once the sliding mark has landed under it (80ms, by timer, never an
        animation frame), the lit fill gives way to the mark. EntertainHQ's
        glide does the same, which is why its rows never flash on load. */
-    window.bbbHandOff = function (row) {
-        setTimeout(function () {
-            row.querySelectorAll('[data-lit]').forEach(function (n) {
-                n.classList.remove('btn-brand');
-                n.removeAttribute('data-lit');
-            });
-        }, 80);
+    window.bbbHandOff = function () {};
+
+    /* Every tab row and switch on the board: EntertainHQ's glide component.
+       `value` is the chosen key; choose() moves the mark at once, before any
+       answer. The row is the element marked .pm-glide inside the component;
+       its chips carry data-key. A ResizeObserver on the row and each chip
+       re-places the mark on a resize, a late font or a panel opening. */
+    window.bbbGlide = function (value) {
+        return {
+            value: value,
+            _ro: null, _ready: null,
+            init() {
+                this.$watch('value', () => this.place());
+                if (window.ResizeObserver) {
+                    this._ro = new ResizeObserver(() => this.place());
+                    const root = this.glideRoot();
+                    if (root) {
+                        this._ro.observe(root);
+                        this.chips().forEach((c) => this._ro.observe(c));
+                    }
+                }
+                setTimeout(() => this.place(), 0);
+            },
+            destroy() { if (this._ro) this._ro.disconnect(); clearTimeout(this._ready); },
+            glideRoot() {
+                return this.$el.classList.contains('pm-glide') ? this.$el : this.$el.querySelector('.pm-glide');
+            },
+            chips() {
+                const root = this.glideRoot();
+                return root ? Array.from(root.querySelectorAll(':scope > [data-key]')) : [];
+            },
+            choose(key) { this.value = String(key); },
+            pick(key) { this.choose(key); },
+            place() {
+                const root = this.glideRoot();
+                if (!root) return;
+                let on = null;
+                this.chips().forEach((c) => {
+                    const yes = c.dataset.key === String(this.value);
+                    if (yes) on = c;
+                    c.toggleAttribute('data-on', yes);
+                    if (c.tagName === 'A') { if (yes) c.setAttribute('aria-current', 'page'); else c.removeAttribute('aria-current'); }
+                    else c.setAttribute('aria-pressed', yes ? 'true' : 'false');
+                });
+                root.toggleAttribute('data-empty', !on);
+                if (!on || !on.offsetWidth) return;
+                if (root.scrollWidth > root.clientWidth + 1) {
+                    const pad = 24, l = on.offsetLeft, r = l + on.offsetWidth;
+                    let x = null;
+                    if (l - pad < root.scrollLeft) x = Math.max(0, l - pad);
+                    else if (r + pad > root.scrollLeft + root.clientWidth) x = r + pad - root.clientWidth;
+                    if (x !== null) root.scrollTo({ left: x, behavior: root.hasAttribute('data-ready') ? 'smooth' : 'auto' });
+                }
+                const s = root.style;
+                s.setProperty('--gx', on.offsetLeft + 'px');
+                s.setProperty('--gy', on.offsetTop + 'px');
+                s.setProperty('--gw', on.offsetWidth + 'px');
+                s.setProperty('--gh', on.offsetHeight + 'px');
+                if (!root.hasAttribute('data-ready')) {
+                    clearTimeout(this._ready);
+                    this._ready = setTimeout(() => root.setAttribute('data-ready', ''), 80);
+                }
+            },
+        };
     };
 
     /* Everything in #pm-main that is not a kept row and holds none: the
@@ -1599,6 +1708,7 @@
     function fadeIn(nodes) {
         nodes.forEach(function (n) {
             if (!n.classList) return;
+            n.classList.add('pm-swapped');
             n.classList.remove('pm-fade-in');
             void n.offsetWidth;
             n.classList.add('pm-fade-in');
@@ -1707,13 +1817,35 @@
                     var incoming = Array.prototype.slice.call(freshMain.childNodes).map(function (n) {
                         return document.adoptNode(n);
                     });
-                    mainEl.replaceChildren.apply(mainEl, incoming);
-                    mainEl.querySelectorAll('[data-keep]').forEach(function (el) {
-                        var old = carried[el.getAttribute('data-keep')];
-                        if (!old) return;
-                        el.replaceWith(old);
-                        old.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: el } }));
+                    /* A row in the tab_row slot (a direct child of #pm-main)
+                       never leaves the page: everything else goes, and what
+                       arrives is put in around it. A row taken out and put
+                       back mid-glide snaps to its end. */
+                    var anchor = null, twin = null;
+                    incoming.forEach(function (n) {
+                        if (anchor || n.nodeType !== 1 || !n.hasAttribute('data-keep')) return;
+                        var old = carried[n.getAttribute('data-keep')];
+                        if (old && old.parentElement === mainEl) { anchor = old; twin = n; }
                     });
+                    if (anchor) {
+                        Array.prototype.slice.call(mainEl.childNodes).forEach(function (n) {
+                            if (n !== anchor) n.remove();
+                        });
+                        var before = true;
+                        incoming.forEach(function (n) {
+                            if (n === twin) { before = false; return; }
+                            if (before) mainEl.insertBefore(n, anchor); else mainEl.appendChild(n);
+                        });
+                        anchor.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: twin } }));
+                    } else {
+                        mainEl.replaceChildren.apply(mainEl, incoming);
+                        mainEl.querySelectorAll('[data-keep]').forEach(function (el) {
+                            var old = carried[el.getAttribute('data-keep')];
+                            if (!old) return;
+                            el.replaceWith(old);
+                            old.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: el } }));
+                        });
+                    }
                     runScripts(mainEl);
                     fadeIn(aroundKept(mainEl));
                 } else {

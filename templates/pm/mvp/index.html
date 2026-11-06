@@ -20,10 +20,10 @@
     "parked": "bg-surface-800 text-surface-400",
 } %}
 
+{% block tab_row %}{{ mvp_tabs('packages') }}{% endblock %}
 {% block content %}
 <div class="space-y-5 stagger-in">
 
-    {{ mvp_tabs('packages') }}
 
     {# relative z-30 per CLAUDE.md LM-1: the client dropdown opens over the
        package list below. #}

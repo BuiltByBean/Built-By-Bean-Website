@@ -23,40 +23,16 @@
 {% macro fin_script() %}
 <script>
 (function () {
-    /* Measured by a timer, never an animation frame: a background tab
-       paints nothing and its frames never fire. */
-    function slider(selector) {
-        return {
-            markStyle: 'opacity:0',
-            placed: false,
-            init() {
-                setTimeout(() => this.place(), 0);
-                if (window.ResizeObserver) new ResizeObserver(() => this.place()).observe(this.$el);
-            },
-            place() {
-                const el = this.$el.querySelector(selector(this));
-                if (!el) return;
-                const glide = this.placed ? ';transition:transform 300ms cubic-bezier(0.22,0.75,0.2,1),width 300ms cubic-bezier(0.22,0.75,0.2,1)' : '';
-                this.markStyle = 'width:' + el.offsetWidth + 'px;transform:translateX(' + el.offsetLeft + 'px)' + glide;
-                if (el.offsetWidth && !this.placed) { this.placed = true; if (window.bbbHandOff) window.bbbHandOff(this.$el); }
-                const row = this.$refs.row;
-                if (row && row.scrollWidth > row.clientWidth) {
-                    const left = el.offsetLeft - 8, right = el.offsetLeft + el.offsetWidth + 8;
-                    if (left < row.scrollLeft) row.scrollLeft = left;
-                    else if (right > row.scrollLeft + row.clientWidth) row.scrollLeft = right - row.clientWidth;
-                }
-            },
-        };
-    }
+    /* Both are the board's one glide (base.html bbbGlide). The row is kept
+       across a press (data-keep) and told what the new page said, so its
+       links and counts follow the page that arrived. */
     window.finTabs = function (active) {
-        return Object.assign(slider((c) => '[data-tab="' + c.active + '"]'), {
-            active: active,
-            pick(key) { this.active = key; this.place(); },
+        return Object.assign(window.bbbGlide(active), {
             kept(fresh) {
-                this.active = fresh.getAttribute('data-active') || this.active;
-                this.$el.setAttribute('data-active', this.active);
-                fresh.querySelectorAll('[data-tab]').forEach((n) => {
-                    const mine = this.$el.querySelector('[data-tab="' + n.getAttribute('data-tab') + '"]');
+                this.value = fresh.getAttribute('data-active') || this.value;
+                this.$el.setAttribute('data-active', this.value);
+                fresh.querySelectorAll('[data-key]').forEach((n) => {
+                    const mine = this.$el.querySelector('[data-key="' + n.getAttribute('data-key') + '"]');
                     if (!mine) return;
                     mine.setAttribute('href', n.getAttribute('href'));
                     const count = n.querySelector('[data-count]'), here = mine.querySelector('[data-count]');
@@ -66,12 +42,7 @@
             },
         });
     };
-    window.finSeg = function (value) {
-        return Object.assign(slider((c) => '[data-seg="' + c.value + '"]'), {
-            value: value,
-            pick(v) { this.value = v; this.place(); },
-        });
-    };
+    window.finSeg = function (value) { return window.bbbGlide(value); };
 })();
 </script>
 {% endmacro %}
@@ -79,21 +50,13 @@
 {% macro fin_tabs(key, active, tabs, label, quiet=false) %}
 <nav data-keep="{{ key }}-tabs" data-active="{{ active }}" aria-label="{{ label }}"
      x-data="finTabs('{{ active }}')" @bbb:kept="kept($event.detail.fresh)"
-     class="shrink-0 max-w-full mb-4">
-    <div x-ref="row" class="relative flex max-w-full overflow-x-auto p-1 rounded-2xl border border-white/10 bg-surface-800/60 select-none"
-         style="scrollbar-width: none">
-        <span aria-hidden="true" class="absolute top-1 bottom-1 left-0 rounded-xl btn-brand pointer-events-none"
-              :style="markStyle" style="opacity:0"></span>
+     class="shrink-0 max-w-full mb-5">
+    <div class="pm-glide">
+        <span aria-hidden="true" class="pm-glide-mark btn-brand"></span>
         {% for t in tabs %}
         {% set id, text, href, count = t[0], t[1], t[2], (t[3] if t | length > 3 else none) %}
-        <a href="{{ href }}" data-tab="{{ id }}" @click="pick('{{ id }}')"
-           {% if id == active %}aria-current="page"{% endif %}
-           :aria-current="active === '{{ id }}' ? 'page' : null"
-           :class="active === '{{ id }}' ? 'text-white' : 'text-surface-300 hover:text-white'"
-           {% if id == active %}data-lit{% endif %}
-           class="relative z-10 inline-flex items-center gap-2 min-h-[44px] px-3 sm:px-4 text-sm font-medium rounded-xl whitespace-nowrap transition-colors
-                  {{ 'text-white btn-brand' if id == active else 'text-surface-300' }}"
-           style="flex: 0 0 auto">
+        <a href="{{ href }}" data-tab="{{ id }}" data-key="{{ id }}" @click="choose('{{ id }}')"
+           class="pm-chip" {% if id == active %}data-on aria-current="page"{% endif %}>
             {{ text }}
             <span data-count="{{ id }}"
                   class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold {{ 'bg-white/15 text-white' if quiet else 'bg-amber-500 text-black' }} {{ '' if count else 'hidden' }}">{{ (count or 0) | commas }}</span>
@@ -104,20 +67,16 @@
 {% endmacro %}
 
 {% macro fin_seg(options, value, label, name='', on_pick='') %}
-<div x-data="finSeg('{{ value }}')" role="group" aria-label="{{ label }}"
-     class="relative inline-flex max-w-full p-1 rounded-2xl border border-white/10 bg-surface-800/60 select-none">
-    <span aria-hidden="true" class="absolute top-1 bottom-1 left-0 rounded-xl btn-brand pointer-events-none"
-          :style="markStyle" style="opacity:0"></span>
+<div x-data="finSeg('{{ value }}')" role="group" aria-label="{{ label }}" class="max-w-full">
     {% if name %}<input type="hidden" name="{{ name }}" value="{{ value }}" :value="value">{% endif %}
-    {% for opt in options %}
-    <button type="button" data-seg="{{ opt[0] }}" @click="pick('{{ opt[0] }}'); {{ on_pick }}"
-            aria-pressed="{{ 'true' if opt[0] | string == value | string else 'false' }}"
-            {% if opt[0] | string == value | string %}data-lit{% endif %}
-            :aria-pressed="value === '{{ opt[0] }}' ? 'true' : 'false'"
-            :class="value === '{{ opt[0] }}' ? 'text-white' : 'text-surface-300 hover:text-white'"
-            class="relative z-10 inline-flex items-center justify-center min-h-[44px] px-3 sm:px-4 rounded-xl text-sm font-medium tabular-nums transition-colors {{ 'btn-brand' if opt[0] | string == value | string else '' }}">
-        {{ opt[1] }}
-    </button>
-    {% endfor %}
+    <div class="pm-glide">
+        <span aria-hidden="true" class="pm-glide-mark btn-brand"></span>
+        {% for opt in options %}
+        <button type="button" data-seg="{{ opt[0] }}" data-key="{{ opt[0] }}" @click="choose('{{ opt[0] }}'); {{ on_pick }}"
+                class="pm-chip tabular-nums" {% if opt[0] | string == value | string %}data-on aria-pressed="true"{% else %}aria-pressed="false"{% endif %}>
+            {{ opt[1] }}
+        </button>
+        {% endfor %}
+    </div>
 </div>
 {% endmacro %}

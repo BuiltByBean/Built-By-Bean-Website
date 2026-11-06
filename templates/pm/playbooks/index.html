@@ -36,9 +36,9 @@
 {% endif %}
 {% endblock %}
 
+{% block tab_row %}{{ practices_tabs('playbook') }}{% endblock %}
 {% block content %}
 <div class="space-y-6 stagger-in">
-    {{ practices_tabs('playbook') }}
 
     {# The grid is the region a fetch swaps, so the marks arrive without the
        page reloading and without the grid jumping back to the top. #}

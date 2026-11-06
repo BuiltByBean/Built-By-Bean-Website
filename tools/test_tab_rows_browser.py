@@ -16,6 +16,11 @@ rebuild the whole page (the Handbook's and the MVP Builder's):
   3. While the next page is on its way the row is never dimmed.
   4. On first paint the chosen tab is lit before any script has measured.
   5. Nothing scrolls the page sideways at 375.
+  6. (Michael, the same evening, with EntertainHQ's row beside ours: "a
+     highlighted pill and the other ones are grayed out", and ours "jitters
+     all around".) The tabs are separate chips with no bar behind them, the
+     row stands at the same height on every tab, and the mark glides there
+     over several frames rather than snapping.
 
 Run: python tools/test_tab_rows_browser.py
 """
@@ -94,12 +99,16 @@ STAMP = """(key) => {
 
 READ = """(key) => {
   const nav = document.querySelector('[data-keep="' + key + '"]');
-  const mark = nav && nav.querySelector('span[aria-hidden="true"]');
+  const mark = nav && nav.querySelector('.pm-glide-mark');
+  const glide = nav && nav.querySelector('.pm-glide');
   return {
     url: location.pathname,
     row: nav ? nav.__witness || null : null,
     main: document.getElementById('pm-main').__witness || null,
-    markAt: mark ? mark.style.transform : null,
+    markAt: mark ? Math.round(mark.getBoundingClientRect().left) : null,
+    rowTop: glide ? Math.round(glide.getBoundingClientRect().top) : null,
+    chipsOwnBorder: glide ? [...glide.querySelectorAll('.pm-chip:not([data-on])')].every(c => getComputedStyle(c).borderTopWidth === '1px') : null,
+    noBar: glide ? getComputedStyle(glide).borderTopWidth === '0px' && getComputedStyle(glide).backgroundColor === 'rgba(0, 0, 0, 0)' : null,
     lit: nav ? [...nav.querySelectorAll('[aria-current="page"]')].map(a => a.dataset.tab) : [],
     rowOpacity: nav ? getComputedStyle(nav).opacity : null,
     sideways: document.getElementById('pm-scroll').scrollWidth - document.getElementById('pm-scroll').clientWidth,
@@ -124,19 +133,37 @@ def run(width, height):
             html = page.request.get(BASE + start).text()
             row_html = html[html.find(f'data-keep="{key}"'):][:6000]
             lit_tag = row_html[:row_html.find("</a>", row_html.find('aria-current="page"'))]
-            check(f"{key}: the chosen tab is lit in the page as sent", "data-lit" in lit_tag and "btn-brand" in lit_tag)
+            check(f"{key}: the chosen tab is lit in the page as sent", "data-on" in lit_tag and "pm-chip" in lit_tag)
 
             page.goto(BASE + start, wait_until="networkidle")
             page.wait_for_timeout(400)
             page.evaluate(STAMP, key)
             before = page.evaluate(READ, key)
             check(f"{key}: after the hand-off only the mark is lit",
-                  page.evaluate(f"""() => document.querySelectorAll('[data-keep="{key}"] [data-lit]').length""") == 0)
+                  page.evaluate(f"""() => {{ const g = document.querySelector('[data-keep="{key}"] .pm-glide');
+                      const on = g.querySelector('[data-on]');
+                      return g.hasAttribute('data-ready') && getComputedStyle(on).backgroundImage === 'none'; }}"""))
+            check(f"{key}: separate chips, no bar behind them", before["noBar"] and before["chipsOwnBorder"], before)
             for tab, path in presses:
                 # Slow the answer a little, so the row's look while waiting is seen.
                 page.route("**" + path + "*", lambda route: (page.wait_for_timeout(450), route.continue_()))
-                page.evaluate(f"""() => document.querySelector('[data-keep="{key}"] [data-tab="{tab}"]').click()""")
-                page.wait_for_timeout(330)
+                # The glide is a CSS transition on transform, which the browser
+                # runs on its compositor: a script sampling positions misses
+                # frames while the next page is being built, so what is
+                # proved is that the browser is running the glide, from where
+                # the mark was, and that the row did not move meanwhile.
+                glide = page.evaluate(f"""() => new Promise(done => {{
+                    const g = document.querySelector('[data-keep="{key}"] .pm-glide');
+                    const m = g.querySelector('.pm-glide-mark');
+                    const top0 = Math.round(g.getBoundingClientRect().top);
+                    g.querySelector('[data-tab="{tab}"]').click();
+                    setTimeout(() => {{
+                        const runs = m.getAnimations().filter(a => a.transitionProperty === 'transform' && a.playState === 'running');
+                        done({{ runs: runs.length, top0, top1: Math.round(g.getBoundingClientRect().top) }});
+                    }}, 30);
+                }})""")
+                check(f"{key} -> {tab}: the mark glides (a running transition, not a snap)",
+                      glide["runs"] == 1 and glide["top0"] == glide["top1"], glide)
                 waiting = page.evaluate(READ, key)
                 check(f"{key} -> {tab}: the row is never dimmed while it waits", waiting["rowOpacity"] == "1",
                       waiting["rowOpacity"])
@@ -149,6 +176,8 @@ def run(width, height):
                 check(f"{key} -> {tab}: the mark slid and {tab} is lit",
                       now["markAt"] != before["markAt"] and now["lit"] == [tab], (before["markAt"], now))
                 check(f"{key} -> {tab}: nothing scrolls sideways", now["sideways"] <= 0, now["sideways"])
+                check(f"{key} -> {tab}: the row stands where it stood", now["rowTop"] == before["rowTop"],
+                      (before["rowTop"], now["rowTop"]))
                 before = now
         browser.close()
 

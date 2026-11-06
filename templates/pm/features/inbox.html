@@ -76,10 +76,10 @@
 </div>
 {% endmacro %}
 
+{% block tab_row %}{{ practices_tabs('history') }}{% endblock %}
 {% block content %}
 <div data-live="results" class="flex flex-col flex-1 min-h-0 gap-5 stagger-in">
 
-    {{ practices_tabs('history') }}
 
     <div class="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
         <div class="glass-card p-4 min-w-0">

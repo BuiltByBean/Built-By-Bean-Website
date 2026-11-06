@@ -13,21 +13,18 @@
                ('projects', 'Projects', url_for('workspace.projects'))] %}
 <nav data-keep="workspace-tabs" data-active="{{ active }}" aria-label="Workspace"
      x-data="wsTabs('{{ active }}')" @bbb:kept="kept($event.detail.fresh)"
-     class="shrink-0 relative inline-flex max-w-full p-1 mb-4 rounded-2xl border border-white/10 bg-surface-800/60 select-none">
-    <span aria-hidden="true" x-ref="mark"
-          class="absolute top-1 bottom-1 left-0 rounded-xl btn-brand pointer-events-none"
-          :style="markStyle" style="opacity:0"></span>
-    {% for key, label, href in tabs %}
-    <a href="{{ href }}" data-tab="{{ key }}" @click="pick('{{ key }}')"
-       :aria-current="active === '{{ key }}' ? 'page' : null"
-       {% if key == active %}aria-current="page" data-lit{% endif %}
-       class="relative z-10 inline-flex items-center gap-2 min-h-[44px] px-3 sm:px-4 text-sm font-medium rounded-xl transition-colors {{ 'btn-brand' if key == active else '' }}"
-       :class="active === '{{ key }}' ? 'text-white' : 'text-surface-300 hover:text-white'">
-        {{ label }}
-        <span data-count="{{ key }}"
-              class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-white/15 text-white {{ '' if counts[key] else 'hidden' }}">{{ counts[key] | commas }}</span>
-    </a>
-    {% endfor %}
+     class="shrink-0 max-w-full mb-4">
+    <div class="pm-glide">
+        <span aria-hidden="true" class="pm-glide-mark btn-brand"></span>
+        {% for key, label, href in tabs %}
+        <a href="{{ href }}" data-tab="{{ key }}" data-key="{{ key }}" @click="choose('{{ key }}')"
+           class="pm-chip" {% if key == active %}data-on aria-current="page"{% endif %}>
+            {{ label }}
+            <span data-count="{{ key }}"
+                  class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-white/15 text-white {{ '' if counts[key] else 'hidden' }}">{{ counts[key] | commas }}</span>
+        </a>
+        {% endfor %}
+    </div>
 </nav>
 {% endmacro %}
 
@@ -40,19 +37,17 @@
 #}
 {% macro seg(options, value, label, name='', on_pick='', full=false, value_js='') %}
 <div x-data="wsSeg({{ value_js if value_js else "'" ~ value ~ "'" }})" role="group" aria-label="{{ label }}"
-     class="relative {{ 'flex w-full sm:w-auto sm:inline-flex' if full else 'inline-flex' }} max-w-full p-1 rounded-2xl border border-white/10 bg-surface-800/60 select-none">
-    <span aria-hidden="true" class="absolute top-1 bottom-1 left-0 rounded-xl btn-brand pointer-events-none"
-          :style="markStyle" style="opacity:0"></span>
+     class="{{ 'w-full sm:w-auto' if full else '' }} max-w-full select-none">
     {% if name %}<input type="hidden" name="{{ name }}" value="{{ value }}" :value="value">{% endif %}
-    {% for opt in options %}
-    {% set v, l, n = opt[0], opt[1], (opt[2] if opt | length > 2 else none) %}
-    <button type="button" data-seg="{{ v }}" @click="pick('{{ v }}'); {{ on_pick }}"
-            {% if v == value %}data-lit{% endif %}
-            :aria-pressed="value === '{{ v }}' ? 'true' : 'false'" aria-pressed="{{ 'true' if v == value else 'false' }}"
-            :class="value === '{{ v }}' ? 'text-white' : 'text-surface-300 hover:text-white'"
-            class="relative z-10 {{ 'flex-1 sm:flex-none' if full else '' }} inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 sm:px-4 rounded-xl text-sm font-medium transition-colors {{ 'btn-brand' if v == value else '' }}">
-        {{ l }}{% if n %}<span class="text-[11px] tabular-nums opacity-80">{{ n | commas }}</span>{% endif %}
-    </button>
-    {% endfor %}
+    <div class="pm-glide {{ 'pm-glide-full' if full else '' }}">
+        <span aria-hidden="true" class="pm-glide-mark btn-brand"></span>
+        {% for opt in options %}
+        {% set v, l, n = opt[0], opt[1], (opt[2] if opt | length > 2 else none) %}
+        <button type="button" data-seg="{{ v }}" data-key="{{ v }}" @click="choose('{{ v }}'); {{ on_pick }}"
+                class="pm-chip" {% if v == value %}data-on aria-pressed="true"{% else %}aria-pressed="false"{% endif %}>
+            {{ l }}{% if n %}<span class="text-[11px] tabular-nums opacity-80">{{ n | commas }}</span>{% endif %}
+        </button>
+        {% endfor %}
+    </div>
 </div>
 {% endmacro %}

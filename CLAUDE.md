@@ -581,27 +581,40 @@ classes in place. Every in-page choice is the `seg` kit (`pm/workspace/_tabs.htm
 switch at 1600 and 375; it fails on the old swap.
 
 **Every tab row switches the EntertainHQ way** (Michael, 2026-11-05: "look at
-entertain hq's code it has perfected this"; its `glide` macro). Every row is
-one of two kits, `fin_tabs` (Finances, Org, the Handbook, the MVP Builder) or
-the Workspace's; the Handbook's and the MVP Builder's rebuilt the whole page
-until then. What makes it smooth, each copied from EntertainHQ:
+entertain hq's code it has perfected this"; then, with its Workspace beside
+ours, "a highlighted pill and the other ones are grayed out ... your long pill
+... jitters all around"). It is EntertainHQ's `glide`, one component for every
+tab row and switch on the board (`window.bbbGlide` in base.html; `finTabs`,
+`finSeg`, `wsTabs`, `wsSeg` are it with a `kept`):
 
-- The mark moves on the press, before any answer, gliding 300ms on
-  `cubic-bezier(0.22,0.75,0.2,1)`.
-- The chosen tab is lit by the server (`btn-brand`, `data-lit`). The mark
-  starts hidden and lands with no transition, and 80ms later
-  `window.bbbHandOff` takes the lit fill off, so a first paint never flashes.
-- **Two pages that wear the same kept row share `#pm-main`**: `bbbNavigate`
-  replaces its insides and carries the row in, so the page's entry animation
-  does not replay and no page needs a `data-panel` for it.
-- While a press waits, only what is under the row dims (`pm-tabbing`,
-  `pm-dim`, the same 140ms delay); the row never does. What arrives fades in
-  over 150ms (`pm-fade-in`, opacity only, fill-mode backwards). Reduced
-  motion turns both off.
+- **Chips, never a bar.** `.pm-glide` holds `.pm-chip`s side by side, each
+  with its own border, grey; no track behind them (a full-width bar with a
+  pill inside it is the thing he rejected). One `.pm-glide-mark` slides to the
+  chosen chip by CSS variables (`--gx --gy --gw --gh`) on the row, moved with
+  transform, 300ms `cubic-bezier(0.22,0.75,0.2,1)`, on the press, before any
+  answer.
+- **No flash on load.** The server lights the chosen chip (`data-on`); the mark
+  is hidden with no transition until it is placed, then `data-ready` (80ms
+  later, by timer) clears the chip and the mark carries the fill.
+- **The row never moves.** A page's row goes in the `tab_row` block, the first
+  thing in `#pm-main`, so it stands at the same place on every tab: drawn
+  inside each page's own wrapper it landed 4 to 24px apart, which was the
+  jitter. The banner's button group hides when empty
+  (`[data-head-actions]`), or it wrapped under a long subtitle on a phone and
+  moved the row 12px. The subtitle is one line.
+- **The row never leaves the page.** Two pages that wear the same kept row
+  share `#pm-main`; `bbbNavigate` removes everything but the row and puts the
+  new page in around it. Taking the row out and putting it back mid-glide
+  snapped the mark to its end. Copy a node list before adopting from it.
+- **Only what is under the row changes.** It dims while waiting (`pm-tabbing`,
+  `pm-dim`); what arrives fades in over 150ms (`pm-fade-in`) and does not
+  replay its own slide (`pm-swapped` switches `stagger-in` off).
 
-Copy a node list before adopting from it: adopting takes the node out of the
-live list being read, and the first version swapped in every other node and
-left `#pm-main` empty. `tools/test_tab_rows_browser.py`.
+Measured, not looked at: `tools/test_tab_rows_browser.py` checks the row's top
+on every press, the chips' borders and the bare row, that the browser is
+running the mark's transition (a script sampling positions misses frames while
+a page is built; the glide itself runs on the compositor), and the row's opacity
+while an answer is slowed.
 
 **A project's dates come from its repo and its domain** (audit item 11,
 `project_autofill.py`, the "project dates" step of the night, before the store

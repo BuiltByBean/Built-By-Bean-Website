@@ -124,7 +124,7 @@ STAMP = """() => {
 
 READ = """() => {
   const nav = document.querySelector('[data-keep="workspace-tabs"]');
-  const mark = nav && nav.querySelector('[aria-hidden="true"]');
+  const mark = nav && nav.querySelector('.pm-glide-mark');
   return {
     url: location.pathname + location.search,
     tabs: nav ? nav.__witness || null : null,
@@ -133,7 +133,7 @@ READ = """() => {
     subtitle: document.getElementById('pm-page-subtitle').__witness || null,
     sidebar: document.querySelector('aside').__witness || null,
     ctx: window.__ctx || null,
-    markAt: mark ? mark.style.transform : null,
+    markAt: mark ? Math.round(mark.getBoundingClientRect().left) : null,
     lit: [...document.querySelectorAll('[data-keep="workspace-tabs"] [aria-current="page"]')].map(a => a.dataset.tab),
   };
 }"""
