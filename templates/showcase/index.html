@@ -21,15 +21,8 @@
 {% block content %}
 <p class="sc-eyebrow">{% if link %}Prepared for {{ link.label }}{% else %}Built By Beans{% endif %}</p>
 <h1 class="sc-h1">Custom software, <span class="text-gradient">built and run</span> for real businesses</h1>
-<p class="sc-lead">Each one below is in use today. Open any of them to see the screens and what it does.</p>
 
 {% if apps %}
-<p class="sc-facts">
-    <span><strong>{{ glance.count }}</strong> product{{ '' if glance.count == 1 else 's' }} built</span>
-    <span><strong>{{ glance.services | length }}</strong> services worked with</span>
-    {% if glance.where %}<span>On {{ glance.where }}</span>{% endif %}
-</p>
-
 <section class="sc-section">
     <div class="sc-products">
         {% for app in apps %}

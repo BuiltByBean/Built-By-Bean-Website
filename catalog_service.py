@@ -219,13 +219,30 @@ def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def live_stores(tile):
+    """{"App Store", "Google Play"}: the stores whose own answer says they list
+    this app now (store_versions_service, what My Apps reads). A bundle id or
+    a package in the repo only says the code CAN build for a store: Master by
+    Trade carries one and is on no store, and the catalog told a prospect it
+    was an iPhone app on the App Store (Michael, 2026-11-06, issue #38)."""
+    summary = tile.stores
+    if not summary:
+        return set()
+    return {label for label, row in summary["rows"] if row.get("status") == "live"}
+
+
+# The store services the catalog only names when that store lists the app.
+STORE_SERVICES = {"app-store": "App Store", "google-play": "Google Play"}
+
+
 def platforms(tile):
     out = []
     if (tile.url or "").startswith(("http://", "https://")):
         out.append("web")
-    if (tile.app_store_bundle_id or "").strip():
+    live = live_stores(tile)
+    if "App Store" in live:
         out.append("ios")
-    if (tile.play_package or "").strip():
+    if "Google Play" in live:
         out.append("android")
     return out
 
@@ -261,11 +278,8 @@ def services(tile, book=None):
     code's reading, so an addition or a hide stays put."""
     import vendor_discovery
     book = book if book is not None else marks()
-    raw = list(tile.services)
-    if (tile.app_store_bundle_id or "").strip():
-        raw.append("App Store")
-    if (tile.play_package or "").strip():
-        raw.append("Google Play")
+    live = live_stores(tile)
+    raw = list(tile.services) + sorted(live)
     if tile.railway_url:
         raw.append("Railway")
     if tile.github_url:
@@ -276,6 +290,10 @@ def services(tile, book=None):
     for n in raw:
         show, pb = resolve(n, book)
         if pb is not None and pb.slug in INTERNAL_PLAYBOOKS:
+            continue
+        store = STORE_SERVICES.get(pb.slug) if pb is not None else None
+        store = store or next((s for s in STORE_SERVICES.values() if vendor_discovery.key(s) == vendor_discovery.key(show)), None)
+        if store and store not in live:
             continue
         if vendor_discovery.key(n) in hidden or vendor_discovery.key(show) in hidden:
             continue

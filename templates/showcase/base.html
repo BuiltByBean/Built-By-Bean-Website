@@ -54,11 +54,6 @@
         .sc-mark-img, .sc-mark-letter { width: 26px; height: 26px; border-radius: 6px; object-fit: contain; flex-shrink: 0; background: #fff; padding: 2px; }
         .sc-mark-letter { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-hover);
                           color: var(--text-muted); font-weight: 700; font-size: 13px; padding: 0; }
-        .sc-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 22px; color: var(--text-muted); font-size: 15px; }
-        .sc-facts span { display: inline-flex; align-items: baseline; gap: 6px; }
-        .sc-facts span + span::before { content: ""; width: 4px; height: 4px; border-radius: 999px; background: var(--border);
-                                         align-self: center; margin-right: 16px; }
-        .sc-facts strong { color: var(--text); font-size: 17px; }
         .sc-products { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 18px; }
         .sc-product { display: flex; flex-direction: column; gap: 14px; text-decoration: none; color: inherit;
                       transition: border-color 0.2s, transform 0.2s; }
@@ -175,7 +170,6 @@
             .container { padding: 0 16px; }
             .sc-main { padding-top: 32px; }
             .sc-built { grid-template-columns: minmax(0, 1fr); }
-            .sc-facts span + span::before { display: none; }
             .sc-apps { grid-template-columns: minmax(0, 1fr); }
             .sc-hero-app { flex-direction: column; gap: 14px; }
             .sc-hero-app .sc-back-btn { order: -1; align-self: flex-end; }

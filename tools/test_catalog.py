@@ -120,6 +120,7 @@ with application.app_context():
     check("a narrowed one names them", narrow.app_ids == [rob_id])
     t_all, t_one, every_id = every.token, narrow.token, every.id
 r = anon.get(f"/work/{t_all}")
+check("the front has no counts line or lead sentence", "sc-facts" not in r.get_data(as_text=True) and "in use today" not in r.get_data(as_text=True))
 page = r.get_data(as_text=True)
 check("a live link opens the showcase with no login", r.status_code == 200, r.status_code)
 check("it says who it was made for", "Prepared for Louis Lucas" in page)
@@ -260,7 +261,22 @@ check("and refuses without the key", door.post("/api/guidance/apps/services",
                                                 json={"name": "EntertainHQ", "services": []}).status_code == 401)
 with application.app_context():
     e = db.session.get(AppLink, ehq_id)
-    check("platforms come from the store ids", cs.platforms(e) == ["web", "ios", "android"])
+    # Issue #38: a bundle id in the repo is not a listing. Master by Trade had
+    # one, was on no store, and the catalog called it an iPhone app.
+    was = e.store_versions
+    e.store_versions = json.dumps({"app_store": {"status": "not_live"}, "play": {"status": "unknown"}})
+    db.session.commit()
+    check("store ids with no live listing claim no phone", cs.platforms(e) == ["web"], cs.platforms(e))
+    check("nor a store under Built with", not {"App Store", "Google Play"} & set(cs.services(e)), cs.services(e))
+    check("nor an iPhone app in the feature list",
+          not any("iPhone" in h or "Android" in h for h in cs.highlights(e)), cs.highlights(e))
+    cs.record_repo_services("BuiltByBean/EntertainHQ", ["Apple Developer Program", "Twilio", "Stripe", "GitHub", "Resend"])
+    check("even when the code reading names the store", "App Store" not in cs.services(e), cs.services(e))
+    cs.record_repo_services("BuiltByBean/EntertainHQ", ["Twilio", "Stripe", "GitHub", "Resend"])
+    e.store_versions = json.dumps({"app_store": {"status": "live", "url": "https://apps.apple.com/app/id1"},
+                                   "play": {"status": "live", "url": "https://play.google.com/store/apps/details?id=com.ehq"}})
+    db.session.commit()
+    check("platforms come from the live listings", cs.platforms(e) == ["web", "ios", "android"])
     check("the stores, Railway and GitHub are services too, the names anybody knows first",
           cs.services(e) == ["App Store", "Google Play", "Stripe", "Twilio", "Resend", "Railway", "GitHub"],
           cs.services(e))
@@ -284,6 +300,8 @@ with application.app_context():
     db.session.commit()
     glance = cs.overview(cs.approved())
     check("the glance gathers every app", glance["count"] == 2 and glance["platforms"] == ["web", "ios", "android"])
+    e.store_versions = was
+    db.session.commit()
     n = cs.record_repo_services("BuiltByBean/EntertainHQ", ["Twilio"])
     check("the nightly audit writes onto the tile its repo is", n == 1 and db.session.get(AppLink, ehq_id).services == ["Twilio"])
 
