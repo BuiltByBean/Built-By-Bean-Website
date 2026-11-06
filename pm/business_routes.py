@@ -40,6 +40,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
 from flask_login import current_user
 
 import books_service
+import business_papers
 import hub
 import sales_tax
 import app_icon_service
@@ -399,10 +400,16 @@ def detail(id):
 # ── Its paperwork ────────────────────────────────────────────
 
 def _papers(business):
-    """The documents in the order KINDS lists them, and the kinds on offer."""
+    """What the page's Documents card draws, as one list with no paper twice:
+    the papers it must hold first (business_papers: each one held, missing or
+    set aside), then everything else on file in the order KINDS lists them."""
     order = {k: i for i, (k, _label) in enumerate(BusinessDocument.KINDS)}
-    docs = sorted(business.documents, key=lambda d: (order.get(d.kind, len(order)), d.id))
-    return {"documents": docs, "doc_kinds": BusinessDocument.KINDS}
+    required = business_papers.status(business)
+    needed = {r["kind"] for r in required}
+    others = sorted((d for d in business.documents if d.kind not in needed),
+                    key=lambda d: (order.get(d.kind, len(order)), d.id))
+    return {"required": required, "documents": others, "doc_kinds": BusinessDocument.KINDS,
+            "papers_missing": sum(1 for r in required if r["state"] == "missing")}
 
 
 def _doc_folder():
@@ -437,6 +444,7 @@ def document_add(id):
             original_name=name[:300] or stored, content_type=DOC_TYPES[ext], size=len(data)))
         kept += 1
     db.session.commit()
+    business_papers.forget()
     if kept:
         flash(f"{kept} document{'' if kept == 1 else 's'} kept.", "success")
     if refused:
@@ -470,7 +478,27 @@ def document_delete(doc_id):
     db.session.delete(doc)
     db.session.commit()
     flash("Document removed.", "success")
+    business_papers.forget()
     return redirect(url_for("businesses.detail", id=business_id) + "#documents")
+
+
+@business_bp.route("/admin/businesses/<int:id>/papers/<kind>/needed", methods=["POST"])
+@ceo_required
+def paper_needed(id, kind):
+    """Not needed (needed=0) or needed after all (needed=1) for one paper this
+    business must hold. Only a kind business_papers asks of it, so a crafted
+    post cannot set aside something that was never asked for."""
+    business = db.session.get(Business, id) or abort(404)
+    if kind not in business_papers.required_kinds(business):
+        abort(404)
+    needed = request.form.get("needed") == "1"
+    who = getattr(current_user, "username", "") or ""
+    if business_papers.set_waived(business.id, kind, not needed, who):
+        db.session.commit()
+    business_papers.forget()
+    label = business_papers.kind_label(kind)
+    flash(f"{label}: asked for again." if needed else f"{label}: set aside as not needed.", "success")
+    return redirect(url_for("businesses.detail", id=business.id) + "#documents")
 
 
 def _logo_folder():
@@ -1331,6 +1359,70 @@ def hub_get_file():
         encoded = base64.b64encode(fh.read()).decode("ascii")
     return jsonify({"name": row.original_name, "content_type": row.content_type,
                     "data": encoded})
+
+
+# ── Its papers, for its own app ─────────────────────────────
+#
+# Michael, 2026-11-06: "if I'm over in the Entertain HQ admin portal ... you
+# can see kind of really nice PDF overlays ... called over to the Built by
+# Beans board, ultimately stored." The board is the one store; a company's app
+# lists and fetches its OWN papers here, signed with its hub secret like the
+# tax doors, and never writes: an upload is Michael's, on the business page.
+# A DBA's app sees only what is filed on the DBA itself, never its company's:
+# Data Dungeon's partner shares its profits, not Built by Bean's EIN letter.
+
+def _doc_out(d):
+    return {"id": d.id, "kind": d.kind, "kind_label": d.kind_label, "title": d.label,
+            "name": d.original_name, "content_type": d.content_type, "size": d.size,
+            "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None}
+
+
+def _private(resp):
+    """A paper can carry a taxpayer number: nobody between here and the app
+    may keep a copy, and the answer never names where it came from."""
+    resp.headers["Cache-Control"] = "private, no-store"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@business_bp.route("/api/hub/documents", methods=["POST"])
+def hub_documents():
+    """Every paper this business holds, and what it must hold and lacks."""
+    business, refused = _hub_business()
+    if refused:
+        return refused
+    order = {k: i for i, (k, _label) in enumerate(BusinessDocument.KINDS)}
+    docs = sorted(business.documents, key=lambda d: (order.get(d.kind, len(order)), d.id))
+    required = [{"kind": r["kind"], "label": r["label"], "why": r["why"], "state": r["state"],
+                 "document_ids": [d.id for d in r["docs"]]}
+                for r in business_papers.status(business)]
+    return _private(jsonify({"business": {"name": business.name, "label": business.label},
+                             "documents": [_doc_out(d) for d in docs],
+                             "required": required}))
+
+
+@business_bp.route("/api/hub/documents/get", methods=["POST"])
+def hub_document_get():
+    """One paper, base64 in JSON like a tax confirmation. Only its own: an id
+    belonging to another business answers exactly as an id that does not
+    exist, so the door says nothing about anybody else's papers."""
+    business, refused = _hub_business()
+    if refused:
+        return refused
+    data = _hub_json()
+    try:
+        doc = db.session.get(BusinessDocument, int(data.get("id")))
+    except (TypeError, ValueError):
+        doc = None
+    if doc is None or doc.business_id != business.id:
+        return _private(jsonify({"error": "no such document"})), 404
+    path = os.path.join(_doc_folder(), doc.stored_name)
+    if not os.path.exists(path):
+        return _private(jsonify({"error": "the file is not on the server any more"})), 410
+    with open(path, "rb") as fh:
+        encoded = base64.b64encode(fh.read()).decode("ascii")
+    return _private(jsonify({**_doc_out(doc), "data": encoded}))
 
 
 # ── The map: everything that makes one business run ─────────

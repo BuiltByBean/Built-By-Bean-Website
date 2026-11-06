@@ -41,6 +41,31 @@
 } %}
 {% set b = business %}
 
+{# One paper on file: what it is, its name, open and remove. A required one
+   wears the tick that says the requirement is met. #}
+{% set PAPER_ROW = 'flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl min-w-0' %}
+{% set PAPER_PILL = 'inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-md' %}
+{% set PAPER_QUIET = 'inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors' %}
+{% macro paper_row(d, required=false) -%}
+<div class="{{ PAPER_ROW }} bg-surface-800/40" data-paper="{{ d.id }}">
+    <div class="min-w-0 grow basis-60 flex items-start gap-3">
+        {% if required %}<span class="mt-0.5 shrink-0 text-emerald-400">{{ icon('check', 'w-5 h-5') }}</span>{% endif %}
+        <div class="min-w-0">
+            <span class="{{ PAPER_PILL }} bg-brand-500/15 text-brand-300">{{ d.kind_label }}</span>
+            <p class="text-sm font-semibold text-white break-words mt-1">{{ d.label }}</p>
+            <p class="text-xs text-surface-400">{{ d.uploaded_at | format_date }} &middot; {{ ((d.size or 0) / 1024) | round(0) | int | commas }} KB</p>
+        </div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0 ml-auto">
+        {{ icon_button('view', 'Open ' ~ d.label, href=url_for('businesses.document_open', doc_id=d.id), target='_blank') }}
+        <form method="POST" data-live-action action="{{ url_for('businesses.document_delete', doc_id=d.id) }}">
+            {{ delete_icon(question='Remove it?', label='Remove ' ~ d.label) }}
+        </form>
+    </div>
+</div>
+{%- endmacro %}
+
+
 {% block title %}{{ b.label }} - Built By Bean{% endblock %}
 {% block page_title %}{{ b.label }}{% endblock %}
 {% block page_subtitle %}{{ b.parent.name ~ ' d/b/a ' ~ b.label if b.parent else b.name }}{% endblock %}
@@ -139,32 +164,74 @@
         <span class="shrink-0 inline-flex items-center min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white">Connections</span>
     </a>
 
-    {# Its paperwork: what LegalZoom filed and the IRS sent back. relative
-       z-30 (LM-1), because the kind picker opens over the cards below. #}
-    <div id="documents" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Documents</h3>
-        {% if documents %}
+    {# Its papers (business_papers.py): first what it must hold, each one on
+       file, missing or set aside, then everything else on file. One list, so
+       no paper is drawn twice. A data-live region: every press here swaps
+       this card, the flash and the sidebar's Needs attention count, and the
+       page does not move. relative z-30 (LM-1), because the kind picker opens
+       over the cards below. #}
+    <div id="documents" data-live="papers" class="glass-card p-5 sm:p-6 min-w-0 space-y-4 relative z-30">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Documents</h3>
+            {% if papers_missing %}
+            <span class="{{ PAPER_PILL }} bg-amber-500/15 text-amber-300" data-papers-missing>{{ papers_missing }} missing</span>
+            {% elif required %}
+            <span class="{{ PAPER_PILL }} bg-emerald-900/30 text-emerald-400">All on file</span>
+            {% endif %}
+        </div>
+        {% if required or documents %}
         <div class="space-y-2">
-            {% for d in documents %}
-            <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-surface-800/40 min-w-0">
-                <div class="min-w-0 flex-1">
-                    <span class="inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-md bg-brand-500/15 text-brand-300">{{ d.kind_label }}</span>
-                    <p class="text-sm font-semibold text-white break-words mt-1">{{ d.label }}</p>
-                    <p class="text-xs text-surface-400">{{ d.uploaded_at | format_date }} &middot; {{ ((d.size or 0) / 1024) | round(0) | int | commas }} KB</p>
+            {% for r in required %}
+            {% if r.state == 'held' %}
+            {% for d in r.docs %}{{ paper_row(d, required=true) }}{% endfor %}
+            {% elif r.state == 'missing' %}
+            <div class="{{ PAPER_ROW }} bg-amber-500/10 border border-amber-500/20" data-paper-missing="{{ r.kind }}">
+                <div class="min-w-0 grow basis-60 flex items-start gap-3">
+                    <span class="mt-0.5 shrink-0 text-amber-300">{{ icon('warning', 'w-5 h-5') }}</span>
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-white break-words">{{ r.label }}</p>
+                        <p class="text-xs text-amber-200/80 break-words">Missing &middot; {{ r.why }}</p>
+                    </div>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    <a href="{{ url_for('businesses.document_open', doc_id=d.id) }}" target="_blank" rel="noopener"
-                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
-                        Open</a>
-                    <form method="POST" action="{{ url_for('businesses.document_delete', doc_id=d.id) }}">
-                        {{ delete_icon(question='Remove it?', label='Remove ' ~ d.label) }}
+                {# On a phone the two presses share the row's width, and stack
+                   when both will not fit on one line, rather than running past
+                   the row's edge or breaking a label in two. #}
+                <div class="flex flex-wrap items-center justify-end gap-2 ml-auto w-full sm:w-auto">
+                    <form method="POST" data-live-action class="grow sm:grow-0"
+                          action="{{ url_for('businesses.paper_needed', id=b.id, kind=r.kind) }}">
+                        <input type="hidden" name="needed" value="0">
+                        <button type="submit" class="{{ PAPER_QUIET }} w-full whitespace-nowrap">Not needed</button>
+                    </form>
+                    {# Its own form, so picking the file is the upload
+                       (catalogue rule: an upload never shares a form). #}
+                    <form method="POST" data-live-action enctype="multipart/form-data" class="grow sm:grow-0"
+                          action="{{ url_for('businesses.document_add', id=b.id) }}">
+                        <input type="hidden" name="kind" value="{{ r.kind }}">
+                        <label class="w-full whitespace-nowrap relative inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white cursor-pointer focus-within:ring-2 focus-within:ring-brand-400">
+                            {{ icon('upload', 'w-4 h-4') }} Upload
+                            <input type="file" name="document" class="sr-only" aria-label="Upload the {{ r.label }}"
+                                   accept=".pdf,.png,.jpg,.jpeg,.webp,.docx" onchange="this.form.requestSubmit()">
+                        </label>
                     </form>
                 </div>
             </div>
+            {% else %}
+            <div class="{{ PAPER_ROW }} bg-surface-800/20" data-paper-waived="{{ r.kind }}">
+                <div class="min-w-0 grow basis-40">
+                    <p class="text-sm font-medium text-surface-300 break-words">{{ r.label }}</p>
+                    <p class="text-xs text-surface-500">Set aside as not needed</p>
+                </div>
+                <form method="POST" data-live-action action="{{ url_for('businesses.paper_needed', id=b.id, kind=r.kind) }}" class="shrink-0 ml-auto">
+                    <input type="hidden" name="needed" value="1">
+                    <button type="submit" class="{{ PAPER_QUIET }}">Ask for it</button>
+                </form>
+            </div>
+            {% endif %}
             {% endfor %}
+            {% for d in documents %}{{ paper_row(d) }}{% endfor %}
         </div>
         {% endif %}
-        <form method="POST" action="{{ url_for('businesses.document_add', id=b.id) }}" enctype="multipart/form-data"
+        <form method="POST" data-live-action action="{{ url_for('businesses.document_add', id=b.id) }}" enctype="multipart/form-data"
               class="p-4 rounded-xl border border-dashed border-white/15 space-y-3">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="min-w-0">

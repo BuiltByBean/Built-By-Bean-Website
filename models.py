@@ -3034,7 +3034,12 @@ class BusinessDocument(db.Model):
     KINDS = (
         ("formation", "Certificate of Formation"),
         ("operating", "Operating Agreement"),
-        ("ein", "EIN letter"),
+        # The IRS letter with the EIN: a CP 575 when it was assigned, or a
+        # 147C asking for it again (EntertainHQ's is a 147C of 2026-10-28).
+        ("ein", "IRS EIN letter"),
+        # The Comptroller's Texas Sales and Use Tax Permit. business_papers
+        # asks for it from a company that collects Texas sales tax.
+        ("sales_permit", "Sales and use tax permit"),
         ("organizer", "Organizer statement"),
         ("resolutions", "Resolutions"),
         ("agent", "Registered agent"),

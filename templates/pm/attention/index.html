@@ -67,6 +67,8 @@
 
             {# Tax deadlines, the state's flags and a company's standing. #}
             {% include "pm/attention/_deadlines.html" %}
+            {# A company missing a paper it must hold (business_papers.py). #}
+            {% include "pm/attention/_papers.html" %}
             {# What is live and broken (live_watch.attention_rows). #}
             {% include "pm/attention/_live.html" %}
             {# The books: what the night found they need (books_upkeep.py). #}
@@ -107,7 +109,7 @@
             </div>
             {% endfor %}
 
-            {% if not messages and not bills and not night and not live and not books and not (tax and (tax.standing or tax.flags or tax.deadlines)) %}
+            {% if not messages and not bills and not night and not live and not books and not papers and not (tax and (tax.standing or tax.flags or tax.deadlines)) %}
             <div class="p-8 sm:p-12 text-center">
                 {{ icon('done', 'w-12 h-12 mx-auto text-surface-600 mb-3') }}
                 <p class="text-surface-300">Nothing is waiting on you.</p>

@@ -1,0 +1,22 @@
+{#
+  A company missing a paper it must hold (business_papers.missing_rows): one
+  row per company, naming each paper, opening its Documents card where each
+  one has its own Upload and Not needed. CEO only, like the business pages it
+  links to; `papers` is empty for anyone else. Cleared by the upload itself,
+  because the row is worked out from the papers on file.
+#}
+{% for p in papers %}
+<div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3" data-papers-row="{{ p.business.id }}">
+    <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-medium text-white break-words min-w-0">{{ p.business.label }}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-300 shrink-0">Papers</span>
+        </div>
+        <p class="text-sm text-surface-200 break-words">Missing {{ p.missing | map(attribute='label') | join(', ') }}</p>
+    </div>
+    <div class="shrink-0 flex items-center gap-2">
+        <a href="{{ url_for('businesses.detail', id=p.business.id) }}#documents"
+           class="min-h-[44px] inline-flex items-center px-4 text-sm font-semibold rounded-xl btn-brand transition-all">Open</a>
+    </div>
+</div>
+{% endfor %}

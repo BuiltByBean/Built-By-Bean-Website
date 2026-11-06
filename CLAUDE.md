@@ -1573,6 +1573,35 @@ articles a Certificate of Formation; a DBA's lawful footing is an Assumed Name
 Certificate), stored on the volume under `business_documents/` exactly as a
 return's confirmation is. `tools/test_business_papers.py`.
 
+**What a company must hold, and its app's door to it** (issue #31, Michael,
+2026-11-06: "a place where I store my business like IRS documents ... my Texas
+sales license ... pointed out to me when there is no upload ... if I'm over in
+the Entertain HQ admin portal ... really nice PDF overlays ... ultimately
+stored" here). `business_papers.py` is the one answer to "what should be on
+file", read by the business page, Needs attention and the hub, decided by what
+a company IS, never typed per company: formed (a formation date, SOS file
+number or Texas taxpayer number) means a Certificate of Formation and the IRS
+EIN letter (CP 575 or 147C); collecting Texas sales tax (a WebFile number, a
+registration or first-sale date, a location) adds the sales and use tax
+permit; more than one owner on its Books adds the company agreement; a DBA
+holds only its Assumed Name Certificate; an idea holds nothing. No employee is
+on the board, so payroll papers are not asked for yet. The Documents card is
+one list (each required paper held, missing with its own Upload and Not
+needed, or set aside with Ask for it; then everything else), a `data-live`
+region, and picking a file on a missing row IS the upload (its own form,
+`requestSubmit`). Not needed is a `DeadlineDone` keyed `paper:<id>:<kind>`.
+Needs attention has one row per company naming each missing paper (CEO only);
+the badge's count is cached a minute per worker and cleared by every press,
+the page reads fresh. `/api/hub/documents` and `/api/hub/documents/get` are a
+company's app listing and fetching its OWN papers, signed with its hub secret,
+read only, `private, no-store`; another company's id answers exactly like an id
+that does not exist, and a DBA's app sees only what is filed on the DBA, never
+its company's EIN letter. Uploads stay Michael's, on the business page. The app
+side (EntertainHQ's PDF overlay) is a gap on its blueprint.
+`tools/test_business_documents.py`, `tools/test_business_documents_browser.py`
+(320, 375, 1600, every press inside its own row: the first layout hung Upload
+7px past its row at 320 while the screen-edge check passed).
+
 **The map: a network of everything that makes a business run**
 (`/admin/businesses/<id>/map`, `business_map.layout`, pure). Three versions
 shipped on 2026-11-02 before it was right, and the owner's words on the first

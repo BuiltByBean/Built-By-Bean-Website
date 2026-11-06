@@ -153,6 +153,23 @@ def _deadline_rows():
         return empty
 
 
+def _paper_rows():
+    """A company missing a paper it must hold (business_papers.py), for the
+    CEO alone, like the business pages the row opens. Worked out from the
+    papers on file, so the upload is what clears it, in every worker at once."""
+    if not _is_ceo():
+        return []
+    import business_papers
+    return business_papers.missing_rows()
+
+
+def _paper_count():
+    if not _is_ceo():
+        return 0
+    import business_papers
+    return business_papers.missing_count()
+
+
 def attention_counts():
     """The sidebar's badges.
 
@@ -176,9 +193,10 @@ def attention_counts():
     import live_watch
     live = len(live_watch.attention_rows())
     books = len(_books_rows())
+    papers = _paper_count()
     return {"messages": messages, "bills": bills, "night": night, "live": live, "books": books,
-            "hosting": increases_due_count(), "deadlines": tax,
-            "total": messages + bills + night + tax + live + books}
+            "papers": papers, "hosting": increases_due_count(), "deadlines": tax,
+            "total": messages + bills + night + tax + live + books + papers}
 
 
 def _books_rows():
@@ -206,10 +224,11 @@ def index():
     import live_watch
     live = live_watch.attention_rows(force=True)
     books = _books_rows()
+    papers = _paper_rows()
     return render_template("pm/attention/index.html", messages=messages,
-                           bills=bills, night=night, tax=tax, live=live, books=books,
+                           bills=bills, night=night, tax=tax, live=live, books=books, papers=papers,
                            total=len(messages) + len(bills) + (1 if night else 0) + tax_total + len(live)
-                           + len(books),
+                           + len(books) + len(papers),
                            here=url_for("attention.index"))
 
 
