@@ -319,9 +319,20 @@ def decide_many(decisions, who="bank skill"):
         if line is None:
             results.append({"id": line_id, "error": "no such line"})
             continue
+        # A line already settled is only settled again when the decision says
+        # so (`resettle`), with what it was before in the answer, so the
+        # change can be put back: a charge filed as personal that was a
+        # business expense (Apple's developer program, 2026-11-06) or booked
+        # to the wrong company (LegalZoom forming EntertainHQ).
+        before = None
         if line.disposition != "review":
-            results.append({"id": line_id, "skipped": f"already {line.disposition}"})
-            continue
+            if not d.get("resettle"):
+                results.append({"id": line_id, "skipped": f"already {line.disposition}"})
+                continue
+            from models import Expense
+            exp = db.session.get(Expense, line.expense_id) if line.expense_id else None
+            before = {"disposition": line.disposition, "business_id": exp.business_id if exp else line.business_id,
+                      "category": exp.category if exp else None, "rule_id": line.rule_id}
         disposition = str(d.get("disposition") or "").strip().lower()
         if disposition not in allowed:
             results.append({"id": line_id, "error": f"disposition must be one of {sorted(allowed)}"})
@@ -340,6 +351,7 @@ def decide_many(decisions, who="bank skill"):
             vendor=str(d.get("vendor") or "")[:120], pattern=str(d.get("pattern") or "")[:120],
             keep=keep, owner_name=str(d.get("owner_name") or "")[:120])
         line = db.session.get(BankTransaction, line_id)
-        results.append({"id": line_id, "settled": line.disposition, "rule": keep})
+        results.append({"id": line_id, "settled": line.disposition, "rule": keep,
+                        **({"before": before} if before else {})})
     bank_feed.fold_duplicates()
     return results, alike

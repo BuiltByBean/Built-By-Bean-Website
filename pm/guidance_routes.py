@@ -452,7 +452,7 @@ def books_search():
                     .filter(db.or_(Receipt.sender.ilike(like), Receipt.subject.ilike(like), Receipt.vendor.ilike(like)))
                     .order_by(Receipt.received_on).limit(300).all())
         out[w] = {
-            "bank": [{"date": str(t.occurred_on), "amount": t.amount, "counterparty": t.counterparty,
+            "bank": [{"id": t.id, "date": str(t.occurred_on), "amount": t.amount, "counterparty": t.counterparty,
                       "disposition": t.disposition, "company": names.get(t.business_id),
                       "account": getattr(c, "name", None) or getattr(c, "provider", None),
                       "kind": getattr(c, "kind", None), "rule": (rules[t.rule_id].vendor if t.rule_id in rules else None),
@@ -466,6 +466,67 @@ def books_search():
                          for r, m in receipts],
         }
     return jsonify(out)
+
+
+@guidance_bp.route("/books/mail-search")
+def books_mail_search():
+    """Every message in every receipt mailbox that names a word, at any date,
+    read only (the mailbox is opened read only, nothing is stored). The board
+    keeps only the mail it used, so an order older than the books' first
+    bank line was nowhere a session could see it (issue #18: Built by Bean's
+    own LegalZoom order). Answers date, sender, subject and the amounts the
+    receipt reader finds in each."""
+    import email
+    from email.header import decode_header, make_header
+    import receipts_service
+    from models import ReceiptMailbox, Business
+    word = (request.args.get("q") or "").strip()
+    if not word or '"' in word:
+        return jsonify({"error": "give ?q= one word or phrase"}), 400
+    names = {b.id: b.name for b in Business.query.all()}
+    out = []
+    for box in ReceiptMailbox.query.order_by(ReceiptMailbox.id).all():
+        row = {"mailbox_company": names.get(box.business_id), "messages": []}
+        try:
+            conn = receipts_service._connect(box)
+        except Exception as err:  # noqa: BLE001
+            row["error"] = str(err)[:200]
+            out.append(row)
+            continue
+        try:
+            if "gmail" in box.imap_host:
+                status, data = conn.search(None, "X-GM-RAW", f'"{word} -in:spam -in:trash"')
+            else:
+                status, data = conn.search(None, "TEXT", word)
+            ids = (data[0] or b"").split() if status == "OK" else []
+            for mid in ids[-60:]:
+                status, parts = conn.fetch(mid, "(BODY.PEEK[])")
+                if status != "OK" or not parts or not isinstance(parts[0], tuple):
+                    continue
+                msg = email.message_from_bytes(parts[0][1])
+                parsed = {}
+                try:
+                    parsed = receipts_service.parse(parts[0][1], any_subject=True) or {}
+                except Exception:  # noqa: BLE001
+                    parsed = {}
+                text = parsed.get("text") or ""
+                try:
+                    charged = receipts_service.charged_amounts(text)
+                except Exception:  # noqa: BLE001
+                    charged = []
+                row["messages"].append({
+                    "date": str(msg.get("Date", ""))[:40],
+                    "from": str(make_header(decode_header(msg.get("From", ""))))[:100],
+                    "subject": str(make_header(decode_header(msg.get("Subject", ""))))[:140],
+                    "amount": parsed.get("amount"), "charged": sorted(charged)[:6] if charged else [],
+                })
+        finally:
+            try:
+                conn.logout()
+            except Exception:  # noqa: BLE001
+                pass
+        out.append(row)
+    return jsonify({"q": word, "mailboxes": out})
 
 
 @guidance_bp.route("/costs")
