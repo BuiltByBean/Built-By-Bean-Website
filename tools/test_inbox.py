@@ -256,6 +256,15 @@ t = "Sounds good.\n\nOn Mon, Nov 2, 2026 at 3:14 PM Michael Bean <m@b.test>\nwro
 check("a two-line 'On ... wrote:' is cut", mail_service.clean_text(t) == "Sounds good.", mail_service.clean_text(t))
 check("a signature is cut", mail_service.clean_text("Yes.\n-- \nPat\nCEO") == "Yes.")
 check("nothing left means the whole mail", mail_service.clean_text("> all quoted") == "> all quoted")
+check("a broken tag's leftovers are trimmed",
+      "width=" not in mail_service.clean_text('Optimum 96 &nbsp; alt="" width="1" height="1" />
+Your bill'))
+check("a > inside an attribute does not break a tag",
+      mail_service._strip_html('<p>Hi<img src="a?b>c" alt="" width="1"/> there</p>') == "Hi there")
+check("comments and double-escaped spaces go",
+      mail_service._strip_html("<!--[if mso]><x><![endif]--><p>ok&amp;nbsp;</p>") == "ok")
+check("the board's pages tell Cloudflare not to hide addresses",
+      "<!--email_off-->" in c.get("/admin/messages/").get_data(as_text=True))
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "All passed.")

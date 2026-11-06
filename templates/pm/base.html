@@ -1053,6 +1053,10 @@
     </script>
 </head>
 <body class="mesh-bg noise min-h-screen">
+{# Cloudflare hides every email address in a page behind "[email protected]" and a
+   script; a page swap never runs that script, so the inbox read "[email protected]"
+   for a sender (2026-11-06). Nothing behind the login needs hiding from scrapers. #}
+<!--email_off-->
 
     <!-- Mobile sidebar overlay -->
     <div x-show="sidebarOpen" x-cloak
@@ -1970,5 +1974,6 @@
 })();
 </script>
 
+<!--/email_off-->
 </body>
 </html>

@@ -162,15 +162,21 @@ def _payload(part):
         return raw.decode("utf-8", "replace")
 
 
-_TAGS = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.S | re.I)
-_TAG = re.compile(r"<[^>]+>")
+_TAGS = re.compile(r"<(script|style|head|title)[^>]*>.*?</\1>", re.S | re.I)
+_COMMENT = re.compile(r"<!--.*?-->", re.S)
+# A tag, with a ">" inside a quoted attribute kept inside it: the plain [^>]
+# version stopped at the first one and left `alt="" width="1" />` on screen.
+_TAG = re.compile(r"""<(?:"[^"]*"|'[^']*'|[^'">])*>""")
+_LOOKS_HTML = re.compile(r"<(?:[a-zA-Z][a-zA-Z0-9]*|/[a-zA-Z]|!--)[^<]{0,400}?>")
 
 
 def _strip_html(text):
-    text = _TAGS.sub(" ", text or "")
-    text = re.sub(r"<br\s*/?>|</p>|</div>|</tr>", "\n", text, flags=re.I)
+    text = _COMMENT.sub(" ", text or "")
+    text = _TAGS.sub(" ", text)
+    text = re.sub(r"<br\s*/?>|</p>|</div>|</tr>|</h[1-6]>|</li>", "\n", text, flags=re.I)
     text = _TAG.sub(" ", text)
-    text = html.unescape(text)
+    # Twice: some senders escape their entities again (&amp;nbsp;).
+    text = html.unescape(html.unescape(text)).replace("\xa0", " ").replace("\u200c", "")
     lines = [" ".join(l.split()) for l in text.splitlines()]
     return "\n".join(l for l in lines if l)
 
@@ -193,6 +199,9 @@ def body_text(msg):
         text = _strip_html(_payload(msg))
     else:
         text = _payload(msg)
+    # A "plain" part that is really HTML (some senders put their markup there).
+    if len(_LOOKS_HTML.findall(text or "")) >= 3:
+        text = _strip_html(text)
     return text.strip()[:BODY_CAP]
 
 
@@ -383,7 +392,13 @@ def clean_text(text):
     """What one person wrote, without the mail they quoted under it or their
     signature, so a thread reads like a conversation (EntertainHQ's
     cleanText). The whole mail stays in `body`; the page can show it."""
-    lines = (text or "").replace("\r\n", "\n").split("\n")
+    text = text or ""
+    if len(_LOOKS_HTML.findall(text)) >= 3:
+        text = _strip_html(text)
+    # What a broken tag left behind: `alt="" width="1" />`, and stray &nbsp;.
+    text = re.sub(r"""(?:\s*[\w:-]+=(?:"[^"]*"|'[^']*'))+\s*/?>""", " ", text)
+    text = text.replace("&nbsp;", " ")
+    lines = text.replace("\r\n", "\n").split("\n")
     out = []
     for i, line in enumerate(lines):
         s = line.strip()
