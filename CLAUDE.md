@@ -830,6 +830,15 @@ receipt check skip it, and `other_company_for` reads twins by sync type, so it
 can never move money. A Twilio account needs its key typed by Michael; the
 board can only say which one is missing or refused.
 
+**A Twilio account connects with an API key made on it** (Account SID, plus
+an SK key and its secret; the main auth token still works for an old one),
+and saving it syncs it on the press, so the flash says at once whether Twilio
+answered (`_try_key`). A saved secret is never drawn back into the form: the
+edit page wrote the auth token into the HTML as an input's value until
+2026-11-05. A blank secret keeps what is saved (`_keep_secrets`). Billed to
+offers Built by Bean, each other company as `b:<id>` (`account_business_id`)
+and each client. `tools/test_twilio_keys.py`.
+
 **A vendor knows its playbook** (Michael, the same evening: "ensure the
 vendors page uses the service icons I know we already have ... a vendor will
 connect to a service that we have a blueprint for"). `playbook_for` is the

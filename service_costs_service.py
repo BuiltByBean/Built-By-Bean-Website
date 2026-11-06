@@ -923,8 +923,13 @@ def _split_railway_month(provider, token, workspace_id, month, invs, amount, pro
 def _sync_twilio(provider):
     creds = _get_credentials(provider)
     account_sid = creds.get("account_sid", "")
-    auth_token = creds.get("auth_token", "")
-    if not account_sid or not auth_token:
+    # An API key made on the account first; the main auth token for an account
+    # connected before keys were asked for.
+    if creds.get("api_key_sid") and creds.get("api_key_secret"):
+        auth = (creds["api_key_sid"], creds["api_key_secret"])
+    else:
+        auth = (account_sid, creds.get("auth_token", ""))
+    if not account_sid or not auth[1]:
         raise ValueError("Twilio credentials not configured")
 
     now = date.today()
@@ -933,7 +938,7 @@ def _sync_twilio(provider):
     url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Usage/Records/Monthly.json"
     params = {"StartDate": start.isoformat(), "EndDate": now.isoformat()}
 
-    resp = requests.get(url, params=params, auth=(account_sid, auth_token), timeout=30)
+    resp = requests.get(url, params=params, auth=auth, timeout=30)
     resp.raise_for_status()
     data = resp.json()
 
@@ -944,7 +949,7 @@ def _sync_twilio(provider):
     try:
         who = requests.get(
             f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}.json",
-            auth=(account_sid, auth_token), timeout=15)
+            auth=auth, timeout=15)
         if who.status_code == 200:
             provider.account_label = (who.json().get("friendly_name") or "")[:200]
     except Exception:

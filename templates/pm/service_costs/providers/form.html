@@ -52,7 +52,7 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1">Secret Access Key</label>
-                <input type="password" name="aws_secret_access_key" value="{{ creds.aws_secret_access_key if editing else '' }}"
+                <input type="password" name="aws_secret_access_key" value="" autocomplete="new-password" placeholder="{{ 'Saved. Leave blank to keep it' if editing and creds.aws_secret_access_key else '' }}"
                        class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
             </div>
             <div>
@@ -67,7 +67,7 @@
             <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Railway Credentials</h3>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1">API Token</label>
-                <input type="password" name="railway_api_token" value="{{ creds.api_token if editing else '' }}"
+                <input type="password" name="railway_api_token" value="" autocomplete="new-password" placeholder="{{ 'Saved. Leave blank to keep it' if editing and creds.api_token else '' }}"
                        class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white" placeholder="railway_token_...">
                 <p class="text-xs text-surface-400 mt-1">railway.com > Account Settings > Tokens, with no workspace chosen</p>
             </div>
@@ -108,10 +108,8 @@
             {% endif %}
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1.5">Billed to</label>
-                {% set owner_opts = [["", "Built by Bean (my own card)"]] %}
-                {% for c in account_clients %}{% set _ = owner_opts.append([c.id, c.name ~ " (their card)"]) %}{% endfor %}
-                {{ select_dropdown("account_client_id", owner_opts,
-                                   provider.account_client_id if editing else "",
+                {% set payer = (provider.account_client_id or (('b:' ~ provider.account_business_id) if provider.account_business_id else '')) if editing else '' %}
+                {{ select_dropdown("account_client_id", payer_choices, payer,
                                    "Built by Bean (my own card)", full_width=true) }}
             </div>
         </div>
@@ -125,8 +123,19 @@
                        class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white" placeholder="AC...">
             </div>
             <div>
-                <label class="block text-sm font-medium text-surface-300 mb-1">Auth Token</label>
-                <input type="password" name="twilio_auth_token" value="{{ creds.auth_token if editing else '' }}"
+                <label class="block text-sm font-medium text-surface-300 mb-1">API key SID</label>
+                <input type="text" name="twilio_api_key_sid" value="{{ creds.api_key_sid if editing else '' }}"
+                       class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white" placeholder="SK...">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1">API key secret</label>
+                <input type="password" name="twilio_api_key_secret" value="" autocomplete="new-password"
+                       placeholder="{{ 'Saved. Leave blank to keep it' if editing and creds.api_key_secret else '' }}"
+                       class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1">Auth Token (only without an API key)</label>
+                <input type="password" name="twilio_auth_token" value="" autocomplete="new-password" placeholder="{{ 'Saved. Leave blank to keep it' if editing and creds.auth_token else '' }}"
                        class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white">
             </div>
         </div>
@@ -136,7 +145,7 @@
             <h3 class="text-sm font-semibold uppercase tracking-wider text-surface-400">Cloudflare Credentials</h3>
             <div>
                 <label class="block text-sm font-medium text-surface-300 mb-1">API Token</label>
-                <input type="password" name="cf_api_token" value="{{ creds.api_token if editing else '' }}"
+                <input type="password" name="cf_api_token" value="" autocomplete="new-password" placeholder="{{ 'Saved. Leave blank to keep it' if editing and creds.api_token else '' }}"
                        class="w-full input-ring min-h-[44px] px-4 py-2.5 text-sm bg-surface-800 text-white">
                 <p class="text-xs text-surface-400 mt-1">Needs Account:Billing:Read permission</p>
             </div>

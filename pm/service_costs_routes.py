@@ -171,8 +171,13 @@ def _extract_credentials(name):
         return {"api_token": request.form.get("railway_api_token", "").strip(),
                 "workspace_id": request.form.get("railway_workspace_id", "").strip()}
     elif name == "twilio":
+        # An API key made on the account (Twilio's own advice, and the
+        # playbook's) is the way in; the main auth token still works for an
+        # account set up before, and is what Twilio's Auth Token rotation breaks.
         return {
             "account_sid": request.form.get("twilio_account_sid", "").strip(),
+            "api_key_sid": request.form.get("twilio_api_key_sid", "").strip(),
+            "api_key_secret": request.form.get("twilio_api_key_secret", "").strip(),
             "auth_token": request.form.get("twilio_auth_token", "").strip(),
         }
     elif name == "cloudflare":
@@ -183,15 +188,52 @@ def _extract_credentials(name):
     return {}
 
 
+# A saved secret is never drawn back into a page (the form wrote the auth
+# token into the HTML as an input's value until 2026-11-05). A field left
+# blank on edit keeps what was saved.
+SECRET_FIELDS = ("aws_secret_access_key", "api_token", "auth_token", "api_key_secret")
+
+
+def _keep_secrets(creds, saved):
+    for k in SECRET_FIELDS:
+        if k in creds and not creds[k] and saved.get(k):
+            creds[k] = saved[k]
+    return creds
+
+
 def _account_client_id():
-    """Whose account the credentials open, or None for Built by Bean's own."""
+    """Whose account the credentials open, or None for Built by Bean's own.
+    The Billed to picker carries a client as its id and a company as "b:<id>"."""
     raw = (request.form.get("account_client_id") or "").strip()
-    if not raw:
+    if not raw or raw.startswith("b:"):
         return None
     try:
         return int(raw)
     except ValueError:
         return None
+
+
+def _account_business_id():
+    """Another of Michael's companies that pays for the account, or None."""
+    raw = (request.form.get("account_client_id") or "").strip()
+    if not raw.startswith("b:"):
+        return None
+    try:
+        return int(raw[2:])
+    except ValueError:
+        return None
+
+
+def _payer_choices():
+    """Billed to: Built by Bean, the other companies, then the clients."""
+    import books_service
+    from models import Business
+    home = books_service.board_business()
+    companies = [b for b in Business.query.filter(Business.parent_id.is_(None)).order_by(Business.name).all()
+                 if not home or b.id != home.id]
+    return ([["", "Built by Bean (my own card)"]]
+            + [[f"b:{b.id}", f"{b.name} (its own card)"] for b in companies]
+            + [[c.id, f"{c.name} (their card)"] for c in Client.query.order_by(Client.name).all()])
 
 
 def _reconcile_ownership(provider):
@@ -221,6 +263,20 @@ def _reconcile_ownership(provider):
             touched += 1
     db.session.commit()
     return touched
+
+
+def _try_key(provider):
+    """A Twilio account is read the moment its key is saved, so the press
+    says whether the key works rather than tomorrow's night. A note for the
+    flash, in the page's own words."""
+    if provider.name != "twilio" or not provider.is_active:
+        return ""
+    import vendor_discovery
+    count, error = sync_provider(provider.id)
+    if error:
+        return " " + (vendor_discovery.plain_error(provider) or error)
+    label = f" ({provider.account_label})" if provider.account_label else ""
+    return f" Twilio answered{label}: {count} cost entr{'ies' if count != 1 else 'y'} this month."
 
 
 def _billing_day():
@@ -367,10 +423,12 @@ def provider_create():
             monthly_cost=_monthly_cost(name),
             billing_day=_billing_day(),
             account_client_id=_account_client_id(),
+            account_business_id=_account_business_id(),
         )
         db.session.add(provider)
         db.session.commit()
-        flash(f"{display_name} provider added.", "success")
+        note = _try_key(provider)
+        flash(f"{display_name} account added.{note}", "warning" if "turned" in note or "did not" in note else "success")
         return redirect(url_for("vendors.index"))
 
     return render_template("pm/service_costs/providers/form.html",
@@ -378,7 +436,7 @@ def provider_create():
         editing=False,
         provider=None,
         manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
-        account_clients=Client.query.order_by(Client.name).all(),
+        payer_choices=_payer_choices(),
     )
 
 
@@ -388,7 +446,8 @@ def provider_edit(id):
     provider = db.session.get(ServiceProvider, id) or abort(404)
 
     if request.method == "POST":
-        creds = _extract_credentials(provider.name)
+        saved = json.loads(provider.credentials_json) if provider.credentials_json else {}
+        creds = _keep_secrets(_extract_credentials(provider.name), saved)
         provider.credentials_json = json.dumps(creds)
         provider.monthly_cost = _monthly_cost(provider.name)
         provider.billing_day = _billing_day()
@@ -398,11 +457,12 @@ def provider_edit(id):
             )
         provider.is_active = "is_active" in request.form
         provider.vendor = (request.form.get("vendor") or "").strip()[:100] or provider.vendor
-        was = provider.account_client_id
+        was = (provider.account_client_id, provider.account_business_id)
         provider.account_client_id = _account_client_id()
+        provider.account_business_id = _account_business_id()
         db.session.commit()
         note = ""
-        if provider.account_client_id != was:
+        if (provider.account_client_id, provider.account_business_id) != was:
             # Only an expense this vendor wrote before the bank took over (and
             # Stripe's fees, which never cross a bank) can move here; a bank
             # line's expense stays with the bank line.
@@ -419,7 +479,10 @@ def provider_edit(id):
             count, error = sync_provider(provider.id)
             note += (f" Railway could not be read: {error}" if error
                      else f" Bills pulled from Railway, {count} project entr{'ies' if count != 1 else 'y'} written.")
-        flash(f"{provider.display_name} updated.{note}", "success" if "could not" not in note else "warning")
+        if provider.name == "twilio":
+            note += _try_key(provider)
+        flash(f"{provider.display_name} updated.{note}",
+              "success" if not any(w in note for w in ("could not", "turned", "did not")) else "warning")
         return redirect(url_for("vendors.index"))
 
     creds = json.loads(provider.credentials_json) if provider.credentials_json else {}
@@ -429,7 +492,7 @@ def provider_edit(id):
         provider=provider,
         creds=creds,
         manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
-        account_clients=Client.query.order_by(Client.name).all(),
+        payer_choices=_payer_choices(),
     )
 
 

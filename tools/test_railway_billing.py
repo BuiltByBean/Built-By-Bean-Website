@@ -323,10 +323,12 @@ with c.session_transaction() as s:
 print("The provider form")
 html = c.get(f"/admin/service-costs/providers/{ids['ehq']}/edit").get_data(as_text=True)
 check("shows the workspace", EHQ_WS in html and 'name="railway_workspace_id"' in html)
+check("Billed to opens on the company that pays", f'"b:{ids["ehq_biz"]}"' in html or f"b:{ids['ehq_biz']}" in html)
 calls.clear()
+# What the page posts: Billed to carries the company as b:<id> (2026-11-05).
 r = c.post(f"/admin/service-costs/providers/{ids['ehq']}/edit", data={
     "railway_api_token": "account-token", "railway_workspace_id": EHQ_WS, "is_active": "1",
-    "account_client_id": ""}, follow_redirects=True)
+    "account_client_id": f"b:{ids['ehq_biz']}"}, follow_redirects=True)
 with application.app_context():
     p = db.session.get(ServiceProvider, ids["ehq"])
     check("saving keeps the workspace and the business", json.loads(p.credentials_json).get("workspace_id") == EHQ_WS
