@@ -138,12 +138,25 @@ check("back is a bordered button, never bare text", 'class="sc-back-btn"' in app
       and "&larr; All products" not in app_page)
 check("the tour has no arrows", "sc-nav-btn" not in app_page)
 check("a product page has no More products list", "More products" not in app_page)
+with application.app_context():
+    e_ = db.session.get(AppLink, ehq_id)
+    e_.catalog = True
+    e_.store_versions = json.dumps({"app_store": {"status": "live", "url": "https://apps.apple.com/app/id1"},
+                                    "play": {"status": "not_live"}})
+    db.session.commit()
+ehq_page = c.get(f"/admin/catalog/preview/{ehq_id}").get_data(as_text=True)
+check("a live App Store listing is a button", "https://apps.apple.com/app/id1" in ehq_page)
+check("a store that does not list it yet is not", "play.google.com" not in ehq_page)
+check("the app's own site is a button", 'href="https://entertainhq.com"' in ehq_page)
+check("a renamed app never links its client's site", "robinsonandcodesign" not in app_page)
+check("a card is the logo, the name, the summary and Read more",
+      "Read more" in page and "See it" not in page and 'class="sc-built"' not in page)
 check("and no platform pills", "class=\"sc-chip" not in app_page)
 
 import re as _re  # noqa: E402
 # Text alone is never a button (Handbook). Each kind below draws a border or a
 # fill; sc-brand is the logo beside the name. Anything else fails.
-BORDERED = {"btn", "sc-back-btn", "sc-thumb", "sc-other", "sc-brand", "sc-card"}
+BORDERED = {"btn", "sc-back-btn", "sc-link-btn", "sc-thumb", "sc-other", "sc-brand", "sc-card"}
 for label, html in (("front", page), ("product page", app_page)):
     bare = []
     for tag in _re.findall(r"<(?:a|button)\b[^>]*>", html):

@@ -304,6 +304,25 @@ def capabilities(tile, book=None):
     return found
 
 
+def site_url(tile):
+    """The app's own web address for a prospect to visit, or None. Never for
+    an app renamed for the catalog: its site carries the client's name."""
+    if tile.renamed:
+        return None
+    url = tile.url or ""
+    return url if url.startswith(("https://", "http://")) else None
+
+
+def store_links(tile):
+    """[(label, listing url)] for each store the store itself says lists the
+    app now: the same answers My Apps shows (store_versions_service)."""
+    summary = tile.stores
+    if not summary:
+        return []
+    return [(label, row["url"]) for label, row in summary["rows"]
+            if row.get("status") == "live" and row.get("url")]
+
+
 def highlights(tile, book=None):
     """The short list of what is built into one app, for the front of the
     showcase: Michael's own (catalog_highlights), else what its services and

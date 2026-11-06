@@ -10,9 +10,12 @@
   invoicing and payment processors ... oh and he also has an app that works
   with 400 talent and staff".
 
-  So: one quiet line of facts under the headline, then each product with its
-  scale in colour and a short list of what is built into it, then every
-  service, the names a prospect knows first, each with what it is for.
+  So: one quiet line of facts under the headline, then each product, then
+  every service, the names a prospect knows first, each with what it is for.
+  A card is the logo, the name, the summary and Read more, nothing else
+  (Michael, the same day: "all it needs is on the card is the logo, name,
+  summary and see it (changed to read more)"); the scale and the feature
+  list are on the product's own page.
 #}
 
 {% block content %}
@@ -30,20 +33,13 @@
 <section class="sc-section">
     <div class="sc-products">
         {% for app in apps %}
-        {% set built = cs.highlights(app, book) %}
         <a href="{{ app_href(app) }}" class="sc-card sc-product">
             <div class="sc-app-head">
                 {{ m.app_icon(app) }}
-                <div style="min-width:0; flex:1">
-                    <div class="sc-app-name">{{ app.showcase_name }}</div>
-                    {% if app.catalog_scale %}<div class="sc-scale">{{ app.catalog_scale }}</div>{% endif %}
-                </div>
+                <div class="sc-app-name" style="min-width:0; flex:1">{{ app.showcase_name }}</div>
             </div>
             {% if app.catalog_pitch %}<p class="sc-app-pitch">{{ app.catalog_pitch }}</p>{% endif %}
-            {% if built %}
-            <ul class="sc-built">{% for b in built %}<li>{{ b }}</li>{% endfor %}</ul>
-            {% endif %}
-            <span class="sc-see">See it <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg></span>
+            <span class="sc-see">Read more <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg></span>
         </a>
         {% endfor %}
     </div>

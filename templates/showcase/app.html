@@ -1,5 +1,6 @@
 {% extends "showcase/base.html" %}
 {% import "showcase/_macros.html" as m with context %}
+{% from "pm/components/brand_icons.html" import app_store, google_play %}
 
 {#
   One product: what it is, a tour of its screens, what it does, what it is
@@ -36,11 +37,6 @@
         </div>
         {% if app.catalog_scale %}<p class="sc-scale" style="margin-top:12px">{{ app.catalog_scale }}</p>{% endif %}
         {% if app.catalog_pitch %}<p class="sc-pp-pitch">{{ app.catalog_pitch }}</p>{% endif %}
-        {% if app.demo_url %}
-        <div class="sc-actions" style="margin-top:16px">
-            <a href="{{ app.demo_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><span>Try it live</span></a>
-        </div>
-        {% endif %}
 
         {% if points %}
         <h2 class="sc-pp-h">What it does</h2>
@@ -66,6 +62,29 @@
 
     <div class="sc-pp-visual">
         <div class="sc-pp-bar">
+            {# The places to go, as My Apps offers them (Michael, 2026-11-06): the
+               live demo once there is one, the app's own site, and each store
+               listing the store itself says is live. A renamed app has no site
+               button, because its site carries the client's name. #}
+            {% set site = cs.site_url(app) %}
+            {% set listings = cs.store_links(app) %}
+            {% if app.demo_url or site or listings %}
+            <div class="sc-links">
+                {% if app.demo_url %}
+                <a href="{{ app.demo_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary"><span>Try it live</span></a>
+                {% endif %}
+                {% if site %}
+                <a href="{{ site }}" target="_blank" rel="noopener noreferrer" class="sc-link-btn" title="{{ app.showcase_name }} on the web">
+                    {{ m.platform_icon('web') }}<span>Website</span>
+                </a>
+                {% endif %}
+                {% for label, url in listings %}
+                <a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="sc-link-btn" title="{{ app.showcase_name }} on {{ label }}">
+                    {% if label == 'App Store' %}{{ app_store('sc-store-icon') }}{% else %}{{ google_play('sc-store-icon') }}{% endif %}<span>{{ label }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
             <a href="{{ base_url }}" class="sc-back-btn" title="All products">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
                 <span>All products</span>
