@@ -410,6 +410,31 @@ def clients():
         for c in rows]})
 
 
+@guidance_bp.route("/taxes/sales")
+def taxes_sales():
+    """The sales tax page's figures, read only, from the same ledger
+    (sales_tax.build over the board's invoice rows; no Stripe call), so a
+    session can check what the page says without a browser (issue #19)."""
+    import sales_tax
+    from models import Invoice, Project, SalesTaxSetting
+    s = SalesTaxSetting.get()
+    led = sales_tax.build(s, Client.query.order_by(Client.name, Client.id).all(), Invoice.query.all(),
+                          Project.query.all())
+    keys = ("sales", "due", "charged", "on_invoices", "billed_back", "short", "left", "to_bill",
+            "drafted", "billed", "collected")
+    return jsonify({
+        "rate": {"rate_percent": s.rate_percent, "taxable_share": s.taxable_share,
+                 "of_every_dollar": s.effective_percent},
+        "totals": {k: led["totals"].get(k) for k in keys},
+        "clients": [dict({k: e.get(k) for k in keys}, name=e["client"].name, exempt=e["exempt"],
+                         catchups=[{"number": c.invoice_number, "status": c.status, "total": c.total,
+                                    "paid": c.amount_paid} for c in e["catchups"]])
+                    for e in led["clients"]],
+        "quarters": [{"label": q["label"], "due": q["due"], "charged": q["charged"],
+                      "billed_back": q["billed_back"]} for q in led["quarters"]],
+    })
+
+
 @guidance_bp.route("/books/carryover")
 def books_carryover():
     """What making the bank line the only thing that books an expense does to
