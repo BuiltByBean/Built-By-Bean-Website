@@ -269,28 +269,67 @@ HOSTING_RAISE_REASON = (
 # data is theirs. An earlier version said only that Built by Bean "retains the
 # right to reuse the underlying code in other work for other clients", which
 # is true and narrower than the freedom the business actually needs.
+#
+# Tightened 2026-11-06 (issue #20), from Michael's own review against US law.
+# Software is not one of the nine "work made for hire" categories (17 USC 101),
+# so a contractor owns the code by default, and ownership moves only by a
+# signed writing (17 USC 204(a)). The danger is the other direction: a court
+# that finds no limits on the client's use can find an unlimited implied
+# license (Asset Marketing Systems v. Gagnon, 9th Cir. 2008). So the clauses
+# below say outright: no work for hire, no assignment unless Built by Bean
+# signs one, the fee buys services and a license and not the code, work done
+# to the client's own request is Built by Bean's like everything else, the
+# client's ideas become Built by Bean's once built in (an early client shapes
+# the product, and must never later claim a feature was theirs), and the
+# license has written limits. In return the client gets promises that make
+# it easy to sign: their brand never goes on another customer's app, their
+# data is never shown to another customer, and accounts in their name are
+# theirs.
 IP_TERMS = [
     "All software, source code, designs, documentation and other work product created "
-    "by Built by Bean LLC, including everything built for or delivered to the Client, is "
-    "and remains the sole and exclusive property of Built by Bean LLC. Nothing in this "
-    "agreement, and no payment made under it, transfers ownership of any of it to the "
-    "Client.",
+    "by Built by Bean LLC, including everything built for or delivered to the Client and "
+    "every feature, configuration, design or change made at the Client's request or to "
+    "the Client's specification, is and remains the sole and exclusive property of Built "
+    "by Bean LLC. Nothing in this agreement, and no payment made under it, transfers "
+    "ownership of any of it to the Client.",
+
+    "Nothing created under this agreement is a \"work made for hire\" for the Client, and "
+    "no assignment of any copyright or other intellectual property is made or implied. "
+    "Ownership of any part of the work product can pass to the Client only by a separate "
+    "written assignment, signed by Built by Bean LLC, that names what is assigned. The "
+    "fees paid under this agreement are for development services and for the license "
+    "below. They are not the purchase price of any software or intellectual property.",
 
     "Built by Bean LLC is free to use, reuse, copy, modify, combine, license, distribute, "
     "sell and otherwise deal with that work product, in whole or in part, in any way and "
     "for any purpose it chooses, including reusing it in work for other clients and "
-    "packaging it, or any product derived from it, for license or sale to anyone. It owes "
-    "the Client no notice, consent, credit, royalty or other payment for doing so.",
+    "packaging it, or any product derived from it, for license or sale to anyone, "
+    "including the Client's competitors. It owes the Client no notice, consent, credit, "
+    "royalty, accounting or other payment for doing so. The Client has no right to any "
+    "revenue Built by Bean LLC earns from it, and no exclusivity of any kind, unless a "
+    "separate written agreement signed by both parties says otherwise.",
 
     "On receipt of full payment of the build fee, the Client is granted a perpetual, "
     "royalty-free, non-exclusive, non-transferable license to use the delivered "
     "application for the Client's own business, with no renewal, no expiry and no "
     "recurring license fee. Until full payment is received, the Client has no license and "
-    "no right to use the work product.",
+    "no right to use the work product. The Client may let its own employees, contractors "
+    "and customers use the application for the Client's business. Every right not "
+    "expressly granted here is kept by Built by Bean LLC.",
 
-    "That license does not permit the Client to copy, resell, sublicense, distribute or "
-    "provide the application or its code to any third party, or to offer it to others as "
-    "a service.",
+    "That license does not permit the Client, or anyone acting for the Client, to copy, "
+    "resell, sublicense, rent, white-label, distribute or provide the application or its "
+    "code to any third party, or to offer it to others as a service; to modify it or make "
+    "derivative works of it; to reverse engineer, decompile or otherwise try to obtain its "
+    "source code; to remove any notice of ownership from it; or to use it, or anything "
+    "learned from it, to build or help build a competing product.",
+
+    "Ideas, suggestions, feature requests, feedback, workflows and specifications the "
+    "Client gives Built by Bean LLC (\"Feedback\") may be used and built into Built by "
+    "Bean LLC's software and products, for any customer, without restriction, credit or "
+    "payment. To the extent the Client has any rights in Feedback as built into that "
+    "software, the Client assigns them to Built by Bean LLC. The Client's own data, "
+    "content and brand are not Feedback.",
 
     "The Hosting & Infrastructure Fee is the only recurring charge. It pays for keeping "
     "the application online and the Client's data stored and backed up; it is not a "
@@ -302,11 +341,79 @@ IP_TERMS = [
     "Client data, meaning customer records, content, files and any material the Client "
     "provides or generates through the application, is and remains the sole property of "
     "the Client at all times. Built by Bean LLC claims no ownership of it, will not sell "
-    "or license it to any third party, and will provide the Client a complete export in a "
-    "machine-readable format on written request.",
+    "or license it to any third party, will never disclose it to any other customer, and "
+    "will provide the Client a complete export in a machine-readable format on written "
+    "request.",
+
+    "The Client's business name, trademarks, logos, photographs and written content "
+    "(\"Client Materials\") remain the Client's. Built by Bean LLC uses Client Materials "
+    "and client data only to build, host, support and improve the Client's application, "
+    "and will never put the Client's name, logo or brand on any other customer's product.",
+
+    "Built by Bean LLC may collect and use aggregated, de-identified information about how "
+    "its software is used and how it performs, which does not identify the Client or any "
+    "individual, to operate and improve its software. That information belongs to Built "
+    "by Bean LLC.",
+
+    "Domain names, app store listings and developer accounts registered in the Client's "
+    "name belong to the Client. Those registered in Built by Bean LLC's name, and every "
+    "hosting account, server and code repository, belong to Built by Bean LLC. Holding an "
+    "account or a listing gives neither party any right in what the other owns. Where the "
+    "application is published under the Client's own app store account, the Client gives "
+    "Built by Bean LLC the access needed to build, submit and update it.",
 
     "Built by Bean LLC may show completed work in its portfolio unless the Client asks "
     "otherwise in writing before the project starts.",
+]
+
+# Confidentiality, which no client document carried until 2026-11-06: the
+# add-on and addendum said a SOW's confidentiality terms applied, and the SOW
+# had none. Mutual, because a client hands over their customers and their
+# books, and source code is named so "confidential" is not argued about.
+CONFIDENTIALITY_TERMS = [
+    "Each party keeps the other's non-public information confidential and uses it only to "
+    "perform this agreement. The application's source code, architecture and technical "
+    "design, and Built by Bean LLC's pricing, are Built by Bean LLC's confidential "
+    "information. This continues for three (3) years after the work ends, and for as long "
+    "as the law protects it in the case of source code or a trade secret.",
+]
+
+# The paperwork around the paperwork. A client's purchase order or vendor
+# onboarding form can carry "work for hire" or "assigns all rights", and a
+# signature on it is the one way the clauses above could be undone by
+# accident. And the agreement has to be able to follow the software if
+# Built by Bean ever sells it.
+PAPER_TERMS = [
+    "This agreement controls over any purchase order, vendor form, onboarding document or "
+    "other paperwork the Client issues, whatever it says, including any \"work for hire\" "
+    "or assignment language. None of it changes this agreement unless Built by Bean LLC "
+    "signs it expressly agreeing to the change.",
+
+    "Built by Bean LLC may assign this agreement, in whole or in part, including to a "
+    "buyer of the software or of its business. The Client may not assign it without Built "
+    "by Bean LLC's written consent.",
+
+    "The terms on ownership, the license and its limits, Feedback, confidentiality and "
+    "liability continue after the work and this agreement end.",
+]
+
+# Everything a client document carries about ownership, in one list, so the
+# SOW, the engagement letter and the shorter documents read the same words.
+CLIENT_TERMS = [*IP_TERMS, *CONFIDENTIALITY_TERMS, *PAPER_TERMS]
+
+# The deal in plain words, at the top of a Statement of Work, before anything
+# legal. A client rarely fights a deal they understood up front; they fight a
+# surprise. The first line is the callout's heading.
+PLAIN_WORDS = [
+    "In plain words",
+    "Yours: your business, your brand, logo and content, your customer data, and any "
+    "domain or app store account in your name. Your data can be exported any time.",
+    "Built by Bean's: the software and its code, including everything built for you. "
+    "Built by Bean may keep improving it and offer it to other businesses.",
+    "What you get: a permanent license to use your application for your business, with "
+    "no license fee, ever. Hosting is the only recurring charge.",
+    "What Built by Bean will not do: sell or share your data, or put your brand on anyone "
+    "else's product. The terms below are what govern.",
 ]
 
 
@@ -478,9 +585,9 @@ STANDALONE_PROTECTIONS = [
     "materials it provides do not infringe third-party rights, and indemnifies Built by "
     "Bean LLC against any claim arising from Client-provided materials.",
 
-    # Ownership: the seven sentences above, spliced in here so the shorter
-    # documents carry exactly what the Statement of Work carries.
-    *IP_TERMS,
+    # Ownership, confidentiality and the paperwork terms, spliced in here so
+    # the shorter documents carry exactly what the Statement of Work carries.
+    *CLIENT_TERMS,
 
     "Built by Bean LLC has no obligation to perform work beyond what is described in this "
     "agreement unless separately contracted in writing.",
@@ -1278,6 +1385,381 @@ def build_partnership(*, partner_name, venture, share_pct, basis="net_profit",
     style.bullets(PARTNERSHIP_PROTECTIONS, size=8.5)
 
     own, client = _signatures(style, partner_name, date_str, countersign, script_font)
+    return bytes(pdf.output()), own, client, pdf.w, pdf.h
+
+
+# ── Founding customer ────────────────────────────────────
+#
+# The fourth kind of deal (Michael, 2026-11-06, issue #20), next to a client
+# build (the SOW), a revenue share and the Data Dungeon profit share. A client
+# pays for an app that is Built by Bean's own product from the first day, and
+# Built by Bean means to sell it to other businesses. Deed in Hand is the
+# first: "I'm going to turn it into an app that I own ... they will have
+# directive guidance, but it's my app ... They just have freedom to use it."
+#
+# Three things this document has to get right that no other one does:
+#
+# - It is not an investment. Money handed over in the hope that somebody
+#   else's work makes it worth more can be a security (the Howey test:
+#   money, a common enterprise, profits expected from the efforts of others).
+#   So the customer is buying a build and the use of a product, its benefit
+#   is that use and never grows with the product's success, and it gets no
+#   stake, return, revenue or say. FOUNDING_NOT says each in terms.
+# - The product is Built by Bean's, name and logo included: Michael made the
+#   name and the logo, so the customer assigns anything it might claim in
+#   them.
+# - If the product is shut down, the customer is not stranded with a hosted
+#   app that no longer runs: 90 days notice, its data, and the source code of
+#   its own version as delivered at the end of the first build, licensed for
+#   its own business only. Never the name, never later versions, never the
+#   right to sell it. Michael's three answers, the same day.
+#
+# The founding hosting fee is a fixed number, not "at cost": a fee defined by
+# Built by Bean's costs invites an argument over the receipts. It can only
+# rise to pass on a real increase in what it costs to host the account, and
+# never above what other customers pay.
+
+FOUNDING_NOT = [
+    "The Customer is buying development services and the use of a product. It is not "
+    "making an investment, a loan or a contribution of capital, and nothing it pays is "
+    "held for it or returnable to it except as this agreement says.",
+
+    "The Customer receives no equity, membership interest, share, unit, option, warrant, "
+    "profits interest, royalty, or share of any revenue, profit, sale proceeds or value of "
+    "the Product or of Built by Bean LLC, and no right to acquire any of them.",
+
+    "The Customer's benefit under this agreement is the use of the Product for its own "
+    "business. That benefit does not depend on, and does not grow with, the number of "
+    "other customers the Product has or the money it makes, and the Customer has no "
+    "expectation of any financial return from the Product's success.",
+
+    "This agreement does not create a partnership, joint venture, agency, franchise or "
+    "fiduciary relationship. Neither party may bind the other, make a promise for the "
+    "other, or hold itself out as acting for the other.",
+
+    "Every decision about the Product is Built by Bean LLC's alone: what it does and when, "
+    "what it is called, what other customers pay, who it is offered to, and whether it "
+    "continues. Built by Bean LLC does not promise that the Product will be offered to "
+    "anyone else or that it will succeed.",
+]
+
+
+def founding_ownership(product):
+    """Who owns what, written for a product Built by Bean owns from day one.
+
+    Its own list rather than IP_TERMS, as the revenue share's is: IP_TERMS
+    licenses a delivered application the client paid to have built for their
+    business, and here the thing is a product with a name, other customers
+    and a roadmap that belong to Built by Bean.
+    """
+    return [
+        f"{product} (the \"Product\"), and everything in it, is and remains the sole and "
+        f"exclusive property of Built by Bean LLC. That includes all software and source "
+        f"code, designs, user interfaces, documentation and features, including every "
+        f"feature, configuration, design or change made at the Customer's request or to "
+        f"the Customer's specification, and the Product's name, logo, brand, domain names, "
+        f"app store listings and accounts. Nothing in this agreement, and no payment made "
+        f"under it, transfers ownership of any of it to the Customer.",
+
+        f"The name {product}, its logo and its brand were created by Built by Bean LLC and "
+        f"belong to it. The Customer will not register, claim or use them as its own "
+        f"except in referring to the Product it uses, and assigns to Built by Bean LLC any "
+        f"right it has or later acquires in them.",
+
+        "Nothing created under this agreement is a \"work made for hire\" for the Customer, "
+        "and no assignment of any copyright or other intellectual property is made or "
+        "implied. Ownership of any part of the Product can pass to the Customer only by a "
+        "separate written assignment, signed by Built by Bean LLC, that names what is "
+        "assigned.",
+
+        "Built by Bean LLC may use, copy, modify, rebrand, license, sell, offer as a "
+        "service and otherwise deal with the Product and any part of it, in any way and for "
+        "any purpose, including to the Customer's competitors and in the Customer's own "
+        "market. It owes the Customer no notice, consent, credit, royalty, accounting or "
+        "other payment for doing so, and the Customer has no exclusivity of any kind unless "
+        "a separate written agreement signed by both parties says otherwise.",
+
+        "Ideas, suggestions, feature requests, feedback, workflows and specifications the "
+        "Customer gives Built by Bean LLC (\"Feedback\") may be used and built into the "
+        "Product, for every customer, without restriction, credit or payment. To the "
+        "extent the Customer has any rights in Feedback as built into the Product, the "
+        "Customer assigns them to Built by Bean LLC. The Customer's own data, content and "
+        "brand are not Feedback.",
+
+        "The Customer will not, and will not let anyone acting for it, copy, resell, "
+        "sublicense, rent, white-label, distribute or offer the Product to anyone else; "
+        "modify it or make derivative works of it; reverse engineer, decompile or otherwise "
+        "try to obtain its source code, except as the section on the Product being shut down "
+        "provides; remove any notice of "
+        "ownership from it; or use it, or anything learned from it, to build or help build a "
+        "competing product.",
+
+        "The Customer's data (its customer records, listings, content, files and anything "
+        "else it or its users put into or generate through its account) and its own "
+        "business name, trademarks, logos and photographs remain the Customer's. Built by "
+        "Bean LLC uses them only to run, support and improve the Customer's account, will "
+        "not sell them, will never disclose the Customer's data to any other customer, will "
+        "never put the Customer's own brand on anyone else's account, and will provide a "
+        "complete export of the Customer's data in a machine-readable format within thirty "
+        "(30) days of a written request.",
+
+        "Built by Bean LLC may collect and use aggregated, de-identified information about "
+        "how the Product is used and performs, which does not identify the Customer or any "
+        "individual, to operate and improve the Product. That information belongs to Built "
+        "by Bean LLC.",
+    ]
+
+
+def founding_shutdown(product):
+    """If the Product is discontinued. Michael's answer, 2026-11-06: 90 days
+    notice and the data, "plus the original set of code they paid for not the
+    full product, not the rights to the name ... Just the code they paid for
+    that is equal to the MVP"."""
+    return [
+        f"If Built by Bean LLC decides to stop offering {product}, it will give the "
+        f"Customer at least ninety (90) days written notice before the Customer's account "
+        f"stops working, and a complete export of the Customer's data in a "
+        f"machine-readable format.",
+
+        "Built by Bean LLC will also deliver to the Customer a copy of the source code of the "
+        "Customer's version of the Product as it stood when the first version described in "
+        "Section 2 was delivered and accepted (the \"Founding Version\"), and grants the "
+        "Customer a perpetual, royalty-free, non-exclusive, non-transferable license to "
+        "use, host and modify the Founding Version solely to run the Customer's own "
+        "business.",
+
+        f"That license does not include the right to sell, license, distribute, white-label "
+        f"or offer the Founding Version, or anything made from it, to anyone else. It does "
+        f"not include the name {product}, its logo, brand, domain names, app store listings "
+        f"or accounts, or any version, feature or work made after the first version. It "
+        f"comes with no support, updates, hosting, warranty or third-party services, which "
+        f"the Customer arranges and pays for itself. Built by Bean LLC continues to own the "
+        f"Founding Version.",
+
+        "This section applies only while the Customer is current on every fee under this "
+        "agreement and not in breach of it. A sale, transfer or assignment of the Product to "
+        "another owner who continues to offer it is not a decision to stop offering it: this "
+        "agreement passes to that owner, who takes it on.",
+    ]
+
+
+FOUNDING_PROTECTIONS = [
+    "Built by Bean LLC provides its services and the Product on a best-effort basis. To "
+    "the maximum extent permitted by law, the Product is provided as is, every implied "
+    "warranty is disclaimed, and neither party is liable to the other for indirect, "
+    "incidental, consequential or punitive damages, including loss of revenue, profit, "
+    "data or business opportunity.",
+
+    "Built by Bean LLC's total aggregate liability arising out of or relating to this "
+    "agreement will not exceed the total fees paid by the Customer under this agreement "
+    "in the twelve (12) months preceding the event giving rise to the claim.",
+
+    *THIRD_PARTY_TERMS,
+
+    "Built by Bean LLC does not control, and is not responsible for, the decisions of "
+    "Apple, Google or any other app store, including review decisions.",
+
+    "The Customer is responsible for ensuring that any content, images, trademarks or "
+    "materials it provides do not infringe third-party rights, and indemnifies Built by "
+    "Bean LLC against any claim arising from them.",
+
+    *CONFIDENTIALITY_TERMS,
+
+    "All fees are in USD. Late payments are subject to a late fee of 1.5% per month on the "
+    "amount outstanding past its due date.",
+
+    "This agreement is the entire agreement between the parties about the Product and "
+    "replaces any earlier discussion, proposal or understanding about it. It controls over "
+    "any purchase order, vendor form or other paperwork the Customer issues, whatever it "
+    "says, including any \"work for hire\" or assignment language.",
+
+    "It may be changed only in writing signed by both parties. An email, a text message or "
+    "a conversation does not change it.",
+
+    "Built by Bean LLC may assign this agreement, in whole or in part, including to a buyer "
+    "of the Product or of its business. The Customer may not assign it without Built by "
+    "Bean LLC's written consent.",
+
+    "If any provision is found unenforceable, the rest continues in force, and that "
+    "provision is reduced to what is enforceable rather than struck out. A failure to "
+    "enforce any provision is not a waiver of it.",
+
+    "In any dispute arising under this agreement, the prevailing party is entitled to "
+    "recover its reasonable attorney's fees and costs.",
+
+    GOVERNING_LAW,
+
+    "This agreement may be signed in counterparts and by electronic signature, each of "
+    "which is an original.",
+]
+
+
+def build_founding(*, client_name, product, features, build_fee, payment, delivery_date,
+                   hosting_fee, hosting_cycle="monthly", third_party_data="",
+                   special_terms="", date_str="", countersign=False, script_font=None):
+    """The Founding Customer Agreement. Returns what every builder returns."""
+    cycle = {"monthly": "month", "quarterly": "quarter", "annually": "year"}.get(
+        hosting_cycle, "month")
+    fee = str(build_fee).strip().lstrip("$") or "0"
+    host = str(hosting_fee).strip().lstrip("$") or "0"
+    title = "Founding Customer Agreement"
+
+    pdf, style = _document(title)
+    pdf.add_page()
+    style.eyebrow("Built by Bean LLC", partner=product)
+    style.rule(gap=1)
+    pdf.ln(6)
+    style.title(title, f"{product} - Built by Bean LLC and {client_name}")
+    _facts(style, [
+        ("Product:", product),
+        ("Between:", f"Built by Bean LLC and {client_name}"),
+        ("Date:", date_str),
+    ])
+
+    style.callout([
+        "In plain words",
+        f"{product} is Built by Bean's product: its code, its name, its logo, and the "
+        f"right to sell it to other businesses.",
+        f"{client_name} is its founding customer. You pay to have the first version "
+        f"built around your business, then use it for your business with no license fee, "
+        f"ever. You pay only a small fixed hosting fee.",
+        "Yours: your business, your brand, your data. Your data can be exported any time, "
+        "and it is never shown to another customer.",
+        "This is not an investment or a partnership: no stake, no share of revenue, and "
+        "no say in how the product is run, though your input is wanted. If the product is "
+        "ever shut down, you get 90 days notice, your data, and the code of the version "
+        "you paid for. The terms below are what govern.",
+    ])
+
+    style.section_heading("1. What this covers")
+    style.lead(
+        f"Built by Bean LLC is building {product}, a software product it owns and intends "
+        f"to offer to other businesses. {client_name} (the \"Customer\") is its founding "
+        f"customer: it pays to have the first version built around its business, and in "
+        f"return uses the Product for its own business for as long as the Product is "
+        f"offered, with no license or subscription fee.")
+
+    style.section_heading("2. The first version")
+    style.body(
+        "The first version of the Product, built for the Customer under this agreement, "
+        "includes the following:")
+    style.bullets(features)
+    style.body(
+        "This is the complete scope of the first version. What the Product does after it, "
+        "and when, is Built by Bean LLC's decision. Work the Customer wants that is not on "
+        "this list is not included and is agreed and priced separately in writing.")
+
+    style.section_heading("3. The build fee")
+    style.table([
+        ("Build Fee", f"${fee}"),
+        ("Payment", payment),
+        ("Estimated Delivery", delivery_date or "As agreed"),
+    ])
+    style.body(
+        "A payment is earned, and is not refundable, once the work it pays for has begun. "
+        "The build fee pays for development services and the Customer's use of the "
+        "Product. It does not buy any part of the Product.")
+
+    style.section_heading("4. The founding hosting fee")
+    style.table([
+        ("Founding Hosting Fee", f"${host}/{cycle}"),
+        ("Billing Cycle", hosting_cycle.title()),
+        ("Starts", "On delivery of the first version"),
+    ])
+    style.bullets([
+        "The founding hosting fee pays for hosting, data storage, backups and keeping the "
+        "Customer's account running. It is not a license or subscription fee: the "
+        "Customer's use of the Product carries none.",
+
+        "Built by Bean LLC may raise it only to pass on a real increase in what it costs to "
+        "host the Customer's account, on sixty (60) days written notice saying why, and "
+        "never above what Built by Bean LLC charges its other customers for the same use.",
+
+        "If an invoice for it remains unpaid more than thirty (30) days past its due date, "
+        "Built by Bean LLC may suspend the Customer's account until it is brought current, "
+        "and restores it in full once it is. The Customer's data is kept, not deleted, "
+        "while the account is suspended.",
+    ])
+
+    style.section_heading("5. What the founding customer gets")
+    style.bullets([
+        f"A lifetime, non-exclusive, non-transferable license to use {product} for the "
+        f"Customer's own business, for as long as Built by Bean LLC offers it, with no "
+        f"license or subscription fee. The Customer may let its own employees, contractors "
+        f"and customers use its account for the Customer's business.",
+
+        "Every update and feature Built by Bean LLC releases to all customers of the "
+        "Product as part of its standard offering, at no extra charge. Optional add-ons "
+        "Built by Bean LLC sells separately are not included.",
+
+        "A voice in where the Product goes. Built by Bean LLC will ask for and consider the "
+        "Customer's views on its direction. Every decision remains Built by Bean LLC's.",
+
+        "Reasonable support by email, and fixes to anything in the Product that does not "
+        "work as described, as part of running it.",
+    ])
+
+    style.section_heading("6. What this is, and what it is not")
+    style.body(
+        "The Customer is a customer. It is worth being exact about that, because the "
+        "alternative has consequences for both parties:")
+    style.bullets(FOUNDING_NOT)
+
+    style.section_heading("7. Who owns what")
+    style.bullets(founding_ownership(product))
+
+    n = 8
+    if third_party_data:
+        style.section_heading(f"{n}. Data from third parties")
+        style.bullets([
+            f"The Customer is responsible for obtaining and keeping every license, "
+            f"membership and authorization needed to use {third_party_data} in its account, "
+            f"and Built by Bean LLC will sign any vendor agreement those require.",
+
+            f"{third_party_data[:1].upper() + third_party_data[1:]} is used only as those "
+            f"licenses allow. It is neither the Customer's data nor part of the Product, "
+            f"and it is never shared between customers.",
+        ])
+        n += 1
+
+    style.section_heading(f"{n}. If the Product is ever shut down")
+    style.bullets(founding_shutdown(product))
+    n += 1
+
+    style.section_heading(f"{n}. Term, and ending it")
+    style.bullets([
+        "This agreement starts on the date of the last signature below and continues for "
+        "as long as Built by Bean LLC offers the Product, unless it is ended under this "
+        "section.",
+
+        "The Customer may end it at any time by written notice. Fees already paid are not "
+        "refunded.",
+
+        "Built by Bean LLC may end it by written notice if the Customer breaches the "
+        "restrictions in Section 7 and does not stop within ten (10) days of being told, or "
+        "if the founding hosting fee remains unpaid ninety (90) days past its due date.",
+
+        "When it ends, the Customer's use of the Product ends, and Built by Bean LLC "
+        "provides a complete export of the Customer's data within thirty (30) days of a "
+        "written request made in the sixty (60) days after.",
+
+        "The terms on ownership, Feedback, confidentiality, the shutdown license and "
+        "liability continue after this agreement ends.",
+    ])
+    n += 1
+
+    if special_terms:
+        style.section_heading(f"{n}. Terms specific to this agreement")
+        style.body(special_terms)
+        style.body(
+            "Where this section and anything above it conflict, this section governs, and "
+            "only on the point it covers.")
+        n += 1
+
+    style.section_heading(f"{n}. General terms")
+    style.bullets(FOUNDING_PROTECTIONS, size=8.5)
+
+    own, client = _signatures(style, client_name, date_str, countersign, script_font)
     return bytes(pdf.output()), own, client, pdf.w, pdf.h
 
 

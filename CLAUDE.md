@@ -2491,10 +2491,45 @@ maintenance window the SOW actually grants, and the footer names the LLC
 that signs the contracts. When the copy on the site or the words in a
 contract change, read the other one again.
 
-`scratchpad/contracts_check.py` (in the session scratchpad, worth keeping)
-renders all five documents through the routes the board uses and reads the
-PDFs back with pymupdf, asserting the sentences that matter appear in every
-one, appear once, and that no words from the retired clauses survive.
+`tools/test_contract_ownership.py` renders every client document and the
+Founding Customer Agreement through the routes and builders the board uses,
+reads the PDFs back with pymupdf, and asserts the sentences that matter appear
+on each one, exactly once.
+
+**Tightened, and a fourth kind of deal** (Michael, 2026-11-06, issue #20, from
+his own review: "if I work with a client and they help me curate a really good
+product, I then want to take that and sell it to the masses"). Software is not
+a work-for-hire category, so the code is Built by Bean's by default and moves
+only by a signed writing; the risk is a court finding an unlimited implied
+license where the contract set no limits (Asset Marketing Systems v. Gagnon).
+So `IP_TERMS` now also says: not a work for hire, the fee buys services and a
+license and not the code, work done to the client's own request is Built by
+Bean's, the client's ideas become Built by Bean's once built in (`Feedback`),
+Built by Bean may sell to the client's competitors with no exclusivity or
+revenue owed, no reverse engineering or competing product, the client's brand
+is never on another customer's product and their data never shown to one,
+anonymous usage data is Built by Bean's, and accounts in the client's name are
+the client's. `CLIENT_TERMS` is `IP_TERMS` with confidentiality (the SOW had
+none, while the add-on said the SOW's applied) and the paperwork terms (the
+client's purchase order never overrides; Built by Bean may assign to a buyer),
+and is what the SOW, the engagement letter and `STANDALONE_PROTECTIONS` read.
+The SOW opens with `PLAIN_WORDS`, the deal said simply, before Section 1.
+
+The deals are now four, each its own document: a **client build** (the SOW:
+their app, Built by Bean's code, a perpetual license), a **revenue share**
+(Kuper, EntertainHQ), the **Data Dungeon profit share**, and a **founding
+customer** (`build_founding`, `/admin/contracts/new/founding`, Deed in Hand
+first): the client pays a build fee for the first version of a product that is
+Built by Bean's from day one, name and logo included, and uses it free of any
+license fee for a fixed founding hosting fee that can only rise to pass on a
+real hosting cost and never above other customers. `FOUNDING_NOT` keeps the
+payment from reading as an investment (no stake, no return, a benefit that
+does not grow with the product's success, no control), because money handed
+over expecting profit from somebody else's work can be a security. If the
+product is shut down: 90 days notice, their data, and the source code of the
+Founding Version (as delivered at the end of the first build) licensed for
+their own business only, never the name or later work, and a sale of the
+product is not a shutdown. Signing it applies like a SOW (`sow_effects`).
 
 ## The shell does not move
 

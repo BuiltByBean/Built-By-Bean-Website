@@ -1,0 +1,140 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+
+{#
+  A client pays for the first version of a product Built by Bean owns from
+  day one, and uses it for their business with no license fee
+  (contract_docs.build_founding). Deed in Hand is the first.
+
+  The terms that never change between one of these and the next (ownership,
+  not an investment, the shutdown promise) are in contract_docs and are not
+  fields here. What is here is what differs: who, which product, what the
+  first version does, and the two fees.
+
+  One card on purpose: every picker opens a panel, and a second card below
+  would paint over it (LM-1).
+#}
+
+{% block title %}New founding customer agreement - Built By Bean{% endblock %}
+{% block back %}{{ back_link(url_for('contracts.contracts_index'), 'Contracts') }}{% endblock %}
+{% block page_title %}New founding customer agreement{% endblock %}
+{% block page_subtitle %}They pay for the first version of your product and use it free{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('contracts.generate_founding') }}"
+      x-data='{ clientId: "{{ request.args.get("client_id", "") }}" }'>
+
+    {% include "pm/contracts/_prefill.html" %}
+
+    <div class="glass-card relative z-30 p-5 sm:p-6 space-y-5">
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Founding customer *</label>
+                {{ select_dropdown("client_id", client_options, "", "Who is paying for it",
+                                   full_width=true, model="clientId") }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Your product *</label>
+                <input type="text" name="product" required
+                       value="{{ request.args.get('product', '') }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="Deed in Hand">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">Date *</label>
+                <input type="date" name="date" required value="{{ today }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                The first version does *
+                <span class="block text-xs text-surface-500 font-normal">one feature per line, the whole scope of what they pay for</span>
+            </label>
+            <textarea name="features" rows="7" required
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                      placeholder="Property listings with photos and details">{{ request.args.get("features", "") }}</textarea>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Build fee *
+                    <span class="block text-xs text-surface-500 font-normal">dollars, once</span>
+                </label>
+                <input type="text" name="build_fee" required value="2,500"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Delivered by
+                    <span class="block text-xs text-surface-500 font-normal">an estimate</span>
+                </label>
+                <input type="date" name="delivery_date"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Founding hosting fee *
+                    <span class="block text-xs text-surface-500 font-normal">dollars, fixed</span>
+                </label>
+                <input type="text" name="hosting_fee" required value="25"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Billed every
+                    <span class="block text-xs text-surface-500 font-normal">hosting cycle</span>
+                </label>
+                {{ select_dropdown("hosting_cycle", cycle_choices, "monthly", "How often",
+                                   full_width=true) }}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Build fee is paid
+                    <span class="block text-xs text-surface-500 font-normal">as it reads on the document</span>
+                </label>
+                <input type="text" name="payment"
+                       value="50% due at signing; 50% due on delivery and acceptance"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                    Data they license from somebody else <span class="text-surface-500 font-normal">optional</span>
+                    <span class="block text-xs text-surface-500 font-normal">adds a section making that their license to hold</span>
+                </label>
+                <input type="text" name="third_party_data"
+                       value="{{ request.args.get('third_party_data', '') }}"
+                       class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                       placeholder="MLS and IDX listing data">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-surface-300 mb-1.5">
+                Terms specific to this one <span class="text-surface-500 font-normal">optional</span>
+            </label>
+            <textarea name="special_terms" rows="3"
+                      class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                      placeholder="Anything agreed for this customer that is not covered by the standard terms">{{ request.args.get("special_terms", "") }}</textarea>
+        </div>
+
+        {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
+                Preview it
+            </button>
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="inline-flex items-center min-h-[44px] px-3 text-sm text-surface-400 hover:text-surface-200">Cancel</a>
+        </div>
+    </div>
+</form>
+{% endblock %}

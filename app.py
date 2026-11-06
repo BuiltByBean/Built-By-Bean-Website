@@ -2778,7 +2778,7 @@ def create_app():
             # The ownership words come from contract_docs.IP_TERMS, the one
             # place they are written, so this letter and the SOW it precedes
             # cannot disagree about who owns the code.
-            *contract_docs.IP_TERMS,
+            *contract_docs.CLIENT_TERMS,
             "Built by Bean LLC provides services on a best-effort basis and is not liable for indirect, incidental, consequential or punitive damages, including loss of revenue, data or business opportunity. Total liability will not exceed the total fees paid by the client.",
             "Built by Bean LLC is not responsible for outages, data loss or service interruptions caused by third-party providers - hosting platforms, cloud storage, domain registrars, DNS providers, email delivery services, payment processors or mobile carriers - which operate under their own terms, and does not guarantee 100% uptime of any deployed application.",
             "The client is responsible for maintaining its own backups of any content, data or credentials it provides, and Built by Bean LLC is not responsible for loss of client-provided materials.",
@@ -3111,6 +3111,10 @@ def create_app():
                 "restarts or duplicates the payment schedule."))
             pdf.ln(4)
 
+        # The deal in plain words before anything legal (contract_docs.PLAIN_WORDS).
+        import contract_docs as _cd
+        style.callout(_cd.PLAIN_WORDS)
+
         # Section 1 - Project Summary
         section_heading("1. Project Summary")
         body_text(project_description)
@@ -3250,7 +3254,7 @@ def create_app():
             # may do anything at all with it; the client holds a perpetual
             # license with nothing to renew; hosting is the only recurring
             # charge and is not a license fee.
-            *contract_docs.IP_TERMS,
+            *contract_docs.CLIENT_TERMS,
             "Client is responsible for ensuring that any content, images, trademarks, or materials provided for use in the project do not infringe on third-party intellectual property rights. Client agrees to indemnify Built by Bean LLC against any claims arising from client-provided materials.",
             "This agreement shall be governed by the laws of the State of Texas. Any disputes arising under this agreement shall be resolved in the courts of the State of Texas.",
         ]

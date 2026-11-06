@@ -1222,6 +1222,92 @@ def generate_partnership():
                     f"{label} - {venture}", "partnership", own, cli, w, h, client)
 
 
+# ── Founding customer ────────────────────────────────────
+#
+# A client pays for the first version of a product Built by Bean owns from
+# day one (contract_docs.build_founding, issue #20). Signing it applies like a
+# statement of work: the client contracted, the project made if it is not on
+# the board, its build fee and hosting fee written. The kind is "sow" in the
+# proposal because that is the shape contract_effects applies; the document's
+# own kind is "founding".
+
+FOUNDING_CYCLES = [("monthly", "Month"), ("quarterly", "Quarter"), ("annually", "Year")]
+
+
+@contracts_bp.route("/new/founding", methods=["GET"])
+@login_required
+def founding_form():
+    options, lookup = _clients_for_picker()
+    return render_template("pm/contracts/founding_form.html",
+                           today=datetime.now(timezone.utc).date().isoformat(),
+                           client_options=options, client_lookup=lookup,
+                           cycle_choices=FOUNDING_CYCLES)
+
+
+def _dollars(raw):
+    """A typed amount as a float, or None when it is not one."""
+    try:
+        return float(str(raw or "").replace(",", "").replace("$", "").strip())
+    except ValueError:
+        return None
+
+
+@contracts_bp.route("/new/founding", methods=["POST"])
+@login_required
+def generate_founding():
+    client = db.session.get(Client, request.form.get("client_id", type=int) or 0)
+    product = " ".join((request.form.get("product") or "").split())
+    features = [l.strip(" -\t") for l in (request.form.get("features") or "").splitlines()
+                if l.strip(" -\t")]
+    build_fee = (request.form.get("build_fee") or "").strip().lstrip("$")
+    hosting_fee = (request.form.get("hosting_fee") or "").strip().lstrip("$")
+    if not client or not product or not features:
+        flash("Choose the customer, name the product, and list what the first version does.",
+              "warning")
+        return redirect(url_for("contracts.founding_form"))
+    # The two numbers the document turns on print exactly as typed, so a value
+    # that is not an amount is refused here rather than argued about later.
+    fee_val, host_val = _dollars(build_fee), _dollars(hosting_fee)
+    if fee_val is None or fee_val <= 0 or host_val is None or host_val < 0:
+        flash("The build fee and the hosting fee have to be amounts, like 2,500 and 25.",
+              "warning")
+        return redirect(url_for("contracts.founding_form"))
+    cycle = (request.form.get("hosting_cycle") or "monthly").strip()
+    if cycle not in dict(FOUNDING_CYCLES):
+        cycle = "monthly"
+
+    pdf_bytes, own, cli, w, h = contract_docs.build_founding(
+        client_name=client.name,
+        product=product,
+        features=features,
+        build_fee=f"{fee_val:,.2f}".replace(".00", ""),
+        payment=(request.form.get("payment") or "").strip()
+        or "50% due at signing; 50% due on delivery and acceptance",
+        delivery_date=_fmt(request.form.get("delivery_date")),
+        hosting_fee=f"{host_val:,.2f}".replace(".00", ""),
+        hosting_cycle=cycle,
+        third_party_data=(request.form.get("third_party_data") or "").strip(),
+        special_terms=(request.form.get("special_terms") or "").strip(),
+        date_str=_fmt(request.form.get("date")),
+        countersign=wants_send(),
+    )
+
+    project = Project.query.filter(Project.client_id == client.id,
+                                   Project.name.ilike(product)).first()
+    try:
+        delivery = datetime.strptime(request.form.get("delivery_date") or "", "%Y-%m-%d").date()
+    except ValueError:
+        delivery = None
+    effects = contract_effects.sow_effects(
+        client=client, project=project, project_name=product, price=fee_val,
+        mvp_date=delivery, maintenance_days=None, hosting_fee=host_val,
+        hosting_cycle=cycle)
+    return _deliver(pdf_bytes,
+                    f"{_safe(product)}_FoundingCustomer_{_safe(client.name)}.pdf",
+                    f"Founding Customer Agreement - {product}",
+                    "founding", own, cli, w, h, client, project, effects=effects)
+
+
 # ── Profit share with an individual ──────────────────────
 #
 # 1% of Data Dungeon's monthly profit to a named person, as a gift Michael can
@@ -1420,6 +1506,7 @@ FORM_ENDPOINTS = {
     "addendum": "contracts.addendum_form",
     "partnership": "contracts.partnership_form",
     "profit_share": "contracts.profit_share_form",
+    "founding": "contracts.founding_form",
 }
 
 
