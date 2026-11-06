@@ -838,6 +838,36 @@ listed under Books, Bank, Tagged, where Set aside takes it off.
 every parent ended in the migration, and every past row stays. A bank rule
 catches what they caught.
 
+## The catalog: a private showcase, opened only from a link
+
+Michael, 2026-11-06 (issue #23): "I need a way where I can pick which products
+I want them to be able to see ... the overall catalog is only accessible upon me
+sending someone a link." `/admin/catalog` (`pm/catalog_routes.py`, logic in
+`catalog_service.py`, sidebar after My Apps, icon concept `catalog`) approves
+My Apps tiles (`AppLink.catalog`), gives each a catalog name, pitch, what it
+does (one per line), its own icon, a tour (`CatalogShot`, on the volume under
+`catalog/`) and a live demo address once it has one, and makes a link per
+prospect (`CatalogLink`: a token, optionally narrowed to some apps, 7/30/90
+days, opens counted in `CatalogView`, switched off or extended in place). "See it
+as a client would" is `/admin/catalog/preview`, which records nothing.
+
+The prospect's side is `/work/<token>` (`templates/showcase/`, the public site's
+own stylesheet): the work at a glance, then each app. An unknown, expired or
+switched-off token is ONE page that names nothing, and every answer is private,
+no-store, noindex and no-referrer, because the token in the address is the only
+key. **A renamed app never wears its tile's icon**: Robinson & Co.'s studio app
+is Vignette in the catalog, and the tile's icon is the client firm's logo
+(`showcase_has_icon`, `catalog_icon`). Copy names no client firm, and a renamed
+app's tour must not show the client's name.
+
+Platforms come from the store ids, services from the code
+(`AppLink.services_json`: the nightly audit's `vendors_in_files` per repo, or
+`/api/guidance/apps/services`), capabilities from `CAPABILITIES` (a vendor as a
+prospect would name it). Code is evidence, not a feature list: Twilio is still
+in EntertainHQ's code though its texting is retired. Tours to start are each
+public site's home at desktop and phone; screens from inside an app need its
+demo mode, which is each app's own work. `tools/test_catalog.py`.
+
 ## Vendors, a page of its own
 
 Michael, 2026-11-05: "I want that on its own page not buried in the hosting
