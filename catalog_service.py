@@ -304,13 +304,36 @@ def capabilities(tile, book=None):
     return found
 
 
+# Sites still behind a password of the day that take a catalog pass instead
+# (Michael, 2026-11-06, of Master by Trade: "when accessing the master by trade
+# site through that connection it doesn't require the password"). Each one's
+# gate checks /gate/pass with the same CATALOG_PASS_SECRET this board holds
+# (masterbytrade's services/site_gate.py). A host not listed here, or no
+# secret on this service, is linked plainly.
+PASS_HOSTS = {"masterbytrade.com"}
+PASS_SALT = "catalog-pass"
+
+
 def site_url(tile):
     """The app's own web address for a prospect to visit, or None. Never for
-    an app renamed for the catalog: its site carries the client's name."""
+    an app renamed for the catalog: its site carries the client's name. A
+    site behind its own password gets a pass, minted fresh on every page
+    view and good for an hour, so the prospect walks straight in."""
+    import os
+    from urllib.parse import urlsplit
     if tile.renamed:
         return None
     url = tile.url or ""
-    return url if url.startswith(("https://", "http://")) else None
+    if not url.startswith(("https://", "http://")):
+        return None
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    secret = (os.environ.get("CATALOG_PASS_SECRET") or "").strip()
+    if secret and (host in PASS_HOSTS or any(host.endswith("." + h) for h in PASS_HOSTS)):
+        from itsdangerous import URLSafeTimedSerializer
+        token = URLSafeTimedSerializer(secret, salt=PASS_SALT).dumps("catalog")
+        return f"{parts.scheme}://{parts.netloc}/gate/pass?t={token}&next=/"
+    return url
 
 
 def store_links(tile):

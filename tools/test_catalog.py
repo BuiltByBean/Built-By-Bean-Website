@@ -161,6 +161,21 @@ check("a live App Store listing is a button", "https://apps.apple.com/app/id1" i
 check("a store that does not list it yet is not", "play.google.com" not in ehq_page)
 check("the app's own site is a button", 'href="https://entertainhq.com"' in ehq_page)
 check("a renamed app never links its client's site", "robinsonandcodesign" not in app_page)
+with application.app_context():
+    from types import SimpleNamespace as _NS
+    from itsdangerous import URLSafeTimedSerializer as _S
+    gated = _NS(renamed=False, url="https://masterbytrade.com")
+    os.environ.pop("CATALOG_PASS_SECRET", None)
+    check("a gated site with no secret here is linked plainly", cs.site_url(gated) == "https://masterbytrade.com")
+    os.environ["CATALOG_PASS_SECRET"] = "shared-with-the-site"
+    u = cs.site_url(gated)
+    check("with the secret, a gated site gets a pass", u.startswith("https://masterbytrade.com/gate/pass?t="), u)
+    tok = u.split("t=", 1)[1].split("&", 1)[0]
+    check("that the site can read with the shared key",
+          _S("shared-with-the-site", salt="catalog-pass").loads(tok, max_age=3600) == "catalog")
+    check("an ungated site never gets a pass",
+          cs.site_url(_NS(renamed=False, url="https://entertainhq.com")) == "https://entertainhq.com")
+    os.environ.pop("CATALOG_PASS_SECRET", None)
 check("a card is the logo, the name, the summary and Read more",
       "Read more" in page and "See it" not in page and 'class="sc-built"' not in page)
 check("and no platform pills", "class=\"sc-chip" not in app_page)
