@@ -80,7 +80,7 @@
                 {% set found = p.discovered_from or '' %}
                 {% if not p.is_active %}{% set dot, state = 'bg-surface-600', 'Not in use' %}
                 {% elif a.error %}{% set dot, state = 'bg-amber-400', 'Not syncing' %}
-                {% elif p.name == 'bank' %}{% set dot, state = 'bg-sky-400', 'From the bank' %}
+                {% elif p.name == 'bank' %}{% set dot, state = 'bg-sky-400', 'From the books' %}
                 {% elif found.startswith('store:') %}{% set dot, state = 'bg-sky-400', 'From the store' %}
                 {% elif p.name == 'code' %}{% set dot, state = 'bg-sky-400', 'In the code' %}
                 {% elif p.last_sync_at %}{% set dot, state = 'bg-emerald-400', 'Synced ' ~ (p.last_sync_at | format_date) %}

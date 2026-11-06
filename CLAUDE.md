@@ -928,6 +928,25 @@ Postmark and RevenueCat). The web runs the bank and store half at boot
 (`start_background`, behind a Postgres advisory lock), so a deploy does not
 wait for the night. `tools/test_vendors_page.py`.
 
+**A vendor's accounts and costs are its companies' books** (issue #18, Michael,
+2026-11-06: "LegalZoom formed both LLCs", "I have two claude accounts", and
+Apple at no cost though he paid it). They were one account per bank rule,
+costed by that rule, so a charge was filed under the rule's company and a
+company's own plan with the same vendor (EntertainHQ's Claude Max) did not
+exist. Now `from_books` reads every company's expenses of the last two years,
+names each one's vendor (`vendor_of`: its bank line's rule, else the longest
+known vendor name its description begins with, `ALIASES` for Anthropic), and
+keeps one account per vendor per company charged, in use while that company
+paid in the last 90 days. `spend` is that company's books for the year, and
+the vendor's own report only for an account on a client's card. The door
+answers `/books/search?q=` (every bank line, expense and receipt naming a
+word, every company) and `/books/mail-search?q=` (every receipt mailbox at any
+date, read only), and `bank/decide` takes `resettle` to file a settled line
+again, answering what it was before. That is how the Apple Developer Program
+($107.17 on 2026-06-14, filed personal by the "Apple Store online" rule) went
+onto Built by Bean's books, and how Built by Bean's own LegalZoom formation
+($301.00, 2024-01-17, order 80675586, before the books begin) was found.
+
 ## The books stand on the bank
 
 Michael, 2026-11-03: "I use an unbelievable amount of services ... I need my

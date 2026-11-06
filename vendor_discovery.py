@@ -90,61 +90,11 @@ def _accounts_by_vendor():
     return out
 
 
-def _last_charge(rule_ids, since):
-    from models import BankTransaction, db
-    if not rule_ids:
-        return None
-    return (db.session.query(db.func.max(BankTransaction.occurred_on))
-            .filter(BankTransaction.rule_id.in_(rule_ids), BankTransaction.amount < 0,
-                    BankTransaction.occurred_on >= since).scalar())
-
-
 def from_bank(today=None):
-    """Add an account for every business vendor the bank pays that has none
-    for that company, and keep each bank account's in use / not in use with
-    its charges. Returns lines saying what changed."""
-    from models import db, ServiceProvider, VendorRule
-    today = today or date.today()
-    home = _home_id()
-    by_vendor = _accounts_by_vendor()
-    rules = {}
-    for r in VendorRule.query.filter(VendorRule.disposition.in_(("expense", "split"))).all():
-        if (r.category or "") not in VENDOR_CATEGORIES or not (r.vendor or "").strip():
-            continue
-        rules.setdefault((key(r.vendor), _payer(r.business_id, home)), []).append(r)
-
-    lines = []
-    for (vkey, payer), rs in sorted(rules.items(), key=lambda kv: (kv[0][0], kv[0][1] or 0)):
-        accounts = by_vendor.get(vkey, [])
-        wanted = ("business", payer) if payer else ("home", None)
-        last = _last_charge([r.id for r in rs], today - timedelta(days=YEAR_DAYS * 2))
-        in_use = bool(last and last >= today - timedelta(days=IN_USE_DAYS))
-        mine = [a for a in accounts if _paid_by(a) == wanted]
-        if any(a.syncs for a in mine):
-            # A real account now stands where the bank's placeholder did.
-            for a in [a for a in mine if a.name == "bank"]:
-                db.session.delete(a)
-                lines.append(f"{a.vendor_name}: the bank's placeholder gave way to its account")
-            continue
-        if mine:
-            for a in mine:
-                if a.name == "bank" and a.is_active != in_use:
-                    a.is_active = in_use
-                    lines.append(f"{a.vendor_name}: {'in use' if in_use else 'not in use'}")
-            continue
-        if not last:
-            continue  # a rule nothing has matched yet is not a vendor anybody pays
-        name = bare(rs[0].vendor.strip())
-        row = ServiceProvider(
-            name="bank", display_name=name, vendor=name, is_active=in_use,
-            account_business_id=payer, credentials_json="{}",
-            discovered_from=f"bank: {rs[0].pattern}"[:200])
-        db.session.add(row)
-        lines.append(f"{name}: found on the bank")
-        by_vendor.setdefault(vkey, []).append(row)
-    db.session.commit()
-    return lines
-
+    """The books' reading (from_books). It read one bank rule per vendor until
+    2026-11-06, which put every charge under the rule's company and missed a
+    company's own plan with the same vendor."""
+    return from_books(today)
 
 def replace_found(provider):
     """A real account added for a vendor takes the place of what the night
@@ -316,9 +266,9 @@ def from_stores():
 
 
 def run_free(today=None):
-    """Everything the board can find from its own records: the bank and the
-    stores. The night runs it, and so does the web at boot."""
-    return from_bank(today) + from_stores()
+    """Everything the board can find from its own records: the books, the
+    bank and the stores. The night runs it, and so does the web at boot."""
+    return from_books(today) + from_stores()
 
 
 def run(today=None):
@@ -382,30 +332,135 @@ def plain_error(provider):
 
 
 def spend(provider, today=None):
-    """What this account cost in the last year: what its vendor reported, or
-    for an account the night found, the bank's charges for that vendor paid
-    by that company. None when there is nothing to read."""
-    from models import db, BankTransaction, ServiceCostEntry, VendorRule
+    """What this account cost in the last year: what its company's books say
+    it paid this vendor (`books_by_vendor`), else, for an account on a
+    client's card that no book of ours holds, what the vendor reported. None
+    when there is nothing to read. Until 2026-11-06 a found account was costed
+    by one bank rule, which left EntertainHQ's own Claude plan and the Apple
+    Developer Program at nothing (issue #18)."""
+    from models import db, ServiceCostEntry
     today = today or date.today()
-    since = today - timedelta(days=YEAR_DAYS)
-    if provider.syncs:
+    books = _books(today).get((key(provider.vendor_name), _paid_by(provider)))
+    if books:
+        return round(books["year"], 2)
+    if provider.syncs and _paid_by(provider)[0] == "client":
+        since = today - timedelta(days=YEAR_DAYS)
         total = (db.session.query(db.func.coalesce(db.func.sum(ServiceCostEntry.allocated_amount), 0.0))
                  .filter(ServiceCostEntry.provider_id == provider.id,
                          ServiceCostEntry.period_end >= since).scalar())
         return round(total or 0.0, 2) if total else None
-    if provider.name != "bank":
-        return None
+    return None
+
+
+# What a description that names no vendor plainly is made by.
+ALIASES = {"anthropic": "Claude", "claude ai": "Claude", "anthropic claude sub": "Claude"}
+
+
+def known_vendors():
+    """Every vendor name the board knows: its accounts, the bank's business
+    rules, the code's signs and the stores'."""
+    from models import ServiceProvider, VendorRule
+    names = {key(p.vendor_name): p.vendor_name for p in ServiceProvider.query.all()}
+    for r in VendorRule.query.filter(VendorRule.disposition.in_(("expense", "split"))).all():
+        if (r.category or "") in VENDOR_CATEGORIES and (r.vendor or "").strip():
+            names.setdefault(key(bare(r.vendor)), bare(r.vendor))
+    for n in list(CODE_SIGNS) + ["Apple Developer Program", "Google Play"]:
+        names.setdefault(key(n), n)
+    return names
+
+
+def vendor_of(expense, line, names):
+    """The vendor an expense is, or None: its bank line's rule, else the
+    longest known vendor name its description begins with."""
+    if line is not None and line.rule_id:
+        from models import db, VendorRule
+        rule = db.session.get(VendorRule, line.rule_id)
+        if rule is not None and key(bare(rule.vendor)) in names:
+            return names[key(bare(rule.vendor))]
+    desc = key(expense.description)
+    for alias, name in ALIASES.items():
+        if desc.startswith(alias):
+            return names.get(key(name), name)
+    best = None
+    for k, name in names.items():
+        if k and (desc == k or desc.startswith(k + " ")) and (best is None or len(k) > len(key(best))):
+            best = name
+    return best
+
+
+_BOOKS = {"at": None, "data": None}
+
+
+def _books(today=None):
+    """{(vendor key, paid by): {"vendor", "year", "last", "first"}} from every
+    company's expenses of the last two years: what each company was charged
+    by each vendor. Read once per request or pass."""
+    from models import db, Expense, BankTransaction
+    today = today or date.today()
+    try:
+        from flask import g, has_request_context
+        if has_request_context() and getattr(g, "_vendor_books", None) is not None:
+            return g._vendor_books
+    except Exception:  # noqa: BLE001
+        g = None
+    names = known_vendors()
     home = _home_id()
-    rule_ids = [r.id for r in VendorRule.query.all()
-                if key(r.vendor) == key(provider.vendor_name)
-                and _payer(r.business_id, home) == provider.account_business_id]
-    if not rule_ids:
-        return None
-    total = (db.session.query(db.func.coalesce(db.func.sum(BankTransaction.amount), 0.0))
-             .filter(BankTransaction.rule_id.in_(rule_ids), BankTransaction.amount < 0,
-                     BankTransaction.disposition.in_(("expense", "split")),
-                     BankTransaction.occurred_on >= since).scalar())
-    return round(-(total or 0.0), 2) if total else None
+    lines = {}
+    out = {}
+    since = today - timedelta(days=YEAR_DAYS * 2)
+    for e in (Expense.query.filter(Expense.time_entry_id.is_(None), Expense.date >= since,
+                                   Expense.amount > 0).all()):
+        line = None
+        if getattr(e, "bank_line_id", None):
+            line = lines.get(e.bank_line_id) or db.session.get(BankTransaction, e.bank_line_id)
+            lines[e.bank_line_id] = line
+        vendor = vendor_of(e, line, names)
+        if not vendor:
+            continue
+        payer = _payer(e.business_id, home)
+        who = ("business", payer) if payer else ("home", None)
+        row = out.setdefault((key(vendor), who), {"vendor": vendor, "year": 0.0, "last": e.date, "first": e.date,
+                                                  "business_id": payer, "what": e.description})
+        if e.date >= today - timedelta(days=YEAR_DAYS):
+            row["year"] += e.amount
+        row["last"] = max(row["last"], e.date)
+        row["first"] = min(row["first"], e.date)
+    try:
+        from flask import g as _g, has_request_context as _h
+        if _h():
+            _g._vendor_books = out
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def from_books(today=None):
+    """An account for every vendor each company's books show it paying, where
+    that company has none: one per vendor per company charged (Michael,
+    2026-11-06: LegalZoom formed both LLCs, EntertainHQ has its own Claude
+    plan). A found account is in use while its company paid in the last
+    IN_USE_DAYS. Returns lines saying what changed."""
+    from models import db, ServiceProvider
+    today = today or date.today()
+    by_vendor = _accounts_by_vendor()
+    lines = []
+    for (vkey, who), row in sorted(_books(today).items(), key=lambda kv: (kv[0][0], str(kv[0][1]))):
+        in_use = row["last"] >= today - timedelta(days=IN_USE_DAYS)
+        mine = [a for a in by_vendor.get(vkey, []) if _paid_by(a) == who]
+        if mine:
+            for a in mine:
+                if not a.syncs and a.is_active != in_use:
+                    a.is_active = in_use
+                    lines.append(f"{a.vendor_name}: {'in use' if in_use else 'not in use'}")
+            continue
+        acct = ServiceProvider(name="bank", display_name=row["vendor"], vendor=row["vendor"], is_active=in_use,
+                               account_business_id=row["business_id"], credentials_json="{}",
+                               discovered_from=f"books: {row['what']}"[:200])
+        db.session.add(acct)
+        by_vendor.setdefault(vkey, []).append(acct)
+        lines.append(f"{row['vendor']}: found in the books")
+    db.session.commit()
+    return lines
 
 
 def playbook_for(name, accounts, playbooks=None):

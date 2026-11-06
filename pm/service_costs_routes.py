@@ -573,11 +573,12 @@ def sync_all():
     # after the press rather than after tonight (vendor_discovery).
     found = []
     try:
-        found = [line for line in vendor_discovery.from_bank() if "found on the bank" in line]
+        found = [line for line in vendor_discovery.from_books() + vendor_discovery.from_stores()
+                 if "found in the books" in line or "found from" in line]
     except Exception as e:  # noqa: BLE001
         db.session.rollback()
         errors.append(f"Finding vendors on the bank failed: {e}")
-    more = f" Found {len(found)} new vendor account{'s' if len(found) != 1 else ''} on the bank." if found else ""
+    more = f" Found {len(found)} new vendor account{'s' if len(found) != 1 else ''}." if found else ""
     if errors:
         flash(f"Synced {total} entries.{more} {' '.join(errors)}", "warning")
     else:

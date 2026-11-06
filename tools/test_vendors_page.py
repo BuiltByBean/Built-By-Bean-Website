@@ -29,7 +29,7 @@ except Exception:
 
 from app import create_app  # noqa: E402
 from models import (db, User, Client, Business, ServiceProvider, VendorRule,  # noqa: E402
-                    BankConnection, BankTransaction, ServiceCostEntry, Playbook, BusinessNode)
+                    BankConnection, BankTransaction, ServiceCostEntry, Playbook, BusinessNode, Expense)
 import vendor_discovery  # noqa: E402
 import service_costs_service  # noqa: E402
 
@@ -106,18 +106,40 @@ with app.app_context():
                                           ("LEGALZOOM", 200, -299.0, conn), ("CHUY S", 3, -30.0, conn),
                                           ("RAILWAY", 4, -52.38, conn)):
         n += 1
-        db.session.add(BankTransaction(connection_id=c.id, business_id=c.business_id, external_id=f"t{n}",
-                                       amount=amount, occurred_on=TODAY - timedelta(days=days_ago),
-                                       counterparty=pattern, disposition=rules[pattern].disposition,
-                                       rule_id=rules[pattern].id))
+        line = BankTransaction(connection_id=c.id, business_id=c.business_id, external_id=f"t{n}",
+                               amount=amount, occurred_on=TODAY - timedelta(days=days_ago),
+                               counterparty=pattern, disposition=rules[pattern].disposition,
+                               rule_id=rules[pattern].id, status="sent")
+        db.session.add(line)
+        db.session.flush()
+        # The books: what each company was charged (the bank line books it).
+        db.session.add(Expense(amount=-amount, date=line.occurred_on, description=rules[pattern].vendor,
+                               category=rules[pattern].category, business_id=c.business_id, bank_line_id=line.id))
+    # Michael, 2026-11-06: EntertainHQ has its own Claude plan, and LegalZoom
+    # formed both LLCs. Neither has a bank rule of its own company.
+    db.session.add_all([
+        Expense(amount=105.40, date=TODAY - timedelta(days=19), description="Claude, EntertainHQ Max plan",
+                category="ai_services", business_id=ehq.id, paid_by="Michael Bean"),
+        Expense(amount=301.0, date=TODAY - timedelta(days=33), description="LegalZoom",
+                category="taxes_licenses", business_id=ehq.id, paid_by="Michael Bean"),
+    ])
     db.session.commit()
     ids = SimpleNamespace(boss=boss.id, ehq=ehq.id, twilio_jd=twilio_jd.id, aws=aws.id)
 
-    print("1. found on the bank")
-    lines = vendor_discovery.from_bank(TODAY)
-    found = {p.vendor_name: p for p in ServiceProvider.query.filter_by(name="bank").all()}
-    check("OpenAI, Google Workspace, LegalZoom and Twilio's own account are found",
-          set(found) == {"OpenAI ChatGPT", "Google Workspace", "LegalZoom", "Twilio"}, (set(found), lines))
+    print("1. found in every company's books")
+    lines = vendor_discovery.from_books(TODAY)
+    rows = ServiceProvider.query.filter_by(name="bank").all()
+    found = {p.vendor_name: p for p in rows if p.account_business_id is None}
+    ehq_found = {p.vendor_name: p for p in rows if p.account_business_id == ids.ehq}
+    check("OpenAI, LegalZoom and Twilio's own account are found for Built by Bean",
+          set(found) == {"OpenAI ChatGPT", "LegalZoom", "Twilio"}, (set(found), lines))
+    check("EntertainHQ's own Claude plan, LegalZoom and Google Workspace are found for EntertainHQ",
+          set(ehq_found) == {"Claude", "LegalZoom", "Google Workspace"}, set(ehq_found))
+    check("each costs what its own company paid",
+          vendor_discovery.spend(ehq_found["Claude"], TODAY) == 105.40
+          and vendor_discovery.spend(ehq_found["LegalZoom"], TODAY) == 301.0
+          and vendor_discovery.spend(found["LegalZoom"], TODAY) == 299.0)
+    found["Google Workspace"] = ehq_found["Google Workspace"]
     check("Google Workspace is EntertainHQ's", found["Google Workspace"].account_business_id == ids.ehq)
     check("OpenAI is Built by Bean's", found["OpenAI ChatGPT"].account_business_id is None)
     check("Twilio paid by Built by Bean is a second Twilio account beside Kenali's",
@@ -127,13 +149,13 @@ with app.app_context():
     check("meals are not a vendor, and a rule nothing matched adds nothing",
           "Chuy's" not in found and "Never Charged" not in found)
     check("a vendor that already has its account is not added again", "Railway" not in found)
-    check("it says where it found each", found["OpenAI ChatGPT"].discovered_from == "bank: OPENAI")
-    again = vendor_discovery.from_bank(TODAY)
-    check("a second night adds nothing", again == [] and ServiceProvider.query.filter_by(name="bank").count() == 4, again)
-    later = vendor_discovery.from_bank(TODAY + timedelta(days=95))
+    check("it says where it found each", found["OpenAI ChatGPT"].discovered_from == "books: OpenAI ChatGPT")
+    again = vendor_discovery.from_books(TODAY)
+    check("a second night adds nothing", again == [] and ServiceProvider.query.filter_by(name="bank").count() == 6, again)
+    later = vendor_discovery.from_books(TODAY + timedelta(days=95))
     check("charges stopping moves an account to Not in use on its own",
           db.session.get(ServiceProvider, found["OpenAI ChatGPT"].id).is_active is False, later)
-    vendor_discovery.from_bank(TODAY)
+    vendor_discovery.from_books(TODAY)
     check("and back when they are in the window again",
           db.session.get(ServiceProvider, found["OpenAI ChatGPT"].id).is_active is True)
     check("a found account never syncs and never fails",
@@ -167,12 +189,14 @@ with app.app_context():
           "Twilio turned the key down" in page and "api.twilio.com" not in page)
     check("its cost from the vendor's report", "$52.38" in page)
     check("AWS is not in use, so not here", 'data-vendor="amazon web services"' not in page)
-    check("found accounts say where from", "From the bank" in page and "In the code" in page)
+    check("found accounts say where from", "From the books" in page and "In the code" in page)
     check("a page to look at: no edit, delete or sync press on any account",
           "Sync now" not in page and "/delete" not in page and "Add account" not in page and "Sync all" not in page)
     check("only a refused key asks for a press", page.count("Fix the key") == 1)
     off = c.get("/admin/vendors/?view=not_in_use").get_data(as_text=True)
-    check("Not in use has AWS and LegalZoom", 'data-vendor="amazon web services"' in off and 'data-vendor="legalzoom"' in off)
+    check("Not in use has AWS, and LegalZoom is in use (EntertainHQ was charged this month)",
+          'data-vendor="amazon web services"' in off and 'data-vendor="legalzoom"' not in off
+          and 'data-vendor="legalzoom"' in page)
     r = c.get("/admin/service-costs/providers?view=not_in_use")
     check("the old address lands on the page", r.status_code == 301 and r.headers["Location"].endswith("/admin/vendors/?view=not_in_use"),
           (r.status_code, r.headers.get("Location")))
@@ -194,7 +218,7 @@ with app.app_context():
     db.session.delete(ServiceProvider.query.filter_by(name="bank", vendor="OpenAI ChatGPT").one())
     db.session.commit()
     r = c.post("/admin/service-costs/sync-all", follow_redirects=True).get_data(as_text=True)
-    check("Sync all finds vendors on the bank too", "Found 1 new vendor account on the bank" in r
+    check("Sync all finds vendors in the books too", "Found 1 new vendor account." in r
           and ServiceProvider.query.filter_by(name="bank", vendor="OpenAI ChatGPT").count() == 1)
     routes.sync_provider = scs_sync
     print("4. a vendor knows its playbook, its mark and its maps")
