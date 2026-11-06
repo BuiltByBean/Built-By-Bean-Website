@@ -58,7 +58,7 @@
                edge of the row it deletes. The link still covers everything
                that is not the button. #}
             <div class="group flex items-center gap-3 p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
-                <a href="{{ url_for('mvp.package_detail', id=p.id) }}"
+                <a data-press="row" href="{{ url_for('mvp.package_detail', id=p.id) }}"
                    class="min-w-0 flex-1 flex items-center gap-3">
                     <span class="min-w-0 flex-1">
                         <span class="flex flex-wrap items-center gap-2">
@@ -75,7 +75,7 @@
                 <form method="POST" data-live-action class="shrink-0"
                       action="{{ url_for('mvp.package_delete', id=p.id) }}">
                     {% call confirm_button(question='Delete it and everything on it?',
-                                           btn_class='inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl text-surface-600 hover:text-red-300 hover:bg-white/5 transition-colors') %}
+                                           btn_class='w-11 h-11 inline-flex items-center justify-center rounded-xl shrink-0 border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors', btn_attrs='aria-label="Delete this package" title="Delete this package"') %}
                         {{ icon('delete', 'w-4 h-4') }}
                     {% endcall %}
                 </form>

@@ -162,13 +162,13 @@
 
         {% with countersigned = true %}{% include "pm/contracts/_send_panel.html" %}{% endwith %}
 
-        <div class="flex flex-wrap items-center gap-3 pt-2">
+        <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
+            <a href="{{ url_for('contracts.contracts_index') }}"
+               class="inline-flex items-center justify-center min-h-[44px] px-6 py-2.5 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-white/20 hover:text-white transition-colors">Cancel</a>
             <button type="submit"
                     class="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-medium rounded-xl btn-brand transition-all">
                 Preview it
             </button>
-            <a href="{{ url_for('contracts.contracts_index') }}"
-               class="text-sm text-surface-400 hover:text-surface-200">Cancel</a>
         </div>
     </div>
 </form>

@@ -88,7 +88,7 @@
                 {% set opens = url_for('stripe.invoice_detail', id=inv.local_id) if inv.local_id else url_for('stripe.invoice_open', stripe_id=inv.id) %}
                 <tr class="hover:bg-surface-800/30 transition-colors">
                     <td class="py-2 px-3">
-                        <a href="{{ opens }}" class="block py-1.5 -my-1.5 min-w-0">
+                        <a data-press="value" href="{{ opens }}" class="block py-1.5 -my-1.5 min-w-0">
                             <span class="block text-sm font-semibold text-brand-400 hover:underline">{{ inv.number or 'Draft' }}</span>
                             <span class="block sm:hidden text-xs text-surface-400 break-words">{{ inv.client_name }}</span>
                         </a>

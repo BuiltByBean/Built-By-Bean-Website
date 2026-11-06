@@ -71,8 +71,8 @@
             <span class="hidden lg:inline max-w-[140px] truncate text-xs text-surface-400"
                   x-text="state.project_name || 'No project'" :title="state.project_name"></span>
 
-            <button @click="togglePause()" :disabled="busy" title="Pause / resume"
-                    class="p-1.5 rounded-lg hover:bg-white/10 text-surface-300 transition">
+            <button @click="togglePause()" :disabled="busy" title="Pause / resume" aria-label="Pause / resume"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition">
                 {{ icon('pause', 'w-4 h-4', attrs='x-show="!state.is_paused"') }}
                 {{ icon('play', 'w-4 h-4', attrs='x-show="state.is_paused" x-cloak') }}
             </button>
@@ -88,8 +88,8 @@
                app to throw away a timer is the loudest possible way to ask
                the smallest question. #}
             <button x-show="!sureDiscard" @click="sureDiscard = true" :disabled="busy"
-                    title="Discard - log nothing"
-                    class="p-1.5 rounded-lg hover:bg-white/10 text-surface-400 hover:text-red-500 transition">
+                    title="Discard - log nothing" aria-label="Discard - log nothing"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition">
                 {{ icon('close', 'w-4 h-4') }}
             </button>
             <span x-show="sureDiscard" x-cloak @click.outside="sureDiscard = false"

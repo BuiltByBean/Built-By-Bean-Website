@@ -86,7 +86,7 @@
         <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-400 mb-2">Without a receipt</h2>
         <div class="divide-y divide-white/5">
             {% for e in s.no_receipt %}
-            <a href="{{ url_for('pm.expense_edit', id=e.id) }}"
+            <a data-press="row" href="{{ url_for('pm.expense_edit', id=e.id) }}"
                class="flex items-center justify-between gap-3 py-2.5 min-h-[44px] hover:bg-white/5 -mx-2 px-2 rounded-lg">
                 <span class="text-sm text-white break-words min-w-0">{{ e.date.strftime('%b') }} {{ e.date.day }} &middot; {{ e.description or category_labels.get(e.category, e.category) }}</span>
                 <span class="text-sm font-semibold text-white tabular-nums shrink-0">{{ money(e.amount) }}</span>

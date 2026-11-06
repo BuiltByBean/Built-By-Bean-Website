@@ -49,7 +49,7 @@
     </div>
 
     {% if projects %}
-    <p class="text-xs text-surface-500">This repository is {% for p in projects %}<a href="{{ url_for('pm.project_detail', id=p.id) }}" class="text-brand-300 hover:text-brand-200">{{ p.name }}</a>{{ ', ' if not loop.last }}{% endfor %}.</p>
+    <p class="text-xs text-surface-500">This repository is {% for p in projects %}<a data-press="prose" href="{{ url_for('pm.project_detail', id=p.id) }}" class="text-brand-300 hover:text-brand-200">{{ p.name }}</a>{{ ', ' if not loop.last }}{% endfor %}.</p>
     {% endif %}
 </div>
 {% endblock %}

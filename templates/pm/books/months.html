@@ -66,7 +66,7 @@
     <h2 class="px-4 sm:px-5 pt-4 sm:pt-5 pb-2 text-xs font-semibold uppercase tracking-wider text-surface-400">To do</h2>
     <div class="divide-y divide-white/5">
         {% for kind, title, detail, href, n in todo %}
-        <a href="{{ href }}" data-todo="{{ kind }}"
+        <a data-press="row" href="{{ href }}" data-todo="{{ kind }}"
            class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 sm:px-5 py-3 min-h-[44px] hover:bg-white/5 transition-colors">
             <span class="min-w-0 grow basis-64">
                 <span class="block text-sm font-medium text-white break-words">{{ title }}</span>
@@ -85,7 +85,7 @@
         {% if months %}
         <div class="divide-y divide-white/5 rounded-xl border border-white/10 overflow-hidden">
             {% for m in months %}
-            <a href="{{ url_for('books.month_page', id=business.id, ym=m.month.strftime('%Y-%m')) }}"
+            <a data-press="row" href="{{ url_for('books.month_page', id=business.id, ym=m.month.strftime('%Y-%m')) }}"
                class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 min-h-[44px] hover:bg-white/5 transition-colors">
                 <span class="text-sm font-medium text-white">{{ m.month.strftime('%B %Y') }}</span>
                 <span class="flex flex-wrap items-center gap-2 text-xs">

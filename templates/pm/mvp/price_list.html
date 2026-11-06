@@ -2,6 +2,7 @@
 {% from "pm/components/select_dropdown.html" import select_dropdown %}
 {% from "pm/components/checkbox.html" import checkbox %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button with context %}
 {% from "pm/mvp/_tabs.html" import mvp_tabs %}
 
 {#
@@ -202,7 +203,7 @@
                         <span class="text-surface-400 font-normal">- {{ s.client.name }}</span>
                     </p>
                     <p class="text-xs text-surface-400 mt-0.5">
-                        <a href="{{ url_for('pm.project_detail', id=s.project_id) }}"
+                        <a data-press="value" href="{{ url_for('pm.project_detail', id=s.project_id) }}"
                            class="hover:text-brand-300 transition-colors">{{ s.project.name }}</a>
                         {%- if s.price is not none %} &middot; {{ s.price|format_currency }}{% endif %}
                         {%- if s.monthly_price %} + {{ s.monthly_price|format_currency }}/mo{% endif %}
@@ -331,7 +332,7 @@
 
             <div class="flex items-center justify-end gap-2 pt-1">
                 <button type="button" @click="sell = null"
-                        class="px-4 py-2 text-sm text-surface-300 hover:text-white transition-colors">Cancel</button>
+                        class="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-white/20 hover:text-white transition-colors">Cancel</button>
                 <button type="submit" class="px-4 py-2 btn-brand text-sm font-medium rounded-xl transition-all">
                     Sell and draft the contract</button>
             </div>
@@ -351,9 +352,7 @@
                         <span x-show="!copied">Copy</span>
                         <span x-show="copied" style="display: none">Copied</span>
                     </button>
-                    <button type="button" @click="prompt = null" class="text-surface-400 hover:text-surface-200 p-1">
-                        {{ icon('close') }}
-                    </button>
+                    {{ icon_button('close', 'Close', attrs='@click="prompt = null"') }}
                 </div>
             </div>
             <pre class="overflow-auto p-4 text-xs text-surface-200 whitespace-pre-wrap font-mono" x-text="prompt"></pre>

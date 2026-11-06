@@ -1,6 +1,7 @@
 {% extends "pm/base.html" %}
 {% from "pm/components/back_link.html" import back_link %}
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button with context %}
 
 {#
   One contract, and everything known about it.
@@ -153,7 +154,7 @@
                 {% if req.revision_of %}
                 <p class="text-xs text-surface-400 mt-4 pt-4 border-t border-white/10">
                     Replaces
-                    <a href="{{ url_for('contracts.contract_detail', id=req.revision_of.id) }}"
+                    <a data-press="prose" href="{{ url_for('contracts.contract_detail', id=req.revision_of.id) }}"
                        class="text-brand-400 hover:text-brand-300">{{ req.revision_of.title }}</a>,
                     which {{ req.revision_of.signer_name }} asked to change.
                 </p>
@@ -162,7 +163,7 @@
                 <p class="text-xs text-surface-400 mt-4 pt-4 border-t border-white/10">
                     Replaced by
                     {% for r in req.revisions %}
-                    <a href="{{ url_for('contracts.contract_detail', id=r.id) }}"
+                    <a data-press="prose" href="{{ url_for('contracts.contract_detail', id=r.id) }}"
                        class="text-brand-400 hover:text-brand-300">{{ r.title }}</a>{{ ", " if not loop.last }}
                     {% endfor %}
                 </p>
@@ -238,7 +239,7 @@
                         <dt class="text-xs text-surface-400 uppercase tracking-wide">Client</dt>
                         <dd class="text-surface-200 mt-0.5">
                             {% if req.client %}
-                            <a href="{{ url_for('pm.client_detail', id=req.client.id) }}"
+                            <a data-press="value" href="{{ url_for('pm.client_detail', id=req.client.id) }}"
                                class="hover:text-brand-300 transition-colors">{{ req.client.name }}</a>
                             {% else %}<span class="text-surface-500">Not linked</span>{% endif %}
                         </dd>
@@ -247,7 +248,7 @@
                     <div>
                         <dt class="text-xs text-surface-400 uppercase tracking-wide">Project</dt>
                         <dd class="text-surface-200 mt-0.5">
-                            <a href="{{ url_for('pm.project_detail', id=req.project.id) }}"
+                            <a data-press="value" href="{{ url_for('pm.project_detail', id=req.project.id) }}"
                                class="hover:text-brand-300 transition-colors">{{ req.project.name }}</a>
                         </dd>
                     </div>
@@ -266,8 +267,8 @@
                     <div>
                         <dt class="text-xs text-surface-400 uppercase tracking-wide">Unsigned original</dt>
                         <dd class="mt-0.5">
-                            <a href="{{ url_for('pm.document_download', id=req.source_document_id) }}"
-                               class="text-brand-300 hover:text-brand-200 transition-colors">Download</a>
+                            {{ icon_button('download', 'Download the unsigned original',
+                                           href=url_for('pm.document_download', id=req.source_document_id)) }}
                         </dd>
                     </div>
                     {% endif %}

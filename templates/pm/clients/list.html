@@ -3,6 +3,7 @@
 {% from "pm/components/clear_filters.html" import clear_filters %}
 {% from "pm/components/pagination.html" import render_pagination %}
 {% from "pm/components/status_badge.html" import badge %}
+{% from "pm/components/icon_button.html" import icon_button with context %}
 
 {% block page_title %}Clients{% endblock %}
 {% block page_subtitle %}Who you build for{% endblock %}
@@ -123,11 +124,8 @@
                     <td class="py-3 px-3 lg:px-4 text-right text-sm text-surface-300 tabular-nums whitespace-nowrap hidden xl:table-cell">{{ (f.spent or 0) | format_currency }}</td>
                     {% endif %}
                     <td class="py-3 pr-4 pl-1 text-right hidden sm:table-cell" onclick="event.stopPropagation()">
-                        <a href="{{ url_for('pm.client_edit', id=client.id) }}"
-                           aria-label="Edit {{ client.company or client.name }}"
-                           class="inline-flex items-center justify-center p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
-                            {{ icon('edit', 'w-4 h-4') }}
-                        </a>
+                        {{ icon_button('edit', 'Edit ' ~ (client.company or client.name),
+                                       href=url_for('pm.client_edit', id=client.id)) }}
                     </td>
                 </tr>
                 {% endfor %}

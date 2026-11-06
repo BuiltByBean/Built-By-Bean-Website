@@ -165,10 +165,10 @@
                     {% if item.feature.summary %}
                     <p class="text-xs text-surface-400 max-w-3xl">{{ item.feature.summary }}</p>
                     {% endif %}
-                    <p class="text-xs">
+                    <div class="flex justify-end">
                         <a href="{{ url_for('features.features_index', q=item.feature.name) }}"
-                           class="text-brand-400 hover:text-brand-300">Open in Best Practices</a>
-                    </p>
+                           class="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">{{ icon('handbook', 'w-4 h-4') }} Open in Best Practices</a>
+                    </div>
                     {% elif item.product and item.product.summary %}
                     <p class="text-xs text-surface-400 max-w-3xl">{{ item.product.summary }}</p>
                     {% endif %}

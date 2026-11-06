@@ -131,7 +131,7 @@
                     {% for req in requests %}
                     <tr class="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors">
                         <td class="px-4 py-3">
-                            <a href="{{ url_for('contracts.contract_detail', id=req.id) }}"
+                            <a data-press="value" href="{{ url_for('contracts.contract_detail', id=req.id) }}"
                                class="font-medium text-white hover:text-brand-300 transition-colors">
                                 {{ req.title }}
                             </a>
@@ -148,7 +148,7 @@
                         </td>
                         <td class="px-4 py-3 text-surface-300 hidden md:table-cell">
                             {% if req.client %}
-                            <a href="{{ url_for('pm.client_detail', id=req.client.id) }}"
+                            <a data-press="value" href="{{ url_for('pm.client_detail', id=req.client.id) }}"
                                class="hover:text-brand-300 transition-colors">{{ req.client.name }}</a>
                             {% else %}
                             <span class="text-surface-500">-</span>

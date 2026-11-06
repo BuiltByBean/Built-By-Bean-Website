@@ -2677,7 +2677,18 @@ regression. `tools/test_volume_files.py`.
   `#pm-scroll.getBoundingClientRect().top` equal to the banner's bottom.
 - **No em dashes. Anywhere.** Not in product copy, not in commit messages.
 - **Text alone is never a button.** Anything that acts on press gets a border
-  or a fill. Actions sit on the trailing edge.
+  or a fill. Actions sit on the trailing edge. A form's Cancel is the outlined
+  secondary before its submit; a glyph action is `icon_button`. Held by
+  `tools/test_bare_buttons.py` (issue #30, after the showcase shipped two bare
+  presses and Michael said "you only fix in isolation"): every `<a>`,
+  `<button>` and `confirm_button` btn_class in templates/pm must draw a border
+  or a fill, `:class` and `{% set %}` variables read in. A press rightly
+  unboxed says what it is with `data-press="<kind>"` (row, prose, value,
+  picture, option, grip, check, chip-part), and the test checks each kind's
+  shape; sidebar links, switches, `aria-pressed` toggles, `role="option"` and
+  rows carrying `icon('expand')` are recognised as they are.
+  `tools/test_bare_buttons_browser.py` draws the pages it changed at 320, 375
+  and 1600.
 - **No explainer copy on pages.** Reasoning goes in code comments, never on
   the screen. Never reuse one icon for two things: every icon is
   `icon('concept')` from the Handbook's vocabulary, and a concept that is not

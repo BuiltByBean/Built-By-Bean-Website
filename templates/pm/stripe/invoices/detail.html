@@ -179,12 +179,12 @@
                     </div>
                     <div>
                         <p class="text-xs text-surface-400">Client</p>
-                        <a href="{{ url_for('pm.client_detail', id=invoice.client.id) }}" class="text-sm font-medium text-brand-500 hover:text-brand-600">{{ invoice.client.name }}</a>
+                        <a data-press="value" href="{{ url_for('pm.client_detail', id=invoice.client.id) }}" class="text-sm font-medium text-brand-500 hover:text-brand-600">{{ invoice.client.name }}</a>
                     </div>
                     {% if invoice.project %}
                     <div>
                         <p class="text-xs text-surface-400">Project</p>
-                        <a href="{{ url_for('pm.project_detail', id=invoice.project.id) }}" class="text-sm font-medium text-brand-500 hover:text-brand-600">{{ invoice.project.name }}</a>
+                        <a data-press="value" href="{{ url_for('pm.project_detail', id=invoice.project.id) }}" class="text-sm font-medium text-brand-500 hover:text-brand-600">{{ invoice.project.name }}</a>
                     </div>
                     {% endif %}
                     <div>

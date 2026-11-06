@@ -1,4 +1,5 @@
 {% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button with context %}
 {#
   The checklists this project is working through.
 
@@ -258,16 +259,13 @@ function playbookPanel(ids, preferred) {
                 </div>
 
                 <div class="flex items-center gap-1 flex-shrink-0">
-                    <a href="{{ url_for('playbooks.playbook_detail', slug=pb.slug) }}"
-                       title="Read the {{ pb.display_name }} playbook"
-                       class="p-2 rounded-lg text-surface-500 hover:text-brand-300 hover:bg-white/5 transition-colors">
-                        {{ icon('handbook', 'w-4 h-4') }}
-                    </a>
+                    {{ icon_button('handbook', 'Read the ' ~ pb.display_name ~ ' playbook',
+                                   href=url_for('playbooks.playbook_detail', slug=pb.slug)) }}
                     {# What has been ticked goes with it, so it asks - in
                        place, where the row is. #}
                     <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_remove', applied_id=applied.id) }}">
                         {% call confirm_button(question='Remove it and the ticks?',
-                                               btn_class='p-2 rounded-lg text-surface-500 hover:text-red-400 hover:bg-white/5 transition-colors') %}
+                                               btn_class='w-11 h-11 inline-flex items-center justify-center rounded-xl shrink-0 border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors', btn_attrs='aria-label="Take this playbook off" title="Take this playbook off"') %}
                             {{ icon('close', 'w-4 h-4') }}
                         {% endcall %}
                     </form>
@@ -330,8 +328,8 @@ function playbookPanel(ids, preferred) {
                             {% endif %}
 
                             {% if step.waits_on_client %}
-                            <button type="button" @click="showMsg = !showMsg"
-                                    class="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-brand-400 hover:text-brand-300">
+                            <button type="button" @click="showMsg = !showMsg" :aria-expanded="showMsg"
+                                    class="mt-2 inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
                                 {{ icon('mail', 'w-3.5 h-3.5') }}
                                 <span x-text="showMsg ? 'Hide the message' : 'Message to send'"></span>
                                 <span class="text-surface-500">&middot; {{ step.client_channel or 'email' }}</span>
@@ -404,9 +402,7 @@ function playbookPanel(ids, preferred) {
             <div class="p-4 border-b border-white/10 flex items-center gap-3">
                 <input type="text" x-model="q" x-ref="q" placeholder="Search playbooks..."
                        class="input-ring flex-1 px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400">
-                <button @click="open = false" class="text-surface-400 hover:text-surface-200 p-1">
-                    {{ icon('close') }}
-                </button>
+                {{ icon_button('close', 'Close', attrs='@click="open = false"') }}
             </div>
 
             <div class="overflow-y-auto p-3 space-y-4">
@@ -422,7 +418,7 @@ function playbookPanel(ids, preferred) {
                         <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
                               x-show="'{{ pb.display_name | lower }}'.includes(q.toLowerCase())">
                             <input type="hidden" name="playbook_id" value="{{ pb.id }}">
-                            <button type="submit"
+                            <button data-press="option" type="submit"
                                     class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
                                 {% if pb.logo_path %}
                                 <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt=""
@@ -451,7 +447,7 @@ function playbookPanel(ids, preferred) {
                         <form method="POST" data-live-action action="{{ url_for('pm.project_playbook_add', id=project.id) }}"
                               x-show="'{{ pb.display_name | lower }}'.includes(q.toLowerCase())">
                             <input type="hidden" name="playbook_id" value="{{ pb.id }}">
-                            <button type="submit" class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
+                            <button data-press="option" type="submit" class="w-full flex items-center gap-3 p-2.5 rounded-xl text-left hover:bg-white/5 transition-colors">
                                 <div class="w-7 h-7 flex-shrink-0 rounded-lg bg-brand-500/15 flex items-center justify-center">
                                     <span class="text-[10px] font-bold text-brand-300">{{ pb.initials }}</span>
                                 </div>

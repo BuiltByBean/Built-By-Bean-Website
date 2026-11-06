@@ -1289,8 +1289,8 @@
                        size the house rule exists to stop: the one control on a
                        phone that opens the whole sidebar was the smallest thing
                        on the screen. #}
-                    <button @click="sidebarOpen = !sidebarOpen" aria-label="Menu"
-                            class="lg:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg hover:bg-surface-700">
+                    <button @click="sidebarOpen = !sidebarOpen" aria-label="Menu" title="Menu"
+                            class="lg:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl border border-white/10 hover:border-brand-500/40 hover:bg-surface-700">
                         {{ icon('menu', 'w-5 h-5 text-surface-300') }}
                     </button>
                     <div class="min-w-0">
@@ -1325,7 +1325,7 @@
                    exactly the width where wrapping begins, which is every
                    phone. The auto margin pushes the group right on its own
                    line as well as on a shared one. #}
-                <div data-head-actions class="flex items-center gap-3 flex-wrap justify-end ml-auto">
+                <div data-head-actions class="flex items-center gap-3 flex-wrap justify-end ml-auto min-w-0 max-w-full">
                     {# display:contents, so these wrappers carry an id for the
                        swap without taking part in the layout: back and the page
                        actions stay direct flex items of this row. #}

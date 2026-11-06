@@ -80,7 +80,7 @@
 
     <div class="flex items-center gap-4 min-w-0">
         {# The app's icon opens the app, like a phone's home screen. #}
-        <a href="{{ app.url }}" {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
+        <a data-press="picture" href="{{ app.url }}" {% if app.is_external %}target="_blank" rel="noopener"{% endif %}
            aria-label="Open {{ app.name }}" title="Open {{ app.name }}" data-app-icon
            class="w-12 h-12 flex-shrink-0 rounded-xl hover:ring-2 hover:ring-brand-500/40 transition-shadow">
         {% if app.icon_file %}

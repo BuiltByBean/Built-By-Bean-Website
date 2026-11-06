@@ -39,13 +39,13 @@
                 {% if client.email %}
                 <div class="min-w-0">
                     <p class="text-xs text-surface-400">Email</p>
-                    <a href="mailto:{{ client.email }}" class="inline-flex items-center min-h-[44px] text-sm text-brand-300 hover:text-brand-200 break-all">{{ client.email }}</a>
+                    <a data-press="value" href="mailto:{{ client.email }}" class="inline-flex items-center min-h-[44px] text-sm text-brand-300 hover:text-brand-200 break-all">{{ client.email }}</a>
                 </div>
                 {% endif %}
                 {% if client.phone %}
                 <div>
                     <p class="text-xs text-surface-400">Phone</p>
-                    <a href="tel:{{ client.phone }}" class="inline-flex items-center min-h-[44px] text-sm text-brand-300 hover:text-brand-200 tabular-nums">{{ client.phone | format_phone }}</a>
+                    <a data-press="value" href="tel:{{ client.phone }}" class="inline-flex items-center min-h-[44px] text-sm text-brand-300 hover:text-brand-200 tabular-nums">{{ client.phone | format_phone }}</a>
                 </div>
                 {% endif %}
                 {% if client.address %}
