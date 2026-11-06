@@ -257,8 +257,7 @@ check("a two-line 'On ... wrote:' is cut", mail_service.clean_text(t) == "Sounds
 check("a signature is cut", mail_service.clean_text("Yes.\n-- \nPat\nCEO") == "Yes.")
 check("nothing left means the whole mail", mail_service.clean_text("> all quoted") == "> all quoted")
 check("a broken tag's leftovers are trimmed",
-      "width=" not in mail_service.clean_text('Optimum 96 &nbsp; alt="" width="1" height="1" />
-Your bill'))
+      "width=" not in mail_service.clean_text('Optimum 96 &nbsp; alt="" width="1" height="1" />\nYour bill'))
 check("a > inside an attribute does not break a tag",
       mail_service._strip_html('<p>Hi<img src="a?b>c" alt="" width="1"/> there</p>') == "Hi there")
 check("comments and double-escaped spaces go",
