@@ -13,21 +13,22 @@
             {{ form.hidden_tag() }}
 
             <div class="space-y-5">
-                <div>
-                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Project Name *</label>
-                    {{ form.name(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="Enter project name") }}
-                    {% for error in form.name.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
-                </div>
+                {# Fields in rows that use the width: name beside client, the two
+                   texts side by side, fee, cycle and repo on one row. One column
+                   of full-width fields left most of a wide screen empty (issue #22). #}
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Project Name *</label>
+                        {{ form.name(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="Enter project name") }}
+                        {% for error in form.name.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                    </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
-                    {{ select_dropdown(form.client_id.name, form.client_id.choices, form.client_id.data, "Select Client...", full_width=true) }}
-                    {% for error in form.client_id.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
-                </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Client *</label>
+                        {{ select_dropdown(form.client_id.name, form.client_id.choices, form.client_id.data, "Select Client...", full_width=true) }}
+                        {% for error in form.client_id.errors %}<p class="mt-1 text-xs text-red-500">{{ error }}</p>{% endfor %}
+                    </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Description</label>
-                    {{ form.description(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="What is this project about?") }}
                 </div>
 
                 {# A client build walks the client phases; his own product walks
@@ -100,7 +101,7 @@
                    for the builds that were agreed before this board could
                    record one, and it is what the Hosting page holds against
                    what the infrastructure actually costs. #}
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Hosting Fee ($)</label>
                         {{ form.hosting_fee(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="25.00") }}
@@ -110,16 +111,23 @@
                         <label class="block text-sm font-medium text-surface-300 mb-1.5">Billing Cycle</label>
                         {{ select_dropdown(form.hosting_cycle.name, form.hosting_cycle.choices, form.hosting_cycle.data or 'monthly', "Monthly", full_width=true) }}
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">GitHub repository <span class="text-surface-500 font-normal">owner/name</span></label>
+                        {{ form.repo(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="BuiltByBean/KuperPlumbing") }}
+                    </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-surface-300 mb-1.5">GitHub repository <span class="text-surface-500 font-normal">owner/name</span></label>
-                    {{ form.repo(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", placeholder="BuiltByBean/KuperPlumbing") }}
-                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Description</label>
+                        {{ form.description(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="What is this project about?") }}
+                    </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
-                    {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="Additional notes...") }}
+                    <div>
+                        <label class="block text-sm font-medium text-surface-300 mb-1.5">Notes</label>
+                        {{ form.notes(class="input-ring w-full px-4 py-2.5 bg-surface-800/50 text-white text-sm placeholder-surface-400", rows="3", placeholder="Additional notes...") }}
+                    </div>
+
                 </div>
             </div>
 
