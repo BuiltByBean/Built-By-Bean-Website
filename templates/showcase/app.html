@@ -31,15 +31,18 @@
     </a>
 </div>
 
+{# Michael, 2026-11-06: "you built this so skinny making it an unnecessary
+   long scroll". The tour beside what it does, then what it is built with
+   across the whole width, three or four to a row. #}
 {% set shots = app.catalog_shots %}
 {% set points = cs.points(app) %}
 {% set services = cs.services(app, book) %}
 {% set caps = cs.capabilities(app, book) %}
+{% set others = apps | rejectattr("id", "equalto", app.id) | list %}
 <div class="sc-layout">
-    <div style="min-width:0; display:grid; gap:24px">
+    <div style="min-width:0">
         {% if shots %}
-        <div class="sc-card sc-viewer" id="tour"
-             data-shots='{{ shots | map(attribute="id") | list | tojson }}'>
+        <div class="sc-card sc-viewer" id="tour">
             <div class="sc-stage">
                 {% for s in shots %}
                 <img src="{{ shot_href(s) }}" alt="{{ s.caption or app.showcase_name }}" data-i="{{ loop.index0 }}"
@@ -58,9 +61,7 @@
             </div>
             {% endif %}
         </div>
-        {% endif %}
-
-        {% if points %}
+        {% elif points %}
         <div class="sc-card">
             <h2 class="sc-h2">What it does</h2>
             <ul class="sc-points">{% for p in points %}<li>{{ p }}</li>{% endfor %}</ul>
@@ -69,30 +70,12 @@
     </div>
 
     <aside class="sc-side">
-        {% if services %}
+        {% if shots and points %}
         <div class="sc-card">
-            <h3>Built with</h3>
-            <div style="display:grid; gap:8px">
-                {% for s in services %}
-                {% set i = cs.info(s, book) %}
-                <div class="sc-service sc-service-lg">
-                    {{ m.mark(s) }}
-                    <div style="min-width:0">
-                        <div class="sc-name">{{ i[1] }}</div>
-                        {% if i[2] %}<div class="sc-service-line">{{ i[2] }}</div>{% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% if caps %}
-            <div class="sc-chips" style="margin-top:14px">
-                {% for c in caps %}<span class="sc-chip sc-chip-cap">{{ c }}</span>{% endfor %}
-            </div>
-            {% endif %}
+            <h3>What it does</h3>
+            <ul class="sc-points">{% for p in points %}<li>{{ p }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
-
-        {% set others = apps | rejectattr("id", "equalto", app.id) | list %}
         {% if others %}
         <div class="sc-card">
             <h3>More products</h3>
@@ -103,6 +86,29 @@
         {% endif %}
     </aside>
 </div>
+
+{% if services %}
+<section class="sc-section">
+    <h2 class="sc-h2">Built with <span class="sc-count">{{ services | length }}</span></h2>
+    {% if caps %}
+    <div class="sc-chips" style="margin-bottom:16px">
+        {% for c in caps %}<span class="sc-chip sc-chip-cap">{{ c }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="sc-service-list">
+        {% for s in services %}
+        {% set i = cs.info(s, book) %}
+        <div class="sc-service sc-service-lg">
+            {{ m.mark(s) }}
+            <div style="min-width:0">
+                <div class="sc-name">{{ i[1] }}</div>
+                {% if i[2] %}<div class="sc-service-line">{{ i[2] }}</div>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
