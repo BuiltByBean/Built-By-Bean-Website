@@ -1,0 +1,27 @@
+{#
+  An unknown, expired or switched-off link. It names nothing: no products,
+  no prospect, nothing that says the link was ever real. One page for all
+  three, so a guessed address learns nothing a wrong one would not.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>Built By Beans</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="background: var(--bg)">
+    <main class="container" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center">
+        <div style="max-width: 520px">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="" style="width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 20px">
+            <h1 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 10px">This link isn't active</h1>
+            <p style="color: var(--text-muted); margin-bottom: 26px">It may have expired. Ask Michael for a new one and he'll send it right over.</p>
+            <a href="mailto:mbean@builtbybeans.com?subject=A%20new%20link%20please" class="btn btn-primary"><span>Email Michael</span></a>
+        </div>
+    </main>
+</body>
+</html>

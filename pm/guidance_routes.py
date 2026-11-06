@@ -1780,6 +1780,36 @@ def register_app():
     return jsonify(out)
 
 
+@guidance_bp.route("/apps/services", methods=["POST"])
+def app_services():
+    """The services an app's code uses, for the catalog (issue #23). The
+    nightly audit reads them off every repo it downloads; this is the same
+    write for a session that has read a repo itself. By `github` (owner/name),
+    `url` (the tile's host) or `name` (exactly); `services` is a list of vendor
+    names. Answers the tile and what it now holds."""
+    import catalog_service
+    from models import AppLink
+    body = request.get_json(silent=True) or {}
+    names = body.get("services")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        return jsonify({"error": "services is a list of vendor names"}), 400
+    tile = None
+    repo = (body.get("github") or "").strip().strip("/").lower()
+    if repo:
+        tile = next((t for t in AppLink.query.all()
+                     if (t.github_url or "").lower().rstrip("/").endswith("/" + repo)), None)
+    if tile is None and body.get("url"):
+        host = (body.get("url") or "").lower().replace("https://", "").replace("http://", "").strip("/")
+        tile = next((t for t in AppLink.query.all() if t.host and t.host.lower() == host), None)
+    if tile is None and body.get("name"):
+        tile = AppLink.query.filter(AppLink.name == body["name"].strip()).first()
+    if tile is None:
+        return jsonify({"error": "no tile matches"}), 404
+    catalog_service.set_services(tile, names)
+    db.session.commit()
+    return jsonify({"tile": tile.name, "services": tile.services})
+
+
 @guidance_bp.route("/apps/retire", methods=["POST"])
 def retire_app():
     """The other half of register_app: something torn down comes off the board.

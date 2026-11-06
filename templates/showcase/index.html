@@ -1,0 +1,82 @@
+{% extends "showcase/base.html" %}
+{% import "showcase/_macros.html" as m with context %}
+
+{#
+  The front of the showcase: who it is for, the whole body of work at a
+  glance (how many products, which platforms, what they do, every service
+  behind them), then each product. Michael, 2026-11-06: "at a glance, they
+  can say, okay, this guy's built a lot of stuff ... but we don't want to
+  overwhelm them."
+#}
+
+{% block content %}
+<p class="sc-eyebrow">{% if link %}Prepared for {{ link.label }}{% else %}Built By Beans{% endif %}</p>
+<h1 class="sc-h1">Software I've <span class="text-gradient">built and run</span></h1>
+<p class="sc-lead">A few of the products I've designed, built and keep running for real businesses. Open any of them to see what it does.</p>
+
+{% if apps %}
+<div class="sc-glance">
+    <div class="sc-card">
+        <div class="sc-stat">{{ glance.count }}</div>
+        <div class="sc-stat-label">product{{ '' if glance.count == 1 else 's' }} in use</div>
+    </div>
+    <div class="sc-card">
+        <div class="sc-chips">
+            {% for p in glance.platforms %}
+            <span class="sc-chip">{{ m.platform_icon(p) }}{{ m.platform_label(p) }}</span>
+            {% endfor %}
+        </div>
+        <div class="sc-stat-label">Where they run</div>
+    </div>
+    <div class="sc-card">
+        <div class="sc-stat">{{ glance.services | length }}</div>
+        <div class="sc-stat-label">services connected</div>
+    </div>
+</div>
+
+{% if glance.capabilities %}
+<section class="sc-section">
+    <h2 class="sc-h2">What they do</h2>
+    <div class="sc-chips">
+        {% for c in glance.capabilities %}<span class="sc-chip sc-chip-cap">{{ c }}</span>{% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section class="sc-section">
+    <h2 class="sc-h2">The products</h2>
+    <div class="sc-apps">
+        {% for app in apps %}
+        <a href="{{ app_href(app) }}" class="sc-card sc-app">
+            <div class="sc-app-head">
+                {{ m.app_icon(app) }}
+                <div style="min-width:0">
+                    <div class="sc-app-name">{{ app.showcase_name }}</div>
+                    <div class="sc-chips" style="margin-top:6px">
+                        {% for p in cs.platforms(app) %}<span class="sc-chip" style="padding:4px 9px;font-size:12.5px">{{ m.platform_icon(p) }}{{ m.platform_label(p) }}</span>{% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% if app.catalog_pitch %}<p class="sc-app-pitch">{{ app.catalog_pitch }}</p>{% endif %}
+            <span class="sc-app-more">See it &rarr;</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+
+{% if glance.services %}
+<section class="sc-section">
+    <h2 class="sc-h2">Services I've worked with</h2>
+    <div class="sc-services">
+        {% for s in glance.services %}
+        <div class="sc-service">{{ m.mark(s) }}<span class="sc-name">{{ s }}</span></div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% else %}
+<div class="sc-card" style="margin-top:36px">
+    <p class="sc-lead">Nothing is in the catalog yet.</p>
+</div>
+{% endif %}
+{% endblock %}

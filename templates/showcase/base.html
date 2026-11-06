@@ -1,0 +1,143 @@
+{#
+  The private showcase's frame (issue #23). The public site's own colours,
+  type and buttons (static/css/style.css), so a prospect who came from
+  builtbybeans.com is on the same site. Nothing here links to the board, and
+  no address on these pages is worth anything without the token in it.
+
+  `base_url` is where every link on these pages goes: /work/<token> for a
+  prospect, /admin/catalog/preview for Michael looking at it.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>{% block title %}Work by Built By Beans{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body { background: var(--bg); }
+        .sc-nav { position: sticky; top: 0; z-index: 50; background: rgba(10,10,11,0.85); backdrop-filter: blur(18px);
+                  border-bottom: 1px solid var(--border); }
+        .sc-nav .container { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 68px; }
+        .sc-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+        .sc-brand img { width: 32px; height: 32px; border-radius: 8px; }
+        .sc-preview { background: rgba(var(--primary-rgb), 0.12); border-bottom: 1px solid rgba(var(--primary-rgb), 0.35);
+                      color: var(--primary); font-size: 13px; text-align: center; padding: 8px 16px; }
+        .sc-main { padding: 48px 0 72px; }
+        .sc-eyebrow { color: var(--primary); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .sc-h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin: 10px 0 14px; }
+        .sc-lead { color: var(--text-muted); font-size: 1.1rem; max-width: 640px; }
+        .sc-section { margin-top: 56px; }
+        .sc-h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 18px; }
+        .sc-glance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 36px; }
+        .sc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; min-width: 0; }
+        .sc-stat { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+        .sc-stat-label { color: var(--text-muted); font-size: 14px; margin-top: 8px; }
+        .sc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .sc-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font-size: 13.5px;
+                   font-weight: 500; background: var(--bg-alt); border: 1px solid var(--border); color: var(--text); }
+        .sc-chip svg { width: 16px; height: 16px; color: var(--primary); flex-shrink: 0; }
+        .sc-chip-cap { background: rgba(var(--primary-rgb), 0.1); border-color: rgba(var(--primary-rgb), 0.3); }
+        .sc-services { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .sc-service { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius);
+                      background: var(--bg-alt); border: 1px solid var(--border); font-size: 14px; min-width: 0; }
+        .sc-service span.sc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sc-mark-img, .sc-mark-letter { width: 26px; height: 26px; border-radius: 6px; object-fit: contain; flex-shrink: 0; background: #fff; padding: 2px; }
+        .sc-mark-letter { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-hover);
+                          color: var(--text-muted); font-weight: 700; font-size: 13px; padding: 0; }
+        .sc-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
+        .sc-app { display: flex; flex-direction: column; gap: 14px; text-decoration: none; color: inherit;
+                  transition: border-color 0.2s, transform 0.2s; }
+        .sc-app:hover { border-color: rgba(var(--primary-rgb), 0.5); transform: translateY(-2px); }
+        .sc-app-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .sc-app-icon { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; flex-shrink: 0; background: var(--bg-alt); }
+        .sc-app-icon.sc-lg { width: 76px; height: 76px; border-radius: 18px; }
+        .sc-app-initials { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--primary);
+                           background: rgba(var(--primary-rgb), 0.12); }
+        .sc-app-name { font-size: 1.15rem; font-weight: 700; }
+        .sc-app-pitch { color: var(--text-muted); font-size: 15px; flex: 1; }
+        .sc-app-more { color: var(--primary); font-size: 14px; font-weight: 600; }
+        .sc-cta { margin-top: 64px; text-align: center; padding: 40px 24px; }
+        .sc-cta p { color: var(--text-muted); margin: 8px 0 22px; }
+        .sc-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); text-decoration: none; font-size: 14px;
+                   min-height: 44px; }
+        .sc-back:hover { color: var(--text); }
+        .sc-hero-app { display: flex; gap: 20px; align-items: flex-start; margin-top: 8px; }
+        .sc-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+        .sc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; margin-top: 36px; align-items: start; }
+        .sc-viewer { padding: 10px; }
+        .sc-stage { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; aspect-ratio: 16 / 10; }
+        .sc-stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .sc-nav-btn { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 999px;
+                      border: 1px solid var(--border); background: rgba(10,10,11,0.75); color: var(--text); cursor: pointer;
+                      display: flex; align-items: center; justify-content: center; }
+        .sc-nav-btn svg { width: 20px; height: 20px; }
+        .sc-prev { left: 12px; } .sc-next { right: 12px; }
+        .sc-caption { padding: 12px 6px 4px; color: var(--text-muted); font-size: 14.5px; min-height: 2.4em; }
+        .sc-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 6px 4px 4px; }
+        .sc-thumb { flex: 0 0 auto; width: 96px; height: 60px; border-radius: 8px; overflow: hidden; border: 2px solid transparent;
+                    background: #000; cursor: pointer; padding: 0; }
+        .sc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .sc-thumb[aria-current="true"] { border-color: var(--primary); }
+        .sc-points { list-style: none; display: grid; gap: 10px; }
+        .sc-points li { display: flex; gap: 10px; font-size: 15px; }
+        .sc-points li::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--primary); margin-top: 9px; flex-shrink: 0; }
+        .sc-side { display: grid; gap: 16px; }
+        .sc-side h3 { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; }
+        .sc-other { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--radius); text-decoration: none; color: var(--text);
+                    min-height: 44px; }
+        .sc-other:hover { background: var(--surface-hover); }
+        .sc-other .sc-app-icon { width: 34px; height: 34px; border-radius: 9px; }
+        .sc-gone { min-height: 70vh; display: flex; align-items: center; justify-content: center; text-align: center; }
+        @media (max-width: 900px) {
+            .sc-layout { grid-template-columns: minmax(0, 1fr); }
+            .sc-glance { grid-template-columns: minmax(0, 1fr); }
+        }
+        @media (max-width: 520px) {
+            .sc-main { padding-top: 32px; }
+            .sc-apps { grid-template-columns: minmax(0, 1fr); }
+            .sc-hero-app { flex-direction: column; gap: 14px; }
+            .sc-nav .btn span.sc-wide { display: none; }
+            .sc-actions .btn { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    {% if preview %}
+    <div class="sc-preview">Preview: this is what a prospect sees from their link. Nothing you do here is recorded.</div>
+    {% endif %}
+    <nav class="sc-nav">
+        <div class="container">
+            <a href="{{ base_url }}" class="sc-brand">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="">
+                Built By Beans
+            </a>
+            <a href="mailto:mbean@builtbybeans.com?subject=About%20a%20project" class="btn btn-primary btn-sm">
+                <span>Let's talk<span class="sc-wide"> about yours</span></span>
+            </a>
+        </div>
+    </nav>
+    <main class="sc-main">
+        <div class="container">
+            {% block content %}{% endblock %}
+            {% block cta %}
+            <div class="sc-card sc-cta">
+                <h2 class="sc-h2" style="margin-bottom:0">Want one built around your business?</h2>
+                <p>Tell me what slows you down, and I'll show you what it could look like.</p>
+                <div class="sc-actions" style="justify-content:center">
+                    <a href="mailto:mbean@builtbybeans.com?subject=About%20a%20project" class="btn btn-primary btn-lg"><span>Email Michael</span></a>
+                    <a href="tel:+19034912095" class="btn btn-outline btn-lg"><span>(903) 491-2095</span></a>
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -3340,7 +3340,59 @@ class AppLink(db.Model):
     # a tile nobody has placed: it follows the placed ones, oldest first.
     position = db.Column(db.Integer, nullable=True)
 
+    # The catalog: the private showcase a prospect opens from a link Michael
+    # sends (issue #23, 2026-11-06: "I need a way where I can pick which
+    # products I want them to be able to see ... only accessible upon me
+    # sending someone a link"). `catalog` is the pick; the name is what the
+    # product is called there, which is not always the tile's (Robinson &
+    # Co.'s studio app is Vignette); the pitch is one or two sentences in a
+    # prospect's words; `catalog_points` is what it does, one per line;
+    # `demo_url` is a live demo with no login, once the app has one.
+    catalog = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    catalog_name = db.Column(db.String(120), nullable=True)
+    catalog_pitch = db.Column(db.Text, nullable=True)
+    catalog_points = db.Column(db.Text, nullable=True)
+    catalog_position = db.Column(db.Integer, nullable=True)
+    demo_url = db.Column(db.String(500), nullable=True)
+    # The product's own icon in the catalog, on the volume under catalog/. A
+    # tile renamed for the catalog never falls back to the tile's icon, which
+    # is the client's (Robinson & Co.'s logo must not sit on Vignette).
+    catalog_icon = db.Column(db.String(120), nullable=True)
+    # The services its code uses, read off the repo by the nightly audit
+    # (vendor_discovery.vendors_in_files) or filed through the door
+    # (/api/guidance/apps/services): a JSON list of vendor names.
+    services_json = db.Column(db.Text, nullable=True)
+    services_checked_at = db.Column(db.DateTime, nullable=True)
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    @property
+    def showcase_name(self):
+        return (self.catalog_name or "").strip() or self.name
+
+    @property
+    def renamed(self):
+        return bool((self.catalog_name or "").strip()) and self.catalog_name.strip() != self.name
+
+    @property
+    def showcase_initials(self):
+        parts = [p for p in self.showcase_name.split() if p[:1].isalnum()]
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return (parts[0][:2] if parts else "?").upper()
+
+    @property
+    def showcase_has_icon(self):
+        return bool(self.catalog_icon or (self.icon_file and not self.renamed))
+
+    @property
+    def services(self):
+        import json
+        try:
+            value = json.loads(self.services_json or "[]")
+        except (TypeError, ValueError):
+            return []
+        return [v for v in value if isinstance(v, str)]
 
     @property
     def section(self):
@@ -3384,6 +3436,73 @@ class AppLink(db.Model):
 
     def __repr__(self):
         return f"<AppLink {self.name}>"
+
+
+class CatalogShot(db.Model):
+    """One screen of an app's tour in the catalog: a picture on the volume
+    (`catalog/`) and what it shows, in the order a prospect pages through."""
+
+    __tablename__ = "catalog_shots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    app_link_id = db.Column(
+        db.Integer,
+        db.ForeignKey("app_links.id", ondelete="CASCADE", name="fk_catalog_shots_app_link_id"),
+        nullable=False, index=True)
+    file = db.Column(db.String(120), nullable=False)
+    caption = db.Column(db.String(200), nullable=False, default="", server_default="")
+    position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    app = db.relationship("AppLink", backref=db.backref(
+        "catalog_shots", lazy="select", cascade="all, delete-orphan",
+        order_by="(CatalogShot.position, CatalogShot.id)"))
+
+
+class CatalogLink(db.Model):
+    """One prospect's way into the catalog. Nobody reaches the showcase
+    without one: the token is the whole key, it expires, and Michael can
+    switch it off. `app_ids_json` narrows it to some approved apps; null is
+    every approved app."""
+
+    __tablename__ = "catalog_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(48), nullable=False, unique=True, index=True)
+    label = db.Column(db.String(120), nullable=False)
+    app_ids_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    last_opened_at = db.Column(db.DateTime, nullable=True)
+    open_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL", name="fk_catalog_links_created_by_id"),
+        nullable=True, index=True)
+
+    @property
+    def app_ids(self):
+        import json
+        try:
+            value = json.loads(self.app_ids_json) if self.app_ids_json else None
+        except (TypeError, ValueError):
+            return None
+        return [int(v) for v in value if str(v).isdigit()] if isinstance(value, list) else None
+
+
+class CatalogView(db.Model):
+    """A page of the showcase opened from a link: when, and which app."""
+
+    __tablename__ = "catalog_views"
+
+    id = db.Column(db.Integer, primary_key=True)
+    link_id = db.Column(
+        db.Integer, db.ForeignKey("catalog_links.id", ondelete="CASCADE", name="fk_catalog_views_link_id"),
+        nullable=False, index=True)
+    app_link_id = db.Column(
+        db.Integer, db.ForeignKey("app_links.id", ondelete="SET NULL", name="fk_catalog_views_app_link_id"),
+        nullable=True, index=True)
+    at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class PlaybookStep(db.Model):

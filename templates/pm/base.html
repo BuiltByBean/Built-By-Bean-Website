@@ -1138,6 +1138,11 @@
                 {{ icon('apps') }}
                 My Apps
             </a>
+            <a href="{{ url_for('catalog.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('catalog.') %}active{% endif %}">
+                {{ icon('catalog') }}
+                Catalog
+            </a>
             <a href="{{ url_for('pm.tickets_list') }}"
                class="sidebar-link {% if request.endpoint and ('ticket' in request.endpoint or request.endpoint.startswith('support.')) %}active{% endif %}">
                 {{ icon('support') }}

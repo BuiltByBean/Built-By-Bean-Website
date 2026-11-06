@@ -219,6 +219,10 @@ def audit(app, repos=None, fetch=None):
                 added = vendor_discovery.note_repo(full_name, files)
                 if added:
                     print(f"  {full_name:40} vendors found: {', '.join(added)}")
+                # And on the app tile this repo is, for the catalog (issue #23).
+                import catalog_service
+                catalog_service.record_repo_services(
+                    full_name, sorted(vendor_discovery.vendors_in_files(files)))
             except Exception as err:  # noqa: BLE001 - never stops the audit
                 db.session.rollback()
                 print(f"  {full_name:40} vendors: {str(err)[:120]}")

@@ -1,0 +1,269 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+{% from "pm/components/icon_button.html" import icon_button %}
+{% from "pm/components/checkbox.html" import checkbox %}
+
+{#
+  The catalog (issue #23): which apps a prospect may see, how each is
+  described, its tour, and the links that let a prospect in. Two columns from
+  lg: the apps on the left, the links on the right, so neither is a bar across
+  a wide screen. Every press is in place (data-live-action) and swaps the two
+  regions it can change.
+
+  openId is outside the live regions, so a save does not shut the app being
+  written about.
+#}
+
+{% block title %}Catalog - Built By Bean{% endblock %}
+{% block page_title %}Catalog{% endblock %}
+{% block page_subtitle %}The apps prospects can see, and their links{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('catalog.preview') }}" target="_blank" rel="noopener"
+   class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl btn-brand text-white">
+    {{ icon('view', 'w-4 h-4') }}<span>See it as a client would</span></a>
+{% endblock %}
+
+{% block content %}
+{% set PLAT = {'web': 'Web', 'ios': 'iPhone', 'android': 'Android'} %}
+<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start"
+     x-data="{ openId: null }">
+
+    {# ── The apps ── #}
+    <div data-live="catalog-apps" class="space-y-4 min-w-0">
+        <form method="POST" action="{{ url_for('catalog.add') }}" data-live-action
+              class="glass-card relative z-30 p-4 flex flex-wrap items-end gap-3">
+            <div class="min-w-0 flex-1 sm:min-w-[260px]">
+                <label class="block text-xs font-medium text-surface-400 mb-1.5">Add an app to the catalog</label>
+                {% set other_options = [] %}
+                {% for o in others %}{% set _ = other_options.append((o.id | string, o.name)) %}{% endfor %}
+                {{ select_dropdown('app_id', other_options, '', 'Pick one of your apps', full_width=true) }}
+            </div>
+            <button type="submit"
+                    class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-brand-500/40 text-brand-300 hover:bg-brand-500/10 transition-colors">
+                {{ icon('add', 'w-4 h-4') }}<span>Add</span></button>
+        </form>
+
+        {% for app in apps %}
+        {% set shots = app.catalog_shots %}
+        <div class="glass-card min-w-0" :class="openId === {{ app.id }} ? 'relative z-20' : 'relative z-0'">
+            <div class="p-4 flex items-center gap-3 min-w-0">
+                {% if app.showcase_has_icon %}
+                <img src="{{ url_for('catalog.icon_file', id=app.id) }}" alt="" class="w-11 h-11 rounded-xl object-cover flex-shrink-0">
+                {% else %}
+                <span class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 text-xs font-bold flex items-center justify-center flex-shrink-0">{{ app.showcase_initials }}</span>
+                {% endif %}
+                <button type="button" @click="openId = (openId === {{ app.id }} ? null : {{ app.id }})"
+                        :aria-expanded="openId === {{ app.id }}"
+                        class="min-w-0 flex-1 min-h-[44px] text-left">
+                    <span class="block text-sm font-semibold text-white truncate">{{ app.showcase_name }}
+                        {% if app.catalog_name and app.catalog_name != app.name %}<span class="font-normal text-surface-500">({{ app.name }})</span>{% endif %}</span>
+                    <span class="block text-xs text-surface-400 truncate">
+                        {% for p in cs.platforms(app) %}{{ PLAT[p] }}{{ ', ' if not loop.last }}{% endfor %}
+                        &middot; {{ shots | length }} screen{{ '' if shots | length == 1 else 's' }}
+                        &middot; {{ cs.services(app) | length }} service{{ '' if cs.services(app) | length == 1 else 's' }}
+                        {%- if not app.catalog_pitch %} &middot; <span class="text-amber-300">no pitch yet</span>{% endif %}
+                        {%- if app.demo_url %} &middot; <span class="text-emerald-300">live demo</span>{% endif %}
+                    </span>
+                </button>
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <form method="POST" action="{{ url_for('catalog.move', id=app.id) }}" data-live-action>
+                        <input type="hidden" name="dir" value="up">
+                        {{ icon_button('promote', 'Move ' ~ app.showcase_name ~ ' up', type='submit', attrs=('disabled' if loop.first else '')) }}
+                    </form>
+                    <form method="POST" action="{{ url_for('catalog.move', id=app.id) }}" data-live-action>
+                        <input type="hidden" name="dir" value="down">
+                        {{ icon_button('demote', 'Move ' ~ app.showcase_name ~ ' down', type='submit', attrs=('disabled' if loop.last else '')) }}
+                    </form>
+                    <button type="button" @click="openId = (openId === {{ app.id }} ? null : {{ app.id }})"
+                            aria-label="Write about {{ app.showcase_name }}"
+                            class="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        {{ icon('expand', 'w-5 h-5 transition-transform', attrs=':class="openId === %d ? \'rotate-180\' : \'\'"' % app.id) }}
+                    </button>
+                </div>
+            </div>
+
+            <div x-show="openId === {{ app.id }}" x-cloak class="border-t border-white/5 p-4 sm:p-5 space-y-5">
+                <form method="POST" action="{{ url_for('catalog.save', id=app.id) }}" data-live-action class="space-y-4">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="space-y-4 min-w-0">
+                            <div>
+                                <label class="block text-xs font-medium text-surface-400 mb-1.5">Name in the catalog</label>
+                                <input type="text" name="catalog_name" value="{{ app.catalog_name or '' }}" placeholder="{{ app.name }}"
+                                       class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-surface-400 mb-1.5">The pitch, in a prospect's words</label>
+                                <textarea name="catalog_pitch" rows="3" maxlength="600"
+                                          class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                                          placeholder="One or two sentences: who it is for and what it saves them">{{ app.catalog_pitch or '' }}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-surface-400 mb-1.5">Live demo address <span class="text-surface-500">once it has one</span></label>
+                                <input type="url" name="demo_url" value="{{ app.demo_url or '' }}" placeholder="https://demo.example.com"
+                                       class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+                            </div>
+                        </div>
+                        <div class="min-w-0">
+                            <label class="block text-xs font-medium text-surface-400 mb-1.5">What it does <span class="text-surface-500">one per line</span></label>
+                            <textarea name="catalog_points" rows="9" maxlength="2000"
+                                      class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm"
+                                      placeholder="Customers book online and get a text reminder">{{ app.catalog_points or '' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex flex-wrap gap-1.5 min-w-0">
+                            {% for s in cs.services(app) %}
+                            <span class="px-2 py-0.5 text-[11px] rounded-md bg-surface-800 text-surface-300">{{ s }}</span>
+                            {% else %}
+                            <span class="text-xs text-surface-500">Services are read from its code each night.</span>
+                            {% endfor %}
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <label class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors cursor-pointer">
+                                {{ icon('image', 'w-4 h-4') }}<span>{{ 'Change its icon' if app.catalog_icon else 'Its own icon' }}</span>
+                                <input type="file" name="icon" accept="image/png,image/jpeg,image/webp" class="sr-only"
+                                       form="icon-{{ app.id }}" onchange="this.form.requestSubmit()">
+                            </label>
+                            <a href="{{ url_for('catalog.preview_app', id=app.id) }}" target="_blank" rel="noopener"
+                               class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                                {{ icon('view', 'w-4 h-4') }}<span>See its page</span></a>
+                            <button type="submit" class="min-h-[44px] px-5 text-sm font-medium rounded-xl btn-brand text-white">Save</button>
+                        </div>
+                    </div>
+                </form>
+
+                <form id="icon-{{ app.id }}" method="POST" action="{{ url_for('catalog.set_icon', id=app.id) }}"
+                      enctype="multipart/form-data" data-live-action class="hidden"></form>
+
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-3">Tour</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {% for s in shots %}
+                        <div class="rounded-xl border border-white/10 bg-surface-900/40 overflow-hidden min-w-0">
+                            <img src="{{ url_for('catalog.shot_file', id=s.id) }}" alt="" class="w-full aspect-[16/10] object-cover bg-black" loading="lazy">
+                            <div class="p-2 space-y-2">
+                                <form method="POST" action="{{ url_for('catalog.caption', id=s.id) }}" data-live-action>
+                                    <input type="text" name="caption" value="{{ s.caption }}" maxlength="200" placeholder="What this screen shows"
+                                           aria-label="Caption" onchange="this.form.requestSubmit()"
+                                           class="input-ring w-full min-w-0 px-3 py-2 bg-surface-800/50 text-white text-xs">
+                                </form>
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <form method="POST" action="{{ url_for('catalog.move_shot', id=s.id) }}" data-live-action>
+                                        <input type="hidden" name="dir" value="up">
+                                        {{ icon_button('back', 'Show this screen earlier', type='submit', attrs=('disabled' if loop.first else '')) }}
+                                    </form>
+                                    <form method="POST" action="{{ url_for('catalog.move_shot', id=s.id) }}" data-live-action>
+                                        <input type="hidden" name="dir" value="down">
+                                        {{ icon_button('forward', 'Show this screen later', type='submit', attrs=('disabled' if loop.last else '')) }}
+                                    </form>
+                                    <form method="POST" action="{{ url_for('catalog.delete_shot', id=s.id) }}" data-live-action>
+                                        {{ confirm_button(label='Remove', question='Remove it?',
+                                            btn_class='min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        <form method="POST" action="{{ url_for('catalog.add_shots', id=app.id) }}" enctype="multipart/form-data"
+                              data-live-action class="min-w-0">
+                            <label class="flex flex-col items-center justify-center gap-2 h-full min-h-[140px] rounded-xl border border-dashed border-white/15 text-surface-400 hover:border-brand-500/40 hover:text-brand-300 cursor-pointer transition-colors p-4 text-center">
+                                {{ icon('upload', 'w-6 h-6') }}
+                                <span class="text-sm font-medium">Add screens</span>
+                                <span class="text-xs text-surface-500">PNG, JPEG or WebP</span>
+                                <input type="file" name="shots" accept="image/png,image/jpeg,image/webp" multiple class="sr-only"
+                                       onchange="this.form.requestSubmit()">
+                            </label>
+                        </form>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('catalog.remove', id=app.id) }}" data-live-action
+                      class="flex justify-end pt-3 border-t border-white/5">
+                    {{ confirm_button(label='Take it out of the catalog', question='Take it out?',
+                        btn_class='min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="glass-card p-8 text-center">
+            <p class="text-surface-300">Nothing is in the catalog yet. Add an app above.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# ── The links ── #}
+    <div data-live="catalog-links" class="space-y-4 min-w-0 lg:sticky lg:top-0">
+        <form method="POST" action="{{ url_for('catalog.make_link') }}" data-live-action
+              class="glass-card relative z-30 p-4 space-y-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-400">Send someone a link</h3>
+            <div>
+                <label class="block text-xs font-medium text-surface-400 mb-1.5">Who it's for</label>
+                <input type="text" name="label" required maxlength="120" placeholder="Name or business"
+                       class="input-ring w-full min-w-0 px-4 py-2.5 bg-surface-800/50 text-white text-sm">
+            </div>
+            {% if apps %}
+            <div>
+                <p class="text-xs font-medium text-surface-400 mb-1.5">Only these <span class="text-surface-500">leave all unticked for every app</span></p>
+                <div class="grid grid-cols-1 gap-1">
+                    {% for app in apps %}
+                    {{ checkbox('app_ids', value=app.id | string, label=app.showcase_name, compact=true) }}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="flex items-end gap-3">
+                <div class="flex-1 min-w-0">
+                    <label class="block text-xs font-medium text-surface-400 mb-1.5">Good for</label>
+                    {{ select_dropdown('days', [('7', '7 days'), ('30', '30 days'), ('90', '90 days')], '30', '30 days', full_width=true) }}
+                </div>
+                <button type="submit" class="min-h-[44px] px-5 text-sm font-medium rounded-xl btn-brand text-white">Make link</button>
+            </div>
+        </form>
+
+        <div class="glass-card p-2">
+            {% for link in links %}
+            {% set ok = live(link) %}
+            {% set url = 'https://' ~ request.host ~ url_for('showcase.showcase', token=link.token) %}
+            <div class="p-3 rounded-xl {{ '' if ok else 'opacity-60' }} border-b border-white/5 last:border-0"
+                 x-data="{ copied: false }">
+                <div class="flex items-start justify-between gap-2 min-w-0">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-white truncate">{{ link.label }}</p>
+                        <p class="text-xs text-surface-400">
+                            {% if link.revoked_at %}<span class="text-red-300">Switched off</span>
+                            {% elif not ok %}<span class="text-amber-300">Expired {{ link.expires_at | format_date }}</span>
+                            {% else %}<span class="text-emerald-300">Good to {{ link.expires_at | format_date }}</span>{% endif %}
+                            &middot; opened {{ link.open_count | commas }} time{{ '' if link.open_count == 1 else 's' }}
+                            {%- if link.last_opened_at %}, last {{ link.last_opened_at | format_date }}{% endif %}
+                        </p>
+                        <p class="text-xs text-surface-500 truncate">
+                            {% if link.app_ids %}{% for i in link.app_ids if names.get(i) %}{{ names[i] }}{{ ', ' if not loop.last }}{% endfor %}{% else %}Every app in the catalog{% endif %}
+                        </p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-end gap-1.5 mt-2">
+                    {% if ok %}
+                    <button type="button" @click="navigator.clipboard.writeText('{{ url }}'); copied = true; setTimeout(() => copied = false, 1500)"
+                            class="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                        {{ icon('copy', 'w-4 h-4') }}<span x-text="copied ? 'Copied' : 'Copy link'">Copy link</span></button>
+                    {{ icon_button('external', 'Open ' ~ link.label ~ "'s link", href=url, target='_blank') }}
+                    <form method="POST" action="{{ url_for('catalog.link_off', id=link.id) }}" data-live-action>
+                        {{ confirm_button(label='Switch off', question='Switch it off?',
+                            btn_class='min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-400 hover:border-red-500/40 hover:text-red-300 transition-colors') }}
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('catalog.link_extend', id=link.id) }}" data-live-action>
+                        <button type="submit" class="min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+                            {{ 'Add 30 days' if ok else 'Turn back on for 30 days' }}</button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <p class="px-3 py-8 text-center text-sm text-surface-400">No links yet</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

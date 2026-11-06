@@ -299,7 +299,9 @@ def create_app():
         answer under /admin and /api says it is private. The admin's own static
         files stay cacheable, because they are the same for everybody."""
         endpoint = (request.endpoint or "").rsplit(".", 1)[-1]
-        if endpoint != "static" and request.path.startswith(("/admin", "/api/")):
+        # /work/ is the private showcase (issue #23): a token in the address
+        # is the only key, so nothing it serves may be stored at the edge.
+        if endpoint != "static" and request.path.startswith(("/admin", "/api/", "/work/")):
             response.headers["Cache-Control"] = "private, no-store"
         return response
 
@@ -404,6 +406,11 @@ def create_app():
     # ── My Apps board ───────────────────────────────────────
     from pm.apps_routes import apps_bp
     app.register_blueprint(apps_bp)
+
+    # ── The catalog: approved apps, and the private showcase a link opens ──
+    from pm.catalog_routes import catalog_bp, showcase_bp
+    app.register_blueprint(catalog_bp)
+    app.register_blueprint(showcase_bp)
 
     # ── Client support: each app's links and desk door ───────
     from pm.support_routes import support_bp

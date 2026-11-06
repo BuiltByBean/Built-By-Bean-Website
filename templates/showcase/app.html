@@ -1,0 +1,143 @@
+{% extends "showcase/base.html" %}
+{% import "showcase/_macros.html" as m with context %}
+
+{#
+  One product: what it is, a tour of its screens, what it does, what it is
+  built with, and a live demo once it has one. The tour is the app's
+  CatalogShots in Michael's order; arrows, thumbnails and the keyboard page
+  through them, and with none there is no tour box at all.
+#}
+
+{% block title %}{{ app.showcase_name }} - Built By Beans{% endblock %}
+
+{% block content %}
+<a href="{{ base_url }}" class="sc-back">&larr; All products</a>
+
+<div class="sc-hero-app">
+    {{ m.app_icon(app, 'sc-lg') }}
+    <div style="min-width:0">
+        <h1 class="sc-h1" style="margin-top:0">{{ app.showcase_name }}</h1>
+        {% if app.catalog_pitch %}<p class="sc-lead">{{ app.catalog_pitch }}</p>{% endif %}
+        <div class="sc-chips" style="margin-top:14px">
+            {% for p in cs.platforms(app) %}<span class="sc-chip">{{ m.platform_icon(p) }}{{ m.platform_label(p) }}</span>{% endfor %}
+        </div>
+        {% if app.demo_url %}
+        <div class="sc-actions">
+            <a href="{{ app.demo_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg"><span>Try it live</span></a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% set shots = app.catalog_shots %}
+{% set points = cs.points(app) %}
+{% set services = cs.services(app) %}
+{% set caps = cs.capabilities(app) %}
+<div class="sc-layout">
+    <div style="min-width:0; display:grid; gap:24px">
+        {% if shots %}
+        <div class="sc-card sc-viewer" id="tour"
+             data-shots='{{ shots | map(attribute="id") | list | tojson }}'>
+            <div class="sc-stage">
+                {% for s in shots %}
+                <img src="{{ shot_href(s) }}" alt="{{ s.caption or app.showcase_name }}" data-i="{{ loop.index0 }}"
+                     {% if not loop.first %}hidden loading="lazy"{% endif %}>
+                {% endfor %}
+                {% if shots | length > 1 %}
+                <button type="button" class="sc-nav-btn sc-prev" data-step="-1" aria-label="Previous screen">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
+                </button>
+                <button type="button" class="sc-nav-btn sc-next" data-step="1" aria-label="Next screen">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
+                </button>
+                {% endif %}
+            </div>
+            <div class="sc-caption" aria-live="polite">{{ shots[0].caption }}</div>
+            {% if shots | length > 1 %}
+            <div class="sc-thumbs">
+                {% for s in shots %}
+                <button type="button" class="sc-thumb" data-go="{{ loop.index0 }}" aria-label="Screen {{ loop.index }}"
+                        aria-current="{{ 'true' if loop.first else 'false' }}" data-caption="{{ s.caption }}">
+                    <img src="{{ shot_href(s) }}" alt="" loading="lazy">
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if points %}
+        <div class="sc-card">
+            <h2 class="sc-h2">What it does</h2>
+            <ul class="sc-points">{% for p in points %}<li>{{ p }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <aside class="sc-side">
+        {% if services %}
+        <div class="sc-card">
+            <h3>Built with</h3>
+            <div style="display:grid; gap:8px">
+                {% for s in services %}
+                <div class="sc-service">{{ m.mark(s) }}<span class="sc-name">{{ s }}</span></div>
+                {% endfor %}
+            </div>
+            {% if caps %}
+            <div class="sc-chips" style="margin-top:14px">
+                {% for c in caps %}<span class="sc-chip sc-chip-cap">{{ c }}</span>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% set others = apps | rejectattr("id", "equalto", app.id) | list %}
+        {% if others %}
+        <div class="sc-card">
+            <h3>More products</h3>
+            {% for o in others %}
+            <a href="{{ app_href(o) }}" class="sc-other">{{ m.app_icon(o) }}<span>{{ o.showcase_name }}</span></a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var tour = document.getElementById('tour');
+    if (!tour) return;
+    var imgs = tour.querySelectorAll('.sc-stage img');
+    var thumbs = tour.querySelectorAll('.sc-thumb');
+    var caption = tour.querySelector('.sc-caption');
+    var at = 0;
+    function show(i) {
+        at = (i + imgs.length) % imgs.length;
+        imgs.forEach(function (img, n) { img.hidden = n !== at; });
+        thumbs.forEach(function (t, n) { t.setAttribute('aria-current', n === at ? 'true' : 'false'); });
+        caption.textContent = thumbs.length ? thumbs[at].dataset.caption : caption.textContent;
+        if (thumbs[at]) thumbs[at].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    tour.addEventListener('click', function (e) {
+        var step = e.target.closest('[data-step]');
+        var go = e.target.closest('[data-go]');
+        if (step) show(at + Number(step.dataset.step));
+        if (go) show(Number(go.dataset.go));
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight') show(at + 1);
+        if (e.key === 'ArrowLeft') show(at - 1);
+    });
+    var x0 = null;
+    tour.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    tour.addEventListener('touchend', function (e) {
+        if (x0 === null) return;
+        var dx = e.changedTouches[0].clientX - x0;
+        if (Math.abs(dx) > 40) show(at + (dx < 0 ? 1 : -1));
+        x0 = null;
+    });
+})();
+</script>
+{% endblock %}
