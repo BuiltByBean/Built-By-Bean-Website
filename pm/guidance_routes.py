@@ -424,6 +424,50 @@ def books_carryover():
     return jsonify(report)
 
 
+@guidance_bp.route("/books/search")
+def books_search():
+    """Every charge that names a word, across every company, read only: bank
+    and statement lines, expenses, and receipts (issue #18). A session cannot
+    read production's database, and a vendor's accounts and costs were built
+    from one bank rule each without anybody looking at what each company was
+    actually charged (Michael, 2026-11-05: LegalZoom formed both LLCs, Apple
+    was paid for, EntertainHQ has its own Claude plan). ?q= may repeat."""
+    from models import BankTransaction, BankConnection, Business, Expense, Receipt, ReceiptMailbox, VendorRule
+    words = [w.strip() for w in request.args.getlist("q") if w.strip()][:10]
+    if not words:
+        return jsonify({"error": "give ?q="}), 400
+    names = {b.id: b.name for b in Business.query.all()}
+    rules = {r.id: r for r in VendorRule.query.all()}
+    out = {}
+    for w in words:
+        like = f"%{w}%"
+        lines = (db.session.query(BankTransaction, BankConnection)
+                 .outerjoin(BankConnection, BankTransaction.connection_id == BankConnection.id)
+                 .filter(db.or_(BankTransaction.counterparty.ilike(like), BankTransaction.description.ilike(like)))
+                 .order_by(BankTransaction.occurred_on).limit(300).all())
+        expenses = (Expense.query.filter(Expense.description.ilike(like), Expense.time_entry_id.is_(None))
+                    .order_by(Expense.date).limit(300).all())
+        receipts = (db.session.query(Receipt, ReceiptMailbox)
+                    .outerjoin(ReceiptMailbox, Receipt.mailbox_id == ReceiptMailbox.id)
+                    .filter(db.or_(Receipt.sender.ilike(like), Receipt.subject.ilike(like), Receipt.vendor.ilike(like)))
+                    .order_by(Receipt.received_on).limit(300).all())
+        out[w] = {
+            "bank": [{"date": str(t.occurred_on), "amount": t.amount, "counterparty": t.counterparty,
+                      "disposition": t.disposition, "company": names.get(t.business_id),
+                      "account": getattr(c, "name", None) or getattr(c, "provider", None),
+                      "kind": getattr(c, "kind", None), "rule": (rules[t.rule_id].vendor if t.rule_id in rules else None),
+                      "expense_id": t.expense_id} for t, c in lines],
+            "expenses": [{"id": e.id, "date": str(e.date), "amount": e.amount, "description": (e.description or "")[:120],
+                          "category": e.category, "company": names.get(e.business_id), "paid_by": e.paid_by}
+                         for e in expenses],
+            "receipts": [{"date": str(r.received_on), "amount": r.amount, "sender": (r.sender or "")[:80],
+                          "subject": (r.subject or "")[:100], "vendor": r.vendor,
+                          "mailbox_company": names.get(m.business_id) if m is not None else None}
+                         for r, m in receipts],
+        }
+    return jsonify(out)
+
+
 @guidance_bp.route("/costs")
 def costs():
     """What each vendor has actually cost, and where that figure came from.
