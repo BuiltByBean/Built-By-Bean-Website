@@ -946,6 +946,17 @@ again, answering what it was before. That is how the Apple Developer Program
 ($107.17 on 2026-06-14, filed personal by the "Apple Store online" rule) went
 onto Built by Bean's books, and how Built by Bean's own LegalZoom formation
 ($301.00, 2024-01-17, order 80675586, before the books begin) was found.
+In use follows the vendor's own rhythm (`in_use_by_rhythm`: one and a half of
+its usual gap, never under 90 days, a single charge thirteen months), because
+the Apple membership charges once a year and read as stopped. Stand-ins give
+way: a vendor found only in the code or a store listing goes once a real
+account exists in that company's family, and an account the old rule reading
+made for a company the books never show paying is taken off, unless other
+evidence keeps it (`discovered_from` "mail:", Built by Bean's 2024 LegalZoom
+order, migration `e8b4c2d6a913`). A DBA has no account of its own: Data
+Dungeon's App Store listing is Built by Bean's developer account (`_family`;
+Michael: "I have only a built by beans account"). The tiles carry the
+playbook link and no map links (his pick).
 
 ## The books stand on the bank
 

@@ -144,7 +144,7 @@ with app.app_context():
     check("OpenAI is Built by Bean's", found["OpenAI ChatGPT"].account_business_id is None)
     check("Twilio paid by Built by Bean is a second Twilio account beside Kenali's",
           found["Twilio"].account_client_id is None and found["Twilio"].account_business_id is None)
-    check("a vendor not charged in 90 days is found Not in use", found["LegalZoom"].is_active is False)
+    check("one charge 200 days ago may be yearly, so it stays in use", found["LegalZoom"].is_active is True)
     check("a charged one is in use", found["OpenAI ChatGPT"].is_active is True)
     check("meals are not a vendor, and a rule nothing matched adds nothing",
           "Chuy's" not in found and "Never Charged" not in found)
@@ -229,7 +229,7 @@ with app.app_context():
         return m.group(1) if m else ""
     check("Twilio wears its playbook's mark and opens it",
           "img/vendors/twilio.svg" in tile("twilio") and 'data-playbook="twilio"' in tile("twilio"), tile("twilio")[:400])
-    check("and names the map it is a service on", "EntertainHQ LLC map" in tile("twilio"))
+    check("no map links, only the playbook (Michael, 2026-11-06)", " map" not in tile("twilio").split("data-account")[0])
     check("a playbook pointed at an account finds it whatever its name",
           'data-playbook="railway"' in tile("railway"))
     check("OpenAI finds the LLM playbook by the words the night uses", 'data-playbook="llm-apis"' in tile("openai chatgpt"))
@@ -273,6 +273,58 @@ with app.app_context():
           ServiceProvider.query.filter_by(vendor="Resend").one().account_business_id == ids.ehq)
     page = c.get("/admin/vendors/").get_data(as_text=True)
     check("the store's account says so on the page", "From the store" in page and "EntertainHQ on the App Store" in page)
+
+    print("6. the books stand: rhythm, stand-ins, the old reading's leftovers")
+    check("a yearly membership is in use five months on", vendor_discovery.in_use_by_rhythm([TODAY - timedelta(days=145)], TODAY))
+    check("a monthly one that stopped is not",
+          not vendor_discovery.in_use_by_rhythm([TODAY - timedelta(days=d) for d in (190, 160, 130)], TODAY))
+    check("a monthly one still charging is",
+          vendor_discovery.in_use_by_rhythm([TODAY - timedelta(days=d) for d in (65, 35, 5)], TODAY))
+    # Apple's membership paid by Built by Bean, booked whole (the line points
+    # at its expense), while the store's stand-in sits under the DBA.
+    dd = Business(name="Data Dungeon", slug="dd", sales_source="manual", parent_id=db.session.get(Business, ids.ehq).id)
+    db.session.add(dd)
+    db.session.flush()
+    stand_in = ServiceProvider(name="code", display_name="Apple Developer Program", vendor="Apple Developer Program",
+                               credentials_json="{}", discovered_from="store: Data Dungeon on the App Store",
+                               account_business_id=dd.id)
+    ServiceProvider.query.filter_by(vendor="Apple Developer Program").delete()
+    db.session.add(stand_in)
+    exp = Expense(amount=107.17, date=TODAY - timedelta(days=145), description="Apple Developer Program",
+                  category="software", business_id=ids.ehq)
+    db.session.add(exp)
+    db.session.flush()
+    db.session.add(BankTransaction(connection_id=conn.id, business_id=conn.business_id, external_id="apple",
+                                   amount=-107.17, occurred_on=exp.date, counterparty="APPLE.COM/US",
+                                   disposition="expense", expense_id=exp.id, status="sent"))
+    stale = ServiceProvider(name="bank", display_name="Google Play", vendor="Google Play", credentials_json="{}",
+                            discovered_from="bank: GOOGLE PLAY")
+    kept = ServiceProvider(name="bank", display_name="LegalZoom", vendor="LegalZoom", credentials_json="{}",
+                           discovered_from="mail: order 1, $301.00 on 2024-01-17", account_business_id=None,
+                           is_active=False)
+    ServiceProvider.query.filter_by(name="bank", vendor="LegalZoom", account_business_id=None).delete()
+    db.session.add_all([stale, kept])
+    db.session.commit()
+    STALE, KEPT, STAND = stale.id, kept.id, stand_in.id
+    lines = vendor_discovery.from_books(TODAY)
+    apple = [a for a in ServiceProvider.query.filter_by(vendor="Apple Developer Program").all()]
+    check("Apple's membership is one account, paid by its company, in use, at what it cost",
+          len(apple) == 1 and apple[0].name == "bank" and apple[0].is_active
+          and vendor_discovery.spend(apple[0], TODAY) == 107.17, [(a.name, a.account_business_id, a.is_active) for a in apple])
+    check("the store's stand-in under the DBA gave way to it", db.session.get(ServiceProvider, STAND) is None, lines)
+    tile_dd = AppLink(name="Data Dungeon", url="https://dd.example", app_store_bundle_id="com.dd.app")
+    db.session.add(tile_dd)
+    db.session.flush()
+    dd.logo_app_id = tile_dd.id
+    db.session.commit()
+    vendor_discovery.from_stores()
+    check("a DBA's App Store listing never makes an account of its own",
+          ServiceProvider.query.filter_by(vendor="Apple Developer Program", account_business_id=dd.id).count() == 0)
+    check("an account the old reading made for a company never charged is taken off",
+          db.session.get(ServiceProvider, STALE) is None)
+    check("an account kept by its mail evidence stays", db.session.get(ServiceProvider, KEPT) is not None)
+    page = c.get("/admin/vendors/?view=in_use").get_data(as_text=True)
+    check("and says it is from the mail", "From the mail" in page and "2024-01-17" in page)
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "all passed")

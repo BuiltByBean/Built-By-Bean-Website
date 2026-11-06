@@ -254,7 +254,10 @@ def from_stores():
     lines = []
     for tile in AppLink.query.order_by(AppLink.id).all():
         biz = Business.query.filter_by(logo_app_id=tile.id).first()
-        payer = _payer(biz.id, _home_id()) if biz is not None else None
+        # A DBA has no developer account of its own: its listing is under its
+        # company's (Michael, 2026-11-06: "I do not have a data dungeon apple
+        # developer program account. I have only a built by beans account").
+        payer = _family(_payer(biz.id, _home_id())) if biz is not None else None
         if (tile.app_store_bundle_id or "").strip():
             if _note("Apple Developer Program", payer, f"{tile.name} on the App Store", kind="store"):
                 lines.append("Apple Developer Program: found from the App Store")
@@ -405,22 +408,27 @@ def _books(today=None):
         g = None
     names = known_vendors()
     home = _home_id()
-    lines = {}
     out = {}
     since = today - timedelta(days=YEAR_DAYS * 2)
+    # A charge the bank booked whole points at its expense (line.expense_id);
+    # one split across projects is pointed at by each share (bank_line_id).
+    by_expense = {t.expense_id: t for t in BankTransaction.query.filter(
+        BankTransaction.expense_id.isnot(None), BankTransaction.occurred_on >= since).all()}
+    by_id = {}
     for e in (Expense.query.filter(Expense.time_entry_id.is_(None), Expense.date >= since,
                                    Expense.amount > 0).all()):
-        line = None
-        if getattr(e, "bank_line_id", None):
-            line = lines.get(e.bank_line_id) or db.session.get(BankTransaction, e.bank_line_id)
-            lines[e.bank_line_id] = line
+        line = by_expense.get(e.id)
+        if line is None and getattr(e, "bank_line_id", None):
+            line = by_id.get(e.bank_line_id) or db.session.get(BankTransaction, e.bank_line_id)
+            by_id[e.bank_line_id] = line
         vendor = vendor_of(e, line, names)
         if not vendor:
             continue
         payer = _payer(e.business_id, home)
         who = ("business", payer) if payer else ("home", None)
         row = out.setdefault((key(vendor), who), {"vendor": vendor, "year": 0.0, "last": e.date, "first": e.date,
-                                                  "business_id": payer, "what": e.description})
+                                                  "business_id": payer, "what": e.description, "dates": []})
+        row["dates"].append(e.date)
         if e.date >= today - timedelta(days=YEAR_DAYS):
             row["year"] += e.amount
         row["last"] = max(row["last"], e.date)
@@ -434,18 +442,51 @@ def _books(today=None):
     return out
 
 
+def in_use_by_rhythm(dates, today):
+    """Whether a vendor still charges: within one and a half of its usual gap
+    since the last charge (never under IN_USE_DAYS), or, with one charge only,
+    within thirteen months, because a yearly membership (Apple's developer
+    program) charges once a year and read as stopped after ninety days."""
+    days = sorted(set(dates))
+    if not days:
+        return False
+    last = days[-1]
+    if len(days) < 2:
+        return (today - last).days <= 400
+    gaps = sorted((b - a).days for a, b in zip(days, days[1:]))
+    usual = gaps[len(gaps) // 2]
+    return (today - last).days <= max(IN_USE_DAYS, int(usual * 1.5))
+
+
+def _family(business_id):
+    """A company and its DBAs as one payer: Data Dungeon's App Store listing
+    is Built by Bean's developer account."""
+    from models import db, Business
+    if business_id is None:
+        return None
+    b = db.session.get(Business, business_id)
+    if b is not None and b.parent_id:
+        return _payer(b.parent_id, _home_id())
+    return business_id
+
+
 def from_books(today=None):
     """An account for every vendor each company's books show it paying, where
     that company has none: one per vendor per company charged (Michael,
     2026-11-06: LegalZoom formed both LLCs, EntertainHQ has its own Claude
-    plan). A found account is in use while its company paid in the last
-    IN_USE_DAYS. Returns lines saying what changed."""
+    plan). In use by the vendor's own rhythm (`in_use_by_rhythm`). Then the
+    stand-ins give way: a vendor found only in the code or a store listing,
+    and an account the old rule-based reading made for a company the books
+    never show paying, are taken off once the vendor has a real account in
+    that company's family. An account kept by other evidence (`mail:`) stays.
+    Returns lines saying what changed."""
     from models import db, ServiceProvider
     today = today or date.today()
+    books = _books(today)
     by_vendor = _accounts_by_vendor()
     lines = []
-    for (vkey, who), row in sorted(_books(today).items(), key=lambda kv: (kv[0][0], str(kv[0][1]))):
-        in_use = row["last"] >= today - timedelta(days=IN_USE_DAYS)
+    for (vkey, who), row in sorted(books.items(), key=lambda kv: (kv[0][0], str(kv[0][1]))):
+        in_use = in_use_by_rhythm(row["dates"], today)
         mine = [a for a in by_vendor.get(vkey, []) if _paid_by(a) == who]
         if mine:
             for a in mine:
@@ -459,6 +500,26 @@ def from_books(today=None):
         db.session.add(acct)
         by_vendor.setdefault(vkey, []).append(acct)
         lines.append(f"{row['vendor']}: found in the books")
+
+    paid = {(vkey, _family(who[1]) if who[0] == "business" else None) for (vkey, who) in books}
+    for vkey, accounts in by_vendor.items():
+        real = [a for a in accounts if a.syncs or (vkey, _family(a.account_business_id)
+                                                   if _paid_by(a)[0] == "business" else None) in paid]
+        for a in accounts:
+            if a.id is None or a.syncs or (a.discovered_from or "").startswith("mail:"):
+                continue
+            fam = _family(a.account_business_id) if _paid_by(a)[0] == "business" else None
+            if a.name == "code":
+                # In the code or a store listing: a stand-in until money shows.
+                if any(r is not a and (r.syncs or r.name == "bank") and
+                       (_family(r.account_business_id) if _paid_by(r)[0] == "business" else None) == fam
+                       for r in real + accounts):
+                    db.session.delete(a)
+                    lines.append(f"{a.vendor_name}: the books' account stands for the stand-in")
+            elif a.name == "bank" and (vkey, fam) not in paid:
+                # Made by the old rule-based reading for a company never charged.
+                db.session.delete(a)
+                lines.append(f"{a.vendor_name}: no charge to {a.account_business.name if a.account_business else 'Built by Bean'} in the books")
     db.session.commit()
     return lines
 
