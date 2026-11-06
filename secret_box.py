@@ -97,3 +97,43 @@ def loads(text):
     except (json.JSONDecodeError, TypeError):
         return {}
     return unseal_creds(raw if isinstance(raw, dict) else {})
+
+
+# ------------------------------------------------------------- columns
+
+import logging
+
+from sqlalchemy.types import Text, TypeDecorator
+
+_log = logging.getLogger(__name__)
+
+
+class SealedText(TypeDecorator):
+    """A text column whose value is sealed in the database and plain in
+    Python (issue #15): the Mercury token, mailbox app passwords, a company's
+    Stripe key, the hub signing secrets and the support desk keys. Nothing
+    that reads or writes one changes. A value saved before reads as it is.
+
+    A value this service cannot open reads as "" and is logged, so the one
+    feature it feeds says it is not set up, rather than one bad row making
+    every page that loads a client or a business fail. Searching BY one of
+    these is never right (the sealed form differs every time it is written);
+    asking whether one is set still works, because "" stays "".
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None or value == "":
+            return value
+        return seal(value)
+
+    def process_result_value(self, value, dialect):
+        if not is_sealed(value):
+            return value
+        try:
+            return unseal(value)
+        except SealError as err:
+            _log.warning("secret_box: %s", err)
+            return ""

@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timezone, date, timedelta
 from flask_sqlalchemy import SQLAlchemy
+from secret_box import SealedText
 from sqlalchemy.orm import Session as _OrmSession
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -141,7 +142,7 @@ class Client(db.Model):
     # the normal case, and several of those would collide on a unique empty
     # string. Null does not collide with null.
     origin_slug = db.Column(db.String(40), nullable=True, unique=True)
-    ingest_secret = db.Column(db.String(120), default="")
+    ingest_secret = db.Column(SealedText(), default="")
     # Where my replies get pushed back to, e.g. https://kuperplumbing.com.
     # Empty means their app cannot receive them, so a reply stays here and is
     # visible as undelivered rather than being silently dropped.
@@ -829,7 +830,7 @@ class SupportApp(db.Model):
     # The desk's API door: where it answers, the bearer key (typed here once
     # and never shown again), and the desk login a call acts for.
     desk_url = db.Column(db.String(300), default="")
-    desk_key = db.Column(db.Text, nullable=True)
+    desk_key = db.Column(SealedText(), nullable=True)
     desk_acting_for = db.Column(db.String(200), default="")
     # An app whose tickets now arrive through another app's desk (J&D's Talent
     # Booker sends to EntertainHQ's since 2026-11-01). The board stops asking
@@ -1084,7 +1085,7 @@ class BankConnection(db.Model):
     # Some card exports show a purchase as a positive number; flipped on
     # import so money out is negative everywhere.
     charges_positive = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
-    token = db.Column(db.Text, default="")
+    token = db.Column(SealedText(), default="")
     synced_from = db.Column(db.Date, nullable=True)
     last_synced_at = db.Column(db.DateTime, nullable=True)
     last_ok = db.Column(db.Boolean, nullable=True)
@@ -1621,7 +1622,7 @@ class ReceiptMailbox(db.Model):
         "businesses.id", ondelete="SET NULL", name="fk_receipt_mailboxes_business_id"), nullable=True)
     address = db.Column(db.String(200), nullable=False, unique=True)
     imap_host = db.Column(db.String(120), nullable=False, default="imap.gmail.com")
-    password = db.Column(db.Text, default="")
+    password = db.Column(SealedText(), default="")
     read_from = db.Column(db.Date, nullable=True)
     last_synced_at = db.Column(db.DateTime, nullable=True)
     last_ok = db.Column(db.Boolean, nullable=True)
@@ -2449,7 +2450,7 @@ class Business(db.Model):
     # Client.origin_slug: most businesses have no app, and null never collides.
     hub_slug = db.Column(db.String(40), nullable=True, unique=True)
     hub_base_url = db.Column(db.String(300), default="")
-    hub_secret = db.Column(db.String(120), default="")
+    hub_secret = db.Column(SealedText(), default="")
     hub_pulled_at = db.Column(db.DateTime, nullable=True)
     hub_pull_note = db.Column(db.String(300), default="")
 
@@ -2458,7 +2459,7 @@ class Business(db.Model):
     # restricted key with read access to the balance, typed by its owner on
     # this business's page and never shown again. Built by Bean's Stripe is
     # read through the app's own key and needs nothing here.
-    stripe_key = db.Column(db.Text, nullable=True)
+    stripe_key = db.Column(SealedText(), nullable=True)
     stripe_synced_at = db.Column(db.DateTime, nullable=True)
     stripe_ok = db.Column(db.Boolean, nullable=True)
     stripe_note = db.Column(db.String(300), default="")

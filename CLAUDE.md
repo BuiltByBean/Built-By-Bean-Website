@@ -849,9 +849,19 @@ Every write is `secret_box.dumps`, every read `secret_box.loads`
 (`service_costs_service._get_credentials`); a plain value saved before still
 reads, and migration `c7e2a9f4b136` sealed what was there. A key this service
 cannot open raises `SealError`, which the sync records in words: changing
-SECRET_KEY means pasting every vendor key again. The other plain secrets
-(Mercury tokens, mailbox passwords, hub secrets, desk keys) are issue #15.
-`tools/test_sealed_keys.py`.
+SECRET_KEY means pasting every vendor key again. `tools/test_sealed_keys.py`.
+
+**And every other secret the board keeps** (issue #15): the Mercury token
+(`BankConnection.token`), the mailbox app passwords (`ReceiptMailbox.password`),
+a company's Stripe key (`Business.stripe_key`), the hub signing secrets
+(`Client.ingest_secret`, `Business.hub_secret`) and the desk keys
+(`SupportApp.desk_key`) are `secret_box.SealedText` columns: sealed on save,
+plain in Python, so no code that uses them changed. A value it cannot open
+reads as "" and is logged, so one bad row never breaks a page that loads a
+client. Never search BY one of these (each save seals differently); asking
+whether one is set still works. A new secret column is `SealedText()` from
+its first line. Migration `d5a8e3c1f927` widened the two VARCHAR(120)s and
+sealed what was there. `tools/test_sealed_secrets.py`.
 
 **A vendor knows its playbook** (Michael, the same evening: "ensure the
 vendors page uses the service icons I know we already have ... a vendor will
