@@ -141,6 +141,15 @@ with app.app_context():
     check("and the bank's placeholder for Built by Bean gave way to it",
           ServiceProvider.query.filter_by(name="bank").count() == 0)
 
+print("6. a link opens Add account filled in, all but the key")
+sid = "AC" + "0123456789abcdef" * 2
+page = c.get(f"/admin/service-costs/providers/new?type=twilio&billed_to=b:{EHQ}&sid={sid}&vendor=Twilio").get_data(as_text=True)
+check("Twilio is chosen", "providerType: 'twilio'" in page)
+check("the account id is in", f'value="{sid}"' in page)
+check("and who pays", f"b:{EHQ}" in page)
+bad = c.get("/admin/service-costs/providers/new?type=evil'x&sid=nope&billed_to=b:999").get_data(as_text=True)
+check("anything else on the link is ignored", "evil" not in bad and 'value="nope"' not in bad and "providerType: ''" in bad)
+
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "all passed")
 sys.exit(1 if FAIL else 0)

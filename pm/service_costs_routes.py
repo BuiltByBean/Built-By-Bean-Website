@@ -265,6 +265,24 @@ def _reconcile_ownership(provider):
     return touched
 
 
+def _prefill():
+    """What a link to Add account fills in, so a session that has found the
+    account opens the form with everything but the key typed (Michael,
+    2026-11-05: get me to the page, or do it). Only known types, payers from
+    the picker's own list, and an id shaped like Twilio's: nothing here is
+    written into the page unless it is one of those."""
+    import re
+    name = request.args.get("type", "")
+    payer = request.args.get("billed_to", "")
+    sid = request.args.get("sid", "")
+    return {
+        "name": name if name in dict(PROVIDER_TYPES) else "",
+        "payer": payer if payer in {str(v) for v, _ in _payer_choices()} else "",
+        "account_sid": sid if re.fullmatch(r"AC[0-9a-f]{32}", sid) else "",
+        "vendor": (request.args.get("vendor", "") if re.fullmatch(r"[\w .&'-]{1,60}", request.args.get("vendor", "")) else ""),
+    }
+
+
 def _try_key(provider):
     """A Twilio account is read the moment its key is saved, so the press
     says whether the key works rather than tomorrow's night. A note for the
@@ -438,6 +456,7 @@ def provider_create():
         provider_types=PROVIDER_TYPES,
         editing=False,
         provider=None,
+        prefill=_prefill(),
         manual_monthly=sorted(MANUAL_MONTHLY_PROVIDERS),
         payer_choices=_payer_choices(),
     )
