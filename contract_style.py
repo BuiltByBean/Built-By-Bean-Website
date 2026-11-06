@@ -198,8 +198,15 @@ class ContractPDF:
         p.cell(0, 6.5, sanitize(text).upper(), new_x="LMARGIN", new_y="NEXT")
         self.rule()
         p.ln(4.5)
+        # The block under a heading starts on this page, whatever its size.
+        # bullets() keeps each item whole, so a first item taller than the
+        # room the heading reserved jumped to the next page and left the
+        # heading alone at the foot (the founding agreement's General terms,
+        # 2026-11-06). The first item now breaks across the page instead.
+        self._headed = True
 
     def body(self, text, size=10, colour=BODY, leading=5.4):
+        self._headed = False
         p = self.pdf
         self._font("", size)
         p.set_text_color(*colour)
@@ -215,6 +222,7 @@ class ContractPDF:
 
     def callout(self, lines):
         """A bordered block for something the reader must not skim past."""
+        self._headed = False
         p = self.pdf
         self._font("", 9.5)
         # Measure first so the whole block moves to the next page together.
@@ -239,6 +247,7 @@ class ContractPDF:
 
     def table(self, rows, label_w=52):
         """Label/value rows. The whole table moves together or not at all."""
+        self._headed = False
         p = self.pdf
         row_h = 9.5
         self.space_needed(len(rows) * row_h + 4)
@@ -264,12 +273,14 @@ class ContractPDF:
         """
         p = self.pdf
         indent = 5.0
-        for item in items:
+        for i, item in enumerate(items):
             self._font("", size)
             p.set_text_color(*BODY)
             lines = p.multi_cell(self.RIGHT - self.LEFT - indent, 5.2, sanitize(item),
                                  dry_run=True, output="LINES")
-            self.space_needed(len(lines) * 5.2 + 2)
+            if not (i == 0 and getattr(self, "_headed", False)):
+                self.space_needed(len(lines) * 5.2 + 2)
+            self._headed = False
             y = p.get_y()
             p.set_xy(self.LEFT, y)
             p.cell(indent, 5.2, "-")

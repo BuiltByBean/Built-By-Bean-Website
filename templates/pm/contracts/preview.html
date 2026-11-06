@@ -73,55 +73,36 @@
     <input type="hidden" name="previewed" value="1">
     <input type="hidden" name="preview_token" value="{{ token }}">
 
-    <div class="glass-card p-4 sm:p-5">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-            <div class="min-w-0">
-                <p class="text-sm font-semibold text-white">{{ meta.title }}</p>
-                <p class="text-xs text-surface-400 mt-1">
-                    {{ meta.client_name or 'No client' }}
-                    &middot; {{ (meta.size / 1024) | round | int }} KB
-                    &middot; {{ meta.filename }}
-                </p>
-            </div>
-
-            {% if not configured %}
-            <div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 max-w-md">
-                <p class="text-xs font-medium text-amber-300">Sending is switched off</p>
-                <p class="text-xs text-surface-300 mt-1">
-                    SIGNADOC_URL and SIGNADOC_API_KEY are not both set, so this can
-                    only be downloaded and signed on paper.
-                </p>
-            </div>
-            {% else %}
-            <div class="rounded-lg border border-brand-500/30 bg-brand-500/5 px-3 py-2 max-w-md">
-                <p class="text-xs font-medium text-brand-300">Sending it will:</p>
-                <ul class="text-xs text-surface-300 mt-1 space-y-0.5">
-                    {% if countersigned %}
-                    <li>&bull; Open it for <span class="text-white">your</span> signature straight away</li>
-                    <li>&bull; Email the signer the moment you are done</li>
-                    {% else %}
-                    <li>&bull; Email the signer a one-click link to sign</li>
-                    {% endif %}
-                </ul>
-            </div>
-            {% endif %}
+    {# The details in a narrow column on the left and the document taking the
+       rest, its full height. They were a bar across the top, most of it empty,
+       with the document squeezed underneath (Michael, 2026-11-06: "you could
+       have put that over on the left in a small box and then had more
+       vertical room for the contract to read"). Stacked on a phone. #}
+    <div class="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-4 items-start">
+    <div class="glass-card p-4 space-y-4 min-w-0 lg:sticky lg:top-0">
+        <div class="min-w-0">
+            <p class="text-sm font-semibold text-white break-words">{{ meta.title }}</p>
+            <p class="text-xs text-surface-400 mt-1 break-words">
+                {{ meta.client_name or 'No client' }}
+                &middot; {{ (meta.size / 1024) | round | int }} KB</p>
+            <p class="text-xs text-surface-500 mt-0.5 break-all">{{ meta.filename }}</p>
         </div>
 
         {# Who it goes to, editable, and here rather than three screens back.
            An empty address is the one thing that turns a send into a silent
            download, so it is asked for on the page that does the sending. #}
         {% if configured %}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/10">
+        <div class="space-y-3 pt-4 border-t border-white/10">
             <div>
                 <label class="block text-xs text-surface-400 mb-1.5">Signer name</label>
                 <input type="text" name="signer_name" value="{{ signer_name }}"
-                       class="input-ring w-full px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                       class="input-ring w-full min-w-0 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
             </div>
             <div>
                 <label class="block text-xs text-surface-400 mb-1.5">Signer email</label>
                 <input type="email" name="signer_email" value="{{ signer_email }}"
                        placeholder="name@example.com"
-                       class="input-ring w-full px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+                       class="input-ring w-full min-w-0 px-3 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
                 {% if not signer_email %}
                 <p class="text-xs text-amber-400 mt-1">
                     No email on file for this client - sending needs one.
@@ -129,25 +110,40 @@
                 {% endif %}
             </div>
         </div>
+        <div class="rounded-lg border border-brand-500/30 bg-brand-500/5 px-3 py-2">
+            <p class="text-xs font-medium text-brand-300">Sending it will:</p>
+            <ul class="text-xs text-surface-300 mt-1 space-y-0.5">
+                {% if countersigned %}
+                <li>&bull; Open it for <span class="text-white">your</span> signature straight away</li>
+                <li>&bull; Email the signer the moment you are done</li>
+                {% else %}
+                <li>&bull; Email the signer a one-click link to sign</li>
+                {% endif %}
+            </ul>
+        </div>
+        {% else %}
+        <div class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+            <p class="text-xs font-medium text-amber-300">Sending is switched off</p>
+            <p class="text-xs text-surface-300 mt-1">
+                SIGNADOC_URL and SIGNADOC_API_KEY are not both set, so this can
+                only be downloaded and signed on paper.
+            </p>
+        </div>
         {% endif %}
+
+        <a href="{{ url_for('contracts.preview_file', token=token) }}" target="_blank" rel="noopener"
+           class="flex items-center justify-center min-h-[44px] px-3 text-xs font-medium rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+            Open it in a new tab</a>
     </div>
 
-    {# The document. Tall on a desktop, still usable on a phone, and the
-       browser's viewer handles paging and zoom. #}
-    <div class="glass-card p-1.5 overflow-hidden">
+    {# The document, as tall as the window leaves it. The browser's viewer
+       handles paging and zoom. #}
+    <div class="glass-card p-1.5 overflow-hidden min-w-0">
         <iframe src="{{ url_for('contracts.preview_file', token=token) }}"
                 title="{{ meta.title }}"
-                class="w-full rounded-lg bg-white"
-                style="height: min(78vh, 1000px); min-height: 420px; border: 0;"></iframe>
+                class="w-full rounded-lg bg-white block"
+                style="height: calc(100dvh - 9.5rem); min-height: 480px; border: 0;"></iframe>
     </div>
-
-    <p class="text-xs text-surface-400">
-        Not showing?
-        <a href="{{ url_for('contracts.preview_file', token=token) }}" target="_blank"
-           rel="noopener" class="text-brand-400 hover:text-brand-300">Open it in a new tab</a>.
-        &middot;
-        <a href="{{ url_for('contracts.contracts_index') }}"
-           class="text-brand-400 hover:text-brand-300">Back to contracts</a>
-    </p>
+    </div>
 </form>
 {% endblock %}
