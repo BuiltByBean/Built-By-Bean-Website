@@ -1,5 +1,4 @@
 {% extends "pm/base.html" %}
-{% from "pm/components/icon_button.html" import icon_button, delete_icon with context %}
 {% from "pm/workspace/_tabs.html" import seg %}
 
 {#
@@ -8,30 +7,19 @@
   under it every account with that vendor: who pays for it, what runs on it,
   what it cost in the last year, and whether it is read by itself. Twilio is
   why: his own EntertainHQ account, Kenali's for J&D and Cason's are three
-  accounts of one vendor. An account the night found on the bank or in the
-  code says so and has nothing to sync (vendor_discovery). In use and Not in
-  use is the account's own switch; a vendor is in use while any account is.
+  accounts of one vendor.
+
+  A page to look at, never to work on (Michael, the same evening: "there
+  should never be the option to edit or delete those things ... this is just
+  a place for me to come look and get information"). Each account is one
+  line; the night syncs, finds and retires them (vendor_discovery). The only
+  press is "Fix the key", on an account whose key the vendor turned down,
+  because a key is the one thing only he can make.
 #}
 
 {% block title %}Vendors - Built By Bean{% endblock %}
 {% block page_title %}Vendors{% endblock %}
 {% block page_subtitle %}Who you pay to run the apps and the businesses{% endblock %}
-
-{% block header_actions %}
-<form method="POST" data-live-action action="{{ url_for('service_costs.sync_all') }}">
-    <input type="hidden" name="next" value="{{ url_for('vendors.index', view=view) }}">
-    <button type="submit"
-            class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
-        {{ icon('refresh', 'w-4 h-4') }}
-        Sync all
-    </button>
-</form>
-<a href="{{ url_for('service_costs.provider_create') }}"
-   class="inline-flex items-center gap-2 px-4 min-h-[44px] text-sm font-medium rounded-xl btn-brand transition-all">
-    {{ icon('add', 'w-4 h-4') }}
-    Add account
-</a>
-{% endblock %}
 
 {% block content %}
 {% include "pm/workspace/_js.html" %}
@@ -44,12 +32,11 @@
     {% if groups %}
     <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 items-start">
         {% for g in groups %}
-        <section id="vendor-{{ g.key | replace(' ', '-') }}" class="glass-card p-5 min-w-0 scroll-mt-4" data-vendor="{{ g.key }}" aria-label="{{ g.name }}">
+        {% set pb = g.playbook %}
+        <section id="vendor-{{ g.key | replace(' ', '-') }}" class="glass-card p-4 sm:p-5 min-w-0 scroll-mt-4"
+                 data-vendor="{{ g.key }}" aria-label="{{ g.name }}">
             <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                    {# The vendor's own mark, from its playbook: a chosen SVG,
-                       then the one fetched off its site, then its letters. #}
-                    {% set pb = g.playbook %}
                     {% if pb and pb.logo_path %}
                     <img src="{{ url_for('static', filename=pb.logo_path) }}?v={{ asset_version }}" alt="" aria-hidden="true" class="w-10 h-10 shrink-0 rounded-xl object-contain">
                     {% elif pb and pb.icon_file %}
@@ -58,8 +45,8 @@
                     <span class="w-10 h-10 shrink-0 rounded-xl bg-brand-500/15 inline-flex items-center justify-center text-xs font-bold text-brand-300">{{ g.name[:2] | upper }}</span>
                     {% endif %}
                     <div class="min-w-0">
-                        <h2 class="text-base font-semibold text-white break-words">{{ g.name }}</h2>
-                        <p class="text-xs text-surface-400">{{ g.accounts | length }} account{{ '' if g.accounts | length == 1 else 's' }}{% if g.trouble %} <span class="text-amber-300">- {{ g.trouble }} not syncing</span>{% endif %}</p>
+                        <h2 class="text-base font-semibold text-white truncate">{{ g.name }}</h2>
+                        <p class="text-xs text-surface-400">{{ g.accounts | length }} account{{ '' if g.accounts | length == 1 else 's' }}{% if g.trouble %} <span class="text-amber-300">{{ g.trouble }} not syncing</span>{% endif %}</p>
                     </div>
                 </div>
                 {% if g.spend %}
@@ -70,12 +57,10 @@
                 {% endif %}
             </div>
 
-            {# Where else on the board this vendor is: its runbook and the
-               business maps it is a service on. #}
             <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
                 {% if pb %}
                 <a href="{{ url_for('playbooks.playbook_detail', slug=pb.slug) }}" data-playbook="{{ pb.slug }}"
-                   class="inline-flex items-center gap-1.5 px-3 min-h-[44px] rounded-lg border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                   class="inline-flex items-center gap-1.5 px-3 min-h-[44px] sm:min-h-[36px] rounded-lg border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
                     {{ icon('handbook', 'w-3.5 h-3.5') }} Playbook
                 </a>
                 {% else %}
@@ -83,79 +68,43 @@
                 {% endif %}
                 {% for b in g.maps %}
                 <a href="{{ url_for('businesses.map_page', id=b.id) }}"
-                   class="inline-flex items-center gap-1.5 px-3 min-h-[44px] rounded-lg border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
+                   class="inline-flex items-center gap-1.5 px-3 min-h-[44px] sm:min-h-[36px] rounded-lg border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
                     {{ icon('business-map', 'w-3.5 h-3.5') }} {{ b.short_name or b.name }} map
                 </a>
                 {% endfor %}
             </div>
 
-            <ul class="mt-4 space-y-3">
+            <ul class="mt-3 rounded-xl border border-white/10 divide-y divide-white/5">
                 {% for a in g.accounts %}
                 {% set p = a.provider %}
-                <li class="rounded-xl border border-white/10 bg-white/[0.02] p-3 min-w-0" data-account="{{ p.id }}">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-sm font-medium text-white break-words">
-                                {% if p.account_client %}{{ p.account_client.name }}'s card
-                                {% elif p.account_business %}{{ p.account_business.name }}
-                                {% else %}Built by Bean{% endif %}
-                            </p>
-                            {% if p.account_label or (p.display_name != g.name) %}
-                            <p class="text-xs text-surface-400 break-words">{{ p.account_label or p.display_name }}</p>
-                            {% endif %}
-                        </div>
-                        {% if a.spend %}
-                        <span class="shrink-0 text-sm tabular-nums text-surface-200">{{ a.spend | format_currency }}</span>
-                        {% endif %}
+                {% set found = p.discovered_from or '' %}
+                {% if not p.is_active %}{% set dot, state = 'bg-surface-600', 'Not in use' %}
+                {% elif a.error %}{% set dot, state = 'bg-amber-400', 'Not syncing' %}
+                {% elif p.name == 'bank' %}{% set dot, state = 'bg-sky-400', 'From the bank' %}
+                {% elif found.startswith('store:') %}{% set dot, state = 'bg-sky-400', 'From the store' %}
+                {% elif p.name == 'code' %}{% set dot, state = 'bg-sky-400', 'In the code' %}
+                {% elif p.last_sync_at %}{% set dot, state = 'bg-emerald-400', 'Synced ' ~ (p.last_sync_at | format_date) %}
+                {% else %}{% set dot, state = 'bg-surface-500', 'Not synced yet' %}{% endif %}
+                {% set extra = p.account_label or (found[found.find(':') + 2:] if found and p.name != 'bank' else '') or (a.used_by | join(', ')) %}
+                <li class="px-3 py-2.5 min-w-0" data-account="{{ p.id }}">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="w-2 h-2 shrink-0 rounded-full {{ dot }}" aria-hidden="true"></span>
+                        <p class="min-w-0 flex-1 truncate text-sm">
+                            <span class="text-white" data-payer>{% if p.account_client %}{{ p.account_client.name }}'s card{% elif p.account_business %}{{ p.account_business.name }}{% else %}Built by Bean{% endif %}</span>
+                            {% if extra %}<span class="text-surface-400">{{ extra }}</span>{% endif %}
+                        </p>
+                        <span class="shrink-0 text-xs {{ 'text-amber-300' if a.error else 'text-surface-400' }}" {% if a.error %}data-trouble{% endif %}>{{ state }}</span>
+                        <span class="shrink-0 w-20 text-right text-sm tabular-nums text-surface-200">{{ a.spend | format_currency if a.spend else '' }}</span>
                     </div>
-
-                    <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-                        {% if not p.is_active %}
-                        <span class="px-2 py-0.5 rounded-full bg-surface-700 text-surface-300">Not in use</span>
-                        {% endif %}
-                        {% if p.name == 'bank' %}
-                        <span class="px-2 py-0.5 rounded-full bg-white/5 text-surface-300">From the bank</span>
-                        {% elif p.name == 'code' %}
-                        <span class="px-2 py-0.5 rounded-full bg-white/5 text-surface-300">In the code, no account linked</span>
-                        {% elif a.error %}
-                        <span data-trouble class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Not syncing</span>
-                        {% elif p.last_sync_at %}
-                        <span class="px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400">Synced {{ p.last_sync_at | format_date }}</span>
-                        {% else %}
-                        <span class="px-2 py-0.5 rounded-full bg-white/5 text-surface-300">Never synced</span>
-                        {% endif %}
-                        {% for name in a.used_by[:4] %}
-                        <span class="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300 break-words">{{ name }}</span>
-                        {% endfor %}
-                        {% if a.used_by | length > 4 %}
-                        <span class="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300">+{{ a.used_by | length - 4 }}</span>
-                        {% endif %}
-                    </div>
-
                     {% if a.error %}
-                    <p class="mt-2 text-xs text-amber-200 break-words">{{ a.error }}</p>
-                    {% elif p.discovered_from and p.name == 'code' %}
-                    <p class="mt-2 text-xs text-surface-500 break-words">{{ p.discovered_from[6:] }}</p>
-                    {% endif %}
-
-                    <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
-                        {% if p.name == 'railway' %}
-                        <a href="{{ url_for('service_costs.railway_months', provider=p.id) }}"
-                           class="inline-flex items-center px-3 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">Months</a>
-                        {% endif %}
-                        {% if p.syncs and p.is_active %}
-                        <form method="POST" data-live-action action="{{ url_for('service_costs.provider_sync', id=p.id) }}">
-                            <button type="submit"
-                                    class="inline-flex items-center px-3 min-h-[44px] text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:text-white hover:bg-white/5 transition-colors">
-                                Sync now
-                            </button>
-                        </form>
-                        {% endif %}
-                        {{ icon_button('edit', 'Edit ' ~ p.display_name, href=url_for('service_costs.provider_edit', id=p.id)) }}
-                        <form method="POST" data-live-action action="{{ url_for('service_costs.provider_delete', id=p.id) }}">
-                            {{ delete_icon('Delete it and its data?', 'Delete ' ~ p.display_name) }}
-                        </form>
+                    <div class="mt-2 flex flex-wrap items-center justify-between gap-2 pl-5">
+                        <p class="text-xs text-amber-200 break-words min-w-0">{{ a.error }}</p>
+                        <a href="{{ url_for('service_costs.provider_edit', id=p.id) }}"
+                           class="shrink-0 inline-flex items-center px-3 min-h-[44px] sm:min-h-[36px] text-xs font-medium rounded-lg border border-amber-500/40 text-amber-200 hover:bg-amber-500/10 transition-colors">
+                            Fix the key
+                        </a>
                     </div>
+                    {% endif %}
                 </li>
                 {% endfor %}
             </ul>

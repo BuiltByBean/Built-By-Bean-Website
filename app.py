@@ -375,6 +375,9 @@ def create_app():
     # Files the nightly service made, moved onto the volume (volume_files.py).
     import volume_files
     volume_files.start_background(app)
+    import vendor_discovery
+    if os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or not os.environ.get("RAILWAY_ENVIRONMENT"):
+        vendor_discovery.start_background(app)
 
     # ── Every client held against the catalogue ───────────
     from pm.cerebro_routes import cerebro_bp

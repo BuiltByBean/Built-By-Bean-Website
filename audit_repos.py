@@ -201,8 +201,8 @@ def audit(app, repos=None, fetch=None):
                                           .filter(Product.presence_pattern.isnot(None)).all()),
                            "signature")
         if not checks and not products:
-            print("  nothing to run")
-            return report
+            # Still read the repos for the vendors they use.
+            checks, products = [], []
         repos = repos if repos is not None else sweep_repos.list_repos()
         now = datetime.now(timezone.utc)
         for full_name in repos:
@@ -212,6 +212,16 @@ def audit(app, repos=None, fetch=None):
                 print(f"  {full_name:40} FAILED  {str(err)[:120]}")
                 continue
             summary = {}
+            # The vendors this repo's code uses (vendor_discovery): the files
+            # are here already, so the page learns them at no extra fetch.
+            try:
+                import vendor_discovery
+                added = vendor_discovery.note_repo(full_name, files)
+                if added:
+                    print(f"  {full_name:40} vendors found: {', '.join(added)}")
+            except Exception as err:  # noqa: BLE001 - never stops the audit
+                db.session.rollback()
+                print(f"  {full_name:40} vendors: {str(err)[:120]}")
             found = scan(files, checks)
             for rule in checks:
                 count, samples = found.get(rule.id, (0, []))

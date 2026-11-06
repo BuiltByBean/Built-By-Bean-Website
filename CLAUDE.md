@@ -907,7 +907,26 @@ else the one its name is, else the one `map_checks.names_vendor` names, the
 words the night already reads the code and the books by. The tile wears that
 playbook's mark (`logo_path`, then its fetched icon), opens it, and names each
 business map with it as a service; the playbook's page links back to the
-vendor's accounts (`accounts_for`). `tools/test_vendors_page.py`.
+vendor's accounts (`accounts_for`).
+
+**A page to look at, and it finds every vendor itself** (Michael, the same
+evening: "there should never be the option to edit or delete those things
+... this is just a place for me to come look and get information", and "you
+have Google Play in here, but you should have known that a vendor's missing
+because we have an app on the fucking App Store"). Each account is one line:
+a dot, who pays, what the vendor calls it (or where it was found, or the
+projects on it), its state and its cost. No edit, delete, sync, Months, Sync
+all or Add account; the only press is "Fix the key" on an account whose key
+the vendor turned down. The night finds vendors from the bank, the stores
+(`from_stores`: an App Store bundle id is the Apple Developer Program, a Play
+package the Google Play Console, paid by the company whose logo is that tile)
+and the code of every repo it already downloads (`note_repo`, called from
+`audit_repos`: `CODE_SIGNS`, a vendor's own key names and libraries, each
+behind a cheap `CODE_HINTS` word, never in docs, tests, migrations, seeds or
+dependencies, which is how the board's own playbooks stopped reading as
+Postmark and RevenueCat). The web runs the bank and store half at boot
+(`start_background`, behind a Postgres advisory lock), so a deploy does not
+wait for the night. `tools/test_vendors_page.py`.
 
 ## The books stand on the bank
 

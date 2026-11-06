@@ -19,11 +19,27 @@ company is read by sync type, which these never share. A bank account is in
 use while its vendor charged in the last `IN_USE_DAYS`; it moves to Not in use
 on its own when the charges stop and back when they start.
 
+- **The stores** (Michael, the same evening: "you should have known that a
+  vendor's missing because we have an app on the fucking App Store"). A My
+  Apps tile with an App Store bundle id is a paid Apple Developer Program
+  membership, one with a Play package a Google Play Console account
+  (`from_stores`), paid by the company whose logo is that tile, else Built by
+  Bean.
+- **Every repo the night reads** (`note_repo`, from `audit_repos`, which has
+  already downloaded each one): a vendor's own key names and libraries in the
+  code (`CODE_SIGNS`, defaults in code). His repos used Resend, Sentry,
+  GitHub, Firebase, RevenueCat, Google Cloud and Hugging Face with none of them
+  on the page.
+
+What the board can find in its own records (bank, stores) it also finds at
+boot (`start_background`), so a deploy does not wait for the night.
+
 `plain_error` is a failed sync said for a person, and `groups` is the page.
 Every vendor knows its playbook (`playbook_for`): the tile wears the
 playbook's mark and opens it, names the business maps it is a service on,
 and the playbook's page lists the vendor's accounts (`accounts_for`).
 """
+import os
 import re
 from datetime import date, timedelta
 
@@ -164,10 +180,185 @@ def note_code(playbook, business, repos):
     return name
 
 
+# A vendor's own words in code: the names of its keys and its libraries. Only
+# the unmistakable ones, because a vendor found here is a tile on the page.
+CODE_SIGNS = {
+    "Resend": r"\bRESEND_API_KEY\b|\bimport resend\b|\bfrom resend\b|['\"]resend['\"]\s*:",
+    "Sentry": r"\bSENTRY_DSN\b|\bsentry_sdk\b|['\"]@sentry/",
+    "GitHub": r"\bGITHUB_TOKEN\b|api\.github\.com",
+    "Twilio": r"\bTWILIO_(?:ACCOUNT_SID|AUTH_TOKEN|API_KEY)\b|\bfrom twilio\b|['\"]twilio['\"]\s*:",
+    "Stripe": r"\bSTRIPE_SECRET_KEY\b|^\s*import stripe\b|['\"]stripe['\"]\s*:",
+    "Anthropic API": r"\bANTHROPIC_API_KEY\b|^\s*import anthropic\b|['\"]@anthropic-ai/",
+    "OpenAI API": r"\bOPENAI_API_KEY\b|^\s*import openai\b|^\s*from openai\b",
+    "Firebase": r"\bFCM_[A-Z_]+\b|\bfirebase_admin\b|['\"]firebase(?:-admin)?['\"]\s*:|fcm\.googleapis\.com",
+    "Apple Developer Program": r"\bAPNS_[A-Z_]+\b|api\.push\.apple\.com",
+    "RevenueCat": r"\bREVENUECAT_[A-Z_]+\b|['\"]@revenuecat/|['\"]react-native-purchases['\"]",
+    "Google Cloud": r"\bGOOGLE_(?:MAPS|PLACES)_[A-Z_]*KEY\b|maps\.googleapis\.com|places\.googleapis\.com",
+    "Hugging Face": r"\bHF_TOKEN\b|\bHUGGINGFACE_[A-Z_]+\b|\bhuggingface_hub\b",
+    "Postmark": r"\bPOSTMARK_[A-Z_]+\b|api\.postmarkapp\.com",
+    "SendGrid": r"\bSENDGRID_API_KEY\b|api\.sendgrid\.com",
+    "Mailgun": r"\bMAILGUN_[A-Z_]+\b|api\.mailgun\.net",
+    "OneSignal": r"\bONESIGNAL_[A-Z_]+\b|onesignal\.com/api",
+    "Mapbox": r"\bMAPBOX_[A-Z_]+\b|api\.mapbox\.com",
+    "PostHog": r"\bPOSTHOG_[A-Z_]+\b|['\"]posthog-js['\"]",
+    "Supabase": r"\bSUPABASE_[A-Z_]+\b|['\"]@supabase/",
+    "ElevenLabs": r"\bELEVENLABS_[A-Z_]+\b|api\.elevenlabs\.io",
+    "Deepgram": r"\bDEEPGRAM_[A-Z_]+\b|api\.deepgram\.com",
+    "Expo": r"['\"]eas-cli['\"]|\bEXPO_TOKEN\b|expo\.dev/accounts",
+    "Cloudflare": r"\bCLOUDFLARE_API_TOKEN\b|\bR2_ACCOUNT_ID\b|\bR2_ACCESS_KEY_ID\b",
+}
+CODE_FILES = (".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".jsonc", ".toml", ".yml", ".yaml", ".example", ".cfg", ".txt")
+# A word each sign needs, checked on the lowercased text before its pattern
+# runs: the patterns alone took 30 seconds on a repo of a thousand files.
+CODE_HINTS = {
+    "Resend": ("resend",), "Sentry": ("sentry",), "GitHub": ("github_token", "api.github.com"),
+    "Twilio": ("twilio",), "Stripe": ("stripe",), "Anthropic API": ("anthropic",), "OpenAI API": ("openai",),
+    "Firebase": ("fcm", "firebase"), "Apple Developer Program": ("apns", "push.apple.com"),
+    "RevenueCat": ("revenuecat", "react-native-purchases"), "Google Cloud": ("googleapis", "google_maps", "google_places"),
+    "Hugging Face": ("hf_token", "huggingface"), "Postmark": ("postmark",), "SendGrid": ("sendgrid",),
+    "Mailgun": ("mailgun",), "OneSignal": ("onesignal",), "Mapbox": ("mapbox",), "PostHog": ("posthog",),
+    "Supabase": ("supabase",), "ElevenLabs": ("elevenlabs",), "Deepgram": ("deepgram",),
+    "Expo": ("eas-cli", "expo_token", "expo.dev"), "Cloudflare": ("cloudflare_api_token", "r2_"),
+}
+# Not the repo's running code: dependencies, build output, and the places a
+# repo talks ABOUT vendors (docs, tests, migrations, seeds and fixtures). The
+# board's own playbooks name Postmark and RevenueCat without using either.
+NOT_CODE = ("node_modules/", "/vendor/", ".venv/", "venv/", "/dist/", "/build/", "package-lock",
+            "tools/", "tests/", "test_", "/test/", "migrations/", "docs/", "fixture", "seed",
+            "vendor_discovery.py", "map_checks.py", "/scripts/", "scripts/")
+_COMPILED = None
+
+
+def _signs():
+    global _COMPILED
+    if _COMPILED is None:
+        _COMPILED = {name: re.compile(rx, re.M) for name, rx in CODE_SIGNS.items()}
+    return _COMPILED
+
+
+def vendors_in_files(files):
+    """{vendor: path of the first file that shows it} for one repo's files
+    ({path: text}). Only the repo's own running code is read."""
+    found = {}
+    signs = _signs()
+    for path, text in (files or {}).items():
+        low = path.lower()
+        if any(part in low for part in NOT_CODE):
+            continue
+        if not low.endswith(CODE_FILES) and "/.env" not in low and not low.startswith(".env"):
+            continue
+        if not isinstance(text, str):
+            continue
+        if low.endswith(("wrangler.toml", "wrangler.jsonc")):
+            found.setdefault("Cloudflare", path)
+        lower = text.lower()
+        for name, rx in signs.items():
+            if name in found or not any(h in lower for h in CODE_HINTS.get(name, ())):
+                continue
+            if rx.search(text):
+                found[name] = path
+        if len(found) == len(signs):
+            break
+    return found
+
+
+def _payer_for_repo(repo):
+    """The company whose app this repo is (its logo is the repo's My Apps
+    tile), as the account_business_id a found account carries."""
+    from models import AppLink, Business
+    want = (repo or "").lower().strip("/")
+    for tile in AppLink.query.filter(AppLink.github_url.isnot(None)).all():
+        if (tile.github_url or "").lower().rstrip("/").endswith("/" + want):
+            biz = Business.query.filter_by(logo_app_id=tile.id).first()
+            if biz is not None:
+                return _payer(biz.id, _home_id())
+    return None
+
+
+def _note(name, payer, where, kind="code"):
+    """An account for a vendor nobody has set up, found in the code or the
+    stores. One per vendor: a vendor that has any account is left alone. Does
+    not commit."""
+    from models import db, ServiceProvider
+    if not name or _accounts_by_vendor().get(key(name)):
+        return None
+    db.session.add(ServiceProvider(
+        name="code", display_name=name, vendor=name, is_active=True,
+        account_business_id=payer, credentials_json="{}",
+        discovered_from=f"{kind}: {where}"[:200]))
+    db.session.flush()
+    return name
+
+
+def note_repo(repo, files):
+    """What one repo's code says it pays for (the nightly audit calls this
+    with the files it has already downloaded). Returns the vendors added."""
+    payer = _payer_for_repo(repo)
+    return [n for n in (_note(name, payer, repo) for name in vendors_in_files(files)) if n]
+
+
+def from_stores():
+    """A store listing is a paid developer account: the App Store's is the
+    Apple Developer Program, Play's is the Google Play Console."""
+    from models import AppLink, Business, db
+    lines = []
+    for tile in AppLink.query.order_by(AppLink.id).all():
+        biz = Business.query.filter_by(logo_app_id=tile.id).first()
+        payer = _payer(biz.id, _home_id()) if biz is not None else None
+        if (tile.app_store_bundle_id or "").strip():
+            if _note("Apple Developer Program", payer, f"{tile.name} on the App Store", kind="store"):
+                lines.append("Apple Developer Program: found from the App Store")
+        if (tile.play_package or "").strip():
+            if _note("Google Play", payer, f"{tile.name} on Google Play", kind="store"):
+                lines.append("Google Play: found from Google Play")
+    db.session.commit()
+    return lines
+
+
+def run_free(today=None):
+    """Everything the board can find from its own records: the bank and the
+    stores. The night runs it, and so does the web at boot."""
+    return from_bank(today) + from_stores()
+
+
 def run(today=None):
-    """The night's step: the bank half (the code half rides the map check)."""
-    lines = from_bank(today)
+    """The night's step (the code half rides the nightly audit)."""
+    lines = run_free(today)
     return "; ".join(lines)[:500] or "nothing new"
+
+
+_timer = {"started": False}
+
+
+def start_background(app):
+    """Once a minute after boot and then daily, on the web service, so a
+    deploy shows what the board can already find. Two workers each start one;
+    a Postgres advisory lock lets one of them do it."""
+    import threading
+    import time
+    if _timer["started"] or os.environ.get("VENDOR_DISCOVERY_DISABLED") == "1":
+        return
+    _timer["started"] = True
+
+    def loop():
+        time.sleep(60)
+        while True:
+            try:
+                with app.app_context():
+                    from models import db
+                    got = True
+                    if db.engine.dialect.name == "postgresql":
+                        got = db.session.execute(db.text("SELECT pg_try_advisory_xact_lock(84412017)")).scalar()
+                    if got:
+                        lines = run_free()
+                        if lines:
+                            print("vendors: " + "; ".join(lines), flush=True)
+                    db.session.commit()
+            except Exception as err:  # noqa: BLE001 - a missed pass is tomorrow's
+                print(f"vendors: {str(err)[:200]}", flush=True)
+            time.sleep(24 * 3600)
+
+    threading.Thread(target=loop, daemon=True, name="vendor-discovery").start()
 
 
 # ------------------------------------------------------------- the page

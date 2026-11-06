@@ -307,10 +307,11 @@ check("the old Vendors tab lands on the Vendors page", r.status_code == 301
 r, html = page(ceo, "/admin/vendors/")
 troubled = re.findall(r'data-account="(\d+)"(?:(?!data-account=).)*?data-trouble', html, re.S)
 check("the account whose sync failed is the one that says so", troubled == [str(BROKEN)], troubled)
-card = re.search(rf'data-account="{PULLED}".*?<p[^>]*>\s*([^<]+?)\s*</p>', html, re.S)
+card = re.search(rf'data-account="{PULLED}".*?data-payer>\s*([^<]+?)\s*</span>', html, re.S)
 check("an account of EntertainHQ's says so", card and card.group(1).strip() == "EntertainHQ LLC",
       card and card.group(1))
-check("a Railway account opens its months", f"/admin/service-costs/railway?provider={TYPED}" in html)
+# A Railway account's months are Hosting's Railway months tab; the Vendors page
+# is read only (2026-11-05) and carries no Months press.
 
 print("7. Stale wording")
 OWN = [ROOT / "pm" / "hosting_routes.py", ROOT / "pm" / "service_costs_routes.py",

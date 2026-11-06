@@ -167,7 +167,10 @@ with app.app_context():
           "Twilio turned the key down" in page and "api.twilio.com" not in page)
     check("its cost from the vendor's report", "$52.38" in page)
     check("AWS is not in use, so not here", 'data-vendor="amazon web services"' not in page)
-    check("found accounts say where from", "From the bank" in page and "In the code, no account linked" in page)
+    check("found accounts say where from", "From the bank" in page and "In the code" in page)
+    check("a page to look at: no edit, delete or sync press on any account",
+          "Sync now" not in page and "/delete" not in page and "Add account" not in page and "Sync all" not in page)
+    check("only a refused key asks for a press", page.count("Fix the key") == 1)
     off = c.get("/admin/vendors/?view=not_in_use").get_data(as_text=True)
     check("Not in use has AWS and LegalZoom", 'data-vendor="amazon web services"' in off and 'data-vendor="legalzoom"' in off)
     r = c.get("/admin/service-costs/providers?view=not_in_use")
@@ -212,6 +215,40 @@ with app.app_context():
           "2 accounts on Vendors" in pb_page and "#vendor-twilio" in pb_page)
     edit = c.get(f"/admin/service-costs/providers/{ids.twilio_jd}/edit").get_data(as_text=True)
     check("the edit form names the vendor and says In use", 'name="vendor"' in edit and "In use" in edit)
+
+    print("5. found from the stores and from the code")
+    from models import AppLink
+    tile = AppLink(name="EntertainHQ", url="https://entertainhq.example", app_store_bundle_id="com.ehq.app",
+                   play_package="com.ehq.app", github_url="https://github.com/mb/ehq")
+    db.session.add(tile)
+    db.session.flush()
+    db.session.get(Business, ids.ehq).logo_app_id = tile.id
+    db.session.commit()
+    lines = vendor_discovery.from_stores()
+    apple = ServiceProvider.query.filter_by(vendor="Apple Developer Program").one_or_none()
+    check("an app on the App Store is an Apple Developer Program account", apple is not None, lines)
+    check("paid by the company whose app it is", apple and apple.account_business_id == ids.ehq)
+    check("and says it came from the store", apple and apple.discovered_from.startswith("store:"))
+    check("an app on Google Play is a Google Play account",
+          ServiceProvider.query.filter_by(vendor="Google Play").count() == 1)
+    check("a second pass adds nothing", vendor_discovery.from_stores() == [])
+    added = vendor_discovery.note_repo("mb/ehq", {
+        "app.py": "import os" + chr(10) + "RESEND_API_KEY = os.environ['RESEND_API_KEY']" + chr(10),
+        "package.json": '{"dependencies": {"@sentry/browser": "7"}}',
+        "config.py": "ONESIGNAL_APP_ID = ''",
+        "docs/vendors.py": "POSTMARK_SERVER_TOKEN = 1",
+        "tests/test_mail.py": "MAILGUN_API_KEY = 1",
+        "node_modules/x/index.js": "process.env.SUPABASE_URL",
+    })
+    db.session.commit()
+    check("the code's own vendors are found, one that has an account is left", sorted(added) == ["OneSignal", "Resend"]
+          and ServiceProvider.query.filter_by(vendor="Sentry").count() == 1, added)
+    check("never from docs, tests or dependencies",
+          not ServiceProvider.query.filter(ServiceProvider.vendor.in_(["Postmark", "Mailgun", "Supabase"])).count())
+    check("paid by the company whose repo it is",
+          ServiceProvider.query.filter_by(vendor="Resend").one().account_business_id == ids.ehq)
+    page = c.get("/admin/vendors/").get_data(as_text=True)
+    check("the store's account says so on the page", "From the store" in page and "EntertainHQ on the App Store" in page)
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "all passed")
