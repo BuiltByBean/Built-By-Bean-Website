@@ -89,7 +89,10 @@ def _unanswered():
     # Never his own address. The sync stops bringing those in, but rows
     # already written stay written, so the page has to filter as well or the
     # ones already sitting there would need dismissing one at a time.
-    q = Message.query.filter_by(direction="in", status="new")
+    #
+    # And only watched mail (a client, a lead, the form). The inbox reads all
+    # of Primary since issue #40; the rest is the Inbox page's, not this one.
+    q = Message.query.filter_by(direction="in", status="new", watched=True)
     own = mail_service.own_addresses()
     if own:
         q = q.filter(db.func.lower(db.func.coalesce(Message.from_email, ""))

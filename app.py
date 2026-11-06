@@ -669,7 +669,16 @@ def create_app():
                     ServiceProvider.name.notin_(ServiceProvider.FOUND_TYPES)).count()
             except Exception:
                 db.session.rollback()
+        # The Inbox badge: mail not read yet (issue #40). His mail, the CEO's alone.
+        inbox_unread = 0
+        if current_user.is_authenticated and getattr(current_user, "is_ceo", False):
+            try:
+                from pm.messages_routes import unread_count
+                inbox_unread = unread_count()
+            except Exception:
+                db.session.rollback()
         return {
+            "inbox_unread": inbox_unread,
             "vendors_failing": vendors_failing,
             "support_waiting": support_waiting,
             "attention_total": attention.get("total", 0),

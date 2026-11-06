@@ -25,6 +25,7 @@ import email
 import hashlib
 import html
 import imaplib
+import json
 import logging
 import re
 import smtplib
@@ -227,33 +228,253 @@ def _fingerprint(msg, addr):
     return "sha256:" + hashlib.sha256(seed.encode("utf-8", "replace")).hexdigest()
 
 
-def ingest(msg):
+# ── The inbox: all of Primary (issue #40) ──────────────────
+
+# Michael, 2026-11-06: the board reads his whole Primary inbox and his Sent
+# mail, like EntertainHQ's admin Inbox, through the same app password. Gmail's
+# IMAP takes Gmail's own search (X-GM-RAW) on All Mail, and hands back its own
+# message and conversation ids (X-GM-MSGID, X-GM-THRID), so one search covers
+# inbox and sent, the categories he never reads stay out, and a mail read
+# twice is still one row.
+PRIMARY_DAYS = 60
+PRIMARY_QUERY = "(in:inbox OR in:sent) -category:promotions -category:social -category:forums"
+MAX_NEW_PER_PASS = 400
+_META = re.compile(rb"(X-GM-MSGID|X-GM-THRID|UID) (\d+)")
+_FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
+
+
+def _imap(app):
+    conn = imaplib.IMAP4_SSL(app.config.get("IMAP_SERVER", "imap.gmail.com"), 993)
+    conn.login(app.config["MAIL_USERNAME"], app.config["MAIL_PASSWORD"])
+    return conn
+
+
+def _all_mail(conn):
+    """Select Gmail's All Mail read-only, found by its \\All flag, because its
+    name follows the account's language."""
+    box = "[Gmail]/All Mail"
+    typ, data = conn.list()
+    for line in data or []:
+        s = line.decode("utf-8", "replace") if isinstance(line, bytes) else str(line)
+        if "\\All" in s:
+            m = re.search(r'"([^"]+)"\s*$', s) or re.search(r"(\S+)\s*$", s)
+            if m:
+                box = m.group(1)
+            break
+    typ, _ = conn.select(f'"{box}"', readonly=True)
+    if typ != "OK":
+        raise RuntimeError("could not open All Mail")
+    return box
+
+
+def _meta(head):
+    out = {k.decode(): v.decode() for k, v in _META.findall(head or b"")}
+    f = _FLAGS.search(head or b"")
+    out["seen"] = bool(f and b"\\Seen" in f.group(1))
+    return out
+
+
+def _fetch_items(conn, uids, what):
+    """[(meta, raw or None)] for one UID FETCH of `what`."""
+    out = []
+    typ, data = conn.uid("FETCH", ",".join(uids), what)
+    if typ != "OK":
+        return out
+    for item in data or []:
+        if isinstance(item, tuple):
+            out.append((_meta(item[0]), item[1]))
+        elif isinstance(item, bytes) and b"X-GM-MSGID" in item:
+            out.append((_meta(item), None))
+    return out
+
+
+def fetch_primary(app, known, days=PRIMARY_DAYS, limit=MAX_NEW_PER_PASS):
+    """What Gmail holds in the window: the raw mail of every message not yet
+    here (by X-GM-MSGID, oldest first, at most `limit`), and the ids of the
+    ones still unread in Gmail. `known(ids)` answers which ids are stored."""
+    conn = _imap(app)
+    try:
+        _all_mail(conn)
+        query = f"newer_than:{days}d {PRIMARY_QUERY}"
+        typ, data = conn.uid("SEARCH", "X-GM-RAW", '"' + query.replace('"', "") + '"')
+        uids = (data[0].split() if typ == "OK" and data and data[0] else [])
+        uids = [u.decode() for u in uids]
+        metas = []
+        for i in range(0, len(uids), 300):
+            metas += [m for m, _ in _fetch_items(conn, uids[i:i + 300], "(UID X-GM-MSGID FLAGS)")]
+        window = {m["X-GM-MSGID"] for m in metas if m.get("X-GM-MSGID")}
+        unread = {m["X-GM-MSGID"] for m in metas if m.get("X-GM-MSGID") and not m["seen"]}
+        have = known(window)
+        new = [m for m in metas if m.get("X-GM-MSGID") and m["X-GM-MSGID"] not in have and m.get("UID")]
+        new.sort(key=lambda m: int(m["UID"]))
+        new = new[-limit:]
+        items = []
+        for i in range(0, len(new), 25):
+            for meta, raw in _fetch_items(conn, [m["UID"] for m in new[i:i + 25]],
+                                          "(UID X-GM-MSGID X-GM-THRID FLAGS BODY.PEEK[])"):
+                if raw:
+                    items.append((email.message_from_bytes(raw), meta))
+        return {"items": items, "window": window, "unread": unread}
+    finally:
+        try:
+            conn.logout()
+        except Exception:  # noqa: BLE001 - already leaving
+            pass
+
+
+def fetch_attachment(gm_msgid, n, app=None):
+    """(filename, content type, bytes) of the n-th part of a message, read
+    from Gmail when it is opened. None when Gmail no longer has it."""
+    app = app or current_app
+    conn = _imap(app)
+    try:
+        _all_mail(conn)
+        typ, data = conn.uid("SEARCH", "X-GM-MSGID", str(int(gm_msgid)))
+        uids = data[0].split() if typ == "OK" and data and data[0] else []
+        if not uids:
+            return None
+        items = _fetch_items(conn, [uids[-1].decode()], "(UID X-GM-MSGID BODY.PEEK[])")
+        raw = next((r for _, r in items if r), None)
+        if not raw:
+            return None
+        for i, part in enumerate(email.message_from_bytes(raw).walk()):
+            if i == n and not part.is_multipart():
+                return (_decode(part.get_filename() or "") or "attachment",
+                        part.get_content_type(), part.get_payload(decode=True) or b"")
+        return None
+    finally:
+        try:
+            conn.logout()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _addrs(values):
+    from email.utils import getaddresses
+    out = []
+    for name, addr in getaddresses([_decode(v) for v in (values or [])]):
+        addr = (addr or "").strip().lower()
+        if addr and "@" in addr:
+            out.append([(name or "").strip()[:120], addr[:200]])
+    return out
+
+
+def _attachments(msg):
+    out = []
+    for i, part in enumerate(msg.walk()):
+        if part.is_multipart():
+            continue
+        name = part.get_filename()
+        disp = str(part.get("Content-Disposition") or "").lower()
+        if not name and "attachment" not in disp:
+            continue
+        payload = part.get_payload(decode=True) or b""
+        out.append({"n": i, "name": (_decode(name or "") or "attachment")[:200],
+                    "type": part.get_content_type(), "size": len(payload)})
+    return out
+
+
+_QUOTE_START = re.compile(
+    r"^(On .{4,200}wrote:\s*$|-{2,} ?(Original Message|Forwarded message) ?-{2,}|"
+    r"_{10,}\s*$|Sent from my (iPhone|iPad|Android))", re.I)
+
+
+def clean_text(text):
+    """What one person wrote, without the mail they quoted under it or their
+    signature, so a thread reads like a conversation (EntertainHQ's
+    cleanText). The whole mail stays in `body`; the page can show it."""
+    lines = (text or "").replace("\r\n", "\n").split("\n")
+    out = []
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if _QUOTE_START.match(s) or s == "--" or line.rstrip() == "-- ":
+            break
+        # "On Tue, Nov 4, 2026 at 9:12 AM Michael Bean <x@y>" broken over two lines.
+        if s.startswith("On ") and i + 1 < len(lines) and lines[i + 1].strip().endswith("wrote:"):
+            break
+        if s.startswith(">"):
+            continue
+        out.append(line)
+    cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(out).strip())
+    return cleaned or (text or "").strip()
+
+
+def _naive(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _mark_replied(row):
+    """An answer from him, whether sent here or in Gmail, answers every mail
+    in the conversation that came before it."""
+    when = _naive(row.received_at)
+    for m in Message.query.filter(Message.thread_id == row.thread_id, Message.direction == "in",
+                                  Message.status == "new").all():
+        if when is None or _naive(m.received_at) is None or _naive(m.received_at) <= when:
+            m.status = "replied"
+            m.replied_at = m.replied_at or row.received_at
+
+
+def ingest(msg, meta=None, quiet=False):
     """One parsed mail into one row. Returns the row, or None if it was
-    already here."""
+    already here.
+
+    `meta` is what Gmail said about it (X-GM-MSGID, X-GM-THRID, seen). `quiet`
+    is the first read of the whole inbox: old mail is filed to its client but
+    moves nobody's stage and does not wait on Needs attention."""
+    meta = meta or {}
     name, addr = parseaddr(_decode(msg.get("From")))
     addr = (addr or "").strip().lower()
     if not addr:
         return None
+    gm_id, thrid = meta.get("X-GM-MSGID"), meta.get("X-GM-THRID")
+    if gm_id and Message.query.filter_by(gm_msgid=gm_id).first():
+        return None
     external_id = (msg.get("Message-ID") or "").strip()[:300]
     if not external_id:
         external_id = _fingerprint(msg, addr)
-    if Message.query.filter_by(external_id=external_id).first():
+    recipients = {"to": _addrs(msg.get_all("To")), "cc": _addrs(msg.get_all("Cc"))}
+    refs = " ".join((msg.get("References") or "").split())[:4000]
+    existing = Message.query.filter_by(external_id=external_id).first()
+    if existing:
+        # Sent from the board, or read before the inbox: now Gmail has it too.
+        if gm_id and not existing.gm_msgid:
+            existing.gm_msgid = gm_id
+            existing.gm_thrid = existing.gm_thrid or thrid
+            if not existing.recipients_json:
+                existing.recipients_json = json.dumps(recipients)
+            existing.refs = existing.refs or refs
+            if existing.attachments_json is None:
+                existing.attachments_json = json.dumps(_attachments(msg))
         return None
+    out = addr in own_addresses()
+    when = _when(msg)
     row = Message(
-        source="gmail", direction="in", from_name=_decode(name)[:200],
-        from_email=addr[:200], to_email=parseaddr(_decode(msg.get("To")))[1][:200],
+        source="gmail", direction="out" if out else "in", from_name=_decode(name)[:200],
+        from_email=addr[:200],
+        to_email=(recipients["to"][0][1] if recipients["to"] else "")[:200],
         subject=_decode(msg.get("Subject"))[:300], body=body_text(msg),
-        external_id=external_id, received_at=_when(msg), status="new",
+        external_id=external_id, received_at=when, status="sent" if out else "new",
+        gm_msgid=gm_id, gm_thrid=thrid, recipients_json=json.dumps(recipients), refs=refs,
+        attachments_json=json.dumps(_attachments(msg)),
+        seen_at=datetime.now(timezone.utc) if (out or meta.get("seen")) else None,
     )
-    # Threaded to what it answers, when that is something the board sent
-    # or already holds; otherwise it starts a conversation of its own.
+    # Threaded by Gmail's own conversation id; failing that, to what it
+    # answers, when the board holds it; otherwise it starts its own.
     parent = None
-    for ref in [msg.get("In-Reply-To") or ""] + (msg.get("References") or "").split():
-        ref = ref.strip()
-        if ref:
-            parent = Message.query.filter_by(external_id=ref).first()
-            if parent:
-                break
+    if thrid:
+        parent = (Message.query.filter_by(gm_thrid=thrid)
+                  .order_by(Message.received_at, Message.id).first())
+    if parent is None:
+        for ref in [msg.get("In-Reply-To") or ""] + (msg.get("References") or "").split():
+            ref = ref.strip()
+            if ref:
+                parent = Message.query.filter_by(external_id=ref).first()
+                if parent:
+                    break
     db.session.add(row)
     db.session.flush()
     if parent:
@@ -261,20 +482,50 @@ def ingest(msg):
         row.thread_id = parent.thread_id or parent.id
     else:
         row.thread_id = row.id
-    # A client's mail is contact: it files the row and moves their stage. A
-    # lead's is logged on the lead.
-    from pm.contact_matching import file_inbound
-    file_inbound(row)
+    root = db.session.get(Message, row.thread_id) if parent else None
+    from pm.contact_matching import file_inbound, match_lead
+    if out:
+        # His own mail: filed to the client it went to, and an answer to
+        # everything before it in the conversation.
+        for _, e in recipients["to"] + recipients["cc"]:
+            client = match_client(e)
+            if client:
+                row.client_id = client.id
+                break
+        row.watched = bool(row.client_id) or bool(root and root.watched)
+        _mark_replied(row)
+    elif quiet:
+        client = match_client(addr)
+        row.client_id = client.id if client else None
+        row.watched = bool(client) or bool(match_lead(addr)) or bool(root and root.watched)
+        # Old mail is history, not a wait: only the last three days ask.
+        if _naive(when) < _naive(datetime.now(timezone.utc)) - timedelta(days=3):
+            row.status = "archived"
+    else:
+        # A client's mail is contact: it files the row and moves their stage.
+        # A lead's is logged on the lead. Anyone else is the inbox's alone.
+        filed = file_inbound(row)
+        row.watched = bool(filed) or bool(root and root.watched)
     return row
 
 
-def sync(app=None, force=False):
+def _known(ids):
+    have = set()
+    ids = list(ids)
+    for i in range(0, len(ids), 500):
+        have |= {g for (g,) in db.session.query(Message.gm_msgid)
+                 .filter(Message.gm_msgid.in_(ids[i:i + 500])).all()}
+    return have
+
+
+def sync(app=None, force=False, every=None):
     """Pull what is new. Returns a dict saying what happened."""
     app = app or current_app
     if not configured(app):
         return {"skipped": "mail is not configured"}
     now = time.monotonic()
-    if not force and now - _state["last"] < SYNC_EVERY_SECONDS:
+    every = SYNC_EVERY_SECONDS if every is None else every
+    if not force and now - _state["last"] < every:
         return {"skipped": "recent"}
     if _state["running"]:
         return {"skipped": "running"}
@@ -285,24 +536,25 @@ def sync(app=None, force=False):
             # now; it will write what this pass would have.
             _state.update(last=now)
             return {"skipped": "another worker"}
-        senders = watched_senders()
-        if not senders:
-            db.session.commit()
-            _state.update(last=now, error=None, new=0)
-            return {"new": 0, "senders": 0}
-        latest = (db.session.query(db.func.max(Message.received_at))
-                  .filter(Message.direction == "in", Message.source == "gmail").scalar())
-        since = ((latest - timedelta(days=2)) if latest
-                 else datetime.now(timezone.utc) - timedelta(days=FIRST_SYNC_DAYS))
+        first = not db.session.query(Message.id).filter(Message.gm_msgid.isnot(None)).first()
+        got = fetch_primary(app, _known)
         created = 0
-        for msg in fetch_recent(app, senders, since):
-            if ingest(msg) is not None:
+        for msg, meta in got["items"]:
+            if ingest(msg, meta, quiet=first) is not None:
                 created += 1
+        # Read in Gmail is read here too.
+        cleared = 0
+        if got["window"]:
+            for row in (Message.query.filter(Message.direction == "in", Message.seen_at.is_(None),
+                                             Message.gm_msgid.isnot(None)).all()):
+                if row.gm_msgid in got["window"] and row.gm_msgid not in got["unread"]:
+                    row.seen_at = datetime.now(timezone.utc)
+                    cleared += 1
         from pm.contact_matching import relink_unmatched
         relink_unmatched()
         db.session.commit()
         _state.update(last=now, error=None, new=created)
-        return {"new": created, "senders": len(senders)}
+        return {"new": created, "read_in_gmail": cleared}
     except Exception as err:  # noqa: BLE001 - reported, never raised into a page
         db.session.rollback()
         _state.update(last=now, error=str(err)[:300])
@@ -381,17 +633,22 @@ def start_background(app):
     return True
 
 
-def kick(app):
+# While the inbox is open it asks this often, like EntertainHQ's 45 seconds.
+INBOX_EVERY_SECONDS = 60
+
+
+def kick(app, every=None):
     """Sync in the background if one is due, so the page opens now."""
+    every = SYNC_EVERY_SECONDS if every is None else every
     if not configured(app) or _state["running"]:
         return False
-    if time.monotonic() - _state["last"] < SYNC_EVERY_SECONDS:
+    if time.monotonic() - _state["last"] < every:
         return False
 
     def run():
         with app.app_context():
             try:
-                sync(app)
+                sync(app, every=every)
             finally:
                 db.session.remove()
 
@@ -402,60 +659,32 @@ def kick(app):
 # ── Writing ──────────────────────────────────────────────
 
 
-def send_reply(original, text, app=None):
-    """Answer a message from Michael's own address, threaded to it.
-    Returns the outbound row."""
-    app = app or current_app
-    if not configured(app):
-        raise RuntimeError("mail is not configured")
-    username = app.config["MAIL_USERNAME"]
-    subject = original.subject or ""
-    if not subject.lower().startswith("re:"):
-        subject = f"Re: {subject}".strip()
-
-    mime = MIMEText(text, "plain", "utf-8")
-    mime["From"] = f"Michael Bean <{username}>"
-    to_name = original.from_name or ""
-    mime["To"] = f"{to_name} <{original.from_email}>" if to_name else original.from_email
-    mime["Subject"] = subject
-    mime["Date"] = formatdate(localtime=False)
-    message_id = make_msgid(domain="builtbybeans.com")
-    mime["Message-ID"] = message_id
-    if original.external_id:
-        mime["In-Reply-To"] = original.external_id
-        mime["References"] = original.external_id
-
-    with smtplib.SMTP(app.config.get("MAIL_SERVER", "smtp.gmail.com"),
-                      int(app.config.get("MAIL_PORT", 587))) as server:
-        server.starttls()
-        server.login(username, app.config["MAIL_PASSWORD"])
-        server.send_message(mime)
-
-    now = datetime.now(timezone.utc)
-    row = Message(
-        source=original.source, direction="out", from_name="Michael Bean",
-        from_email=username, to_email=original.from_email, subject=subject,
-        body=text, external_id=message_id, in_reply_to_id=original.id,
-        thread_id=original.thread_id or original.id, client_id=original.client_id,
-        status="sent", received_at=now,
-    )
-    db.session.add(row)
-    from pm.contact_matching import advance_client
-    advance_client(original.client, "out")
-    original.status = "replied"
-    original.replied_at = now
-    db.session.commit()
-    return row
+def _fmt(name, addr):
+    from email.utils import formataddr
+    return formataddr((name, addr)) if name else addr
 
 
-def send_new(to_email, to_name, subject, text, html_body=None, client=None, app=None):
-    """A new message from Michael's own address (not a reply), filed in the
-    board's mail like one, so the client's page shows it went. Returns the
-    outbound row. Raises when mail is not configured or the server refuses."""
+def send_mail(to, subject, text, cc=None, reply_to=None, send_key=None, client=None,
+              html_body=None, source="board", app=None):
+    """Send one mail from Michael's own address and file it. Returns
+    (row, sent): `sent` is False when this press (`send_key`) already went,
+    and the row is the one it sent then.
+
+    `to` and `cc` are [(name, email)]. `reply_to` is the board's row it
+    answers: the reply carries In-Reply-To and the whole References chain, so
+    it threads in their mail and in his Gmail, where SMTP files it in Sent."""
     from email.mime.multipart import MIMEMultipart
     app = app or current_app
     if not configured(app):
         raise RuntimeError("mail is not configured")
+    if send_key:
+        done = Message.query.filter_by(send_key=send_key).first()
+        if done:
+            return done, False
+    to = [(n or "", e.strip().lower()) for n, e in (to or []) if e and "@" in e]
+    cc = [(n or "", e.strip().lower()) for n, e in (cc or []) if e and "@" in e]
+    if not to:
+        raise ValueError("nobody to send it to")
     username = app.config["MAIL_USERNAME"]
     if html_body:
         mime = MIMEMultipart("alternative")
@@ -464,26 +693,79 @@ def send_new(to_email, to_name, subject, text, html_body=None, client=None, app=
     else:
         mime = MIMEText(text, "plain", "utf-8")
     mime["From"] = f"Michael Bean <{username}>"
-    mime["To"] = f"{to_name} <{to_email}>" if to_name else to_email
+    mime["To"] = ", ".join(_fmt(n, e) for n, e in to)
+    if cc:
+        mime["Cc"] = ", ".join(_fmt(n, e) for n, e in cc)
     mime["Subject"] = subject
     mime["Date"] = formatdate(localtime=False)
     message_id = make_msgid(domain="builtbybeans.com")
     mime["Message-ID"] = message_id
+    refs = ""
+    if reply_to is not None and reply_to.external_id and not reply_to.external_id.startswith("sha256:"):
+        chain = (reply_to.refs or "").split() + [reply_to.external_id]
+        refs = " ".join(chain[-20:])
+        mime["In-Reply-To"] = reply_to.external_id
+        mime["References"] = refs
     with smtplib.SMTP(app.config.get("MAIL_SERVER", "smtp.gmail.com"),
                       int(app.config.get("MAIL_PORT", 587))) as server:
         server.starttls()
         server.login(username, app.config["MAIL_PASSWORD"])
-        server.send_message(mime)
+        server.send_message(mime, from_addr=username, to_addrs=[e for _, e in to + cc])
+
+    now = datetime.now(timezone.utc)
+    if client is None and reply_to is not None:
+        client = reply_to.client
+    if client is None:
+        for _, e in to + cc:
+            client = match_client(e)
+            if client:
+                break
     row = Message(
-        source="board", direction="out", from_name="Michael Bean", from_email=username,
-        to_email=to_email, subject=subject[:300], body=text, external_id=message_id,
-        client_id=client.id if client is not None else None, status="sent",
-        received_at=datetime.now(timezone.utc),
+        source=source, direction="out", from_name="Michael Bean", from_email=username,
+        to_email=to[0][1], subject=subject[:300], body=text, external_id=message_id,
+        client_id=client.id if client is not None else None, status="sent", received_at=now,
+        recipients_json=json.dumps({"to": [list(x) for x in to], "cc": [list(x) for x in cc]}),
+        refs=refs or None, attachments_json="[]", seen_at=now, send_key=send_key or None,
+        watched=bool(client) or bool(reply_to is not None and reply_to.watched),
     )
     db.session.add(row)
     db.session.flush()
-    row.thread_id = row.id
+    if reply_to is not None:
+        row.in_reply_to_id = reply_to.id
+        row.thread_id = reply_to.thread_id or reply_to.id
+        _mark_replied(row)
+    else:
+        row.thread_id = row.id
+    if client is not None:
+        from pm.contact_matching import advance_client
+        advance_client(client, "out")
     db.session.commit()
+    return row, True
+
+
+def send_reply(original, text, app=None, cc=None, send_key=None):
+    """Answer a message from Michael's own address, threaded to it.
+    Returns the outbound row."""
+    subject = original.subject or ""
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}".strip()
+    row, _ = send_mail([(original.from_name or "", original.from_email)], subject, text,
+                       cc=cc, reply_to=original, send_key=send_key,
+                       source=original.source if original.source != "contact_form" else "gmail",
+                       app=app)
+    original.status = "replied"
+    original.replied_at = original.replied_at or row.received_at
+    db.session.commit()
+    return row
+
+
+def send_new(to_email, to_name, subject, text, html_body=None, client=None, app=None,
+             cc=None, send_key=None):
+    """A new message from Michael's own address (not a reply), filed in the
+    board's mail like one, so the client's page shows it went. Returns the
+    outbound row. Raises when mail is not configured or the server refuses."""
+    row, _ = send_mail([(to_name or "", to_email)], subject, text, cc=cc, client=client,
+                       html_body=html_body, send_key=send_key, app=app)
     return row
 
 

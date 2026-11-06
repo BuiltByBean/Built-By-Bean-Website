@@ -49,12 +49,15 @@ MAIL = email.message_from_string(
 READS = []
 
 
-def fake_fetch(app, senders, since):
-    READS.append(sorted(senders))
-    return [MAIL]
+def fake_fetch(app, known, **kw):
+    # Since issue #40 the pass reads all of Primary, not a sender list.
+    READS.append("pass")
+    have = known({"1001"})
+    items = [] if "1001" in have else [(MAIL, {"X-GM-MSGID": "1001", "X-GM-THRID": "2001", "seen": False})]
+    return {"items": items, "window": {"1001"}, "unread": {"1001"}}
 
 
-mail_service.fetch_recent = fake_fetch
+mail_service.fetch_primary = fake_fetch
 mail_service.SYNC_EVERY_SECONDS = 0  # every pass is due, so the test is quick
 
 from app import create_app  # noqa: E402
@@ -104,7 +107,6 @@ with application.app_context():
     row = Message.query.filter_by(external_id="<abc123@kuper.test>").first()
     client = Client.query.filter_by(email="cason@kuper.test").first()
     check("and it is matched to the client", row is not None and row.client_id == client.id)
-check("the client's address is a watched sender", READS and "cason@kuper.test" in READS[0])
 
 print("2. Read again, stored once")
 before = len(READS)

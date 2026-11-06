@@ -1100,6 +1100,20 @@
                     {%- endif %}
                 </span>
             </a>
+            {# The inbox (issue #40): all of his Primary mail, read and answered
+               here. His own link (his pick), the CEO's alone, with what is unread. #}
+            {% if current_user.is_ceo %}
+            <a href="{{ url_for('messages.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('messages.') %}active{% endif %}">
+                {{ icon('mail') }}
+                Inbox
+                <span data-live="nav-inbox" class="ml-auto">
+                    {%- if inbox_unread %}
+                    <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-brand-500 text-white text-[10px] font-bold">{{ inbox_unread | commas }}</span>
+                    {%- endif %}
+                </span>
+            </a>
+            {% endif %}
             {# Second, under Needs attention (Michael, 2026-11-04): messages,
                tasks and projects in one place. It replaced Notes and the
                standalone Projects page. The badge is what is NEW to you,
@@ -1567,7 +1581,7 @@
     /* Regions outside the content that a new page may still change: the flash
        strip, and the two sidebar counts. Everything else in the sidebar is
        identical on every page and is left alone. */
-    var LIVE = ['flash', 'nav-attention', 'nav-workspace', 'nav-support'];
+    var LIVE = ['flash', 'nav-attention', 'nav-inbox', 'nav-workspace', 'nav-support'];
     var FILES = /\.(pdf|png|jpe?g|gif|svg|ico|csv|zip|xlsx?|docx?|txt)$/i;
 
     function swappable(a, ev) {

@@ -1,0 +1,306 @@
+{% extends "pm/base.html" %}
+{% from "pm/workspace/_tabs.html" import seg %}
+{% from "pm/components/checkbox.html" import checkbox %}
+{% from "pm/components/confirm_button.html" import confirm_button %}
+
+{#
+  The inbox (issue #40): EntertainHQ's admin Inbox, on the board. The list of
+  conversations on the left, the one open on the right; on a phone they are
+  two pages, the list and the conversation, each scrolling inside itself.
+
+  A conversation reads like texts: theirs on the left, his on the right, each
+  without the mail it quoted (short_body), the whole mail one press away. The
+  reply box sits under it, reply-all by default, and Send asks once, naming
+  who it goes to, before it sends.
+
+  The list asks /poll every minute while the page is in front: a sync when
+  one is due, and a stamp. A different stamp swaps the list and the sidebar
+  count, never the conversation, so a reply being typed is never touched.
+#}
+
+{% block title %}Inbox - Built By Bean{% endblock %}
+{% block page_title %}Inbox{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+
+{% block header_actions %}
+{% if configured %}
+<div class="flex items-center gap-2">
+    <form method="POST" data-live-action action="{{ url_for('messages.sync_now') }}">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button type="submit" aria-label="Check mail" title="Check mail"
+                class="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl border border-white/10 text-surface-300 hover:border-brand-500/40 hover:text-brand-300 transition-colors">
+            {{ icon('refresh', 'w-5 h-5') }}
+        </button>
+    </form>
+    <a href="{{ url_for('messages.index', new=1) }}"
+       class="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl btn-brand text-white">
+        {{ icon('add', 'w-4 h-4') }} New message
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% macro keep(extra={}) -%}
+{%- set args = {} -%}
+{%- if view != 'all' %}{% set _ = args.update({'view': view}) %}{% endif -%}
+{%- if q %}{% set _ = args.update({'q': q}) %}{% endif -%}
+{%- set _ = args.update(extra) -%}
+{{ args | urlencode }}
+{%- endmacro %}
+
+{% block content %}
+<script>
+    /* Every minute while the tab is in front, and on coming back to it. A
+       new stamp swaps only the list and the sidebar's count. */
+    window.inboxPoll = function (url) {
+        return {
+            stamp: null, timer: null,
+            init() {
+                this.ask();
+                this.timer = setInterval(() => { if (!document.hidden) this.ask(); }, 60000);
+                this._vis = () => { if (!document.hidden) this.ask(); };
+                document.addEventListener('visibilitychange', this._vis);
+            },
+            destroy() { clearInterval(this.timer); document.removeEventListener('visibilitychange', this._vis); },
+            ask() {
+                if (!document.querySelector('[data-inbox]')) return this.destroy();
+                fetch(url, { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(d => {
+                    if (!d) return;
+                    if (this.stamp !== null && d.stamp !== this.stamp) {
+                        fetch(location.href, { credentials: 'same-origin' }).then(r => r.ok ? r.text() : null)
+                            .then(html => { if (html) window.bbbSwapLive(html, ['convs', 'nav-inbox']); });
+                    }
+                    this.stamp = d.stamp;
+                }).catch(() => {});
+            },
+        };
+    };
+</script>
+<script>
+    window.wsSeg = window.wsSeg || function (value) { return window.bbbGlide(value); };
+    window.inboxDraft = function (key) {
+        return {
+            text: '',
+            init() { try { this.text = localStorage.getItem(key) || ''; } catch (e) {} },
+            save() { try { this.text ? localStorage.setItem(key, this.text) : localStorage.removeItem(key); } catch (e) {} },
+            done() { try { localStorage.removeItem(key); } catch (e) {} },
+        };
+    };
+</script>
+
+{% if mail.error %}
+<div class="shrink-0 mb-3 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-300 break-words">
+    The last check failed: {{ mail.error }}
+</div>
+{% endif %}
+
+<div class="flex flex-1 min-h-0 gap-4" x-data="inboxPoll('{{ url_for('messages.poll') }}')" data-inbox>
+
+    {# The list. On a phone it is the page until a conversation is open. #}
+    <section class="{{ 'hidden lg:flex' if (thread or compose) else 'flex' }} flex-col min-h-0 w-full lg:w-[420px] lg:shrink-0 glass-card overflow-hidden"
+             aria-label="Conversations">
+        <form method="GET" x-data="liveFilter()" @submit.prevent="apply()"
+              class="shrink-0 p-3 space-y-3 border-b border-white/10 relative z-30">
+            <label class="relative block">
+                <span class="sr-only">Search mail</span>
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 pointer-events-none">{{ icon('search', 'w-4 h-4') }}</span>
+                <input type="search" name="q" value="{{ q }}" @input="soon()" placeholder="Search mail"
+                       class="input-ring w-full min-w-0 min-h-[44px] pl-9 pr-3 py-2 bg-surface-800/50 text-white text-sm placeholder-surface-400 rounded-xl">
+            </label>
+            {# Four chips are wider than a 320 phone's card: the row scrolls inside it. #}
+            <div class="overflow-x-auto -mx-1 px-1 pb-0.5">
+            {{ seg([('all', 'All'), ('unread', 'Unread'), ('clients', 'Clients'), ('archived', 'Archived')],
+                   view, 'Show', name='view', on_pick='$nextTick(() => apply())') }}
+            </div>
+        </form>
+
+        <div data-live="convs" class="flex-1 min-h-0 overflow-y-auto">
+            {% for c in convs %}
+            {% set here = root and root.id == c.id %}
+            <a href="{{ url_for('messages.detail', id=c.id) }}{% set k = keep() %}{% if k %}?{{ k }}{% endif %}"
+               data-press="row"
+               class="block px-4 py-3 border-b border-white/5 transition-colors {{ 'bg-brand-500/10' if here else 'hover:bg-white/5' }}"
+               {% if here %}aria-current="true"{% endif %}>
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="w-2 h-2 shrink-0 rounded-full {{ 'bg-brand-400' if c.unread else 'bg-transparent' }}"
+                          {% if c.unread %}aria-label="Unread"{% endif %}></span>
+                    <span class="min-w-0 truncate text-sm {{ 'font-semibold text-white' if c.unread else 'font-medium text-surface-200' }}">{{ c.who }}</span>
+                    {% if c.n > 1 %}<span class="shrink-0 text-[11px] tabular-nums text-surface-500">{{ c.n }}</span>{% endif %}
+                    <span class="ml-auto shrink-0 text-xs text-surface-500 whitespace-nowrap">{{ c.last | mail_when }}</span>
+                </div>
+                <div class="mt-1 flex items-center gap-2 min-w-0 pl-4">
+                    <span class="min-w-0 truncate text-sm {{ 'text-white' if c.unread else 'text-surface-300' }}">{{ c.subject }}</span>
+                    {% if c.files %}<span class="shrink-0 text-surface-500" title="Has attachments">{{ icon('attach', 'w-3.5 h-3.5') }}</span>{% endif %}
+                </div>
+                <div class="mt-0.5 flex items-center gap-2 min-w-0 pl-4">
+                    <span class="min-w-0 truncate text-xs text-surface-500">{% if c.from_me %}You: {% endif %}{{ c.snippet }}</span>
+                    {% if c.client %}<span class="shrink-0 max-w-[40%] truncate text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-surface-400">{{ c.client.name }}</span>{% endif %}
+                </div>
+            </a>
+            {% else %}
+            <div class="px-4 py-10 text-center text-sm text-surface-400">
+                {% if q %}Nothing matches "{{ q }}".{% elif view == 'unread' %}Nothing unread.{% elif view == 'archived' %}Nothing archived.{% elif not configured %}Mail is not connected on this server.{% else %}No conversations yet.{% endif %}
+            </div>
+            {% endfor %}
+            {% if pages > 1 %}
+            <div class="flex items-center justify-between gap-2 px-3 py-3">
+                {% if page > 1 %}
+                <a href="?{{ keep({'page': page - 1}) }}"
+                   class="inline-flex items-center gap-1.5 min-h-[44px] px-3 py-2 text-sm rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                    {{ icon('back', 'w-4 h-4') }} Newer</a>
+                {% else %}<span></span>{% endif %}
+                <span class="text-xs text-surface-500 tabular-nums">{{ page }} of {{ pages }}</span>
+                {% if page < pages %}
+                <a href="?{{ keep({'page': page + 1}) }}"
+                   class="inline-flex items-center gap-1.5 min-h-[44px] px-3 py-2 text-sm rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                    Older {{ icon('forward', 'w-4 h-4') }}</a>
+                {% else %}<span></span>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {# The open conversation, a new message, or nothing yet. #}
+    <section class="{{ 'flex' if (thread or compose) else 'hidden lg:flex' }} flex-col min-h-0 flex-1 min-w-0 glass-card overflow-hidden"
+             aria-label="Conversation">
+    {% if thread %}
+        <header class="shrink-0 flex items-start gap-3 px-4 py-3 border-b border-white/10">
+            <a href="{{ url_for('messages.index') }}{% set k = keep() %}{% if k %}?{{ k }}{% endif %}" aria-label="All conversations"
+               class="lg:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] -ml-1 rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                {{ icon('back', 'w-5 h-5') }}</a>
+            <div class="min-w-0 flex-1">
+                <h2 class="text-base font-semibold text-white break-words">{{ root.subject or '(no subject)' }}</h2>
+                <p class="mt-0.5 flex items-center gap-1 min-w-0 text-xs text-surface-500">
+                    <span class="shrink-0">{{ thread | length }} message{{ '' if thread | length == 1 else 's' }}</span>
+                    {%- set cl = (thread | selectattr('client_id') | list) %}
+                    {% if cl %}<span class="shrink-0">&middot;</span>
+                    <a href="{{ url_for('pm.client_detail', id=cl[0].client_id) }}" data-press="prose" class="min-w-0 truncate text-brand-300 hover:text-brand-200 underline underline-offset-2">{{ cl[0].client.name }}</a>{% endif %}
+                </p>
+            </div>
+            {% if archived %}
+            <form method="POST" action="{{ url_for('messages.unarchive', id=root.id) }}" class="shrink-0">
+                <button type="submit"
+                        class="inline-flex items-center gap-1.5 min-h-[44px] px-3 py-2 text-sm rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                    {{ icon('reply', 'w-4 h-4') }} Move to inbox</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('messages.archive', id=root.id) }}" class="shrink-0">
+                <input type="hidden" name="next" value="{{ url_for('messages.index') }}{% set k = keep() %}{% if k %}?{{ k }}{% endif %}">
+                <button type="submit" aria-label="Archive" title="Archive"
+                        class="inline-flex items-center gap-1.5 min-h-[44px] px-3 py-2 text-sm rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                    {{ icon('archive', 'w-4 h-4') }}<span class="hidden sm:inline">Archive</span></button>
+            </form>
+            {% endif %}
+        </header>
+
+        <div class="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3" data-thread x-init="$el.scrollTop = $el.scrollHeight">
+            {% for m in thread %}
+            {% set mine = m.direction == 'out' %}
+            <div class="flex {{ 'justify-end' if mine else 'justify-start' }}" x-data="{ whole: false }">
+                <div class="w-full sm:max-w-[85%] min-w-0 rounded-2xl px-4 py-3 {{ 'bg-brand-500/10 border border-brand-500/20' if mine else 'bg-white/[0.04] border border-white/10' }}">
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 mb-1.5">
+                        <span class="text-sm font-medium text-white min-w-0 truncate">{{ 'You' if mine else m.sender_label }}</span>
+                        <span class="text-xs text-surface-500 whitespace-nowrap">{{ m.received_at | mail_when(true) }}{% if m.source == 'contact_form' %} &middot; the site's form{% endif %}</span>
+                    </div>
+                    {% set r = m.recipients %}
+                    {% if mine or r.cc or (r.to | length) > 1 %}
+                    <p class="mb-1.5 text-xs text-surface-500 break-words">
+                        To {{ r.to | map('last') | join(', ') or m.to_email }}{% if r.cc %} &middot; Cc {{ r.cc | map('last') | join(', ') }}{% endif %}
+                    </p>
+                    {% endif %}
+                    {% if m.project_type %}<p class="text-xs text-surface-400 mb-1.5">Project type: {{ m.project_type }}</p>{% endif %}
+                    {% set short = m.short_body %}
+                    <div class="text-sm text-surface-200 whitespace-pre-wrap break-words leading-relaxed" x-show="!whole">{{ short }}</div>
+                    {% if short != (m.body or '').strip() %}
+                    <div class="text-sm text-surface-200 whitespace-pre-wrap break-words leading-relaxed" x-show="whole" x-cloak>{{ m.body }}</div>
+                    <button type="button" @click="whole = !whole"
+                            class="mt-2 inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 text-xs rounded-lg border border-white/10 text-surface-400 hover:text-white">
+                        {{ icon('expand', 'w-3.5 h-3.5') }}<span x-text="whole ? 'Show less' : 'Show the whole email'">Show the whole email</span></button>
+                    {% endif %}
+                    {% if m.attachments %}
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        {% for a in m.attachments %}
+                        <a href="{{ url_for('messages.attachment', id=m.id, n=a.n) }}" target="_blank" rel="noopener"
+                           class="inline-flex items-center gap-1.5 max-w-full min-h-[36px] px-3 py-1.5 text-xs rounded-lg border border-white/10 text-surface-300 hover:text-white">
+                            {{ icon('attach', 'w-3.5 h-3.5 shrink-0') }}<span class="truncate">{{ a.name }}</span>
+                            <span class="shrink-0 text-surface-500">{{ ((a.size or 0) / 1024) | round | int | commas }} KB</span></a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if configured and plan and plan.to %}
+        {% set people = plan.to + plan.cc %}
+        <form method="POST" action="{{ url_for('messages.reply', id=root.id) }}"
+              x-data="inboxDraft('inbox-draft-{{ root.id }}')" @submit="done()"
+              class="shrink-0 border-t border-white/10 p-3 space-y-2">
+            <input type="hidden" name="send_key" value="{{ send_key }}">
+            <p class="text-xs text-surface-500 break-words">
+                To {{ plan.to | map('last') | join(', ') }}{% if plan.cc %} &middot; Cc {{ plan.cc | map('last') | join(', ') }}{% endif %}
+            </p>
+            <label for="reply-body" class="sr-only">Reply</label>
+            <textarea id="reply-body" name="body" rows="3" required x-model="text" @input="save()"
+                      placeholder="Write a reply"
+                      class="input-ring w-full min-w-0 px-4 py-3 text-sm bg-surface-800/50 text-white rounded-xl resize-y max-h-[40vh]"></textarea>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                {% if plan.cc %}
+                <span class="mr-auto">{{ checkbox('reply_all', checked=true, label='Reply to everyone') }}</span>
+                <input type="hidden" name="reply_all" value="0">
+                {% endif %}
+                {{ confirm_button('Send', 'Send to ' ~ (people | length) ~ (' person' if people | length == 1 else ' people') ~ '?',
+                                  btn_class='min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-xl btn-brand text-white',
+                                  tone='brand') }}
+            </div>
+        </form>
+        {% endif %}
+
+    {% elif compose %}
+        <header class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/10">
+            <a href="{{ url_for('messages.index') }}" aria-label="All conversations"
+               class="lg:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] -ml-1 rounded-xl border border-white/10 text-surface-300 hover:text-white">
+                {{ icon('back', 'w-5 h-5') }}</a>
+            <h2 class="text-base font-semibold text-white">New message</h2>
+        </header>
+        <form method="POST" action="{{ url_for('messages.send') }}" x-data="inboxDraft('inbox-draft-new')" @submit="done()"
+              class="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+            <input type="hidden" name="send_key" value="{{ send_key }}">
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">To</span>
+                <input type="text" name="to" value="{{ to }}" required autocomplete="off" placeholder="name@company.com, another@company.com"
+                       class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </label>
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">Cc</span>
+                <input type="text" name="cc" autocomplete="off"
+                       class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </label>
+            <label class="block">
+                <span class="block text-xs font-medium text-surface-400 mb-1">Subject</span>
+                <input type="text" name="subject" value="{{ subject }}" required maxlength="300"
+                       class="input-ring w-full min-w-0 min-h-[44px] px-4 py-2 bg-surface-800/50 text-white text-sm rounded-xl">
+            </label>
+            <label class="block">
+                <span class="sr-only">Message</span>
+                <textarea name="body" rows="12" required x-model="text" @input="save()"
+                          class="input-ring w-full min-w-0 px-4 py-3 text-sm bg-surface-800/50 text-white rounded-xl resize-y"></textarea>
+            </label>
+            <div class="flex justify-end gap-2">
+                <a href="{{ url_for('messages.index') }}"
+                   class="inline-flex items-center min-h-[44px] px-4 py-2 text-sm rounded-xl border border-white/10 text-surface-300 hover:text-white">Cancel</a>
+                {{ confirm_button('Send', 'Send it?', btn_class='min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-xl btn-brand text-white', tone='brand') }}
+            </div>
+        </form>
+
+    {% else %}
+        <div class="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <span class="text-surface-600">{{ icon('mail', 'w-10 h-10') }}</span>
+            <p class="text-sm text-surface-400">{{ total | commas }} conversation{{ '' if total == 1 else 's' }}{% if view == 'unread' %} unread{% elif view == 'archived' %} archived{% endif %}</p>
+        </div>
+    {% endif %}
+    </section>
+</div>
+
+{% endblock %}

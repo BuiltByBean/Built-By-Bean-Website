@@ -4638,8 +4638,51 @@ class Message(db.Model):
     status = db.Column(db.String(10), nullable=False, default="new", index=True)
     received_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     replied_at = db.Column(db.DateTime, nullable=True)
+    # The inbox (issue #40): all of Primary and Sent, not only client mail.
+    # Gmail's own ids, read over IMAP's X-GM-MSGID and X-GM-THRID: the message
+    # (dedupe, and how an attachment is fetched again) and its conversation.
+    gm_msgid = db.Column(db.String(32), nullable=True, unique=True, index=True)
+    gm_thrid = db.Column(db.String(32), nullable=True, index=True)
+    # {"to": [[name, email], ...], "cc": [...]}: who else was on it, for reply-all.
+    recipients_json = db.Column(db.Text, nullable=True)
+    # The References header as it arrived, so a reply carries the whole chain.
+    refs = db.Column(db.Text, nullable=True)
+    # [{"n": walk index, "name", "type", "size"}]: the files stay in Gmail and
+    # are fetched when opened.
+    attachments_json = db.Column(db.Text, nullable=True)
+    # Read on the board (an inbound row only). Gmail's own read mark clears it too.
+    seen_at = db.Column(db.DateTime, nullable=True)
+    archived_at = db.Column(db.DateTime, nullable=True, index=True)
+    # A client, a lead or the contact form: the only mail Needs attention shows.
+    watched = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    # The press that sent it, so a double press sends once.
+    send_key = db.Column(db.String(64), nullable=True, unique=True, index=True)
 
     client = db.relationship("Client", backref=db.backref("messages", lazy="dynamic"))
+
+    @property
+    def recipients(self):
+        import json
+        try:
+            data = json.loads(self.recipients_json or "{}")
+        except ValueError:
+            data = {}
+        return {"to": data.get("to") or [], "cc": data.get("cc") or []}
+
+    @property
+    def attachments(self):
+        import json
+        try:
+            return json.loads(self.attachments_json or "[]")
+        except ValueError:
+            return []
+
+    @property
+    def short_body(self):
+        """The body without the quoted mail under it, so a thread reads as
+        what each person said (EntertainHQ's cleanText)."""
+        from pm.mail_service import clean_text
+        return clean_text(self.body or "")
 
     @property
     def snippet(self):
