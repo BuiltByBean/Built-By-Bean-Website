@@ -426,6 +426,9 @@ def provider_create():
             account_business_id=_account_business_id(),
         )
         db.session.add(provider)
+        db.session.flush()
+        import vendor_discovery
+        vendor_discovery.replace_found(provider)
         db.session.commit()
         note = _try_key(provider)
         flash(f"{display_name} account added.{note}", "warning" if "turned" in note or "did not" in note else "success")

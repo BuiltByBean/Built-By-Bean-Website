@@ -77,7 +77,10 @@ with app.app_context():
     db.session.flush()
     tw = ServiceProvider(name="twilio", display_name="Twilio", vendor="Twilio", account_client_id=kenali.id,
                          credentials_json=json.dumps({"account_sid": "ACjd", "auth_token": "OLDTOKEN"}))
-    db.session.add(tw)
+    # What the bank found: Built by Bean's own Twilio charges, no account yet.
+    found = ServiceProvider(name="bank", display_name="Twilio", vendor="Twilio", credentials_json="{}",
+                            discovered_from="bank: TWILIO")
+    db.session.add_all([tw, found])
     db.session.commit()
     TW, EHQ, BOSS = tw.id, ehq.id, boss.id
 
@@ -135,6 +138,8 @@ with app.app_context():
     new = ServiceProvider.query.filter_by(name="twilio").order_by(ServiceProvider.id.desc()).first()
     check("it is added and synced", new.id != TW and not new.sync_error and CALLS, (new.id, new.sync_error))
     check("its vendor is Twilio, under the one tile", new.vendor_name == "Twilio")
+    check("and the bank's placeholder for Built by Bean gave way to it",
+          ServiceProvider.query.filter_by(name="bank").count() == 0)
 
 print()
 print("FAILED: " + ", ".join(FAIL) if FAIL else "all passed")

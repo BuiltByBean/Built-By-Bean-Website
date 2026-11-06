@@ -104,6 +104,12 @@ def from_bank(today=None):
         last = _last_charge([r.id for r in rs], today - timedelta(days=YEAR_DAYS * 2))
         in_use = bool(last and last >= today - timedelta(days=IN_USE_DAYS))
         mine = [a for a in accounts if _paid_by(a) == wanted]
+        if any(a.syncs for a in mine):
+            # A real account now stands where the bank's placeholder did.
+            for a in [a for a in mine if a.name == "bank"]:
+                db.session.delete(a)
+                lines.append(f"{a.vendor_name}: the bank's placeholder gave way to its account")
+            continue
         if mine:
             for a in mine:
                 if a.name == "bank" and a.is_active != in_use:
@@ -122,6 +128,24 @@ def from_bank(today=None):
         by_vendor.setdefault(vkey, []).append(row)
     db.session.commit()
     return lines
+
+
+def replace_found(provider):
+    """A real account added for a vendor takes the place of what the night
+    found for the same vendor and payer: the bank's placeholder for that
+    company, and any "in the code" stand-in. Does not commit."""
+    from models import db, ServiceProvider
+    if not provider.syncs:
+        return 0
+    gone = 0
+    for a in ServiceProvider.query.filter(ServiceProvider.name.in_(ServiceProvider.FOUND_TYPES),
+                                          ServiceProvider.id != provider.id).all():
+        if key(a.vendor_name) != key(provider.vendor_name):
+            continue
+        if a.name == "code" or _paid_by(a) == _paid_by(provider):
+            db.session.delete(a)
+            gone += 1
+    return gone
 
 
 def note_code(playbook, business, repos):
