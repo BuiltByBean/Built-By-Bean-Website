@@ -137,6 +137,20 @@ check("with its tour", f"/work/{t_all}/shot/{shot_id}" in app_page)
 check("back is a bordered button, never bare text", 'class="sc-back-btn"' in app_page
       and "&larr; All products" not in app_page)
 check("the tour has no arrows", "sc-nav-btn" not in app_page)
+
+import re as _re  # noqa: E402
+# Text alone is never a button (Handbook). Each kind below draws a border or a
+# fill; sc-brand is the logo beside the name. Anything else fails.
+BORDERED = {"btn", "sc-back-btn", "sc-thumb", "sc-other", "sc-brand", "sc-card"}
+for label, html in (("front", page), ("product page", app_page)):
+    bare = []
+    for tag in _re.findall(r"<(?:a|button)\b[^>]*>", html):
+        classes = set((_re.search(r'class="([^"]*)"', tag) or [None, ""])[1].split())
+        if not classes & BORDERED:
+            bare.append(tag[:90])
+    check(f"every link and button on the {label} has a border or a fill", not bare, bare)
+    check(f"no coloured text with an arrow posing as a button on the {label}",
+          "&rarr;" not in html and "sc-app-more" not in html)
 check("the tour picture comes through the link", anon.get(f"/work/{t_all}/shot/{shot_id}").status_code == 200)
 r = anon.get(f"/work/{t_one}")
 check("a narrowed link shows only its apps",
