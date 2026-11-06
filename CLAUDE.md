@@ -580,6 +580,29 @@ classes in place. Every in-page choice is the `seg` kit (`pm/workspace/_tabs.htm
 `tools/test_workspace_tabs.py` stamps all of it and presses every tab and
 switch at 1600 and 375; it fails on the old swap.
 
+**Every tab row switches the EntertainHQ way** (Michael, 2026-11-05: "look at
+entertain hq's code it has perfected this"; its `glide` macro). Every row is
+one of two kits, `fin_tabs` (Finances, Org, the Handbook, the MVP Builder) or
+the Workspace's; the Handbook's and the MVP Builder's rebuilt the whole page
+until then. What makes it smooth, each copied from EntertainHQ:
+
+- The mark moves on the press, before any answer, gliding 300ms on
+  `cubic-bezier(0.22,0.75,0.2,1)`.
+- The chosen tab is lit by the server (`btn-brand`, `data-lit`). The mark
+  starts hidden and lands with no transition, and 80ms later
+  `window.bbbHandOff` takes the lit fill off, so a first paint never flashes.
+- **Two pages that wear the same kept row share `#pm-main`**: `bbbNavigate`
+  replaces its insides and carries the row in, so the page's entry animation
+  does not replay and no page needs a `data-panel` for it.
+- While a press waits, only what is under the row dims (`pm-tabbing`,
+  `pm-dim`, the same 140ms delay); the row never does. What arrives fades in
+  over 150ms (`pm-fade-in`, opacity only, fill-mode backwards). Reduced
+  motion turns both off.
+
+Copy a node list before adopting from it: adopting takes the node out of the
+live list being read, and the first version swapped in every other node and
+left `#pm-main` empty. `tools/test_tab_rows_browser.py`.
+
 **A project's dates come from its repo and its domain** (audit item 11,
 `project_autofill.py`, the "project dates" step of the night, before the store
 ids). The repo pair (`Project.repo`, the tile's `github_url`) fills whichever is

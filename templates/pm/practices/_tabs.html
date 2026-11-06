@@ -7,9 +7,10 @@
   guidance API link into them; this strip is what makes them one place.
 
   History is what changed and who changed it, with no count: nothing in it
-  waits on anybody. The strip wraps rather than scrolling sideways, so it
-  never widens the page at 375px.
+  waits on anybody. On a phone the strip scrolls sideways inside itself, the
+  current tab brought into view, so it never widens the page at 375px.
 #}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
 {% macro practices_tabs(active) %}
 {% set c = practices_counts() %}
 {% set tabs = [
@@ -22,17 +23,9 @@
     ('gaps', 'Gaps', url_for('blueprints.gaps_index'), c.gaps),
     ('history', 'History', url_for('inbox.inbox_index'), none),
 ] %}
-<nav aria-label="Handbook" class="shrink-0 flex flex-wrap gap-2">
-    {% for key, label, href, n in tabs %}
-    <a href="{{ href }}" {% if key == active %}aria-current="page"{% endif %}
-       class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
-              {{ 'btn-brand text-white' if key == active else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
-        {{ label }}
-        {% if n is not none %}
-        <span class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums
-                     {{ 'bg-white/15 text-white' if key == active else 'bg-surface-700 text-surface-300' }}">{{ n | commas }}</span>
-        {% endif %}
-    </a>
-    {% endfor %}
-</nav>
+{# The Finances kit's row (2026-11-05, Michael: tab switches "smoother ...
+   look at entertain hq"): kept across a press, its mark glides, and only
+   what is under it changes (base.html bbbNavigate, the shared-row swap). #}
+{{ fin_script() }}
+{{ fin_tabs('practices', active, tabs, 'Handbook', quiet=true) }}
 {% endmacro %}

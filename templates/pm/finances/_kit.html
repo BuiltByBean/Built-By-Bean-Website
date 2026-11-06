@@ -36,9 +36,9 @@
             place() {
                 const el = this.$el.querySelector(selector(this));
                 if (!el) return;
-                const glide = this.placed ? ';transition:transform 300ms ease-out,width 300ms ease-out' : '';
+                const glide = this.placed ? ';transition:transform 300ms cubic-bezier(0.22,0.75,0.2,1),width 300ms cubic-bezier(0.22,0.75,0.2,1)' : '';
                 this.markStyle = 'width:' + el.offsetWidth + 'px;transform:translateX(' + el.offsetLeft + 'px)' + glide;
-                if (el.offsetWidth) this.placed = true;
+                if (el.offsetWidth && !this.placed) { this.placed = true; if (window.bbbHandOff) window.bbbHandOff(this.$el); }
                 const row = this.$refs.row;
                 if (row && row.scrollWidth > row.clientWidth) {
                     const left = el.offsetLeft - 8, right = el.offsetLeft + el.offsetWidth + 8;
@@ -76,7 +76,7 @@
 </script>
 {% endmacro %}
 
-{% macro fin_tabs(key, active, tabs, label) %}
+{% macro fin_tabs(key, active, tabs, label, quiet=false) %}
 <nav data-keep="{{ key }}-tabs" data-active="{{ active }}" aria-label="{{ label }}"
      x-data="finTabs('{{ active }}')" @bbb:kept="kept($event.detail.fresh)"
      class="shrink-0 max-w-full mb-4">
@@ -90,12 +90,13 @@
            {% if id == active %}aria-current="page"{% endif %}
            :aria-current="active === '{{ id }}' ? 'page' : null"
            :class="active === '{{ id }}' ? 'text-white' : 'text-surface-300 hover:text-white'"
+           {% if id == active %}data-lit{% endif %}
            class="relative z-10 inline-flex items-center gap-2 min-h-[44px] px-3 sm:px-4 text-sm font-medium rounded-xl whitespace-nowrap transition-colors
-                  {{ 'text-white' if id == active else 'text-surface-300' }}"
+                  {{ 'text-white btn-brand' if id == active else 'text-surface-300' }}"
            style="flex: 0 0 auto">
             {{ text }}
             <span data-count="{{ id }}"
-                  class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold bg-amber-500 text-black {{ '' if count else 'hidden' }}">{{ (count or 0) | commas }}</span>
+                  class="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold {{ 'bg-white/15 text-white' if quiet else 'bg-amber-500 text-black' }} {{ '' if count else 'hidden' }}">{{ (count or 0) | commas }}</span>
         </a>
         {% endfor %}
     </div>
@@ -111,9 +112,10 @@
     {% for opt in options %}
     <button type="button" data-seg="{{ opt[0] }}" @click="pick('{{ opt[0] }}'); {{ on_pick }}"
             aria-pressed="{{ 'true' if opt[0] | string == value | string else 'false' }}"
+            {% if opt[0] | string == value | string %}data-lit{% endif %}
             :aria-pressed="value === '{{ opt[0] }}' ? 'true' : 'false'"
             :class="value === '{{ opt[0] }}' ? 'text-white' : 'text-surface-300 hover:text-white'"
-            class="relative z-10 inline-flex items-center justify-center min-h-[44px] px-3 sm:px-4 rounded-xl text-sm font-medium tabular-nums transition-colors">
+            class="relative z-10 inline-flex items-center justify-center min-h-[44px] px-3 sm:px-4 rounded-xl text-sm font-medium tabular-nums transition-colors {{ 'btn-brand' if opt[0] | string == value | string else '' }}">
         {{ opt[1] }}
     </button>
     {% endfor %}

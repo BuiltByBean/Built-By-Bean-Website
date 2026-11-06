@@ -426,6 +426,18 @@
            working. Nothing else on the shell dims, because nothing else is
            changing. */
         .pm-navigating #pm-main { opacity: 0.55; transition: opacity 120ms ease 140ms; }
+        /* A tab press (EntertainHQ's way, 2026-11-05): the row stays lit and
+           only what is under it dims, on the same delay, and what arrives
+           fades in. Opacity only, and fill-mode backwards, so nothing is left
+           holding a transform (LM-1). */
+        .pm-navigating.pm-tabbing #pm-main { opacity: 1; }
+        .pm-tabbing .pm-dim { opacity: 0.55; transition: opacity 120ms ease 140ms; }
+        @keyframes pmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .pm-fade-in { animation: pmFadeIn 150ms ease-out backwards; }
+        @media (prefers-reduced-motion: reduce) {
+            .pm-fade-in { animation: none; }
+            .pm-tabbing .pm-dim { transition: none; }
+        }
 
         .flash-msg {
             background: var(--surface);
@@ -1550,9 +1562,56 @@
 
     var token = 0;
 
-    function go(url, push, returning) {
+    /* A tab row's chosen option is lit by the server so the first paint shows
+       it; once the sliding mark has landed under it (80ms, by timer, never an
+       animation frame), the lit fill gives way to the mark. EntertainHQ's
+       glide does the same, which is why its rows never flash on load. */
+    window.bbbHandOff = function (row) {
+        setTimeout(function () {
+            row.querySelectorAll('[data-lit]').forEach(function (n) {
+                n.classList.remove('btn-brand');
+                n.removeAttribute('data-lit');
+            });
+        }, 80);
+    };
+
+    /* Everything in #pm-main that is not a kept row and holds none: the
+       siblings of each kept row and of each of its ancestors. That is what a
+       tab press dims and what fades in after it, so the row itself is never
+       touched (EntertainHQ's tabs, 2026-11-05). */
+    function aroundKept(root) {
+        var out = [], seen = [];
+        root.querySelectorAll('[data-keep]').forEach(function (keep) {
+            for (var node = keep; node && node !== root; node = node.parentElement) {
+                var parent = node.parentElement;
+                if (!parent) break;
+                Array.prototype.forEach.call(parent.children, function (sib) {
+                    if (sib === node || sib.tagName === 'SCRIPT' || seen.indexOf(sib) !== -1) return;
+                    if (sib.hasAttribute('data-keep') || sib.querySelector('[data-keep]')) return;
+                    seen.push(sib);
+                    out.push(sib);
+                });
+            }
+        });
+        return out;
+    }
+
+    function fadeIn(nodes) {
+        nodes.forEach(function (n) {
+            if (!n.classList) return;
+            n.classList.remove('pm-fade-in');
+            void n.offsetWidth;
+            n.classList.add('pm-fade-in');
+        });
+    }
+
+    function go(url, push, returning, from) {
         var mine = ++token;
         if (window.bbbScroll) window.bbbScroll.save();
+        var mainNow = document.getElementById('pm-main');
+        var tabbing = !!(from && from.closest && from.closest('#pm-main [data-keep]'));
+        document.documentElement.classList.toggle('pm-tabbing', tabbing);
+        if (tabbing && mainNow) aroundKept(mainNow).forEach(function (n) { n.classList.add('pm-dim'); });
         document.documentElement.classList.add('pm-navigating');
 
         fetch(url, { credentials: 'same-origin', headers: { 'X-Shell': 'swap' } })
@@ -1615,6 +1674,48 @@
                         if (twin) el.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: twin } }));
                     });
                     runScripts(newPanel);
+                    fadeIn([newPanel]);
+                } else if ((function () {
+                    /* Two pages that wear the same kept row (a tab strip):
+                       #pm-main stays, so its entry animation does not play
+                       again, its insides are the new page's, and the row is
+                       carried in where the new page draws it. Nothing above
+                       or beside the row moves; what is under it fades in. */
+                    var nextMain = fresh.getElementById('pm-main');
+                    if (!nextMain) return false;
+                    return Array.prototype.some.call(document.querySelectorAll('#pm-main [data-keep]'), function (el) {
+                        return !!nextMain.querySelector('[data-keep="' + el.getAttribute('data-keep') + '"]');
+                    });
+                })()) {
+                    var mainEl = document.getElementById('pm-main');
+                    var freshMain = fresh.getElementById('pm-main');
+                    SWAP.forEach(function (id) {
+                        if (id === 'pm-main') return;
+                        var stale = document.getElementById(id);
+                        var next = fresh.getElementById(id);
+                        if (stale && next && stale.outerHTML !== next.outerHTML) {
+                            stale.replaceWith(document.adoptNode(next));
+                        }
+                    });
+                    if (mainEl.className !== freshMain.className) mainEl.className = freshMain.className;
+                    var carried = {};
+                    mainEl.querySelectorAll('[data-keep]').forEach(function (el) {
+                        carried[el.getAttribute('data-keep')] = el;
+                    });
+                    /* Copied first: adopting a node takes it out of the live
+                       list being read, and every other one would be skipped. */
+                    var incoming = Array.prototype.slice.call(freshMain.childNodes).map(function (n) {
+                        return document.adoptNode(n);
+                    });
+                    mainEl.replaceChildren.apply(mainEl, incoming);
+                    mainEl.querySelectorAll('[data-keep]').forEach(function (el) {
+                        var old = carried[el.getAttribute('data-keep')];
+                        if (!old) return;
+                        el.replaceWith(old);
+                        old.dispatchEvent(new CustomEvent('bbb:kept', { detail: { fresh: el } }));
+                    });
+                    runScripts(mainEl);
+                    fadeIn(aroundKept(mainEl));
                 } else {
                     /* An element marked data-keep that the next page also has
                        is carried across the swap rather than rebuilt, and told
@@ -1668,7 +1769,9 @@
             })
             .catch(function () { location.href = url; })
             .then(function () {
-                if (mine === token) document.documentElement.classList.remove('pm-navigating');
+                if (mine !== token) return;
+                document.documentElement.classList.remove('pm-navigating', 'pm-tabbing');
+                document.querySelectorAll('#pm-main .pm-dim').forEach(function (n) { n.classList.remove('pm-dim'); });
             });
     }
 
@@ -1702,7 +1805,7 @@
         /* A back control has already recorded that this arrival is a return. */
         var returning = a.hasAttribute('data-back-to')
             || (window.bbbScroll && window.bbbScroll.claimReturn(a.href));
-        go(a.href, true, returning);
+        go(a.href, true, returning, a);
     });
 
     window.addEventListener('popstate', function (ev) {

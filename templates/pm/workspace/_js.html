@@ -27,9 +27,9 @@
                 const tab = this.$el.querySelector('[data-tab="' + this.active + '"]');
                 if (!tab) return;
                 // The first placement lands; only a change slides.
-                const glide = this.placed ? ';transition:transform 300ms ease-out,width 300ms ease-out' : '';
+                const glide = this.placed ? ';transition:transform 300ms cubic-bezier(0.22,0.75,0.2,1),width 300ms cubic-bezier(0.22,0.75,0.2,1)' : '';
                 this.markStyle = 'width:' + tab.offsetWidth + 'px;transform:translateX(' + tab.offsetLeft + 'px)' + glide;
-                if (tab.offsetWidth) this.placed = true;
+                if (tab.offsetWidth && !this.placed) { this.placed = true; if (window.bbbHandOff) window.bbbHandOff(this.$el); }
             },
             pick(key) { this.active = key; this.place(); },
             kept(fresh) {
@@ -89,9 +89,9 @@
             place() {
                 const b = this.$el.querySelector('[data-seg="' + this.value + '"]');
                 if (!b) return;
-                const glide = this.placed ? ';transition:transform 300ms ease-out,width 300ms ease-out' : '';
+                const glide = this.placed ? ';transition:transform 300ms cubic-bezier(0.22,0.75,0.2,1),width 300ms cubic-bezier(0.22,0.75,0.2,1)' : '';
                 this.markStyle = 'width:' + b.offsetWidth + 'px;transform:translateX(' + b.offsetLeft + 'px)' + glide;
-                if (b.offsetWidth) this.placed = true;
+                if (b.offsetWidth && !this.placed) { this.placed = true; if (window.bbbHandOff) window.bbbHandOff(this.$el); }
             },
             pick(v) { this.value = v; this.place(); },
         };

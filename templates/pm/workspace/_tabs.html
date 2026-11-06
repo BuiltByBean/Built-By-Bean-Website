@@ -20,8 +20,8 @@
     {% for key, label, href in tabs %}
     <a href="{{ href }}" data-tab="{{ key }}" @click="pick('{{ key }}')"
        :aria-current="active === '{{ key }}' ? 'page' : null"
-       {% if key == active %}aria-current="page"{% endif %}
-       class="relative z-10 inline-flex items-center gap-2 min-h-[44px] px-3 sm:px-4 text-sm font-medium rounded-xl transition-colors"
+       {% if key == active %}aria-current="page" data-lit{% endif %}
+       class="relative z-10 inline-flex items-center gap-2 min-h-[44px] px-3 sm:px-4 text-sm font-medium rounded-xl transition-colors {{ 'btn-brand' if key == active else '' }}"
        :class="active === '{{ key }}' ? 'text-white' : 'text-surface-300 hover:text-white'">
         {{ label }}
         <span data-count="{{ key }}"
@@ -47,9 +47,10 @@
     {% for opt in options %}
     {% set v, l, n = opt[0], opt[1], (opt[2] if opt | length > 2 else none) %}
     <button type="button" data-seg="{{ v }}" @click="pick('{{ v }}'); {{ on_pick }}"
+            {% if v == value %}data-lit{% endif %}
             :aria-pressed="value === '{{ v }}' ? 'true' : 'false'" aria-pressed="{{ 'true' if v == value else 'false' }}"
             :class="value === '{{ v }}' ? 'text-white' : 'text-surface-300 hover:text-white'"
-            class="relative z-10 {{ 'flex-1 sm:flex-none' if full else '' }} inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 sm:px-4 rounded-xl text-sm font-medium transition-colors">
+            class="relative z-10 {{ 'flex-1 sm:flex-none' if full else '' }} inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 sm:px-4 rounded-xl text-sm font-medium transition-colors {{ 'btn-brand' if v == value else '' }}">
         {{ l }}{% if n %}<span class="text-[11px] tabular-nums opacity-80">{{ n | commas }}</span>{% endif %}
     </button>
     {% endfor %}

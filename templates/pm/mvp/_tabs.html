@@ -2,20 +2,15 @@
   The MVP Builder's two halves: the packages being scoped, and the price list
   with its Sell flow. Products folded in here on 2026-11-04 (Michael's
   decision on the automation audit), so the sidebar has one link for both.
-  Same strip as the Handbook's, wrapping rather than scrolling at 375px.
+  The Finances kit's row, like the Handbook's: kept across a press, its mark
+  glides, and only what is under it changes.
 #}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
 {% macro mvp_tabs(active) %}
 {% set tabs = [
     ('packages', 'Packages', url_for('mvp.mvp_index')),
     ('prices', 'Price list', url_for('mvp.price_list')),
 ] %}
-<nav aria-label="MVP Builder" class="shrink-0 flex flex-wrap gap-2">
-    {% for key, label, href in tabs %}
-    <a href="{{ href }}" {% if key == active %}aria-current="page"{% endif %}
-       class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-medium rounded-xl transition-colors
-              {{ 'btn-brand text-white' if key == active else 'border border-white/15 bg-surface-800/60 text-surface-200 hover:bg-surface-700' }}">
-        {{ label }}
-    </a>
-    {% endfor %}
-</nav>
+{{ fin_script() }}
+{{ fin_tabs('mvp', active, tabs, 'MVP Builder') }}
 {% endmacro %}
