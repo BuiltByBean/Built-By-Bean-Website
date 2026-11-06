@@ -29,6 +29,7 @@ except Exception:
 from app import create_app  # noqa: E402
 from models import db, User, Client, Business, ServiceProvider  # noqa: E402
 import service_costs_service  # noqa: E402
+import secret_box  # noqa: E402
 
 app = create_app()
 app.config["WTF_CSRF_ENABLED"] = False
@@ -105,7 +106,7 @@ r = c.post(f"/admin/service-costs/providers/{TW}/edit", data={
 flash = r.get_data(as_text=True)
 with app.app_context():
     p = db.session.get(ServiceProvider, TW)
-    creds = json.loads(p.credentials_json)
+    creds = secret_box.loads(p.credentials_json)
     check("the key is saved and the old token kept", creds["api_key_sid"] == "SKgood"
           and creds["api_key_secret"] == "goodsecret" and creds["auth_token"] == "OLDTOKEN", creds)
     check("billed to EntertainHQ LLC, no client", p.account_business_id == EHQ and p.account_client_id is None,
@@ -120,7 +121,7 @@ c.post(f"/admin/service-costs/providers/{TW}/edit", data={
     "twilio_account_sid": "ACehq", "twilio_api_key_sid": "SKgood", "twilio_api_key_secret": "",
     "twilio_auth_token": "", "is_active": "on", "account_client_id": f"b:{EHQ}"})
 with app.app_context():
-    creds = json.loads(db.session.get(ServiceProvider, TW).credentials_json)
+    creds = secret_box.loads(db.session.get(ServiceProvider, TW).credentials_json)
     check("both secrets are still there", creds["api_key_secret"] == "goodsecret" and creds["auth_token"] == "OLDTOKEN")
 
 print("4. a wrong key says so in words")

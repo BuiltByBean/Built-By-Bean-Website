@@ -10,12 +10,11 @@ from models import db, ServiceProvider, ServiceMapping, ServiceCostEntry, Expens
 
 
 def _get_credentials(provider):
-    if not provider.credentials_json:
-        return {}
-    try:
-        return json.loads(provider.credentials_json)
-    except (json.JSONDecodeError, TypeError):
-        return {}
+    """The provider's credentials with its secrets opened (secret_box). A key
+    this service cannot open raises SealError, which the sync records in
+    words, so a changed SECRET_KEY is never a quiet night of nothing."""
+    import secret_box
+    return secret_box.loads(provider.credentials_json)
 
 
 def _find_mapping(provider_id, resource_identifier):

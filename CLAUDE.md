@@ -839,6 +839,20 @@ edit page wrote the auth token into the HTML as an input's value until
 offers Built by Bean, each other company as `b:<id>` (`account_business_id`)
 and each client. `tools/test_twilio_keys.py`.
 
+**Vendor keys are sealed in the database** (`secret_box.py`, issue #14). The
+secret fields of `credentials_json` (`SECRET_FIELDS`) are Fernet tokens,
+`enc:v1:...`, under a key derived with HKDF from `SECRET_KEY`; ids, workspaces
+and regions stay plain because the board reads them. The web service and
+cost-sync hold the same SECRET_KEY (their fingerprints were compared before
+this was written), which is why the night can open what the web sealed.
+Every write is `secret_box.dumps`, every read `secret_box.loads`
+(`service_costs_service._get_credentials`); a plain value saved before still
+reads, and migration `c7e2a9f4b136` sealed what was there. A key this service
+cannot open raises `SealError`, which the sync records in words: changing
+SECRET_KEY means pasting every vendor key again. The other plain secrets
+(Mercury tokens, mailbox passwords, hub secrets, desk keys) are issue #15.
+`tools/test_sealed_keys.py`.
+
 **A vendor knows its playbook** (Michael, the same evening: "ensure the
 vendors page uses the service icons I know we already have ... a vendor will
 connect to a service that we have a blueprint for"). `playbook_for` is the

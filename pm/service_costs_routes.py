@@ -15,6 +15,7 @@ from service_costs_service import (
     _record_cost_entry, _month_bounds, _find_mapping,
 )
 import provider_bills
+import secret_box
 # Vendors recorded month by month (provider_bills says why). Imported here as
 # well because the expenses page and the door read it from this module.
 from provider_bills import MANUAL_MONTHLY_PROVIDERS  # noqa: F401
@@ -437,7 +438,7 @@ def provider_create():
             name=name,
             display_name=display_name,
             vendor=(request.form.get("vendor") or "").strip()[:100] or vendor_discovery.bare(display_name),
-            credentials_json=json.dumps(creds),
+            credentials_json=secret_box.dumps(creds),
             monthly_cost=_monthly_cost(name),
             billing_day=_billing_day(),
             account_client_id=_account_client_id(),
@@ -468,9 +469,12 @@ def provider_edit(id):
     provider = db.session.get(ServiceProvider, id) or abort(404)
 
     if request.method == "POST":
-        saved = json.loads(provider.credentials_json) if provider.credentials_json else {}
+        try:
+            saved = secret_box.loads(provider.credentials_json)
+        except secret_box.SealError:
+            saved = {}  # a key nobody can open is replaced by whatever is typed
         creds = _keep_secrets(_extract_credentials(provider.name), saved)
-        provider.credentials_json = json.dumps(creds)
+        provider.credentials_json = secret_box.dumps(creds)
         provider.monthly_cost = _monthly_cost(provider.name)
         provider.billing_day = _billing_day()
         if provider.name == "flat":
@@ -507,7 +511,11 @@ def provider_edit(id):
               "success" if not any(w in note for w in ("could not", "turned", "did not")) else "warning")
         return redirect(url_for("vendors.index"))
 
-    creds = json.loads(provider.credentials_json) if provider.credentials_json else {}
+    # Only to say which fields hold something: no secret is drawn back.
+    try:
+        creds = secret_box.loads(provider.credentials_json)
+    except secret_box.SealError:
+        creds = {}
     return render_template("pm/service_costs/providers/form.html",
         provider_types=PROVIDER_TYPES,
         editing=True,
