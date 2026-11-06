@@ -134,6 +134,9 @@ r = anon.get(f"/work/{t_all}/{rob_id}")
 app_page = r.get_data(as_text=True)
 check("an app's page opens", r.status_code == 200 and "Mood boards" in app_page)
 check("with its tour", f"/work/{t_all}/shot/{shot_id}" in app_page)
+check("back is a bordered button, never bare text", 'class="sc-back-btn"' in app_page
+      and "&larr; All products" not in app_page)
+check("the tour has no arrows", "sc-nav-btn" not in app_page)
 check("the tour picture comes through the link", anon.get(f"/work/{t_all}/shot/{shot_id}").status_code == 200)
 r = anon.get(f"/work/{t_one}")
 check("a narrowed link shows only its apps",

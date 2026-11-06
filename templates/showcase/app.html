@@ -11,11 +11,9 @@
 {% block title %}{{ app.showcase_name }} - Built By Beans{% endblock %}
 
 {% block content %}
-<a href="{{ base_url }}" class="sc-back">&larr; All products</a>
-
 <div class="sc-hero-app">
     {{ m.app_icon(app, 'sc-lg') }}
-    <div style="min-width:0">
+    <div style="min-width:0; flex:1">
         <h1 class="sc-h1" style="margin-top:0">{{ app.showcase_name }}</h1>
         {% if app.catalog_pitch %}<p class="sc-lead">{{ app.catalog_pitch }}</p>{% endif %}
         <div class="sc-chips" style="margin-top:14px">
@@ -27,6 +25,10 @@
         </div>
         {% endif %}
     </div>
+    <a href="{{ base_url }}" class="sc-back-btn" title="All products">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
+        <span>All products</span>
+    </a>
 </div>
 
 {% set shots = app.catalog_shots %}
@@ -43,14 +45,6 @@
                 <img src="{{ shot_href(s) }}" alt="{{ s.caption or app.showcase_name }}" data-i="{{ loop.index0 }}"
                      {% if not loop.first %}hidden loading="lazy"{% endif %}>
                 {% endfor %}
-                {% if shots | length > 1 %}
-                <button type="button" class="sc-nav-btn sc-prev" data-step="-1" aria-label="Previous screen">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
-                </button>
-                <button type="button" class="sc-nav-btn sc-next" data-step="1" aria-label="Next screen">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
-                </button>
-                {% endif %}
             </div>
             <div class="sc-caption" aria-live="polite">{{ shots[0].caption }}</div>
             {% if shots | length > 1 %}
@@ -128,9 +122,7 @@
         if (thumbs[at]) thumbs[at].scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
     tour.addEventListener('click', function (e) {
-        var step = e.target.closest('[data-step]');
         var go = e.target.closest('[data-go]');
-        if (step) show(at + Number(step.dataset.step));
         if (go) show(Number(go.dataset.go));
     });
     document.addEventListener('keydown', function (e) {
