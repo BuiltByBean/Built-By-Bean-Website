@@ -147,6 +147,11 @@ _VOLATILE = [
     re.compile(rb"(?i)<meta[^>]+(?:generated|last-modified|date)[^>]*>"),
     re.compile(rb"(?i)page generated[^<]*"),
     re.compile(rb"(?i)<!--.*?-->", re.S),
+    # Cloudflare re-scrambles its email-protection tokens on every request (texasattorneygeneral.gov).
+    re.compile(rb"email-protection#[0-9a-f]+"),
+    re.compile(rb"(?i)data-cfemail=\"[0-9a-f]+\""),
+    # A long hex token in an attribute is a nonce, a build id or a cache key, never the law.
+    re.compile(rb"=\"[0-9a-f]{24,}\""),
     re.compile(rb"\s+"),
 ]
 
@@ -413,7 +418,17 @@ def recheck(keys=None, by="", run=None):
             unreachable += 1
             continue
         live = substance(body, ctype)
-        known = src.board_substance or src.repo_substance
+        # Compare with the board's own copy re-read under today's rules, so a change to what counts as volatile
+        # never reads as a change in the law; the stored checksum stands in only where the copy is gone.
+        known = None
+        stored = copy_path(src)
+        if stored:
+            try:
+                with open(stored, "rb") as fh:
+                    known = substance(fh.read(), src.content_type or ctype)
+            except OSError:
+                known = None
+        known = known or src.board_substance or src.repo_substance
         if not known:
             # No copy to compare with: this fetch becomes the board's copy.
             import volume_files
