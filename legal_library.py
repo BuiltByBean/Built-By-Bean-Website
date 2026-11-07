@@ -91,7 +91,7 @@ def _slug(value):
 
 
 # Official sites that are not .gov or .us: a state's own code publisher or court system.
-OFFICIAL_EXTRA = ("nmonesource.com", "www.nmonesource.com", "oscn.net", "www.oscn.net", "malegislature.gov",
+OFFICIAL_EXTRA = ("floridarevenue.com", "www.floridarevenue.com", "arsstc.org", "www.arsstc.org", "nmonesource.com", "www.nmonesource.com", "oscn.net", "www.oscn.net", "malegislature.gov",
                   "lis.njleg.state.nj.us", "pub.njleg.state.nj.us")
 
 
