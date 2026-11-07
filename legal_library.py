@@ -169,6 +169,16 @@ _VOLATILE_TEXT = [
     re.compile(r"(?i)page generated[^.]{0,80}"),
     re.compile(r"(?i)(last|date) (updated|modified|generated)\s*:?\s*[A-Za-z0-9,/: -]{4,40}"),
     re.compile(r"(?i)\b\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?\b"),
+    re.compile(r"(?i)loading articles\s*[0-9.]+"),
+]
+
+# A PDF built on request (Pennsylvania's statutes are) stamps the moment it was built into its XMP and /ModDate
+# fields; the law inside is the same. These are taken out of a PDF's bytes before they are hashed.
+_VOLATILE_PDF = [
+    re.compile(rb"<xmp:(ModifyDate|MetadataDate|CreateDate)>[^<]*</xmp:\1>"),
+    re.compile(rb"/(ModDate|CreationDate)\s*\([^)]*\)"),
+    re.compile(rb"<xmpMM:(DocumentID|InstanceID)>[^<]*</xmpMM:\1>"),
+    re.compile(rb"/ID\s*\[\s*<[0-9A-Fa-f]+>\s*<[0-9A-Fa-f]+>\s*\]"),
 ]
 
 def page_text(data, ctype):
@@ -177,6 +187,8 @@ def page_text(data, ctype):
     removed, entities unescaped, whitespace collapsed, and the parts that change on every request taken out.
     Two fetches of the same law give the same text; a changed sidebar does not read as a changed law."""
     if "pdf" in (ctype or ""):
+        for rx in _VOLATILE_PDF:
+            data = rx.sub(b"", data)
         return data
     body = data
     m = re.search(rb"(?is)<main\b.*?</main>", body)
