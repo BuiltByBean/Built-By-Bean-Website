@@ -90,9 +90,16 @@ def _slug(value):
     return re.sub(r"[^a-z0-9]+", "-", (value or "").lower()).strip("-")[:120]
 
 
+# Official sites that are not .gov or .us: a state's own code publisher or court system.
+OFFICIAL_EXTRA = ("nmonesource.com", "www.nmonesource.com", "oscn.net", "www.oscn.net", "malegislature.gov",
+                  "lis.njleg.state.nj.us", "pub.njleg.state.nj.us")
+
+
 def host_ok(url):
-    host = urllib.parse.urlsplit(url or "").hostname or ""
-    return host in OFFICIAL_HOSTS
+    """A government host: .gov, a state's .us, or one of the few official publishers that are neither."""
+    host = (urllib.parse.urlsplit(url or "").hostname or "").lower()
+    return bool(host) and (host.endswith(".gov") or host.endswith(".us") or host in OFFICIAL_HOSTS
+                           or host in OFFICIAL_EXTRA)
 
 
 # ── Fetching ──────────────────────────────────────────
