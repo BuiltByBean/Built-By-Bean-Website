@@ -387,6 +387,9 @@ def create_app():
 
     from pm.practices_routes import practices_bp
     app.register_blueprint(practices_bp)
+    # The Legal library (issue #42): a sibling of Best Practices, never inside it.
+    from pm.legal_routes import legal_bp
+    app.register_blueprint(legal_bp)
     from pm.bank_routes import bank_bp
     app.register_blueprint(bank_bp)
     from pm.books_routes import books_bp

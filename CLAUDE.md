@@ -3058,3 +3058,60 @@ rg -n "username.ilike" app.py
 ```
 Every seeding insert must be guarded by a query that ORs username with
 email, and the block that holds them must sit inside its try.
+
+## The Legal library
+
+Michael, 2026-11-07: "best practices make our app function well, legal keeps us
+not in jail or sued"; buttoned up "as much as we can without a lawyer"; and it
+"wont be folded into the best practice because it needs extra care and
+attention". So Legal is a sibling of the Handbook, never a tab of it: its own
+sidebar link and pages (`pm/legal_routes.py`, `/admin/legal`: Library, Gaps,
+Sources, Checks), its own tables (`models.LegalEntry`, `LegalSource`,
+`LegalEntrySource`, `LegalTouch`, `LegalCheck`; migration `a7c2e9d14b58`), its
+own door (`pm/legal_door_routes.py`, nested under `/api/guidance/legal` so the
+bearer gate covers it) and its own bridge tools (`get_legal`, `file_legal`,
+`legal_recheck`). The work the three share is `legal_library.py`. Every page and
+every door answer carries the disclaimer: nothing in it is legal advice.
+
+**An entry is one decision and the law behind it.** The law (name, citation,
+jurisdiction), the official sources (kept once each in `LegalSource` however
+many entries cite them, government sites only: a URL off `OFFICIAL_HOSTS` is
+refused on filing), what it requires in plain words, the decision and where it
+is recorded, its status (backed, gap, needs a lawyer, watch, does not apply),
+the issues, the apps it touches with the functions and routes inside each
+(`LegalTouch`, matched to a My Apps tile by name or host; an unmatched name is
+kept and reported), and when it was last checked. It is written only through
+the door (`file_legal`): a product's repo holds its register (EntertainHQ:
+`docs/legal/library/entries.json`, `sources.json`, `manifest.json`, the copies
+under `sources/`, and `scripts/legal_library.py export` prints the exact shape
+the door takes). The only thing typed on the board is Michael's call on an
+entry's status, recorded on its notes with his name and the day.
+
+**Two proof copies.** The product's repo keeps a copy of each source with its
+sha256 and the date fetched (filed as `repo_*`); the board fetches its own onto
+the volume (`volume_files.write`, folder `legal/`) after a filing, in a thread
+so ninety documents never sit in one request (`LEGAL_COPIES_INLINE` makes the
+tests do it inline). The copy is served at
+`/admin/legal/sources/<key>/copy` as a file, never rendered on the board's
+origin, with a CSP that lets nothing load or run: it is another site's page.
+A source whose site refuses scripts (`fetch_how` browser: nysenate.gov,
+leginfo.legislature.ca.gov) has its copy saved by hand from a browser in the
+product's repo and is read by hand on a re-check.
+
+**The re-check** (`legal_library.recheck`) fetches every source again and
+compares it with the copy by its substance (the page's text with volatile
+chrome removed; a PDF by its bytes), stamps each source and each entry with
+same, changed, unreachable or by hand, and keeps the run as a `LegalCheck`. It
+runs on a thread from the Checks tab's press or the door (`legal_recheck`
+polls), and it is written to be called by the overnight job later: Michael,
+2026-11-07, "eventually we will put it on an overnight job along with that
+best practice checks and gaps check. for now it will just done periodically
+via usage from the plans". The on-demand run is the `legal` skill
+(`.claude/skills/legal/SKILL.md`), the way Tend is for Best Practices.
+
+**Gaps per product** (`gaps_by_product`): every tile in Live and earning and
+Building to earn, never Personal projects, with the entries that are a gap,
+need a lawyer or whose law moved; a product no entry names reads "not yet
+reviewed", which is a gap of its own and is said so.
+
+`tools/test_legal_library.py` proves all of it against a fake of the law.

@@ -518,6 +518,79 @@ TOOLS = [
             "required": ["reason"],
         },
     },
+    {
+        "name": "get_legal",
+        "description": (
+            "The Legal library: the laws behind each product's decisions, "
+            "with a proof copy of each official document, what the law "
+            "requires, the decision and where it is recorded, its status "
+            "(backed, gap, needs a lawyer, watch, does not apply), the apps "
+            "and the functions and routes it touches, and when it was last "
+            "checked. Ask it before building or changing anything that "
+            "sends, charges, cancels, deletes, texts, signs or stores "
+            "personal data. With gaps=true it answers the gaps per product. "
+            "Nothing it returns is legal advice."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Words to search: a law, a topic, an app, a decision"},
+                "slug": {"type": "string", "description": "One entry's slug, for the whole entry with its sources"},
+                "app": {"type": "string", "description": "Only entries that touch this app (its tile's name)"},
+                "product": {"type": "string", "description": "Only entries filed by this product, e.g. entertainhq"},
+                "status": {"type": "string", "enum": ["backed", "gap", "lawyer", "watch", "not_applicable"]},
+                "topic": {"type": "string", "description": "A topic slug: email, texting, billing, renewal, deletion..."},
+                "gaps": {"type": "boolean", "description": "true: the gaps view per product instead of the entries"},
+            },
+        },
+    },
+    {
+        "name": "file_legal",
+        "description": (
+            "File a product's legal register into the Legal library: the "
+            "decisions, each with the law behind it (name, citation, the "
+            "official source's id, title, site, URL, the date it was "
+            "fetched, its sha256 and where the product's repo keeps the "
+            "copy), what it requires, the decision and where it is "
+            "recorded, its status, the lawyer's question where it needs "
+            "one, the issues, and the apps it touches with their functions "
+            "and routes. Applies on arrival; the board then fetches its own "
+            "copy of each new source onto its volume. EntertainHQ's "
+            "`python scripts/legal_library.py export` prints the exact "
+            "shape. Only government sites are accepted as sources."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": SOURCE,
+                "product": {"type": "string", "description": "The product's slug, e.g. entertainhq"},
+                "entries": {"type": "array", "items": {"type": "object"},
+                            "description": "The entries, in the export's shape"},
+                "register_json": {"type": "string",
+                                  "description": "Alternatively the whole export as a JSON string"},
+            },
+            "required": ["project"],
+        },
+    },
+    {
+        "name": "legal_recheck",
+        "description": (
+            "Re-check the Legal library's sources: the board fetches every "
+            "official document again (or the ones named) and compares it "
+            "with its stored copy; each source and entry is stamped with "
+            "the result, and the run is kept. Runs on demand now; the "
+            "overnight job will call the same code later. Waits up to "
+            "`wait` seconds for the run and reports what changed, what was "
+            "unreachable and what must be read by hand."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": SOURCE,
+                "sources": {"type": "array", "items": {"type": "string"},
+                            "description": "Source ids to re-check; empty for every source"},
+                "wait": {"type": "integer", "description": "Seconds to wait for the run (default 90, at most 240)"},
+            },
+            "required": ["project"],
+        },
+    },
 ]
 
 
@@ -859,6 +932,88 @@ def tool_retire_app(args):
     return ". ".join(parts) + ". Removed tiles, whole: " + json.dumps(apps)
 
 
+def tool_get_legal(args):
+    if args.get("gaps"):
+        text, err = _http("GET", "/api/guidance/legal/gaps")
+        if err:
+            return err
+        return json.loads(text).get("text", text)
+    slug = (args.get("slug") or "").strip()
+    if slug:
+        text, err = _http("GET", "/api/guidance/legal/" + urllib.parse.quote(slug))
+        if err:
+            return err
+        return json.loads(text).get("text", text)
+    params = {k: v for k, v in (("q", args.get("query")), ("app", args.get("app")),
+                                ("status", args.get("status")), ("product", args.get("product")),
+                                ("topic", args.get("topic"))) if v}
+    text, err = _http("GET", "/api/guidance/legal" + ("?" + urllib.parse.urlencode(params) if params else ""))
+    if err:
+        return err
+    return json.loads(text).get("text", text)
+
+
+def tool_file_legal(args):
+    body = {"project": args.get("project") or ""}
+    if args.get("register_json"):
+        try:
+            body.update(json.loads(args["register_json"]))
+        except ValueError as exc:
+            return f"register_json is not JSON: {exc}"
+    if args.get("product"):
+        body["product"] = args["product"]
+    if args.get("entries"):
+        body["entries"] = args["entries"]
+    if not body.get("entries"):
+        return "Give entries (or register_json with them)."
+    data, err = _post("/api/guidance/legal", body)
+    if err:
+        return err
+    line = (f"Filed {len(data.get('entries') or [])} entries for {data.get('product')}: {data.get('made')} new, "
+            f"{data.get('updated')} updated, {data.get('sources')} sources; copies {data.get('copies')}.")
+    if data.get("unmatched_apps"):
+        line += " No My Apps tile matched: " + ", ".join(data["unmatched_apps"]) + " (kept by name)."
+    return line + " " + data.get("disclaimer", "")
+
+
+def tool_legal_recheck(args):
+    import time as _time
+    payload = {"project": args.get("project") or ""}
+    if args.get("sources"):
+        payload["sources"] = args["sources"]
+    data, err = _post("/api/guidance/legal/recheck", payload)
+    if err:
+        return err
+    run = data.get("run") or {}
+    run_id = run.get("id")
+    wait = min(int(args.get("wait") or 90), 240)
+    waited = 0
+    while run.get("status") == "running" and waited < wait:
+        _time.sleep(5)
+        waited += 5
+        text, err = _http("GET", f"/api/guidance/legal/checks/{run_id}")
+        if err:
+            return err
+        run = json.loads(text).get("run") or run
+    detail = run.get("detail") or {}
+    changed = [k for k, v in detail.items() if v.get("status") == "changed"]
+    gone = [k for k, v in detail.items() if v.get("status") == "unreachable"]
+    hand = [k for k, v in detail.items() if v.get("status") == "by_hand"]
+    lines = [f"Re-check {run_id}: {run.get('status')}; {run.get('checked')} checked, {run.get('changed')} changed, "
+             f"{run.get('unreachable')} unreachable, {run.get('by_hand')} to read by hand."]
+    if run.get("status") == "running":
+        lines.append("Still running; ask again with get_legal (gaps=true) or the board's Checks tab.")
+    if changed:
+        lines.append("CHANGED (read each against its copy and update the entry): " + ", ".join(changed))
+    if gone:
+        lines.append("Unreachable: " + ", ".join(gone))
+    if hand:
+        lines.append("Read by hand (the site refuses scripts): " + ", ".join(hand))
+    if run.get("note"):
+        lines.append(run["note"])
+    return "\n".join(lines)
+
+
 HANDLERS = {
     "get_rules": tool_get_rules,
     "get_feature_guidance": tool_get_feature_guidance,
@@ -882,6 +1037,9 @@ HANDLERS = {
     "register_hosting_resource": tool_register_hosting_resource,
     "register_app": tool_register_app,
     "retire_app": tool_retire_app,
+    "get_legal": tool_get_legal,
+    "file_legal": tool_file_legal,
+    "legal_recheck": tool_legal_recheck,
 }
 
 

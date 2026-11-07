@@ -1,0 +1,132 @@
+{% extends "pm/base.html" %}
+{% from "pm/components/back_link.html" import back_link %}
+{% from "pm/legal/_tabs.html" import legal_banner, status_pill, check_pill %}
+
+{#
+  One entry of the Legal library: the law (each source with its official
+  address, the board's stored copy, the date it was fetched, its checksum and
+  its last check), what it requires, the decision and where it is recorded,
+  the question for the lawyer where there is one, the apps it touches and
+  inside each the functions and routes, and Michael's press to set its status.
+#}
+
+{% block title %}{{ e.title }} - Legal{% endblock %}
+{% block back %}{{ back_link(url_for('legal.index'), 'Library') }}{% endblock %}
+{% block page_title %}{{ e.title }}{% endblock %}
+{% block page_subtitle %}{{ e.product }} · {{ topic_labels.get(e.topic, e.topic) }}{% if e.jurisdiction %} · {{ e.jurisdiction }}{% endif %}{% endblock %}
+
+{% block content %}
+{% include "pm/components/runbook_style.html" %}
+{{ legal_banner() }}
+<div class="space-y-4 stagger-in" data-entry="{{ e.slug }}">
+
+    <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
+        <div class="min-w-0 flex-1 flex flex-wrap items-center gap-2">
+            {{ status_pill(e) }}
+            {{ check_pill(e.check_result, e.check_label) }}
+            <span class="text-xs text-surface-400">Last checked {{ e.last_checked_at|format_date if e.last_checked_at else 'never' }}</span>
+            <span class="text-xs text-surface-500">Filed by {{ e.filed_by or 'a session' }}, updated {{ e.updated_at|format_date if e.updated_at else '' }}</span>
+            {% for i in e.issue_list %}
+            <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-300">{{ i }}</span>
+            {% endfor %}
+        </div>
+        <form method="POST" action="{{ url_for('legal.set_status', slug=e.slug) }}" class="flex flex-wrap items-center gap-2 sm:justify-end" data-status-form>
+                    <input type="hidden" name="next" value="{{ request.full_path }}">
+            <input type="text" name="reason" placeholder="Why (optional)" aria-label="Why"
+                   class="min-h-[44px] px-3 rounded-xl bg-surface-800/60 border border-white/10 text-sm text-white placeholder-surface-500 focus:border-brand-500/60 focus:outline-none w-44">
+            {% for s in statuses if s != e.status %}
+            <button type="submit" name="status" value="{{ s }}"
+                    class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">{{ status_labels[s] }}</button>
+            {% endfor %}
+        </form>
+    </div>
+
+    {% macro section(heading, body, tone='text-surface-300') %}
+    {% if body and body.strip() %}
+    <section class="glass-card p-4 sm:p-6 min-w-0">
+        <h2 class="text-sm font-semibold uppercase tracking-wider {{ tone }} mb-4 pb-3 border-b border-white/10 break-words">{{ heading }}</h2>
+        <div class="runbook">{{ body | tidy_md | markdown }}</div>
+    </section>
+    {% endif %}
+    {% endmacro %}
+
+    {{ section('The law', e.laws_md) }}
+
+    <section class="glass-card p-4 sm:p-6 min-w-0" data-sources>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-300 mb-4 pb-3 border-b border-white/10">The proof: the official documents</h2>
+        {% if e.links %}
+        <ul class="divide-y divide-white/5">
+            {% for lk in e.links %}{% set s = lk.source %}
+            <li class="py-3 space-y-1 min-w-0" data-source="{{ s.key }}">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-medium text-white break-words">{{ s.title }}</span>
+                    {{ check_pill(s.last_check, s.check_label) }}
+                    {% if s.fetch_how == 'browser' %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-sky-500/10 text-sky-300">saved from a browser</span>{% endif %}
+                </div>
+                {% if lk.citation %}<p class="text-xs text-surface-300 break-words">{{ lk.citation }}</p>{% endif %}
+                <p class="text-xs text-surface-400 break-all">
+                    <a href="{{ s.url }}" target="_blank" rel="noopener" data-press="value" class="text-brand-300 hover:underline">{{ s.url }}</a>
+                    {% if s.pdf_url %} · <a href="{{ s.pdf_url }}" target="_blank" rel="noopener" data-press="prose" class="text-brand-300 hover:underline">PDF</a>{% endif %}
+                </p>
+                <p class="text-xs text-surface-500 break-all tabular-nums">
+                    {{ s.site }} · fetched {{ s.fetched_at|format_date if s.fetched_at else 'not yet' }}
+                    {% if s.sha256 %} · sha256 <code class="text-surface-400">{{ s.sha256 }}</code>{% endif %}
+                    {% if copies.get(s.id) %} · <a href="{{ url_for('legal.source_copy', key=s.key) }}" data-press="prose" class="text-brand-300 hover:underline">the board's copy</a>{% endif %}
+                    {% if s.repo_copy %} · repo copy <code class="text-surface-400">{{ s.repo_copy }}</code>{% endif %}
+                </p>
+                {% if s.note %}<p class="text-xs text-surface-500 break-words">{{ s.note }}</p>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-surface-400">No source filed. An entry without its law is a gap in the library itself.</p>
+        {% endif %}
+    </section>
+
+    {{ section('What it requires', e.requires_md) }}
+    {{ section('Our decision', e.decision_md) }}
+    {{ section('Where it is recorded', e.recorded_in_md) }}
+    {{ section('For the lawyer', e.lawyer_question, 'text-amber-300') }}
+    {{ section('Notes', e.notes_md) }}
+
+    <section class="glass-card p-4 sm:p-6 min-w-0" data-touches>
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-surface-300 mb-4 pb-3 border-b border-white/10">The apps it touches</h2>
+        {% if e.touches %}
+        <div class="space-y-4">
+            {% for t in e.touches %}
+            <div class="min-w-0" data-touch="{{ t.app_name }}">
+                <div class="flex items-center gap-2 mb-2">
+                    {% if t.app and t.app.icon_file %}<img src="{{ url_for('apps.icon', id=t.app.id) }}" alt="" class="w-6 h-6 rounded-md object-contain">{% endif %}
+                    <span class="text-sm font-semibold text-white">{{ t.app_name }}</span>
+                    {% if not t.app %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-amber-500/10 text-amber-300">no tile on My Apps</span>{% endif %}
+                    {% if t.note %}<span class="text-xs text-surface-400 break-words">{{ t.note }}</span>{% endif %}
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-surface-500 mb-1">Functions</p>
+                        {% if t.functions %}
+                        <ul class="space-y-0.5">
+                            {% for f in t.functions %}
+                            <li class="text-xs break-all"><code class="text-brand-300">{{ f.name }}</code>{% if f.file %} <span class="text-surface-500">{{ f.file }}</span>{% endif %}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}<p class="text-xs text-surface-500">none named</p>{% endif %}
+                    </div>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-surface-500 mb-1">Routes</p>
+                        {% if t.routes %}
+                        <ul class="space-y-0.5">
+                            {% for r in t.routes %}<li class="text-xs break-all"><code class="text-surface-200">{{ r }}</code></li>{% endfor %}
+                        </ul>
+                        {% else %}<p class="text-xs text-surface-500">none named</p>{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-surface-400">No app named. The entry applies to the product as a whole.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

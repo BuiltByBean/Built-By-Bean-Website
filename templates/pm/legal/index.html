@@ -1,0 +1,125 @@
+{% extends "pm/base.html" %}
+{% from "pm/legal/_tabs.html" import legal_tabs, legal_banner, status_pill, check_pill %}
+{% from "pm/components/select_dropdown.html" import select_dropdown %}
+{% from "pm/components/clear_filters.html" import clear_filters %}
+
+{#
+  The Legal library: one row per decision a product made that the law
+  touches. Closed, a row is the decision, its status and the product; open, it
+  is the law, what it requires, the decision and where it is recorded, and the
+  apps it touches. Every row is on the page and the bar filters in place, the
+  way the Handbook's lists do.
+#}
+
+{% block title %}Library - Legal{% endblock %}
+{% block page_title %}Legal{% endblock %}
+{% block page_subtitle %}The law behind every decision, with the proof{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+{% block tab_row %}{{ legal_tabs('library') }}{% endblock %}
+{% block content %}
+{% include "pm/components/runbook_style.html" %}
+{{ legal_banner() }}
+<div class="flex flex-col flex-1 min-h-0 gap-5 stagger-in"
+     x-data='{
+       q: {{ q|tojson }},
+       status: {{ status|tojson }},
+       product: {{ product|tojson }},
+       topic: {{ topic|tojson }},
+       shown: {{ rows|length }},
+       get active() { return this.q.trim() !== "" || this.status !== "all" || this.product !== "all" || this.topic !== "all"; },
+       clear() { this.q = ""; this.status = "all"; this.product = "all"; this.topic = "all"; },
+       filter() {
+         const needle = this.q.trim().toLowerCase();
+         let n = 0;
+         for (const row of this.$el.querySelectorAll("[data-row]")) {
+           const hit = (this.status === "all" || row.dataset.status === this.status)
+                    && (this.product === "all" || row.dataset.product === this.product)
+                    && (this.topic === "all" || row.dataset.topic === this.topic)
+                    && (!needle || row.dataset.search.includes(needle));
+           row.hidden = !hit;
+           if (hit) n += 1;
+         }
+         this.shown = n;
+         const p = new URLSearchParams();
+         if (needle) p.set("q", this.q.trim());
+         if (this.status !== "all") p.set("status", this.status);
+         if (this.product !== "all") p.set("product", this.product);
+         if (this.topic !== "all") p.set("topic", this.topic);
+         history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p.toString() : ""));
+       }
+     }'
+     x-effect="filter()">
+
+    <div class="shrink-0 relative z-30 flex flex-wrap items-center gap-2" @keydown.enter.prevent>
+        <label class="relative flex-1 min-w-[12rem]">
+            <span class="sr-only">Search the library</span>
+            {{ icon('search', 'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500') }}
+            <input type="search" x-model="q" placeholder="Search the law, the decision, the app"
+                   class="w-full min-h-[44px] pl-9 pr-3 rounded-xl bg-surface-800/60 border border-white/10 text-sm text-white placeholder-surface-500 focus:border-brand-500/60 focus:outline-none">
+        </label>
+        {{ select_dropdown('status', status_options, status, 'Status', model='status', extra_class='w-44') }}
+        {{ select_dropdown('product', product_options, product, 'Product', model='product', extra_class='w-44') }}
+        {{ select_dropdown('topic', topic_options, topic, 'Topic', model='topic', extra_class='w-52') }}
+        {{ clear_filters(click='clear()', show='active') }}
+    </div>
+
+    <div class="glass-card overflow-hidden flex flex-col min-h-0">
+        <div class="shrink-0 px-4 sm:px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3">
+            <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">
+                <span x-text="shown">{{ rows|length }}</span> of {{ total|commas }} shown</span>
+            <span class="text-xs text-surface-500">Filed through the bridge (file_legal); Michael sets a status here</span>
+        </div>
+        <div class="divide-y divide-white/5 min-h-0 overflow-y-auto">
+        {% for r in rows %}
+        {% set e = r.e %}
+        <div class="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors" x-data="{ open: false }"
+             data-row data-slug="{{ e.slug }}" data-status="{{ e.status }}" data-product="{{ e.product }}"
+             data-topic="{{ e.topic }}" data-search="{{ r.search }}">
+            <button type="button" @click="open = !open" :aria-expanded="open"
+                    class="group flex w-full items-start gap-3 text-left min-h-[44px]">
+                <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-white group-hover:text-brand-300 transition-colors break-words">{{ e.title }}</span>
+                        {{ status_pill(e) }}
+                        {% if e.topic %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ topic_labels.get(e.topic, e.topic) }}</span>{% endif %}
+                        {% if e.jurisdiction %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ e.jurisdiction }}</span>{% endif %}
+                        {% if e.check_result == 'changed' %}{{ check_pill('changed', 'the law moved') }}{% endif %}
+                    </span>
+                    <span class="block mt-1 text-xs text-surface-400 max-w-3xl break-words">
+                        {{ e.product }}{% if e.touches %} · {{ e.touches|map(attribute='app_name')|unique|join(', ') }}{% endif %}
+                        · checked {{ e.last_checked_at|format_date if e.last_checked_at else 'never' }}</span>
+                </span>
+                {{ icon('expand', 'mt-0.5 w-4 h-4 text-surface-500 transition-transform group-hover:text-surface-300', attrs=':class="open && \'rotate-180\'"') }}
+            </button>
+            <div x-show="open" x-cloak class="mt-4 pt-4 border-t border-surface-700 space-y-4 min-w-0">
+                {% if e.laws_md %}
+                <div><p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">The law</p>
+                    <div class="prose-pm text-sm text-surface-200 break-words">{{ e.laws_md | tidy_md | markdown }}</div></div>
+                {% endif %}
+                {% if e.requires_md %}
+                <div><p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">What it requires</p>
+                    <div class="prose-pm text-sm text-surface-200 break-words">{{ e.requires_md | tidy_md | markdown }}</div></div>
+                {% endif %}
+                {% if e.decision_md %}
+                <div><p class="text-xs font-semibold uppercase tracking-wider text-surface-400 mb-1.5">Our decision</p>
+                    <div class="prose-pm text-sm text-surface-200 break-words">{{ e.decision_md | tidy_md | markdown }}</div></div>
+                {% endif %}
+                {% if e.lawyer_question %}
+                <div><p class="text-xs font-semibold uppercase tracking-wider text-amber-300 mb-1.5">For the lawyer</p>
+                    <div class="prose-pm text-sm text-surface-200 break-words">{{ e.lawyer_question | tidy_md | markdown }}</div></div>
+                {% endif %}
+                <div class="flex justify-end">
+                    <a href="{{ url_for('legal.entry', slug=e.slug) }}"
+                       class="inline-flex items-center min-h-[44px] px-4 text-sm font-medium rounded-xl border border-white/10 text-surface-200 hover:border-brand-500/40 hover:text-brand-300 transition-colors">Open the entry</a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="p-8 sm:p-12 text-center">
+            <p class="text-surface-400">No entries yet. A session files a product's register with <code class="text-brand-300">file_legal</code>.</p>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

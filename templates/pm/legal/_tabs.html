@@ -1,0 +1,39 @@
+{#
+  The strip every Legal page wears: Library, Gaps (per product), Sources (the
+  official documents and their copies), Checks (the re-check runs). The same
+  kit as the Handbook's strip, so the two read as siblings and never as one:
+  Legal has its own sidebar link, its own pages and its own store (issue #42,
+  Michael, 2026-11-07: "it needs extra care and attention").
+
+  Every Legal page also carries the disclaimer, through legal_banner(): nothing
+  in the library is legal advice.
+#}
+{% from "pm/finances/_kit.html" import fin_script, fin_tabs %}
+{% macro legal_tabs(active) %}
+{% set c = legal_counts() %}
+{% set tabs = [
+    ('library', 'Library', url_for('legal.index'), c.entries),
+    ('gaps', 'Gaps', url_for('legal.gaps'), c.gaps),
+    ('sources', 'Sources', url_for('legal.sources'), c.sources),
+    ('checks', 'Checks', url_for('legal.checks'), c.checks),
+] %}
+{{ fin_script() }}
+{{ fin_tabs('legal', active, tabs, 'Legal', quiet=true) }}
+{% endmacro %}
+
+{% macro legal_banner() %}
+<p data-legal-disclaimer class="shrink-0 mb-4 px-4 py-2 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-200 break-words">
+    {{ legal_disclaimer() }}
+</p>
+{% endmacro %}
+
+{% macro status_pill(e) %}
+<span class="px-2 py-0.5 rounded-lg text-[11px] font-semibold {{ e.status_tone }}" data-status="{{ e.status }}">{{ e.status_label }}</span>
+{% endmacro %}
+
+{% macro check_pill(result, label) %}
+{% set tone = {'same': 'bg-emerald-500/10 text-emerald-300', 'changed': 'bg-red-500/15 text-red-300',
+               'unreachable': 'bg-amber-500/15 text-amber-300', 'by_hand': 'bg-sky-500/10 text-sky-300',
+               'never': 'bg-surface-800 text-surface-400'}[result] %}
+<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium {{ tone }}" data-check="{{ result }}">{{ label }}</span>
+{% endmacro %}

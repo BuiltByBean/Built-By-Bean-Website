@@ -1208,6 +1208,14 @@
                 {{ icon('handbook') }}
                 Handbook
             </a>
+            {# Legal (issue #42): the laws behind each product's decisions, with the
+               proof copies. A sibling of the Handbook, never a tab of it: Michael,
+               2026-11-07, "it needs extra care and attention". #}
+            <a href="{{ url_for('legal.index') }}"
+               class="sidebar-link {% if request.endpoint and request.endpoint.startswith('legal.') %}active{% endif %}">
+                {{ icon('legal') }}
+                Legal
+            </a>
             {# The builder closes the work block: a client's build, assembled
                on the call from Best Practices. It sat under Catalogue once,
                which is where its parts live, not where the job of using it

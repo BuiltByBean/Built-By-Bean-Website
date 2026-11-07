@@ -5405,3 +5405,262 @@ class LeadTouch(db.Model):
 
     def __repr__(self):
         return f"<LeadTouch {self.channel} {self.outcome} {self.occurred_on}>"
+
+
+# ── The Legal library (issue #42) ───────────────────────────────────────────
+#
+# Michael, 2026-11-07: "best practices make our app function well, legal keeps
+# us not in jail or sued", kept apart from Best Practices "because it needs
+# extra care and attention". One entry per decision a product made that the
+# law touches: the law behind it (with a proof copy of the official document,
+# its URL, the date it was fetched and its checksum), what it requires in plain
+# words, the decision and where it is recorded, its status, the apps it affects
+# and inside each the functions and routes it touches, and when it was last
+# checked. Nothing in it is legal advice, and every page says so.
+
+LEGAL_STATUSES = ("backed", "gap", "lawyer", "watch", "not_applicable")
+LEGAL_STATUS_LABELS = {
+    "backed": "Backed", "gap": "Gap", "lawyer": "Needs a lawyer", "watch": "Watch",
+    "not_applicable": "Does not apply",
+}
+# Full class strings, never a colour spliced in (Tailwind scans whole names).
+LEGAL_STATUS_TONE = {
+    "backed": "bg-emerald-500/15 text-emerald-300",
+    "gap": "bg-red-500/15 text-red-300",
+    "lawyer": "bg-amber-500/15 text-amber-300",
+    "watch": "bg-sky-500/15 text-sky-300",
+    "not_applicable": "bg-surface-800 text-surface-400",
+}
+LEGAL_CHECKS = ("same", "changed", "unreachable", "by_hand", "never")
+LEGAL_CHECK_LABELS = {
+    "same": "Unchanged", "changed": "Changed", "unreachable": "Unreachable",
+    "by_hand": "Read by hand", "never": "Never checked",
+}
+
+
+class LegalEntry(db.Model):
+    """One decision and the law behind it. Written through the door
+    (file_legal), read through it (get_legal), shown at /admin/legal."""
+
+    __tablename__ = "legal_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(120), nullable=False, unique=True)
+    title = db.Column(db.String(240), nullable=False)
+    # Which product filed it: the blueprint or tile slug ("entertainhq").
+    product = db.Column(db.String(80), nullable=False, default="", index=True)
+    topic = db.Column(db.String(60), nullable=False, default="", index=True)
+    jurisdiction = db.Column(db.String(120), nullable=False, default="")
+    laws_md = db.Column(db.Text, default="")
+    requires_md = db.Column(db.Text, default="")
+    decision_md = db.Column(db.Text, default="")
+    recorded_in_md = db.Column(db.Text, default="")
+    status = db.Column(db.String(16), nullable=False, default="watch", index=True)
+    notes_md = db.Column(db.Text, default="")
+    lawyer_question = db.Column(db.Text, default="")
+    issues = db.Column(db.String(300), default="")
+    filed_by = db.Column(db.String(120), default="")
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+    last_checked_at = db.Column(db.DateTime, nullable=True)
+    check_result = db.Column(db.String(16), nullable=False, default="never", server_default="never")
+
+    links = db.relationship("LegalEntrySource", back_populates="entry",
+                            cascade="all, delete-orphan", order_by="LegalEntrySource.position")
+    touches = db.relationship("LegalTouch", back_populates="entry",
+                              cascade="all, delete-orphan", order_by="LegalTouch.id")
+
+    @property
+    def status_label(self):
+        return LEGAL_STATUS_LABELS.get(self.status, self.status)
+
+    @property
+    def status_tone(self):
+        return LEGAL_STATUS_TONE.get(self.status, LEGAL_STATUS_TONE["watch"])
+
+    @property
+    def check_label(self):
+        return LEGAL_CHECK_LABELS.get(self.check_result, self.check_result)
+
+    @property
+    def sources(self):
+        return [lk.source for lk in self.links]
+
+    @property
+    def issue_list(self):
+        return [s.strip() for s in (self.issues or "").split(",") if s.strip()]
+
+    @property
+    def needs_attention(self):
+        """What the gaps view lists: a gap, a lawyer item, or a source that moved."""
+        return self.status in ("gap", "lawyer") or self.check_result == "changed"
+
+    def __repr__(self):
+        return f"<LegalEntry {self.slug}>"
+
+
+class LegalSource(db.Model):
+    """One official document the library rests on, kept once however many
+    entries cite it. Two copies are recorded: the one in the product's repo
+    (repo_*, filed with the entry) and the board's own on its volume
+    (board_*, fetched by the board). The re-check fetches the URL again and
+    compares what matters on the page (the text with volatile chrome removed)
+    with the board's copy."""
+
+    __tablename__ = "legal_sources"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(120), nullable=False, unique=True)
+    title = db.Column(db.String(400), nullable=False, default="")
+    site = db.Column(db.String(200), default="")
+    url = db.Column(db.String(700), nullable=False, default="")
+    pdf_url = db.Column(db.String(700), default="")
+    kind = db.Column(db.String(20), default="")
+    jurisdiction = db.Column(db.String(120), default="")
+    # "script": fetched by the keeper; "browser": the site refuses scripts and
+    # the copy was saved from a browser, so the re-check reads it by hand.
+    fetch_how = db.Column(db.String(12), nullable=False, default="script", server_default="script")
+    note = db.Column(db.Text, default="")
+    repo_copy = db.Column(db.String(300), default="")
+    repo_sha256 = db.Column(db.String(64), default="")
+    repo_substance = db.Column(db.String(64), default="")
+    repo_fetched_at = db.Column(db.DateTime, nullable=True)
+    repo_bytes = db.Column(db.Integer, nullable=True)
+    content_type = db.Column(db.String(80), default="")
+    copy_file = db.Column(db.String(160), nullable=True)
+    board_sha256 = db.Column(db.String(64), default="")
+    board_substance = db.Column(db.String(64), default="")
+    board_fetched_at = db.Column(db.DateTime, nullable=True)
+    board_bytes = db.Column(db.Integer, nullable=True)
+    last_checked_at = db.Column(db.DateTime, nullable=True)
+    last_check = db.Column(db.String(16), nullable=False, default="never", server_default="never")
+    live_substance = db.Column(db.String(64), default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    links = db.relationship("LegalEntrySource", back_populates="source", cascade="all, delete-orphan")
+
+    @property
+    def entries(self):
+        return [lk.entry for lk in self.links if lk.entry.is_active]
+
+    @property
+    def check_label(self):
+        return LEGAL_CHECK_LABELS.get(self.last_check, self.last_check)
+
+    @property
+    def sha256(self):
+        """The checksum the page shows: the board's copy where it has one,
+        else the repo's."""
+        return self.board_sha256 or self.repo_sha256
+
+    @property
+    def fetched_at(self):
+        return self.board_fetched_at or self.repo_fetched_at
+
+    def __repr__(self):
+        return f"<LegalSource {self.key}>"
+
+
+class LegalEntrySource(db.Model):
+    """An entry cites a source, with the pinpoint (the section) it leans on."""
+
+    __tablename__ = "legal_entry_sources"
+    __table_args__ = (db.UniqueConstraint("entry_id", "source_id", name="uq_legal_entry_sources"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey(
+        "legal_entries.id", ondelete="CASCADE", name="fk_legal_entry_sources_entry_id"),
+        nullable=False, index=True)
+    source_id = db.Column(db.Integer, db.ForeignKey(
+        "legal_sources.id", ondelete="CASCADE", name="fk_legal_entry_sources_source_id"),
+        nullable=False, index=True)
+    citation = db.Column(db.String(400), default="")
+    position = db.Column(db.Integer, nullable=False, default=0)
+
+    entry = db.relationship("LegalEntry", back_populates="links")
+    source = db.relationship("LegalSource", back_populates="links")
+
+
+class LegalTouch(db.Model):
+    """An app an entry affects and, inside it, the functions and routes."""
+
+    __tablename__ = "legal_touches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey(
+        "legal_entries.id", ondelete="CASCADE", name="fk_legal_touches_entry_id"),
+        nullable=False, index=True)
+    # The My Apps tile, matched by name or host when filed; SET NULL so a
+    # retired tile leaves the mapping readable under its name.
+    app_id = db.Column(db.Integer, db.ForeignKey(
+        "app_links.id", ondelete="SET NULL", name="fk_legal_touches_app_id"),
+        nullable=True, index=True)
+    app_name = db.Column(db.String(160), nullable=False, default="")
+    functions_json = db.Column(db.Text, default="[]")
+    routes_json = db.Column(db.Text, default="[]")
+    note = db.Column(db.String(400), default="")
+
+    entry = db.relationship("LegalEntry", back_populates="touches")
+    app = db.relationship("AppLink")
+
+    @staticmethod
+    def _list(raw):
+        import json
+        try:
+            out = json.loads(raw or "[]")
+        except ValueError:
+            return []
+        return out if isinstance(out, list) else []
+
+    @property
+    def functions(self):
+        """[{name, file}] as filed; a bare string reads as a name."""
+        out = []
+        for f in self._list(self.functions_json):
+            if isinstance(f, dict):
+                out.append({"name": str(f.get("name", "")), "file": str(f.get("file", ""))})
+            else:
+                out.append({"name": str(f), "file": ""})
+        return out
+
+    @property
+    def routes(self):
+        return [str(r) for r in self._list(self.routes_json)]
+
+    def __repr__(self):
+        return f"<LegalTouch {self.entry_id} {self.app_name}>"
+
+
+class LegalCheck(db.Model):
+    """One re-check run: every source fetched again and compared with its copy.
+    On demand through the bridge now; the overnight job later calls the same
+    function (legal_library.recheck)."""
+
+    __tablename__ = "legal_checks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    finished_at = db.Column(db.DateTime, nullable=True)
+    by = db.Column(db.String(120), default="")
+    status = db.Column(db.String(12), nullable=False, default="running", server_default="running")
+    checked = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    changed = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    unreachable = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    by_hand = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    detail_json = db.Column(db.Text, default="{}")
+    note = db.Column(db.Text, default="")
+
+    @property
+    def detail(self):
+        import json
+        try:
+            return json.loads(self.detail_json or "{}")
+        except ValueError:
+            return {}
+
+    def __repr__(self):
+        return f"<LegalCheck {self.id} {self.status}>"

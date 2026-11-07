@@ -1,0 +1,49 @@
+{% extends "pm/base.html" %}
+{% from "pm/legal/_tabs.html" import legal_tabs, legal_banner, check_pill %}
+
+{#
+  Every official document the library rests on, once each: its address, the
+  board's stored copy (the proof), when it was fetched, its checksum, how its
+  last check went, and the entries that cite it.
+#}
+
+{% block title %}Sources - Legal{% endblock %}
+{% block page_title %}Legal{% endblock %}
+{% block page_subtitle %}The official documents and their copies{% endblock %}
+{% block main_class %}contained-scroll{% endblock %}
+{% block tab_row %}{{ legal_tabs('sources') }}{% endblock %}
+{% block content %}
+{{ legal_banner() }}
+<div class="glass-card overflow-hidden flex flex-col min-h-0 stagger-in" data-legal-sources>
+    <div class="shrink-0 px-4 sm:px-5 py-3 border-b border-white/5 flex items-center justify-between gap-3">
+        <span class="text-xs font-semibold uppercase tracking-wider text-surface-400">{{ sources|length|commas }} documents</span>
+        <span class="text-xs text-surface-500">Government sites only; a copy from anywhere else is refused</span>
+    </div>
+    <div class="divide-y divide-white/5 min-h-0 overflow-y-auto">
+        {% for s in sources %}
+        <div class="p-4 sm:p-5 space-y-1 min-w-0" data-source="{{ s.key }}">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-medium text-white break-words">{{ s.title }}</span>
+                {{ check_pill(s.last_check, s.check_label) }}
+                {% if s.jurisdiction %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ s.jurisdiction }}</span>{% endif %}
+                {% if s.kind %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-surface-800 text-surface-400">{{ s.kind }}</span>{% endif %}
+                {% if s.fetch_how == 'browser' %}<span class="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-sky-500/10 text-sky-300">saved from a browser</span>{% endif %}
+            </div>
+            <p class="text-xs text-surface-400 break-all"><a href="{{ s.url }}" target="_blank" rel="noopener" data-press="value" class="text-brand-300 hover:underline">{{ s.url }}</a></p>
+            <p class="text-xs text-surface-500 break-all tabular-nums">
+                {{ s.site }} · fetched {{ s.fetched_at|format_date if s.fetched_at else 'not yet' }}
+                {% if s.sha256 %} · sha256 <code class="text-surface-400">{{ s.sha256 }}</code>{% endif %}
+                {% if copies.get(s.id) %} · <a href="{{ url_for('legal.source_copy', key=s.key) }}" data-press="prose" class="text-brand-300 hover:underline">the board's copy</a>{% else %} · no copy on the board yet{% endif %}
+                {% if s.last_checked_at %} · checked {{ s.last_checked_at|format_date }}{% endif %}
+            </p>
+            <p class="text-xs text-surface-500 break-words">
+                Cited by
+                {% for e in s.entries %}<a href="{{ url_for('legal.entry', slug=e.slug) }}" data-press="prose" class="text-brand-300 hover:underline">{{ e.title }}</a>{{ ', ' if not loop.last }}{% else %}nothing yet{% endfor %}
+            </p>
+        </div>
+        {% else %}
+        <div class="p-8 sm:p-12 text-center"><p class="text-surface-400">No sources yet.</p></div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

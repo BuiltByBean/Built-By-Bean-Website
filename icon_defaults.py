@@ -9,7 +9,19 @@ says how. Generated, then kept by hand: change a concept here and the board
 changes everywhere it is drawn.
 """
 
-DEFAULTS = [{'slug': 'notifications',
+DEFAULTS = [{'slug': 'legal',
+             'name': 'Legal',
+             'group': 'nav',
+             'library': 'Heroicons outline',
+             'icon_name': 'scale',
+             # The Legal library (issue #42, 2026-11-07): the laws behind each
+             # product's decisions. A balance, because the Handbook already
+             # wears the cap and Contracts the checked document.
+             'svg': '<path d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.5c-1.468 0-2.88.266-4.185.75m4.185-.75c1.146 0 2.254.187 3.312.533m-3.312-.533l2.86 10.027a.75.75 0 0 1-.247.83 6.75 6.75 0 0 1-6.627 0 .75.75 0 0 1-.247-.83L18.75 4.5M5.25 4.5c1.468 0 2.88.266 4.185.75M5.25 4.5c-1.146 0-2.254.187-3.312.533m3.312-.533l2.86 10.027a.75.75 0 0 1-.247.83 6.75 6.75 0 0 1-6.627 0 .75.75 0 0 1-.247-.83L5.25 4.5"/>',
+             'aliases': 'law, laws, compliance, lawyer, statutes, legal library',
+             'used_in_md': 'BBB Legal: the library of the laws behind each product, with the proof copies',
+             'never_md': 'contracts (document-check); handbook (academic-cap)'},
+            {'slug': 'notifications',
   'name': 'Notifications',
   'group': 'nav',
   'library': 'Heroicons outline',

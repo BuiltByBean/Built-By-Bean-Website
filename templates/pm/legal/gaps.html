@@ -1,0 +1,60 @@
+{% extends "pm/base.html" %}
+{% from "pm/legal/_tabs.html" import legal_tabs, legal_banner, status_pill, check_pill %}
+
+{#
+  Legal gaps per product: every tile in Live and earning and Building to earn
+  (never Personal projects), each with the entries that are a gap, need a
+  lawyer, or whose law moved since it was checked. A product no entry names is
+  "not yet reviewed", which is a gap of its own and is said so.
+#}
+
+{% block title %}Gaps - Legal{% endblock %}
+{% block page_title %}Legal{% endblock %}
+{% block page_subtitle %}What each product still has to settle{% endblock %}
+{% block tab_row %}{{ legal_tabs('gaps') }}{% endblock %}
+{% block content %}
+{% include "pm/components/runbook_style.html" %}
+{{ legal_banner() }}
+<div class="space-y-6 stagger-in" data-legal-gaps>
+    {% for g in groups %}{% set tile = g.tile %}
+    <section class="glass-card overflow-hidden min-w-0" data-gap-product="{{ tile.name }}" data-section="{{ g.section }}">
+        <div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3 border-b border-white/10 min-h-[44px]">
+            {% if tile.icon_file %}<img src="{{ url_for('apps.icon', id=tile.id) }}" alt="" class="w-8 h-8 rounded-lg object-contain">{% endif %}
+            <span class="text-sm font-semibold text-white break-words">{{ tile.name }}</span>
+            <span class="px-2 py-0.5 rounded-lg text-[11px] font-medium {{ 'bg-emerald-500/10 text-emerald-300' if g.section == 'client' else 'bg-amber-500/10 text-amber-300' }}">{{ 'Live and earning' if g.section == 'client' else 'Building to earn' }}</span>
+            {% if g.reviewed %}
+            <span class="text-xs text-surface-400 tabular-nums">{{ g.counts.backed }} backed · {{ g.counts.gap }} gaps · {{ g.counts.lawyer }} for the lawyer · {{ g.counts.watch }} to watch{% if g.counts.moved %} · {{ g.counts.moved }} moved{% endif %}</span>
+            <a href="{{ url_for('legal.index', product=g.all[0].product) }}" data-press="prose" class="ml-auto text-xs text-brand-300 hover:underline">All {{ g.all|length }} entries</a>
+            {% endif %}
+        </div>
+        {% if not g.reviewed %}
+        <div class="p-4 sm:p-5" data-not-reviewed>
+            <p class="text-sm text-red-300 font-medium">Not yet reviewed.</p>
+            <p class="text-xs text-surface-400 mt-1">No entry names this product, so none of its decisions has been checked against the law. A session files its register with <code class="text-brand-300">file_legal</code>.</p>
+        </div>
+        {% elif g.entries %}
+        <div class="divide-y divide-white/5">
+            {% for e in g.entries %}
+            <a href="{{ url_for('legal.entry', slug=e.slug) }}" data-press="row" class="block p-4 sm:p-5 hover:bg-white/[0.02] min-w-0" data-gap-entry="{{ e.slug }}">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-semibold text-white break-words">{{ e.title }}</span>
+                    {{ status_pill(e) }}
+                    {% if e.check_result == 'changed' %}{{ check_pill('changed', 'the law moved') }}{% endif %}
+                </div>
+                {% if e.status == 'lawyer' and e.lawyer_question %}
+                <p class="text-xs text-surface-300 mt-1 break-words">{{ e.lawyer_question.split('\n')[0] }}</p>
+                {% elif e.status == 'gap' and e.requires_md %}
+                <p class="text-xs text-surface-300 mt-1 break-words">{{ e.requires_md.split('\n')[0] }}</p>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-4 sm:p-5"><p class="text-sm text-surface-400">Nothing open: every entry is backed, watched or does not apply.</p></div>
+        {% endif %}
+    </section>
+    {% else %}
+    <div class="glass-card p-8 sm:p-12 text-center"><p class="text-surface-400">No product tiles in Live and earning or Building to earn.</p></div>
+    {% endfor %}
+</div>
+{% endblock %}

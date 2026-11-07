@@ -9,7 +9,8 @@ of ~/.claude/CLAUDE.md is left alone) or `.\tools\bootstrap_guidance.ps1 -Key
 Every session on this machine carries the pm-guidance tools: get_rules,
 get_feature_guidance, get_playbook, get_blueprint, report_lesson, suggest_update,
 get_clients, upsert_project, log_expense,
-register_hosting_resource, register_app and retire_app. They talk to the deployed board at
+register_hosting_resource, register_app, retire_app, and the Legal library's
+get_legal, file_legal and legal_recheck. They talk to the deployed board at
 https://builtbybeans.com, which is the one copy every machine and every
 session agrees on. The bridge is registered at user scope and reads
 PM_GUIDANCE_KEY from the environment. The bootstrap also installs the
@@ -45,6 +46,14 @@ order, not a request.
   Do this before the code change, not after. A note in a repo's
   CLAUDE.md is not the rule; the catalogue row is. Confirm by name and
   say that the Rules count went up.
+- Legal is kept apart from Best Practices (Michael, 2026-11-07: "legal keeps
+  us not in jail or sued" and "needs extra care and attention"). Before
+  building or changing anything that sends, charges, cancels, deletes,
+  texts, signs or stores personal data, call get_legal for the entries that
+  touch it. When a product makes a decision the law touches, file it with
+  file_legal from the product's register, with the official source and its
+  copy. Nothing in the library is legal advice; what only a lawyer can
+  settle is marked so and goes on the lawyer list.
 - When a lesson costs something (a bug that shipped, a vendor screen that
   moved, a better file to copy), file it through report_lesson or
   suggest_update the moment it is learned, not at the end of the work.

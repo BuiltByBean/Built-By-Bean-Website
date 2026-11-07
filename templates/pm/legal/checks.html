@@ -1,0 +1,46 @@
+{% extends "pm/base.html" %}
+{% from "pm/legal/_tabs.html" import legal_tabs, legal_banner %}
+
+{#
+  The re-check runs: every source fetched again and compared with its copy.
+  One press starts a run now (it answers at once and runs behind the page); a
+  session starts the same run through the bridge (legal_recheck), and the
+  overnight job will call the same function later.
+#}
+
+{% block title %}Checks - Legal{% endblock %}
+{% block page_title %}Legal{% endblock %}
+{% block page_subtitle %}Each source fetched again and compared with its copy{% endblock %}
+{% block tab_row %}{{ legal_tabs('checks') }}{% endblock %}
+{% block header_actions %}
+<form method="POST" action="{{ url_for('legal.run_check') }}">
+    <button type="submit" class="inline-flex items-center gap-2 min-h-[44px] px-4 text-sm font-semibold rounded-xl btn-brand text-white" data-run-check>
+        {{ icon('refresh', 'w-4 h-4') }} Re-check every source
+    </button>
+</form>
+{% endblock %}
+{% block content %}
+{{ legal_banner() }}
+<div class="glass-card overflow-hidden stagger-in" data-legal-checks>
+    <div class="divide-y divide-white/5">
+        {% for r in runs %}
+        <div class="p-4 sm:p-5 space-y-1 min-w-0" data-run="{{ r.id }}" x-data="{ open: false }">
+            <button type="button" @click="open = !open" class="flex w-full flex-wrap items-center gap-2 text-left min-h-[44px]">
+                <span class="text-sm font-semibold text-white tabular-nums">Run {{ r.id }}</span>
+                <span class="px-2 py-0.5 rounded-lg text-[11px] font-semibold {{ 'bg-emerald-500/15 text-emerald-300' if r.status == 'done' else ('bg-amber-500/15 text-amber-300' if r.status == 'running' else 'bg-red-500/15 text-red-300') }}">{{ r.status }}</span>
+                <span class="text-xs text-surface-400 tabular-nums">{{ r.started_at|format_date if r.started_at else '' }} · by {{ r.by or 'the board' }} · {{ r.checked }} checked, {{ r.changed }} changed, {{ r.unreachable }} unreachable, {{ r.by_hand }} by hand</span>
+                {{ icon('expand', 'ml-auto w-4 h-4 text-surface-500', attrs=':class="open && \'rotate-180\'"') }}
+            </button>
+            <div x-show="open" x-cloak class="pt-2 space-y-1">
+                {% if r.note %}<p class="text-xs text-red-300 break-words">{{ r.note }}</p>{% endif %}
+                {% for key, d in r.detail.items() %}
+                <p class="text-xs break-all"><code class="text-surface-300">{{ key }}</code> <span class="{{ 'text-red-300' if d.status == 'changed' else ('text-amber-300' if d.status == 'unreachable' else 'text-surface-500') }}">{{ d.status }}</span>{% if d.error %} <span class="text-surface-500">{{ d.error }}</span>{% endif %}</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="p-8 sm:p-12 text-center"><p class="text-surface-400">No run yet. Press Re-check every source, or ask a session for <code class="text-brand-300">legal_recheck</code>.</p></div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
