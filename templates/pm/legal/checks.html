@@ -35,6 +35,12 @@
                 {% if r.note %}<p class="text-xs text-red-300 break-words">{{ r.note }}</p>{% endif %}
                 {% for key, d in r.detail.items() %}
                 <p class="text-xs break-all"><code class="text-surface-300">{{ key }}</code> <span class="{{ 'text-red-300' if d.status == 'changed' else ('text-amber-300' if d.status == 'unreachable' else 'text-surface-500') }}">{{ d.status }}</span>{% if d.error %} <span class="text-surface-500">{{ d.error }}</span>{% endif %}</p>
+                {% if d.diff %}
+                <div class="ml-4 mb-2 grid gap-1 sm:grid-cols-2 text-[11px] break-words" data-diff="{{ key }}">
+                    <p><span class="text-surface-500">was:</span> <span class="text-surface-300">{{ d.diff.stored }}</span></p>
+                    <p><span class="text-surface-500">now:</span> <span class="text-red-200">{{ d.diff.live }}</span></p>
+                </div>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>

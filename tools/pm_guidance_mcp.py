@@ -1005,6 +1005,11 @@ def tool_legal_recheck(args):
         lines.append("Still running; ask again with get_legal (gaps=true) or the board's Checks tab.")
     if changed:
         lines.append("CHANGED (read each against its copy and update the entry): " + ", ".join(changed))
+        for k in changed:
+            d = (detail.get(k) or {}).get("diff") or {}
+            if d:
+                lines.append(f"  {k} was: {d.get('stored', '')[:200]}")
+                lines.append(f"  {k} now: {d.get('live', '')[:200]}")
     if gone:
         lines.append("Unreachable: " + ", ".join(gone))
     if hand:

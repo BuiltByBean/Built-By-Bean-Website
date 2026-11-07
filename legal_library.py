@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import html as _html
 import json
 import os
 import re
@@ -156,16 +157,48 @@ _VOLATILE = [
 ]
 
 
-def substance(data, ctype):
-    """What matters on a page: the raw bytes for a PDF; for HTML the text with the
-    parts that change on every request taken out. The same function as the
-    product's keeper (EntertainHQ scripts/legal_library.py), so the two agree."""
+# Lines of text that change on every request without a change of substance.
+_VOLATILE_TEXT = [
+    re.compile(r"(?i)page generated[^.]{0,80}"),
+    re.compile(r"(?i)(last|date) (updated|modified|generated)\s*:?\s*[A-Za-z0-9,/: -]{4,40}"),
+    re.compile(r"(?i)\b\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?\b"),
+]
+
+def page_text(data, ctype):
+    """What matters on a page as text: a PDF's bytes stand as they are; for HTML the <main> element where there
+    is one (a government page's chrome, its news blocks and menus, sits outside it), scripts, styles and tags
+    removed, entities unescaped, whitespace collapsed, and the parts that change on every request taken out.
+    Two fetches of the same law give the same text; a changed sidebar does not read as a changed law."""
     if "pdf" in (ctype or ""):
-        return sha256(data)
+        return data
     body = data
-    for rx in _VOLATILE:
-        body = rx.sub(b" ", body)
-    return sha256(body)
+    m = re.search(rb"(?is)<main\b.*?</main>", body)
+    if m and len(m.group(0)) > 2000:
+        body = m.group(0)
+    body = re.sub(rb"(?is)<(script|style|noscript|svg).*?</\1>", b" ", body)
+    body = re.sub(rb"(?is)<!--.*?-->", b" ", body)
+    body = re.sub(rb"(?s)<[^>]+>", b" ", body)
+    text = _html.unescape(body.decode("utf-8", "replace"))
+    for rx in _VOLATILE_TEXT:
+        text = rx.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip().encode("utf-8")
+
+
+def substance(data, ctype):
+    """A checksum of page_text: what the re-check compares."""
+    return sha256(page_text(data, ctype))
+
+
+def first_difference(a, b, span=160):
+    """Where two texts first part, as a pair of snippets, or None when they agree."""
+    if a == b:
+        return None
+    a = a.decode("utf-8", "replace") if isinstance(a, bytes) else a
+    b = b.decode("utf-8", "replace") if isinstance(b, bytes) else b
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    return {"stored": a[max(0, i - 60):i + span], "live": b[max(0, i - 60):i + span]}
 
 
 def _ext_for(ctype, url):
@@ -421,11 +454,13 @@ def recheck(keys=None, by="", run=None):
         # Compare with the board's own copy re-read under today's rules, so a change to what counts as volatile
         # never reads as a change in the law; the stored checksum stands in only where the copy is gone.
         known = None
+        stored_bytes = None
         stored = copy_path(src)
         if stored:
             try:
                 with open(stored, "rb") as fh:
-                    known = substance(fh.read(), src.content_type or ctype)
+                    stored_bytes = fh.read()
+                known = substance(stored_bytes, src.content_type or ctype)
             except OSError:
                 known = None
         known = known or src.board_substance or src.repo_substance
@@ -444,6 +479,10 @@ def recheck(keys=None, by="", run=None):
             src.last_check = "changed"
             changed += 1
             detail[src.key] = {"status": "changed", "bytes": len(body), "stored": known, "live": live}
+            if stored_bytes is not None:
+                # Where the words first part, so a reader can tell a changed law from a changed page at a glance.
+                detail[src.key]["diff"] = first_difference(page_text(stored_bytes, src.content_type or ctype),
+                                                           page_text(body, ctype))
         else:
             src.last_check = "same"
             detail[src.key] = {"status": "same", "bytes": len(body)}
